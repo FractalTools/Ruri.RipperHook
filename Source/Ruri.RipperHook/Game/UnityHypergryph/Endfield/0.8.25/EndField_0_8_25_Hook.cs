@@ -26,7 +26,8 @@ public partial class EndField_0_8_25_Hook : EndFieldCommon_Hook
 
     protected override void InitAttributeHook()
     {
-AddMethodHook(typeof(EndField_0_5_27_Hook), nameof(EndField_0_5_27_Hook.Mesh_ReadRelease));
+        AddMethodHook(typeof(EndField_0_5_27_Hook), nameof(EndField_0_5_27_Hook.Mesh_ReadRelease));
+        AddMethodHook(typeof(EndField_0_8_25_Hook), nameof(AnimClipAclCompressedBuffer_ReadRelease));
 
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(CustomAssetBundlesCheck));
