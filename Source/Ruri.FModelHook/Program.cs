@@ -18,32 +18,37 @@ namespace Ruri.FModelHook
 
         private static void InitializeHooks()
         {
-            var hookName = "UE_ShaderDecompiler";
-            HookLogger.Log($"Initializing hook: {hookName}");
+            HookLogger.Log("Scanning for hooks...");
 
             try
             {
                 var assembly = Assembly.GetExecutingAssembly();
-                var hookClass = assembly.GetTypes().FirstOrDefault(t => 
-                {
-                    var attr = t.GetCustomAttribute<GameHookAttribute>();
-                    return attr != null && attr.GameName == hookName;
-                });
+                var hookTypes = assembly.GetTypes()
+                    .Where(t => t.GetCustomAttribute<GameHookAttribute>() != null)
+                    .ToList();
 
-                if (hookClass != null)
+                HookLogger.Log($"Found {hookTypes.Count} hooks.");
+
+                foreach (var hookType in hookTypes)
                 {
-                    var instance = (RuriHook)Activator.CreateInstance(hookClass, true)!;
-                    instance.Initialize();
-                    HookLogger.LogSuccess($"[+] Hook {hookName} initialized successfully.");
-                }
-                else
-                {
-                    HookLogger.LogWarning($"[-] No implementation found for hook: {hookName}");
+                    var attr = hookType.GetCustomAttribute<GameHookAttribute>();
+                    var hookName = attr?.GameName ?? hookType.Name;
+
+                    try
+                    {
+                        var instance = (RuriHook)Activator.CreateInstance(hookType, true)!;
+                        instance.Initialize();
+                        HookLogger.LogSuccess($"[+] Hook '{hookName}' initialized successfully.");
+                    }
+                    catch (Exception ex)
+                    {
+                        HookLogger.LogFailure($"[-] Failed to initialize hook '{hookName}': {ex}");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                HookLogger.LogFailure($"Failed to initialize hook {hookName}: {ex}");
+                HookLogger.LogFailure($"Critical error during hook initialization: {ex}");
             }
         }
 
