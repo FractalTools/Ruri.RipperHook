@@ -1,4 +1,3 @@
-using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
 using Ruri.RipperHook.UnityChina;
 
@@ -9,12 +8,12 @@ public partial class PunishingGrayRaven_2_11_Hook : UnityChinaCommon_Hook
 {
     protected PunishingGrayRaven_2_11_Hook()
     {
-        UnityChinaCommon_Hook.SetKey("PGR CN/JP/TW", "7935585076714C4F72436F6B57524961");
+        SetKey("PGR CN/JP/TW", "7935585076714C4F72436F6B57524961");
     }
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new BundleFileBlockReaderHook(UnityChinaCommon_Hook.CustomBlockCompression));
+        RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }
 }

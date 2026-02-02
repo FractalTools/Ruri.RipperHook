@@ -27,7 +27,7 @@ public partial class EndField_0_5_27_Hook : EndFieldCommon_Hook
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new GameBundleHook(CustomFilePreInitialize));
+        RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(CustomAssetBundlesCheck));
         RegisterModule(new PlatformGameStructureHook_IsBundleHeader(CustomAssetBundlesCheckMagicNum));
 

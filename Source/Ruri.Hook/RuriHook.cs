@@ -26,10 +26,6 @@ namespace Ruri.Hook
             if (methodHooks.Count > 0)
             {
                  Registry.ApplyManualHooks(methodHooks);
-                 foreach (var method in methodHooks)
-                 {
-                     Console.WriteLine($"[RuriHook] Enabled hook: {method.DeclaringType?.Name}.{method.Name}");
-                 }
             }
         }
 
@@ -93,8 +89,9 @@ namespace Ruri.Hook
                     {
                         if (Activator.CreateInstance(type, true) is RuriHook hook)
                         {
-                            hook.Initialize();
+                            Console.WriteLine();
                             Console.WriteLine($"[RuriHook] Enabled hook: {id}");
+                            hook.Initialize();
                         }
                     }
                     catch (Exception ex)

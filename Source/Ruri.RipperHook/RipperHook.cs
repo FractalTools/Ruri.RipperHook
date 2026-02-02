@@ -65,7 +65,7 @@ public abstract class RipperHook : RuriHook
             return;
         }
 
-        HookLogger.Log($"Found {hookClassAttrs.Count()} TypeTreeHook attributes.");
+        HookLogger.LogRaw($"    Found {hookClassAttrs.Count()} TypeTreeHook attributes in {type.Name}.");
 
         var classIds = hookClassAttrs.Select(a => a.ClassID).ToList();
         
@@ -213,7 +213,7 @@ public abstract class RipperHook : RuriHook
                            targetName = targetInstance.GetType().Name;
                        }
 
-                       HookLogger.LogSuccess($"[+] {sourceType.Name} -> {targetName}");
+                       HookLogger.LogSuccessRaw($"    [+] Hooked {sourceType.Name} -> {targetName}");
                    }
                    else
                    {

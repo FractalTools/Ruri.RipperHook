@@ -60,6 +60,7 @@ namespace Ruri.Hook.Utils
                     throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
             });
             HookManager.Register(new ILHook(srcMethod, hookDest));
+            HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {func.Method.Name}");
         }
 
         public static void RetargetCallCtorFunc(Func<ILContext, bool> func, ConstructorInfo srcMethod)
@@ -70,6 +71,7 @@ namespace Ruri.Hook.Utils
                     throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
             });
             HookManager.Register(new ILHook(srcMethod, hookDest));
+            HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {func.Method.Name}");
         }
 
         /// <summary>
@@ -121,6 +123,11 @@ namespace Ruri.Hook.Utils
             });
 
             HookManager.Register(new ILHook(srcMethod, hookDest));
+            
+            if (targetMethod.Name != "Universal_ReadRelease")
+            {
+                HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {targetMethod.Name}");
+            }
         }
 
         #endregion

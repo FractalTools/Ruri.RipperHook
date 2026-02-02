@@ -4,6 +4,7 @@ namespace Ruri.RipperHook.UnityMihoyo;
 
 public class Acl
 {
+    private const string DllName = "ACL.Houkai";
     public static void DecompressAll(byte[] data, out float[] values, out float[] times)
     {
         var decompressedClip = new DecompressedClip();
@@ -18,10 +19,10 @@ public class Acl
         Dispose(ref decompressedClip);
     }
 
-    [DllImport("acl", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void DecompressAll(byte[] data, ref DecompressedClip decompressedClip);
 
-    [DllImport("acl", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void Dispose(ref DecompressedClip decompressedClip);
 
     public struct DecompressedClip

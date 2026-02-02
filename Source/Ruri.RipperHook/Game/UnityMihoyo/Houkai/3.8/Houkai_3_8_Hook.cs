@@ -19,7 +19,7 @@ public partial class Houkai_3_8_Hook : HoukaiCommon_Hook
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new GameBundleHook(HoukaiCommon_Hook.CustomFilePreInitialize));
+        RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new BundleFileBlockReaderHook(MihoyoCommon.CustomBlockCompression));
         base.InitAttributeHook();
     }

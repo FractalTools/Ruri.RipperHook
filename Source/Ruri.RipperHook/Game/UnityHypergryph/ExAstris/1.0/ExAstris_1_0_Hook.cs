@@ -1,6 +1,3 @@
-using Ruri.RipperHook.Attributes;
-using Ruri.RipperHook.Crypto;
-using Ruri.RipperHook.ExAstris;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
 
 namespace Ruri.RipperHook.ExAstris;
@@ -14,7 +11,7 @@ public partial class ExAstris_1_0_Hook : ExAstrisCommon_Hook
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new BundleFileBlockReaderHook(ExAstrisCommon_Hook.CustomBlockCompression));
+        RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }
 }

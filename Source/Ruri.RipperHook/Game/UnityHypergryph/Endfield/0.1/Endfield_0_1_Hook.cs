@@ -1,5 +1,3 @@
-using Ruri.RipperHook.Attributes;
-using Ruri.RipperHook.Endfield;
 using Ruri.RipperHook.Crypto;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
 
@@ -17,7 +15,7 @@ public partial class EndField_0_1_Hook : EndFieldCommon_Hook
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new BundleFileBlockReaderHook(EndField_0_1_Hook.CustomBlockCompression));
+        RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }
 }

@@ -9,12 +9,12 @@ public partial class AzurPromilia_0_1_1_3_Hook : UnityChinaCommon_Hook
 {
     protected AzurPromilia_0_1_1_3_Hook()
     {
-        UnityChinaCommon_Hook.SetKey("AzurPromilia_0_1_1_3", "7a346c32336268352333356826333231");
+        SetKey("AzurPromilia_0_1_1_3", "7a346c32336268352333356826333231");
     }
 
     protected override void InitAttributeHook()
     {
-RegisterModule(new BundleFileBlockReaderHook(UnityChinaCommon_Hook.CustomBlockCompression));
+        RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }
 }
