@@ -66,6 +66,16 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                             {
                                 HookLogger.LogFailure($"[UE_ShaderDecompiler] Failed to extract global mappings: {ex.Message}");
                             }
+
+                            // Extract parameter mappings from material Properties
+                            try
+                            {
+                                MaterialParameterExporter.ExportAll(self);
+                            }
+                            catch (Exception ex)
+                            {
+                                HookLogger.LogFailure($"[UE_ShaderDecompiler] Failed to export material parameters: {ex.Message}");
+                            }
                         }
                     }
                 }
