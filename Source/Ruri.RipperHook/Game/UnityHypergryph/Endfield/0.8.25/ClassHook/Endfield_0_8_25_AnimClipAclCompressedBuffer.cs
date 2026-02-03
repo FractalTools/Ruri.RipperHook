@@ -186,5 +186,6 @@ public partial class EndField_0_8_25_Hook
         decompressor.Dispose();
         floatDecompressor?.Dispose();
         rootDecompressor?.Dispose();
+        _this.Name += "_ACL";
     }
 }
