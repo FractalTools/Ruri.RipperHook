@@ -12,6 +12,7 @@ using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.IO.Objects;
 using CUE4Parse.FileProvider.Vfs;
 using Ruri.Hook.Core;
+using CUE4Parse.FileProvider;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 {
@@ -26,6 +27,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         [RetargetMethod(typeof(CUE4ParseViewModel), "ExportData", true, false)]
         public static void ExportData_Hook(CUE4ParseViewModel self, GameFile entry, bool updateUi)
         {
+            // Enable ReadShaderMaps on the provider to ensure UMaterial deserializes the InlineShaderMap
+            if (self.Provider is AbstractFileProvider abstractProvider)
+            {
+                if (!abstractProvider.ReadShaderMaps)
+                {
+                    abstractProvider.ReadShaderMaps = true;
+                }
+            }
+
             if (entry == null) return;
 
             // Only trigger on Shader Bytecode Library export
@@ -67,10 +77,10 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                                 HookLogger.LogFailure($"[UE_ShaderDecompiler] Failed to extract global mappings: {ex.Message}");
                             }
 
-                            // Extract parameter mappings from material Properties
+                            // Extract parameter mappings using UniformExpressionExporter
                             try
                             {
-                                MaterialParameterExporter.ExportAll(self);
+                                UniformExpressionExporter.ExportAll(self);
                             }
                             catch (Exception ex)
                             {
