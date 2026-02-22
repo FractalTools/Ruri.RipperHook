@@ -10,8 +10,7 @@ namespace Ruri.RipperHook.Endfield;
 [GameHook("Endfield", "0.5.27", "2021.3.34f1")]
 public partial class EndField_0_5_27_Hook : EndFieldCommon_Hook
 {
-    public static string customVersion = $"2021.3.527x{(int)CustomEngineType.EndField}";
-    public static UnityVersion endFieldClassVersion = UnityVersion.Parse(customVersion);
+    public static UnityVersion endFieldClassVersion = new UnityVersion(2021, 3, 527, UnityVersionType.Experimental, (byte)CustomEngineType.EndField);
 
     private static EndField_0_5_27_FairGuardDecryptor fairGuardDecryptor;
 
