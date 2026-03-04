@@ -1,13 +1,6 @@
 # ⚠️⚠️⚠️ **WARNING** ⚠️⚠️⚠️
-# **❌ 不要通过任何渠道宣传本项目，该项目仅供学习，严禁用于商业用途，下载后请于24小时内删除。 ❌**
-
-# **❌ Please do not promote this project through any channels. This project is for learning and communication purposes only. Commercial use is strictly prohibited. Please delete it within 24 hours after downloading. ❌**
-
-# **❌ 不要 star，更不要 fork 项目备份 保持低调 ❌**
-
-# **❌ DO NOT star, and DO NOT fork this project for backup. Keep a low profile ❌**
-
 # **小鬼太多想了想还是私有了 就怕有心狗举报 现在是邀请制**
+# **Too many little brats overthinking it — I decided to make it private after all. Just worried some malicious snitch might report it. It’s invite-only now.**
 
 ## 不要问我怎么用
 - 作者不喜欢回复小白问题 因为他很忙 并且曾经是小白的时候受过心理创伤现在极度反社会 你应该找ai帮你
