@@ -1,7 +1,7 @@
 # ⚠️⚠️⚠️ **WARNING** ⚠️⚠️⚠️
-不要通过任何渠道宣传本项目，该项目仅供学习，严禁用于商业用途，下载后请于24小时内删除。
+# **❌ 不要通过任何渠道宣传本项目，该项目仅供学习，严禁用于商业用途，下载后请于24小时内删除。 ❌**
 
-Please do not promote this project through any channels. This project is for learning and communication purposes only. Commercial use is strictly prohibited. Please delete it within 24 hours after downloading.
+# **❌ Please do not promote this project through any channels. This project is for learning and communication purposes only. Commercial use is strictly prohibited. Please delete it within 24 hours after downloading. ❌**
 
 # **❌ 不要 star，更不要 fork 项目备份 保持低调 ❌**
 
