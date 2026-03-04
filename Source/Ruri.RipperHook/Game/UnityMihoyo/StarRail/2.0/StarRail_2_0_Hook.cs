@@ -9,8 +9,7 @@ namespace Ruri.RipperHook.StarRail;
 [GameHook("StarRail", "2.0", "2019.4.34f1")]
 public partial class StarRail_2_0_Hook : StarRailCommon_Hook
 {
-    public static string customVersion = $"2019.4.200x{(int)CustomEngineType.StarRail}";
-    public static UnityVersion starRailClassVersion = UnityVersion.Parse(customVersion);
+    public static UnityVersion starRailClassVersion = new UnityVersion(2019, 4, 200, UnityVersionType.Experimental, (byte)CustomEngineType.StarRail);
 
     protected StarRail_2_0_Hook()
     {
