@@ -36,7 +36,6 @@ public partial class EndField_0_8_25_Hook
             if (isVFSContainer)
             {
                 // VFS 容器模式：循环切分
-                int index = 0;
                 while (position < fileData.Length)
                 {
                     var remaining = span.Slice((int)position);
@@ -55,7 +54,7 @@ public partial class EndField_0_8_25_Hook
 
                     // 切分数据
                     var bundleData = fileData.Skip((int)position).Take((int)bundleSize).ToArray();
-                    var subName = $"{Path.GetFileName(path)}_sub{index++}";
+                    var subName = $"{Path.GetFileName(path)}_0x{position:X}";
 
                     fileStack.AddRange(GameBundleHook.LoadFilesAndDependencies(
                         bundleData,

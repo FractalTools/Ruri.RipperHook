@@ -47,6 +47,10 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<TargetPath>ACL.Houkai.dll</TargetPath>
 		</ContentWithTargetPath>
+        <ContentWithTargetPath Include="Libraries\ACL.EndField.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>ACL.EndField.dll</TargetPath>
+		</ContentWithTargetPath>
 		<Reference Include="Ruri.SourceGenerated.dll">
 			<SpecificVersion>False</SpecificVersion>
 			<HintPath>Libraries\Ruri.SourceGenerated.dll</HintPath>
