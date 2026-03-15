@@ -71,6 +71,7 @@
   <Project Path="AssetRipper/Source/AssetRipper.AssemblyDumper/AssetRipper.AssemblyDumper.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.Assets.Tests/AssetRipper.Assets.Tests.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.Assets/AssetRipper.Assets.csproj" />
+  <Project Path="AssetRipper/Source/AssetRipper.Configuration/AssetRipper.Configuration.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.DocExtraction.ConsoleApp/AssetRipper.DocExtraction.ConsoleApp.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.DocExtraction/AssetRipper.DocExtraction.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.Export.Modules.Audio/AssetRipper.Export.Modules.Audio.csproj" />

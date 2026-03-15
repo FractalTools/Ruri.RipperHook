@@ -6,7 +6,7 @@ using AssetRipper.Export.UnityProjects.Shaders;
 using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
-using AssetRipper.SourceGenerated.Subclasses.BufferBinding;
+using AssetRipper.SourceGenerated.Subclasses.BufferBindingParameter;
 using AssetRipper.SourceGenerated.Subclasses.ConstantBuffer;
 using AssetRipper.SourceGenerated.Subclasses.MatrixParameter;
 using AssetRipper.SourceGenerated.Subclasses.ParserBindChannels;
@@ -477,7 +477,7 @@ public static class ShaderAssetCreator
         return new AssetTypeValueField { TemplateField = template, Children = children };
     }
 
-    private static AssetTypeValueField ConvertBufferBinding(string name, IBufferBinding bb)
+    private static AssetTypeValueField ConvertBufferBinding(string name, IBufferBindingParameter bb)
     {
         var children = new List<AssetTypeValueField>
         {
