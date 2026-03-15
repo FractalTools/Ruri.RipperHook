@@ -1,5 +1,7 @@
 using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleFileHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleHeaderHook;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 using Ruri.RipperHook.UnityMihoyo;
@@ -21,6 +23,8 @@ public partial class Houkai_7_1_Hook : HoukaiCommon_Hook
 
     protected override void InitAttributeHook()
     {
+        RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
+        RegisterModule(new FileStreamBundleFileHook(CustomReadFileStreamMetadata));
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new BundleFileBlockReaderHook(MihoyoCommon.CustomBlockCompression));
         base.InitAttributeHook();

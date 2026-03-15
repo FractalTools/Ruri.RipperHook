@@ -1,5 +1,7 @@
 using AssetRipper.Primitives;
+using Ruri.RipperHook.HookUtils.BlocksInfoHook;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleHeaderHook;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using Ruri.RipperHook.HookUtils.PlatformGameStructureHook_IsBundleHeader;
 using Ruri.RipperHook.UnityMihoyo;
@@ -20,6 +22,8 @@ public partial class StarRail_3_2_Hook : StarRailCommon_Hook
     }
     protected override void InitAttributeHook()
     {
+        RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
+        RegisterModule(new BlocksInfoHook(CustomBlocksInfoRead));
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new BundleFileBlockReaderHook(MihoyoCommon.CustomBlockCompression));
         RegisterModule(new PlatformGameStructureHook_IsBundleHeader(CustomAssetBundlesCheckMagicNum));

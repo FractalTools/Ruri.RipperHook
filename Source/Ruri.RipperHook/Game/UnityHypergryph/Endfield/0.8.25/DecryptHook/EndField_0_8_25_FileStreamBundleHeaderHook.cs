@@ -1,7 +1,6 @@
 ﻿using AssetRipper.IO.Endian;
 using AssetRipper.IO.Files.BundleFiles;
 using AssetRipper.IO.Files.BundleFiles.FileStream;
-using AssetRipper.Import.Logging;
 using System.Numerics;
 using Ruri.RipperHook.Crypto;
 
@@ -9,11 +8,8 @@ namespace Ruri.RipperHook.Endfield;
 
 public partial class EndField_0_8_25_Hook
 {
-    [RetargetMethod(typeof(FileStreamBundleHeader), nameof(Read))]
-    public void Read(EndianReader reader)
+    public static void CustomReadHeader(FileStreamBundleHeader _this, EndianReader reader)
     {
-        var _this = (object)this as FileStreamBundleHeader;
-
         // 设置版本以确保 AR 正确处理 64位 Size 字段
         _this.Version = BundleVersion.BF_LargeFilesSupport;
         _this.UnityWebBundleVersion = "5.x.x";

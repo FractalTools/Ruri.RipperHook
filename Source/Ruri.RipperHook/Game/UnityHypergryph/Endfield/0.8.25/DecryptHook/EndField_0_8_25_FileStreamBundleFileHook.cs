@@ -1,5 +1,4 @@
-﻿using AssetRipper.Import.Logging;
-using AssetRipper.IO.Endian;
+﻿using AssetRipper.IO.Endian;
 using AssetRipper.IO.Files.BundleFiles;
 using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.Extensions;
@@ -11,10 +10,8 @@ namespace Ruri.RipperHook.Endfield;
 
 public partial class EndField_0_8_25_Hook
 {
-    [RetargetMethod(typeof(FileStreamBundleFile), "ReadFileStreamMetadata")]
-    public void ReadFileStreamMetadata(Stream stream, long basePosition)
+    public static void CustomReadFileStreamMetadata(FileStreamBundleFile _this, Stream stream, long basePosition)
     {
-        var _this = (object)this as FileStreamBundleFile;
         var Header = _this.Header;
 
         if (Header.Version >= BundleVersion.BF_LargeFilesSupport) stream.Align(16);
@@ -43,7 +40,7 @@ public partial class EndField_0_8_25_Hook
 
             if (bytesWritten != uncompressedSize)
             {
-                Logger.Warning($"[EndField] Metadata decompression mismatch. Expected {uncompressedSize}, got {bytesWritten}");
+                AssetRipper.Import.Logging.Logger.Warning($"[EndField] Metadata decompression mismatch. Expected {uncompressedSize}, got {bytesWritten}");
             }
 
             uncompressedStream = new MemoryStream(uncompressedBytes);

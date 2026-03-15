@@ -1,4 +1,5 @@
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleHeaderHook;
 using Ruri.RipperHook.UnityChina;
 
 namespace Ruri.RipperHook.PunishingGrayRaven;
@@ -13,6 +14,7 @@ public partial class PunishingGrayRaven_2_11_Hook : UnityChinaCommon_Hook
 
     protected override void InitAttributeHook()
     {
+        RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
         RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }

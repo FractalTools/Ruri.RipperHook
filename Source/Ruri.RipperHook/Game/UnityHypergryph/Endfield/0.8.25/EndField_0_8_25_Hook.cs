@@ -1,6 +1,8 @@
 using AssetRipper.Primitives;
 using Ruri.RipperHook.Crypto;
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleFileHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleHeaderHook;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using Ruri.RipperHook.HookUtils.PlatformGameStructureHook_CollectAssetBundles;
 using Ruri.RipperHook.HookUtils.PlatformGameStructureHook_IsBundleHeader;
@@ -27,6 +29,8 @@ public partial class EndField_0_8_25_Hook : EndFieldCommon_Hook
     {
         AddMethodHook(typeof(EndField_0_5_27_Hook), nameof(EndField_0_5_27_Hook.Mesh_ReadRelease));
 
+        RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
+        RegisterModule(new FileStreamBundleFileHook(CustomReadFileStreamMetadata));
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));
         RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(CustomAssetBundlesCheck));
         RegisterModule(new PlatformGameStructureHook_IsBundleHeader(CustomAssetBundlesCheckMagicNum));

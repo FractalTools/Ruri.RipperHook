@@ -8,11 +8,8 @@ namespace Ruri.RipperHook.UnityChina;
 
 public partial class UnityChinaCommon_Hook
 {
-    [RetargetMethod(typeof(FileStreamBundleHeader), nameof(Read))]
-    public void Read(EndianReader reader)
+    public static void CustomReadHeader(FileStreamBundleHeader _this, EndianReader reader)
     {
-        var _this = (object)this as FileStreamBundleHeader;
-
         string signature = reader.ReadStringZeroTerm();
         _this.Version = (BundleVersion)reader.ReadInt32();
         _this.UnityWebBundleVersion = reader.ReadStringZeroTerm();

@@ -6,8 +6,7 @@ namespace Ruri.RipperHook.StarRail;
 
 public partial class StarRailCommon_Hook
 {
-    [RetargetMethod(typeof(BlocksInfo), nameof(Read))]
-    public static BlocksInfo BlocksInfo_Read(EndianReader reader)
+    public static BlocksInfo CustomBlocksInfoRead(EndianReader reader)
     {
         return new BlocksInfo(new Hash128(), reader.ReadEndianArray<StorageBlock>());
     }

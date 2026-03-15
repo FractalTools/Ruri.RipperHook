@@ -1,5 +1,6 @@
 
 using Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
+using Ruri.RipperHook.HookUtils.FileStreamBundleHeaderHook;
 using Ruri.RipperHook.UnityChina;
 
 namespace Ruri.RipperHook.AzurPromilia;
@@ -14,6 +15,7 @@ public partial class AzurPromilia_0_1_1_3_Hook : UnityChinaCommon_Hook
 
     protected override void InitAttributeHook()
     {
+        RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
         RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         base.InitAttributeHook();
     }

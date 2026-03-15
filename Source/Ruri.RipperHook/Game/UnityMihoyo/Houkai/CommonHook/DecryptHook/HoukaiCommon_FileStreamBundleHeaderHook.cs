@@ -7,11 +7,8 @@ namespace Ruri.RipperHook.Houkai;
 
 public partial class HoukaiCommon_Hook
 {
-    [RetargetMethod(typeof(FileStreamBundleHeader), nameof(Read))]
-    public void Read(EndianReader reader)
+    public static void CustomReadHeader(FileStreamBundleHeader _this, EndianReader reader)
     {
-        var _this = (object)this as FileStreamBundleHeader;
-
         var signature = reader.ReadStringZeroTerm();
         var key = reader.ReadUInt32();
         if (key <= 11)

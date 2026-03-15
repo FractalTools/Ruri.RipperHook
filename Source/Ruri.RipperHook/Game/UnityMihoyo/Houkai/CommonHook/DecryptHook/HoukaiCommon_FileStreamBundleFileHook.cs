@@ -12,11 +12,8 @@ public partial class HoukaiCommon_Hook
 {
     private static readonly MethodInfo ReadMetadata = typeof(FileStreamBundleFile).GetMethod("ReadMetadata", ReflectionExtensions.PrivateInstanceBindFlag());
 
-    [RetargetMethod(typeof(FileStreamBundleFile), nameof(ReadFileStreamMetadata))]
-    public void ReadFileStreamMetadata(Stream stream, long basePosition)
+    public static void CustomReadFileStreamMetadata(FileStreamBundleFile _this, Stream stream, long basePosition)
     {
-        var _this = (object)this as FileStreamBundleFile;
-
         var Header = _this.Header;
         var NameFixed = _this.NameFixed;
         if (Header.Version >= BundleVersion.BF_LargeFilesSupport) stream.Align(16);
@@ -31,7 +28,7 @@ public partial class HoukaiCommon_Hook
         {
             case CompressionType.None:
             {
-                ReadMetadata.Invoke(this, new object[] { stream, Header.UncompressedBlocksInfoSize });
+                ReadMetadata.Invoke(_this, new object[] { stream, Header.UncompressedBlocksInfoSize });
             }
                 break;
 
@@ -41,7 +38,7 @@ public partial class HoukaiCommon_Hook
                 LzmaCompression.DecompressLzmaStream(stream, Header.CompressedBlocksInfoSize, uncompressedStream, Header.UncompressedBlocksInfoSize);
 
                 uncompressedStream.Position = 0;
-                ReadMetadata.Invoke(this, new object[] { uncompressedStream, Header.UncompressedBlocksInfoSize });
+                ReadMetadata.Invoke(_this, new object[] { uncompressedStream, Header.UncompressedBlocksInfoSize });
             }
                 break;
 
@@ -59,7 +56,7 @@ public partial class HoukaiCommon_Hook
                     {
                         ARIntelnalReflection.ThrowIncorrectNumberBytesWrittenMethod.Invoke(null, new object[] { _this.NameFixed, metaCompression, (long)uncompressedSize, (long)bytesWritten });
                     }
-                    ReadMetadata.Invoke(this, new object[] { new MemoryStream(uncompressedBytes), uncompressedSize });
+                    ReadMetadata.Invoke(_this, new object[] { new MemoryStream(uncompressedBytes), uncompressedSize });
                 }
                 break;
 
