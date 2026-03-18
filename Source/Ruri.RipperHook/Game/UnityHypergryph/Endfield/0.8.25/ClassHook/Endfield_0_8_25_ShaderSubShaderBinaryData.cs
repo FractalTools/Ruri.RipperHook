@@ -93,11 +93,6 @@ public static class ShaderBinaryDataStore
         // 使用导出时shader的Collection
         var collection = shader.Collection;
 
-        var allCompressedBlobs = new List<byte[]>();
-        var allOffsets = new List<List<uint>>();
-        var allCompressedLengths = new List<List<uint>>();
-        var allDecompressedLengths = new List<List<uint>>();
-
         foreach (var (fileID, pathID) in info.SubShaderBinaryDataPPtrs)
         {
             try
@@ -154,25 +149,162 @@ public static class ShaderBinaryDataStore
                     continue;
                 }
 
-                allCompressedBlobs.Add(subShaderBinaryData.CompressedBlob);
+                // 用户要求：先不考虑LOD全部支持，只取最高质量的LOD块（第一个块）回填到Shader中
+                // 避免合并多个块导致偏移量(Offsets)和长度计算错误，进而引发解包器报错
+                shader.CompressedBlob = subShaderBinaryData.CompressedBlob;
 
-                // 收集offsets/lengths
-                for (int i = 0; i < subShaderBinaryData.Offsets.Count; i++)
+                if (shader.Offsets_AssetList_AssetList_UInt32 != null)
                 {
-                    var offsets = new List<uint>();
-                    var compLengths = new List<uint>();
-                    var decompLengths = new List<uint>();
+                    shader.Offsets_AssetList_AssetList_UInt32.Clear();
+                    shader.CompressedLengths_AssetList_AssetList_UInt32.Clear();
+                    shader.DecompressedLengths_AssetList_AssetList_UInt32.Clear();
 
-                    foreach (var o in subShaderBinaryData.Offsets[i]) offsets.Add(o);
-                    foreach (var l in subShaderBinaryData.CompressedLengths[i]) compLengths.Add(l);
-                    foreach (var l in subShaderBinaryData.DecompressedLengths[i]) decompLengths.Add(l);
-
-                    allOffsets.Add(offsets);
-                    allCompressedLengths.Add(compLengths);
-                    allDecompressedLengths.Add(decompLengths);
+                    for (int i = 0; i < subShaderBinaryData.Offsets.Count; i++)
+                    {
+                        shader.Offsets_AssetList_AssetList_UInt32.AddNew().AddRange(subShaderBinaryData.Offsets[i]);
+                        shader.CompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(subShaderBinaryData.CompressedLengths[i]);
+                        shader.DecompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(subShaderBinaryData.DecompressedLengths[i]);
+                    }
                 }
 
-                HookLogger.LogSuccess($"    [SubShaderBinaryData] Resolved PathID={pathID}, blob size={subShaderBinaryData.CompressedBlob.Length}");
+                HookLogger.LogSuccess($"    [SubShaderBinaryData] Filled single LOD0 blob ({subShaderBinaryData.CompressedBlob.Length} bytes) from PathID={pathID} into Shader");
+
+                // === 临时调试：Dump blob到文件 ===
+                try
+                {
+                    var shaderName = (shader as AssetRipper.Assets.INamed)?.Name?.ToString() ?? $"PathID_{shader.PathID}";
+                    // 清理文件名非法字符
+                    foreach (var c in System.IO.Path.GetInvalidFileNameChars()) shaderName = shaderName.Replace(c, '_');
+                    var dumpDir = $@"D:\RuriDebug\{shaderName}";
+                    System.IO.Directory.CreateDirectory(dumpDir);
+
+                    // 1. Dump原始压缩blob
+                    System.IO.File.WriteAllBytes(System.IO.Path.Combine(dumpDir, "compressed_blob.raw"), subShaderBinaryData.CompressedBlob);
+
+                    // 2. 完整信息dump
+                    using (var sw = new System.IO.StreamWriter(System.IO.Path.Combine(dumpDir, "blob_info.txt")))
+                    {
+                        sw.WriteLine("=== SubShaderBinaryData Info ===");
+                        sw.WriteLine($"SubShaderBinaryData.Name = {subShaderBinaryData.Name_R}");
+                        sw.WriteLine($"SubShaderBinaryData PathID = {pathID}");
+                        sw.WriteLine($"CompressedBlob.Length = {subShaderBinaryData.CompressedBlob.Length}");
+                        sw.WriteLine($"Offsets.Count (platforms) = {subShaderBinaryData.Offsets.Count}");
+
+                        for (int pi = 0; pi < subShaderBinaryData.Offsets.Count; pi++)
+                        {
+                            sw.WriteLine($"\n--- Platform[{pi}] ({subShaderBinaryData.Offsets[pi].Count} segments) ---");
+                            for (int si = 0; si < subShaderBinaryData.Offsets[pi].Count; si++)
+                            {
+                                sw.WriteLine($"  [{si}] offset={subShaderBinaryData.Offsets[pi][si]}, compLen={subShaderBinaryData.CompressedLengths[pi][si]}, decompLen={subShaderBinaryData.DecompressedLengths[pi][si]}");
+                            }
+                        }
+
+                        sw.WriteLine("\n=== AR Shader State After Fill ===");
+                        sw.WriteLine($"Shader.PathID = {shader.PathID}");
+                        sw.WriteLine($"Shader.Name = {shaderName}");
+                        sw.WriteLine($"Shader.CompressedBlob.Length = {shader.CompressedBlob?.Length ?? -1}");
+                        sw.WriteLine($"Has_CompressedLengths_AssetList_AssetList_UInt32 = {shader.Has_CompressedLengths_AssetList_AssetList_UInt32()}");
+                        sw.WriteLine($"Has_CompressedLengths_AssetList_UInt32 = {shader.Has_CompressedLengths_AssetList_UInt32()}");
+                        sw.WriteLine($"Has_CompressedBlob = {shader.Has_CompressedBlob()}");
+
+                        if (shader.Has_CompressedLengths_AssetList_AssetList_UInt32())
+                        {
+                            sw.WriteLine($"Offsets_AssetList_AssetList count = {shader.Offsets_AssetList_AssetList_UInt32?.Count ?? -1}");
+                            if (shader.Offsets_AssetList_AssetList_UInt32 != null)
+                            {
+                                for (int pi = 0; pi < shader.Offsets_AssetList_AssetList_UInt32.Count; pi++)
+                                {
+                                    sw.WriteLine($"  Platform[{pi}]: {shader.Offsets_AssetList_AssetList_UInt32[pi].Count} segments");
+                                    for (int si = 0; si < shader.Offsets_AssetList_AssetList_UInt32[pi].Count; si++)
+                                    {
+                                        sw.WriteLine($"    [{si}] offset={shader.Offsets_AssetList_AssetList_UInt32[pi][si]}, compLen={shader.CompressedLengths_AssetList_AssetList_UInt32[pi][si]}, decompLen={shader.DecompressedLengths_AssetList_AssetList_UInt32[pi][si]}");
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            sw.WriteLine("WARNING: Has_CompressedLengths_AssetList_AssetList_UInt32 is FALSE!");
+                            sw.WriteLine("ReadBlobs will NOT use the nested AssetList path!");
+                        }
+
+                        // Dump segment 0 entries table
+                        sw.WriteLine("\n=== Segment 0 Entries Table Parse ===");
+                        if (subShaderBinaryData.Offsets.Count > 0 && subShaderBinaryData.Offsets[0].Count > 0)
+                        {
+                            try
+                            {
+                                uint s0Off = subShaderBinaryData.Offsets[0][0];
+                                uint s0CompLen = subShaderBinaryData.CompressedLengths[0][0];
+                                uint s0DecompLen = subShaderBinaryData.DecompressedLengths[0][0];
+                                var s0Decompressed = new byte[s0DecompLen];
+                                K4os.Compression.LZ4.LZ4Codec.Decode(
+                                    subShaderBinaryData.CompressedBlob, (int)s0Off, (int)s0CompLen,
+                                    s0Decompressed, 0, (int)s0DecompLen);
+
+                                // 读取entries count (第一个int32)
+                                int entryCount = BitConverter.ToInt32(s0Decompressed, 0);
+                                sw.WriteLine($"Entry count = {entryCount}");
+                                // 每个Entry: offset(4) + length(4) + segment(4) = 12 bytes (2019.3+)
+                                int entrySize = 12; // offset + length + segment
+                                for (int ei = 0; ei < Math.Min(entryCount, 20); ei++)
+                                {
+                                    int baseOff = 4 + ei * entrySize;
+                                    if (baseOff + entrySize > s0Decompressed.Length) break;
+                                    int eOffset = BitConverter.ToInt32(s0Decompressed, baseOff);
+                                    int eLength = BitConverter.ToInt32(s0Decompressed, baseOff + 4);
+                                    int eSegment = BitConverter.ToInt32(s0Decompressed, baseOff + 8);
+                                    sw.WriteLine($"  Entry[{ei}]: offset={eOffset}, length={eLength}, segment={eSegment}");
+                                }
+                                if (entryCount > 20) sw.WriteLine($"  ... ({entryCount - 20} more entries)");
+                            }
+                            catch (Exception ex)
+                            {
+                                sw.WriteLine($"Failed to parse: {ex.Message}");
+                            }
+                        }
+                    }
+
+                    // 3. Dump每个解压后的sub-blob
+                    for (int pi = 0; pi < subShaderBinaryData.Offsets.Count; pi++)
+                    {
+                        for (int si = 0; si < subShaderBinaryData.Offsets[pi].Count; si++)
+                        {
+                            uint off = subShaderBinaryData.Offsets[pi][si];
+                            uint compLen = subShaderBinaryData.CompressedLengths[pi][si];
+                            uint decompLen = subShaderBinaryData.DecompressedLengths[pi][si];
+
+                            if (off + compLen > (uint)subShaderBinaryData.CompressedBlob.Length)
+                            {
+                                HookLogger.LogWarning($"    [SubShaderBinaryData] Skipping dump p{pi}_s{si}: offset({off})+compLen({compLen}) > blobLen({subShaderBinaryData.CompressedBlob.Length})");
+                                continue;
+                            }
+
+                            try
+                            {
+                                var decompressed = new byte[decompLen];
+                                K4os.Compression.LZ4.LZ4Codec.Decode(
+                                    subShaderBinaryData.CompressedBlob, (int)off, (int)compLen,
+                                    decompressed, 0, (int)decompLen);
+                                System.IO.File.WriteAllBytes(
+                                    System.IO.Path.Combine(dumpDir, $"decompressed_p{pi}_s{si}.raw"), decompressed);
+                            }
+                            catch (Exception dex)
+                            {
+                                HookLogger.LogWarning($"    [SubShaderBinaryData] Decompress failed p{pi}_s{si}: {dex.Message}");
+                            }
+                        }
+                    }
+
+                    HookLogger.LogSuccess($"    [SubShaderBinaryData] Dump complete: {dumpDir}");
+                }
+                catch (Exception dumpEx)
+                {
+                    HookLogger.LogFailure($"    [SubShaderBinaryData] Dump failed: {dumpEx.Message}");
+                }
+                // === 临时调试结束 ===
+
+                return true; // 成功解析并回填第一个高质量LOD块后直接返回
             }
             catch (Exception ex)
             {
@@ -180,118 +312,7 @@ public static class ShaderBinaryDataStore
             }
         }
 
-        if (allCompressedBlobs.Count == 0)
-            return false;
-
-        // 合并所有blob为一个master blob，调整offsets
-        using var masterStream = new System.IO.MemoryStream();
-        uint currentOffset = 0;
-
-        for (int blobIdx = 0; blobIdx < allCompressedBlobs.Count; blobIdx++)
-        {
-            var blobData = allCompressedBlobs[blobIdx];
-            uint blobStartOffset = (uint)masterStream.Position;
-
-            masterStream.Write(blobData, 0, blobData.Length);
-
-            // 调整这个blob对应的所有offset组
-            // 因为每个SubShaderBinaryData的offsets是相对于自己的CompressedBlob的起始位置
-            // 合并后需要加上当前在master blob中的偏移
-            // 但是offsets/lengths是按平台分组的，一个SubShaderBinaryData可能对应多个平台
-            // 我们需要知道这个blobIdx对应的offset组范围
-        }
-
-        // 由于每个SubShaderBinaryData有独立的offset体系，
-        // 最简单的方式是取第一个（通常只有一个）SubShaderBinaryData的数据直接使用
-        if (allCompressedBlobs.Count == 1)
-        {
-            shader.CompressedBlob = allCompressedBlobs[0];
-
-            // 填充offsets/lengths到shader
-            if (shader.Offsets_AssetList_AssetList_UInt32 != null)
-            {
-                shader.Offsets_AssetList_AssetList_UInt32.Clear();
-                shader.CompressedLengths_AssetList_AssetList_UInt32.Clear();
-                shader.DecompressedLengths_AssetList_AssetList_UInt32.Clear();
-
-                for (int i = 0; i < allOffsets.Count; i++)
-                {
-                    var offsetList = new AssetList<uint>();
-                    foreach (var o in allOffsets[i]) offsetList.Add(o);
-                    shader.Offsets_AssetList_AssetList_UInt32.AddNew().AddRange(allOffsets[i]);
-
-                    var compList = new AssetList<uint>();
-                    foreach (var l in allCompressedLengths[i]) compList.Add(l);
-                    shader.CompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(allCompressedLengths[i]);
-
-                    var decompList = new AssetList<uint>();
-                    foreach (var l in allDecompressedLengths[i]) decompList.Add(l);
-                    shader.DecompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(allDecompressedLengths[i]);
-                }
-            }
-
-            HookLogger.LogSuccess($"    [SubShaderBinaryData] Filled single blob ({allCompressedBlobs[0].Length} bytes) into Shader");
-            return true;
-        }
-
-        // 多个SubShaderBinaryData: 合并blobs并调整offsets
-        byte[] mergedBlob;
-        using (var mergeStream = new System.IO.MemoryStream())
-        {
-            var mergedOffsets = new List<List<uint>>();
-            var mergedCompLengths = new List<List<uint>>();
-            var mergedDecompLengths = new List<List<uint>>();
-
-            int offsetGroupIdx = 0;
-            for (int blobIdx = 0; blobIdx < allCompressedBlobs.Count; blobIdx++)
-            {
-                uint blobBaseOffset = (uint)mergeStream.Position;
-                mergeStream.Write(allCompressedBlobs[blobIdx], 0, allCompressedBlobs[blobIdx].Length);
-
-                // 找出这个blob对应的offset组数量
-                // 每个SubShaderBinaryData的Offsets.Count就是平台数
-                // 但我们在收集时是按顺序flat添加的，需要重新调整
-                // 由于SubShaderBinaryData的offsets是相对于其自身CompressedBlob起始
-                // 而合并后需要相对于mergedBlob起始，所以需要加blobBaseOffset
-                while (offsetGroupIdx < allOffsets.Count)
-                {
-                    var adjustedOffsets = new List<uint>();
-                    foreach (var o in allOffsets[offsetGroupIdx])
-                    {
-                        adjustedOffsets.Add(o + blobBaseOffset);
-                    }
-                    mergedOffsets.Add(adjustedOffsets);
-                    mergedCompLengths.Add(allCompressedLengths[offsetGroupIdx]);
-                    mergedDecompLengths.Add(allDecompressedLengths[offsetGroupIdx]);
-                    offsetGroupIdx++;
-
-                    // 检查是否到了下一个blob的范围（这里需要更精确的逻辑）
-                    // 简化处理：假设offset groups均匀分布
-                    break; // TODO: 需要根据实际SubShaderBinaryData的offset组数来分
-                }
-            }
-
-            mergedBlob = mergeStream.ToArray();
-
-            shader.CompressedBlob = mergedBlob;
-
-            if (shader.Offsets_AssetList_AssetList_UInt32 != null)
-            {
-                shader.Offsets_AssetList_AssetList_UInt32.Clear();
-                shader.CompressedLengths_AssetList_AssetList_UInt32.Clear();
-                shader.DecompressedLengths_AssetList_AssetList_UInt32.Clear();
-
-                for (int i = 0; i < mergedOffsets.Count; i++)
-                {
-                    shader.Offsets_AssetList_AssetList_UInt32.AddNew().AddRange(mergedOffsets[i]);
-                    shader.CompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(mergedCompLengths[i]);
-                    shader.DecompressedLengths_AssetList_AssetList_UInt32.AddNew().AddRange(mergedDecompLengths[i]);
-                }
-            }
-        }
-
-        HookLogger.LogSuccess($"    [SubShaderBinaryData] Merged {allCompressedBlobs.Count} blobs ({mergedBlob.Length} bytes) into Shader");
-        return true;
+        return false;
     }
 
     /// <summary>
