@@ -231,6 +231,7 @@ public static class ShaderBinaryDataStore
             }
 
             HookLogger.LogSuccess($"    [SubShaderBinaryData] Filled single blob ({allCompressedBlobs[0].Length} bytes) into Shader");
+            AkefShaderPreprocessor.PreprocessForDecompile(shader);
             return true;
         }
 
@@ -291,6 +292,7 @@ public static class ShaderBinaryDataStore
         }
 
         HookLogger.LogSuccess($"    [SubShaderBinaryData] Merged {allCompressedBlobs.Count} blobs ({mergedBlob.Length} bytes) into Shader");
+        AkefShaderPreprocessor.PreprocessForDecompile(shader);
         return true;
     }
 
