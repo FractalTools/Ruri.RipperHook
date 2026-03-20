@@ -1,0 +1,24 @@
+# How to use:
+#	- Update [engine].
+#	- Define new key [<name>].
+#	- Update values of fields.
+#	- Update name in [engine].
+
+[engine]
+name = "dummy"
+
+[dummy]
+delay = 10
+binary = "UnityPlayer.dll"
+output_dir = ""
+transfer = 256
+json_dump = true
+text_dump = true
+binary_dump = true
+exclude = [1, 2, 3, 4]
+version = "2021.3.34f5"
+common_strings = 0x1b9d680
+rtti = 0x1f79910
+type_tree_ctor = 0x77ce60
+type_tree = 0x78fc40
+produce = 0x302f40
