@@ -11,10 +11,10 @@ namespace Ruri.RipperHook.Endfield;
 
 public partial class EndField_0_8_25_Hook
 {
-    [RetargetMethod(typeof(AnimClipAclCompressedBuffer), "ReadRelease", isBefore: true, isReturn: true)]
+    [RetargetMethod(typeof(AnimClipAclCompressedBuffer_2021_3_825), "ReadRelease", isBefore: true, isReturn: true)]
     public void AnimClipAclCompressedBuffer_ReadRelease(ref EndianSpanReader reader)
     {
-        var _this = (object)this as AnimClipAclCompressedBuffer;
+        var _this = (object)this as AnimClipAclCompressedBuffer_2021_3_825;
         
         _this.Header.ReadRelease(ref reader);
         _this.TransformBufferData = reader.ReadRelease_ArrayAlign_Byte();

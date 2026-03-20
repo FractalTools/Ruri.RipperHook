@@ -124,5 +124,6 @@
   <Project Path="Source/Ruri.FModelHook/Ruri.FModelHook.csproj" />
   <Project Path="Source/Ruri.ShaderDecompiler/Ruri.ShaderDecompiler.csproj" />
   <Project Path="Source/Ruri.SourceGenerated/Ruri.SourceGenerated.csproj" />
+  <Project Path="Tpk/Tpk.ConsoleApp/Tpk.ConsoleApp.csproj" />
   <Project Path="USCSandbox/USCSandbox/USCSandbox.csproj" />
 </Solution>
