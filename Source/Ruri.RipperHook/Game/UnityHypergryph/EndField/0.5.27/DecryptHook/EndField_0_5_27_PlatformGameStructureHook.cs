@@ -16,7 +16,8 @@ public partial class EndField_0_5_27_Hook
                 return true;
             }
         }
-        return filePath.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase);
+        return filePath.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) ||
+               filePath.EndsWith(".ab", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool CustomAssetBundlesCheckMagicNum(EndianReader reader, MethodInfo FromSerializedFile)

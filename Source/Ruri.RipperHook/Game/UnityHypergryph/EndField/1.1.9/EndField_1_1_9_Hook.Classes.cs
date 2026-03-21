@@ -21,7 +21,6 @@ namespace Ruri.RipperHook.Endfield;
 [TypeTreeHook(ClassIDType.Light)]
 [TypeTreeHook(ClassIDType.LineRenderer)]
 [TypeTreeHook(ClassIDType.Material)]
-[TypeTreeHook(ClassIDType.Mesh)]
 [TypeTreeHook(ClassIDType.MeshCollider)]
 [TypeTreeHook(ClassIDType.MeshRenderer)]
 [TypeTreeHook(ClassIDType.MonoScript)]

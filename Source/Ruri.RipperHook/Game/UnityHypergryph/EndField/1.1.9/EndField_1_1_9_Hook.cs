@@ -35,7 +35,7 @@ public partial class EndField_1_1_9_Hook : EndFieldCommon_Hook
         RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
         RegisterModule(new FileStreamBundleFileHook(CustomReadFileStreamMetadata));
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));
-        RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(CustomAssetBundlesCheck));
+        RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(EndField_0_5_27_Hook.CustomAssetBundlesCheck));
         RegisterModule(new PlatformGameStructureHook_IsBundleHeader(CustomAssetBundlesCheckMagicNum));
         RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
         HookExportHandlerProcess();
