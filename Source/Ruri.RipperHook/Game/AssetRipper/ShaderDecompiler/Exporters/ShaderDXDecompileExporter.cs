@@ -38,6 +38,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Ruri.RipperHook.Endfield;
 
 namespace Ruri.RipperHook.AR;
 
@@ -45,21 +46,28 @@ public sealed class ShaderDXDecompileExporter : ShaderExporterBase
 {
     public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
     {
-        // This part remains unchanged
         using Stream fileStream = File.Create(path);
 
         var shader = (IShader)asset;
 
-        var shaderName = shader.Name;
         AssetTypeValueField shaderData = ShaderAssetCreator.CreateAssetTypeValueField(shader);
 
-        // USCSandbox.Processor.ShaderProcessor is internal, use Reflection
-        var uscsAssembly = typeof(USCSandbox.GPUPlatform).Assembly;
+        // Endfield v1.1.9: Transform custom GpuType=33 (combined VS+PS) into standard DX11 types
+        shaderData = Endfield_1_1_9_GpuType33Transform.Apply(shaderData, asset.Collection.Version);
+
         var shaderProcessor = new USCSandbox.Processor.ShaderProcessor(shaderData, asset.Collection.Version, USCSandbox.GPUPlatform.d3d11);
 
-        string shaderText = shaderProcessor.Process();
+        string shaderText;
+        try
+        {
+            shaderText = shaderProcessor.Process();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ShaderExport] USCSandbox failed on '{shader.Name}': {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
 
-        // For testing, you might want to write the shaderText to the file
         using (StreamWriter writer = new StreamWriter(fileStream))
         {
             writer.Write(shaderText);
@@ -67,6 +75,7 @@ public sealed class ShaderDXDecompileExporter : ShaderExporterBase
 
         return true;
     }
+
 }
 
 
@@ -262,25 +271,25 @@ public static class ShaderAssetCreator
             children.Add(ConvertStencilOp("stencilOp", state.StencilOp));
             children.Add(ConvertStencilOp("stencilOpFront", state.StencilOpFront));
             children.Add(ConvertStencilOp("stencilOpBack", state.StencilOpBack));
-            children.Add(CreateSerializedFloatField("stencilRef", state.StencilRef.Val));
-            children.Add(CreateSerializedFloatField("stencilReadMask", state.StencilReadMask.Val));
-            children.Add(CreateSerializedFloatField("stencilWriteMask", state.StencilWriteMask.Val));
+            children.Add(CreateSerializedFloatField("stencilRef", state.StencilRef.Val, FvName(state.StencilRef)));
+            children.Add(CreateSerializedFloatField("stencilReadMask", state.StencilReadMask.Val, FvName(state.StencilReadMask)));
+            children.Add(CreateSerializedFloatField("stencilWriteMask", state.StencilWriteMask.Val, FvName(state.StencilWriteMask)));
 
             // Fog
-            children.Add(CreatePrimitiveField("fogMode", "float", AssetValueType.Float, (float)state.FogMode)); // A-code reads AsFloat
+            children.Add(CreatePrimitiveField("fogMode", "float", AssetValueType.Float, (float)state.FogMode));
             children.Add(ConvertFogColor("fogColor", state.FogColor));
-            children.Add(CreateSerializedFloatField("fogDensity", state.FogDensity.Val));
-            children.Add(CreateSerializedFloatField("fogStart", state.FogStart.Val));
-            children.Add(CreateSerializedFloatField("fogEnd", state.FogEnd.Val));
+            children.Add(CreateSerializedFloatField("fogDensity", state.FogDensity.Val, FvName(state.FogDensity)));
+            children.Add(CreateSerializedFloatField("fogStart", state.FogStart.Val, FvName(state.FogStart)));
+            children.Add(CreateSerializedFloatField("fogEnd", state.FogEnd.Val, FvName(state.FogEnd)));
 
             // Other states
-            children.Add(CreateSerializedFloatField("alphaToMask", state.AlphaToMask.Val));
-            children.Add(CreateSerializedFloatField("zClip", state.ZClip.Val));
-            children.Add(CreateSerializedFloatField("zTest", (float)state.ZTest.Val));
-            children.Add(CreateSerializedFloatField("zWrite", (float)state.ZWrite.Val));
-            children.Add(CreateSerializedFloatField("culling", (float)state.Culling.Val));
-            children.Add(CreateSerializedFloatField("offsetFactor", state.OffsetFactor.Val));
-            children.Add(CreateSerializedFloatField("offsetUnits", state.OffsetUnits.Val));
+            children.Add(CreateSerializedFloatField("alphaToMask", state.AlphaToMask.Val, FvName(state.AlphaToMask)));
+            children.Add(CreateSerializedFloatField("zClip", state.ZClip.Val, FvName(state.ZClip)));
+            children.Add(CreateSerializedFloatField("zTest", (float)state.ZTest.Val, FvName(state.ZTest)));
+            children.Add(CreateSerializedFloatField("zWrite", (float)state.ZWrite.Val, FvName(state.ZWrite)));
+            children.Add(CreateSerializedFloatField("culling", (float)state.Culling.Val, FvName(state.Culling)));
+            children.Add(CreateSerializedFloatField("offsetFactor", state.OffsetFactor.Val, FvName(state.OffsetFactor)));
+            children.Add(CreateSerializedFloatField("offsetUnits", state.OffsetUnits.Val, FvName(state.OffsetUnits)));
         }
 
         var template = new AssetTypeTemplateField { Name = name, Type = "SerializedShaderState", ValueType = AssetValueType.None, Children = children.Select(c => c.TemplateField).ToList() };
@@ -291,13 +300,13 @@ public static class ShaderAssetCreator
     {
         var children = new List<AssetTypeValueField>
         {
-            CreateSerializedFloatField("srcBlend", (float)blendState.SourceBlend.Val),
-            CreateSerializedFloatField("destBlend", (float)blendState.DestinationBlend.Val),
-            CreateSerializedFloatField("srcBlendAlpha", (float)blendState.SourceBlendAlpha.Val),
-            CreateSerializedFloatField("destBlendAlpha", (float)blendState.DestinationBlendAlpha.Val),
-            CreateSerializedFloatField("blendOp", (float)blendState.BlendOp.Val),
-            CreateSerializedFloatField("blendOpAlpha", (float)blendState.BlendOpAlpha.Val),
-            CreateSerializedFloatField("colMask", (float)blendState.ColMask.Val)
+            CreateSerializedFloatField("srcBlend", (float)blendState.SourceBlend.Val, FvName(blendState.SourceBlend)),
+            CreateSerializedFloatField("destBlend", (float)blendState.DestinationBlend.Val, FvName(blendState.DestinationBlend)),
+            CreateSerializedFloatField("srcBlendAlpha", (float)blendState.SourceBlendAlpha.Val, FvName(blendState.SourceBlendAlpha)),
+            CreateSerializedFloatField("destBlendAlpha", (float)blendState.DestinationBlendAlpha.Val, FvName(blendState.DestinationBlendAlpha)),
+            CreateSerializedFloatField("blendOp", (float)blendState.BlendOp.Val, FvName(blendState.BlendOp)),
+            CreateSerializedFloatField("blendOpAlpha", (float)blendState.BlendOpAlpha.Val, FvName(blendState.BlendOpAlpha)),
+            CreateSerializedFloatField("colMask", (float)blendState.ColMask.Val, FvName(blendState.ColMask))
         };
         var template = new AssetTypeTemplateField { Name = name, Type = "SerializedShaderRTBlendState", ValueType = AssetValueType.None, Children = children.Select(c => c.TemplateField).ToList() };
         return new AssetTypeValueField { TemplateField = template, Value = null, Children = children };
@@ -307,10 +316,10 @@ public static class ShaderAssetCreator
     {
         var children = new List<AssetTypeValueField>
         {
-            CreateSerializedFloatField("pass", (float)stencilOp.Pass.Val),
-            CreateSerializedFloatField("fail", (float)stencilOp.Fail.Val),
-            CreateSerializedFloatField("zFail", (float)stencilOp.ZFail.Val),
-            CreateSerializedFloatField("comp", (float)stencilOp.Comp.Val)
+            CreateSerializedFloatField("pass", (float)stencilOp.Pass.Val, FvName(stencilOp.Pass)),
+            CreateSerializedFloatField("fail", (float)stencilOp.Fail.Val, FvName(stencilOp.Fail)),
+            CreateSerializedFloatField("zFail", (float)stencilOp.ZFail.Val, FvName(stencilOp.ZFail)),
+            CreateSerializedFloatField("comp", (float)stencilOp.Comp.Val, FvName(stencilOp.Comp))
         };
         var template = new AssetTypeTemplateField { Name = name, Type = "SerializedStencilOp", ValueType = AssetValueType.None, Children = children.Select(c => c.TemplateField).ToList() };
         return new AssetTypeValueField { TemplateField = template, Value = null, Children = children };
@@ -320,20 +329,36 @@ public static class ShaderAssetCreator
     {
         var children = new List<AssetTypeValueField>
         {
-            CreateSerializedFloatField("x", fogColor.X.Val),
-            CreateSerializedFloatField("y", fogColor.Y.Val),
-            CreateSerializedFloatField("z", fogColor.Z.Val),
-            CreateSerializedFloatField("w", fogColor.W.Val)
+            CreateSerializedFloatField("x", fogColor.X.Val, FvName(fogColor.X)),
+            CreateSerializedFloatField("y", fogColor.Y.Val, FvName(fogColor.Y)),
+            CreateSerializedFloatField("z", fogColor.Z.Val, FvName(fogColor.Z)),
+            CreateSerializedFloatField("w", fogColor.W.Val, FvName(fogColor.W))
         };
         var template = new AssetTypeTemplateField { Name = name, Type = "SerializedShaderVectorValue", ValueType = AssetValueType.None, Children = children.Select(c => c.TemplateField).ToList() };
         return new AssetTypeValueField { TemplateField = template, Value = null, Children = children };
     }
 
-    private static AssetTypeValueField CreateSerializedFloatField(string name, float value)
+    /// <summary>
+    /// Extract property name from SerializedShaderFloatValue via INamed interface.
+    /// Returns null if name is empty or "&lt;noninit&gt;".
+    /// </summary>
+    private static string? FvName(object floatValue)
+    {
+        if (floatValue is INamed named)
+        {
+            var n = named.Name?.ToString();
+            if (!string.IsNullOrEmpty(n) && n != "<noninit>")
+                return n;
+        }
+        return null;
+    }
+
+    private static AssetTypeValueField CreateSerializedFloatField(string name, float value, string? propName = null)
     {
         var valField = CreatePrimitiveField("val", "float", AssetValueType.Float, value);
-        var template = new AssetTypeTemplateField { Name = name, Type = "SerializedFloat", ValueType = AssetValueType.None, Children = new List<AssetTypeTemplateField> { valField.TemplateField } };
-        return new AssetTypeValueField { TemplateField = template, Value = null, Children = new List<AssetTypeValueField> { valField } };
+        var nameField = CreateStringField("name", propName ?? "");
+        var template = new AssetTypeTemplateField { Name = name, Type = "SerializedFloat", ValueType = AssetValueType.None, Children = new List<AssetTypeTemplateField> { valField.TemplateField, nameField.TemplateField } };
+        return new AssetTypeValueField { TemplateField = template, Value = null, Children = new List<AssetTypeValueField> { valField, nameField } };
     }
 
     private static AssetTypeValueField ConvertSerializedProgram(string name, ISerializedProgram? program, UnityVersion version)

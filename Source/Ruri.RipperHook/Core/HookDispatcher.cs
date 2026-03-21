@@ -33,6 +33,8 @@ namespace Ruri.RipperHook.Core
             };
         }
 
+        public static IEnumerable<Type> GetRegisteredTypes() => _genericHookCache.Keys;
+
         public static void Universal_ReadRelease(object asset, ref EndianSpanReader reader)
         {
             var type = asset.GetType();

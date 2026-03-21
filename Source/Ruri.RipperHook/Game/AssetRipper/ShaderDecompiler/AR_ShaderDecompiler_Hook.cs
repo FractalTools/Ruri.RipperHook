@@ -1,6 +1,7 @@
 using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.HookUtils.ExportHandlerHook;
-﻿namespace Ruri.RipperHook.AR;
+
+namespace Ruri.RipperHook.AR;
 
 /// <summary>
 /// DXBC反编译为hlsl用的
@@ -8,4 +9,9 @@ using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 [GameHook("AR_ShaderDecompiler")]
 public partial class AR_ShaderDecompiler_Hook : RipperHook
 {
+    protected override void InitAttributeHook()
+    {
+        base.InitAttributeHook();
+        ApplyUSCSandboxFixes();
+    }
 }
