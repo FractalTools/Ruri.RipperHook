@@ -1,168 +1,24 @@
-using System.Reflection;
 using AssetRipper.Assets;
-using AssetRipper.Assets.Generics;
-using AssetRipper.Assets.IO;
-using AssetRipper.Assets.Metadata;
-using AssetRipper.Import.AssetCreation;
 using AssetRipper.IO.Endian;
-using AssetRipper.IO.Files.SerializedFiles.Parser;
-using AssetRipper.Primitives;
-using AssetRipper.SourceGenerated;
-using Mono.Cecil.Cil;
-using MonoMod.Cil;
 using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.Core;
+using Ruri.SourceGenerated.Classes.ClassID_48;
+using System.Reflection;
 
 namespace Ruri.RipperHook.Endfield;
 
 public partial class EndField_1_1_9_Hook
 {
-    // Cached reflection info for Ruri Shader_2021_3_1014
-    private static MethodInfo? _shaderCreateMethod;
-    private static Type? _shaderConcreteType;
-    private static bool _shaderReflectionReady;
-    private static int _shaderReadCount;
-
-    // Cached AR factory reflection (resolved once in SetupShaderReflection)
-    private static MethodInfo? _arShaderCreateMethod;
-
     public override void Initialize()
     {
         base.Initialize();
-        SetupShaderReflection();
     }
 
-    private void SetupShaderReflection()
+    [RetargetMethod(typeof(Shader_2021), "ReadRelease", isBefore: false, isReturn: false)]
+    public void Shader_2021_3_1014_ReadRelease(ref EndianSpanReader reader)
     {
-        try
-        {
-            var ruriAssembly = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == "Ruri.SourceGenerated");
-            if (ruriAssembly == null)
-            {
-                HookLogger.LogFailure("[EndField 1.1.9] Cannot find Ruri.SourceGenerated assembly");
-                return;
-            }
-
-            var ruriFactoryType = ruriAssembly.GetType("Ruri.SourceGenerated.Classes.ClassID_48.Shader");
-            if (ruriFactoryType == null)
-            {
-                HookLogger.LogFailure("[EndField 1.1.9] Cannot find Ruri Shader factory type");
-                return;
-            }
-
-            _shaderCreateMethod = ruriFactoryType.GetMethod("Create",
-                BindingFlags.Public | BindingFlags.Static, null,
-                new Type[] { typeof(AssetInfo), typeof(UnityVersion) }, null);
-
-            if (_shaderCreateMethod == null)
-            {
-                HookLogger.LogFailure("[EndField 1.1.9] Cannot find Ruri Shader.Create method");
-                return;
-            }
-
-            var probeVersion = new UnityVersion(2021, 3, 1014, UnityVersionType.Experimental, (byte)CustomEngineType.EndField);
-            var probeInstance = _shaderCreateMethod.Invoke(null, new object[] { null!, probeVersion });
-            _shaderConcreteType = probeInstance?.GetType();
-
-            if (_shaderConcreteType == null)
-            {
-                HookLogger.LogFailure("[EndField 1.1.9] Failed to resolve Ruri Shader concrete type");
-                return;
-            }
-
-            // Cache AR Shader factory method
-            var arFactoryType = typeof(ClassIDType).Assembly
-                .GetType("AssetRipper.SourceGenerated.Classes.ClassID_48.Shader");
-            _arShaderCreateMethod = arFactoryType?.GetMethod("Create", new[] { typeof(AssetInfo), typeof(UnityVersion) });
-
-            _shaderReflectionReady = true;
-            HookLogger.LogSuccess($"[EndField 1.1.9] Shader reflection ready → {_shaderConcreteType.Name} (SubShaderBlobs={_shaderConcreteType.GetProperty("SubShaderBlobs") != null})");
-        }
-        catch (Exception ex)
-        {
-            HookLogger.LogFailure($"[EndField 1.1.9] Shader reflection setup failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// IL hook on GameAssetFactory.ReadAsset to intercept Shader (ClassID 48) reading.
-    /// Injects a check at method start: if classID==48, use our custom reader and return.
-    /// </summary>
-    [RetargetMethodFunc(typeof(GameAssetFactory), "ReadAsset")]
-    public static bool HookReadAsset(ILContext il)
-    {
-        var cursor = new ILCursor(il);
-
-        // Insert at method beginning:
-        //   var result = TryCustomShaderRead(assetInfo, assetData);
-        //   if (result != null) return result;
-        cursor.Emit(OpCodes.Ldarg_1); // assetInfo
-        cursor.Emit(OpCodes.Ldarg_2); // assetData (ReadOnlyArraySegment<byte>)
-        cursor.EmitDelegate<Func<AssetInfo, ReadOnlyArraySegment<byte>, IUnityObjectBase?>>(TryCustomShaderRead);
-
-        var skipLabel = cursor.DefineLabel();
-        cursor.Emit(OpCodes.Dup);
-        cursor.Emit(OpCodes.Brfalse_S, skipLabel);
-        cursor.Emit(OpCodes.Ret);
-        cursor.MarkLabel(skipLabel);
-        cursor.Emit(OpCodes.Pop);
-
-        HookLogger.LogSuccess("[EndField 1.1.9] Hooked GameAssetFactory.ReadAsset for Shader interception");
-        return true;
-    }
-
-    /// <summary>
-    /// Called for every asset read. Returns non-null only for ClassID 48 (Shader).
-    /// Creates a Ruri Shader_2021_3_1014, reads the v1.1.9 data, consolidates blobs,
-    /// and deep-copies into an AR Shader_2021_3_12 object.
-    /// </summary>
-    private static IUnityObjectBase? TryCustomShaderRead(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData)
-    {
-        if (assetInfo.ClassID != 48) return null;
-
-        if (!_shaderReflectionReady || _shaderCreateMethod == null) return null;
-
-        try
-        {
-            // Create AR Shader object (the target that AR knows how to export)
-            if (_arShaderCreateMethod == null) return null;
-
-            var arShader = (IUnityObjectBase)_arShaderCreateMethod.Invoke(null,
-                new object[] { assetInfo, assetInfo.Collection.Version })!;
-
-            // Create Ruri dummy with v1.1.9 TypeTree layout (Shader_2021_3_1014)
-            var probeVersion = new UnityVersion(2021, 3, 1014, UnityVersionType.Experimental, (byte)CustomEngineType.EndField);
-            var ruriShader = (IUnityObjectBase)_shaderCreateMethod.Invoke(null,
-                new object[] { assetInfo, probeVersion })!;
-
-            // Read binary data using Ruri's generated ReadRelease
-            var reader = new EndianSpanReader(assetData, arShader.Collection.EndianType);
-            ruriShader.ReadRelease(ref reader);
-
-            _shaderReadCount++;
-            if (_shaderReadCount <= 3)
-            {
-                var nameProp = ruriShader.GetType().GetProperty("Name_Utf8String",
-                    BindingFlags.Public | BindingFlags.Instance);
-                Console.WriteLine($"[EndField 1.1.9] Shader #{_shaderReadCount}: {nameProp?.GetValue(ruriShader)}, reader={reader.Position}/{reader.Length}");
-            }
-
-            // Phase A: Consolidate SubShaderBlobs[0] → root CompressedBlob
-            ConsolidateSubShaderBlobs(ruriShader);
-            // Note: CompressionType=3 (LZ4HC) is left as-is.
-            // ReadBlobs() uses LZ4Codec.Decode unconditionally, which handles LZ4HC natively.
-
-            // Deep copy processed Ruri shader → AR shader
-            ReflectionExtensions.ClassDeepCopy(ruriShader, arShader);
-
-            return arShader;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[EndField 1.1.9] Shader read error (PathID={assetInfo.PathID}): {ex.Message}");
-            return null; // Fall through to original AR reading
-        }
+        var _this = (object)this as Shader_2021;
+        ConsolidateSubShaderBlobs(_this);
     }
 
     #region Phase A: Consolidate SubShaderBlobs
