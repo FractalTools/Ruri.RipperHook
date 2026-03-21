@@ -41,8 +41,6 @@ using System.Reflection;
 
 namespace Ruri.RipperHook.AR;
 
-using Ruri.RipperHook.Endfield;
-
 public sealed class ShaderDXDecompileExporter : ShaderExporterBase
 {
     public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
@@ -77,9 +75,6 @@ public static class ShaderAssetCreator
 
     public static AssetTypeValueField CreateAssetTypeValueField(IShader shader)
     {
-        // Endfield: UseExternalBlobs时，从SubShaderBinaryData解析blob填充到shader
-        ShaderBinaryDataStore.TryResolveAndFillBlob(shader);
-
         var blobs = shader.ReadBlobs();
 
         byte[] masterBlob;
