@@ -38,6 +38,7 @@ public partial class EndField_1_1_9_Hook : EndFieldCommon_Hook
         RegisterModule(new PlatformGameStructureHook_CollectAssetBundles(EndField_0_5_27_Hook.CustomAssetBundlesCheck));
         RegisterModule(new PlatformGameStructureHook_IsBundleHeader(CustomAssetBundlesCheckMagicNum));
         RegisterModule(new BundleFileBlockReaderHook(CustomBlockCompression));
+        RegisterAnimatorControllerHook();
         HookExportHandlerProcess();
 
         Endfield_1_1_9_GpuType33Transform.IsEnabled = true;
@@ -47,9 +48,9 @@ public partial class EndField_1_1_9_Hook : EndFieldCommon_Hook
 
     /// <summary>
     /// Hook ExportHandler.Process to catch individual processor failures.
-    /// Endfield's custom engine causes AssetRipper processors (AnimatorController,
-    /// AnimationClip, etc.) to fail on certain assets. This hook ensures each
-    /// processor failure is logged but doesn't stop the entire pipeline.
+    /// Endfield's custom engine causes AssetRipper processors (AnimationClip, etc.)
+    /// to fail on certain assets. This hook ensures each processor failure is
+    /// logged but doesn't stop the entire pipeline.
     /// </summary>
     private void HookExportHandlerProcess()
     {

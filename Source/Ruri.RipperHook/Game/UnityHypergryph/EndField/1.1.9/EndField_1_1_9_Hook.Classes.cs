@@ -5,7 +5,6 @@ namespace Ruri.RipperHook.Endfield;
 
 [TypeTreeHook(ClassIDType.AnimationClip)]
 [TypeTreeHook(ClassIDType.Animator)]
-[TypeTreeHook(ClassIDType.AnimatorController)]
 [TypeTreeHook(ClassIDType.AnimatorOverrideController)]
 [TypeTreeHook(ClassIDType.AssetBundle)]
 [TypeTreeHook(ClassIDType.AudioManager)]
