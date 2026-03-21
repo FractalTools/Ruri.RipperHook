@@ -8,6 +8,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<AssemblyName>Ruri.RipperHook</AssemblyName>
         <TargetFramework>net10.0-windows</TargetFramework>
+        <InternalsAssemblyNames>AssetRipper.SourceGenerated;Ruri.SourceGenerated</InternalsAssemblyNames>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -23,6 +24,10 @@
 		<PackageReference Include="AsmResolver.PE.File" Version="6.0.0-beta.5" />
 		<PackageReference Include="AssetRipper.Checksum" Version="1.1.0" />
 		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
+		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
 		<PackageReference Include="Oodle.NET" Version="2.2.0" />
