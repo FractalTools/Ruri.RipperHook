@@ -112,8 +112,6 @@
   <Project Path="AssetRipper/Source/AssetRipper.Web/AssetRipper.Web.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.Yaml.Tests/AssetRipper.Yaml.Tests.csproj" />
   <Project Path="AssetRipper/Source/AssetRipper.Yaml/AssetRipper.Yaml.csproj" />
-  <Project Path="AssetRipper/Source/Smolv/Smolv.csproj" />
-  <Project Path="AssetRipper/Source/SpirV/SpirV.csproj" />
   <Project Path="AssetRipper/Source/UnityEngine/UnityEngine.csproj" />
   <Project Path="FModel/CUE4Parse/CUE4Parse-Conversion/CUE4Parse-Conversion.csproj" />
   <Project Path="FModel/CUE4Parse/CUE4Parse/CUE4Parse.csproj" />
