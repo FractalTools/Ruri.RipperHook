@@ -5,7 +5,7 @@ using Ruri.RipperHook.Core;
 using USCSandbox.Processor;
 using MonoModHook = MonoMod.RuntimeDetour.Hook;
 
-namespace Ruri.RipperHook.AR;
+namespace Ruri.RipperHook.Endfield;
 
 /// <summary>
 /// Runtime patches for USCSandbox limitations:
@@ -13,7 +13,7 @@ namespace Ruri.RipperHook.AR;
 /// - ShaderSubProgram skips inline ShaderParams for Unity >= 2021 (version hardcode bug)
 /// - TextureParameter.Index packed format: low 16 bits = bind point, high 16 bits = flags
 /// </summary>
-public partial class AR_ShaderDecompiler_Hook
+public partial class EndField_1_1_9_Hook
 {
     private static readonly List<MonoModHook> _uscsSandboxHooks = new();
 

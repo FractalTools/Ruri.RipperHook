@@ -32,6 +32,8 @@ public partial class EndField_1_1_9_Hook : EndFieldCommon_Hook
 
     protected override void InitAttributeHook()
     {
+        ApplyUSCSandboxFixes();
+
         RegisterModule(new FileStreamBundleHeaderHook(CustomReadHeader));
         RegisterModule(new FileStreamBundleFileHook(CustomReadFileStreamMetadata));
         RegisterModule(new GameBundleHook(CustomFilePreInitialize));

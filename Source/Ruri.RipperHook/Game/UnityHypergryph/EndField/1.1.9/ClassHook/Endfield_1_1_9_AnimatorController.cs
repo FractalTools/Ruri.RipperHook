@@ -1,16 +1,52 @@
-using System.Reflection;
 using AssetRipper.Assets;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Checksum;
 using AssetRipper.IO.Endian;
 using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated;
-using Ruri.Hook.Utils;
+using AssetRipper.SourceGenerated.Classes.ClassID_91;
+using AssetRipper.SourceGenerated.Subclasses.PPtr_AnimationClip;
+using Ruri.SourceGenerated.Subclasses.PPtr_HGAnimationCurveMask;
+using System.Reflection;
 
 namespace Ruri.RipperHook.Endfield;
 
 public partial class EndField_1_1_9_Hook
-{
+{/*
+    [RetargetMethod(typeof(AnimatorController_2018_3), "ReadRelease")]
+    public void AnimatorController_2021_ReadRelease(ref EndianSpanReader reader)
+    {
+        var _this = (object)this as AnimatorController_2018_3;
+
+        // 原版读取结构
+        // m_Name = reader.ReadRelease_Utf8StringAlign();
+        // m_ControllerSize = reader.ReadUInt32();
+        // ((UnityAssetBase)m_Controller).ReadRelease(ref reader);
+        // m_TOS.ReadRelease_Map_UInt32_Utf8StringAlign(ref reader);
+        // m_AnimationClips.ReadRelease_ArrayAlign_Asset<PPtr_AnimationClip_5>(ref reader);
+        // ((UnityAssetBase)m_StateMachineBehaviourVectorDescription).ReadRelease(ref reader);
+        // m_StateMachineBehaviours.ReadRelease_ArrayAlign_Asset<PPtr_MonoBehaviour_5>(ref reader);
+        // m_MultiThreadedStateMachine = reader.ReadRelease_BooleanAlign();
+
+        // 自定义版读取
+        _this.Name = ReadReleaseMethods.ReadRelease_Utf8StringAlign(ref reader);
+        _this.ControllerSize = reader.ReadUInt32();
+        _this.Controller.ReadRelease(ref reader);
+        ReadReleaseMethods.ReadRelease_ArrayAlign_Utf8StringAlign(_this.TOS, ref reader); // 需要修复ConvertTOSData
+        AssetList<PPtr_HGAnimationCurveMask> m_AnimationCurveMask = new();
+        ReadReleaseMethods.ReadRelease_ArrayAlign_Asset(m_AnimationCurveMask, ref reader);
+        ReadReleaseMethods.ReadRelease_ArrayAlign_Asset<AssetList<PPtr_AnimationClip_5>>(_this.AnimationClips, ref reader);
+        _this.StateMachineBehaviourVectorDescription.ReadRelease(ref reader);
+        ReadReleaseMethods.ReadRelease_ArrayAlign_Asset(_this.StateMachineBehaviours, ref reader);
+        _this.MultiThreadedStateMachine = ReadReleaseMethods.ReadRelease_BooleanAlign(ref reader);
+        var m_ClothCalculatorType = reader.ReadInt32();
+        var m_EnableOptClipBindings = ReadReleaseMethods.ReadRelease_BooleanAlign(ref reader);
+        var m_ReserveCount = ReadReleaseMethods.ReadRelease_ByteAlign(ref reader);
+
+        ConvertTOSData(_this, _realthis);
+    }*/
+
     /// <summary>
     /// Endfield 1.1.9 changed AnimatorController's TOS structure:
     ///   Standard Unity: map m_TOS (AssetDictionary&lt;uint, Utf8String&gt;)

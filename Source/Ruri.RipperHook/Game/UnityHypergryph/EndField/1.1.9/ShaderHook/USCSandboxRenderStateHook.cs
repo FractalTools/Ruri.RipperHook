@@ -5,7 +5,7 @@ using System.Reflection;
 using USCSandbox.Extras;
 using USCSandbox.Processor;
 
-namespace Ruri.RipperHook.AR;
+namespace Ruri.RipperHook.Endfield;
 
 /// <summary>
 /// Hooks ShaderProcessor.WritePassState and WritePassRtBlend to restore
