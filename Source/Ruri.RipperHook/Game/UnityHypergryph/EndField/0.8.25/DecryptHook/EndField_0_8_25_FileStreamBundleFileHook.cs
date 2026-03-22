@@ -53,8 +53,7 @@ public partial class EndField_0_8_25_Hook
         using (var reader = new EndianReader(uncompressedStream, EndianType.BigEndian))
         {
             // 1. Parse Obfuscated BlocksInfo
-            var blocksInfo = ReadObfuscatedBlocksInfo(reader);
-            SetPrivateProperty(_this, "BlocksInfo", blocksInfo);
+            _this.SetBlocksInfo(ReadObfuscatedBlocksInfo(reader));
 
             // 2. Parse Obfuscated DirectoryInfo
             var directoryInfo = ReadObfuscatedDirectoryInfo(reader);
@@ -102,9 +101,9 @@ public partial class EndField_0_8_25_Hook
             compressedSize = BitOperations.RotateLeft(compressedSize, 3) ^ 0x5ADA4ABA;
 
             var block = new StorageBlock();
-            SetPrivateProperty(block, "CompressedSize", compressedSize);
-            SetPrivateProperty(block, "UncompressedSize", uncompressedSize);
-            SetPrivateProperty(block, "Flags", (StorageBlockFlags)flags);
+            block.SetCompressedSize(compressedSize);
+            block.SetUncompressedSize(uncompressedSize);
+            block.SetFlags((StorageBlockFlags)flags);
 
             storageBlocks[i] = block;
         }

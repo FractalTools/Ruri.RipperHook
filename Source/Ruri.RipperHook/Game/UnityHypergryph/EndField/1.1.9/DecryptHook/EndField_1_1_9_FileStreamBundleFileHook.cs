@@ -4,6 +4,7 @@ using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.Extensions;
 using K4os.Compression.LZ4;
 using Ruri.RipperHook.Crypto;
+using Ruri.RipperHook.HookUtils;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
@@ -53,8 +54,7 @@ public partial class EndField_1_1_9_Hook
 
         using (var reader = new EndianReader(uncompressedStream, EndianType.BigEndian))
         {
-            var blocksInfo = ReadObfuscatedBlocksInfo(reader);
-            SetPrivateProperty(_this, "BlocksInfo", blocksInfo);
+            _this.SetBlocksInfo(ReadObfuscatedBlocksInfo(reader));
 
             var directoryInfo = ReadObfuscatedDirectoryInfo(reader);
             _this.DirectoryInfo = directoryInfo;
@@ -101,10 +101,10 @@ public partial class EndField_1_1_9_Hook
             var compressedSize = VFSDecryptor.BitConcat(16, (uint)(b ^ d ^ 0xA121), (uint)d);
             compressedSize = BitOperations.RotateRight(compressedSize, 18) ^ 0xF74324EE;
 
-            var block = new StorageBlock();
-            SetPrivateProperty(block, "CompressedSize", compressedSize);
-            SetPrivateProperty(block, "UncompressedSize", uncompressedSize);
-            SetPrivateProperty(block, "Flags", (StorageBlockFlags)flags);
+            var block = new StorageBlock(); 
+            block.SetCompressedSize(compressedSize);
+            block.SetUncompressedSize(uncompressedSize);
+            block.SetFlags((StorageBlockFlags)flags);
 
             storageBlocks[i] = block;
         }
