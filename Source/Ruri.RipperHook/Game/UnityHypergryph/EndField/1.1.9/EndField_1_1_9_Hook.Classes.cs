@@ -5,6 +5,7 @@ namespace Ruri.RipperHook.Endfield;
 
 [TypeTreeHook(ClassIDType.AnimationClip)]
 [TypeTreeHook(ClassIDType.Animator)]
+//[TypeTreeHook(ClassIDType.AnimatorController)]
 [TypeTreeHook(ClassIDType.AnimatorOverrideController)]
 [TypeTreeHook(ClassIDType.AssetBundle)]
 [TypeTreeHook(ClassIDType.AudioManager)]
@@ -34,7 +35,7 @@ namespace Ruri.RipperHook.Endfield;
 [TypeTreeHook(ClassIDType.ReflectionProbe)]
 [TypeTreeHook(ClassIDType.RenderSettings)]
 [TypeTreeHook(ClassIDType.RenderTexture)]
-[TypeTreeHook(ClassIDType.Shader)]
+//[TypeTreeHook(ClassIDType.Shader)]
 [TypeTreeHook(ClassIDType.SkinnedMeshRenderer)]
 [TypeTreeHook(ClassIDType.SparseTexture)]
 [TypeTreeHook(ClassIDType.SphereCollider)]

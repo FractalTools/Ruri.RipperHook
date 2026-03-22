@@ -1,8 +1,7 @@
 using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Endian;
-using Ruri.RipperHook.Attributes;
-using Ruri.RipperHook.Core;
-using Ruri.SourceGenerated.Classes.ClassID_48;
+using AssetRipper.SourceGenerated.Classes.ClassID_48;
+using Shader_119 = Ruri.SourceGenerated.Classes.ClassID_48.Shader_2021;
 
 namespace Ruri.RipperHook.Endfield;
 
@@ -13,14 +12,22 @@ public partial class EndField_1_1_9_Hook
         base.Initialize();
     }
 
-    [RetargetMethod(typeof(Shader_2021), "ReadRelease", isBefore: false, isReturn: false)]
-    public void Shader_2021_3_1014_ReadRelease(ref EndianSpanReader reader)
+    [RetargetMethod(typeof(Shader_2021_3_12), "ReadRelease")]
+    public void Shader_2021_3_1109_ReadRelease(ref EndianSpanReader reader)
     {
-        var _this = (object)this as Shader_2021;
-        ConsolidateSubShaderBlobs(_this);
+        var _this = (object)this as Shader_2021_3_12;
+
+        var dummyThis = new Shader_119(_this.AssetInfo);
+        dummyThis.ReadRelease(ref reader);
+
+        ConsolidateSubShaderBlobs(dummyThis);
+
+        ReflectionExtensions.ClassDeepCopy(dummyThis, _this);
+
+        Endfield_1_1_9_GpuType33Transform.Apply(_this, _this.Collection.Version);
     }
 
-    private static void ConsolidateSubShaderBlobs(Shader_2021 shader)
+    private static void ConsolidateSubShaderBlobs(Shader_119 shader)
     {
         var compressedBlob = shader.CompressedBlob;
         if (compressedBlob != null && compressedBlob.Length > 0) return;

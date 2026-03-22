@@ -1,72 +1,68 @@
+using AssetRipper.Export.Modules.Shaders.Extensions;
 using AssetRipper.Primitives;
-using AssetsTools.NET;
+using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using K4os.Compression.LZ4;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 
 namespace Ruri.RipperHook.Endfield;
 
-/// <summary>
-/// Transforms Endfield v1.1.9 custom GpuProgramType=33 (combined VS+PS DXBC in one blob entry)
-/// into standard DX11VertexSM40 (15) and DX11PixelSM40 (17) separate entries
-/// so USCSandbox can decompile them to HLSL.
-/// </summary>
 internal static class Endfield_1_1_9_GpuType33Transform
 {
-    public static bool IsEnabled { get; set; }
+    public static bool IsEnabled { get; set; } = true;
 
     private const sbyte GpuType_Custom33 = 33;
     private const sbyte GpuType_DX11VertexSM40 = 15;
     private const sbyte GpuType_DX11PixelSM40 = 17;
     private const int Platform_D3D11 = 4;
-    private const int StandardBlobVersion = 202012090; // Unity >= 2021.2
+    private const int StandardBlobVersion = 202012090;
 
-    // Custom ProgramData header layout offsets
-    private const int PD_Offset2 = 0x04; // offset to 2nd DXBC
-    private const int PD_Size2 = 0x08;   // size of 2nd DXBC
-    private const int PD_Offset1 = 0x0C; // offset to 1st DXBC (= header size)
-    private const int PD_Size1 = 0x10;   // size of 1st DXBC
-    private const uint DXBC_Magic = 0x43425844;
+    private const int PD_Offset2 = 0x04;
+    private const int PD_Size2 = 0x08;
+    private const int PD_Offset1 = 0x0C;
+    private const int PD_Size1 = 0x10;
 
-    public static AssetTypeValueField Apply(AssetTypeValueField shaderData, UnityVersion version)
+    public static void Apply(IShader shader, UnityVersion version)
     {
-        if (!IsEnabled) return shaderData;
+        if (!IsEnabled) return;
+        if (!HasGpuType33(shader)) return;
 
-        if (!HasGpuType33(shaderData))
-            return shaderData;
+        Console.WriteLine("[GpuType33Transform] Detected custom GpuType=33 entries, applying full blob reconstruction...");
 
-        Console.WriteLine("[GpuType33Transform] Detected custom GpuType=33 entries, transforming...");
-
-        int d3d11Index = FindPlatformIndex(shaderData);
+        int d3d11Index = FindPlatformIndex(shader);
         if (d3d11Index < 0)
         {
             Console.WriteLine("[GpuType33Transform] No d3d11 platform found, skipping");
-            return shaderData;
+            return;
         }
 
-        // Step 1: Transform blob — split GpuType=33 entries into VS+PS
-        var (splitMap, reindexMap) = TransformBlob(shaderData, d3d11Index, version);
+        var (splitMap, reindexMap) = ReconstructAllBlobsAndSplitD3D11(shader, d3d11Index, version);
 
-        // Step 2: Transform PlayerSubPrograms in progVertex and progFragment
-        TransformPlayerSubPrograms(shaderData, splitMap, reindexMap);
-
-        return shaderData;
+        TransformPlayerSubPrograms(shader, splitMap, reindexMap);
     }
 
     #region Detection
 
-    private static bool HasGpuType33(AssetTypeValueField shaderData)
+    private static bool HasGpuType33(IShader shader)
     {
-        foreach (var subShader in shaderData["m_ParsedForm"]["m_SubShaders.Array"])
+        dynamic dynShader = shader;
+        if (dynShader.ParsedForm?.SubShaders == null) return false;
+
+        foreach (var subShader in dynShader.ParsedForm.SubShaders)
         {
-            foreach (var pass in subShader["m_Passes.Array"])
+            foreach (var pass in subShader.Passes)
             {
-                var pspOuter = pass["progVertex"]["m_PlayerSubPrograms"];
-                if (pspOuter.IsDummy) continue;
-                var outerArray = pspOuter["Array"];
-                if (outerArray.Children.Count == 0) continue;
-                var lastInner = outerArray.Children[^1]["Array"];
+                var pspOuter = pass.ProgVertex?.PlayerSubPrograms;
+                if (pspOuter == null || pspOuter.Count == 0) continue;
+
+                var lastInner = pspOuter[pspOuter.Count - 1];
                 foreach (var entry in lastInner)
                 {
-                    if (entry["m_GpuProgramType"].AsSByte == GpuType_Custom33)
+                    if (entry.GpuProgramType == GpuType_Custom33)
                         return true;
                 }
             }
@@ -74,271 +70,231 @@ internal static class Endfield_1_1_9_GpuType33Transform
         return false;
     }
 
-    private static int FindPlatformIndex(AssetTypeValueField shaderData)
+    private static int FindPlatformIndex(IShader shader)
     {
-        var platforms = shaderData["platforms.Array"];
-        for (int i = 0; i < platforms.Children.Count; i++)
+        dynamic dynShader = shader;
+        var platforms = dynShader.Platforms;
+        for (int i = 0; i < platforms.Count; i++)
         {
-            if (platforms[i].AsInt == Platform_D3D11)
-                return i;
+            if ((int)platforms[i] == Platform_D3D11) return i;
         }
         return -1;
     }
 
     #endregion
 
-    #region Blob Transform
+    #region Blob Reconstruction (修复多Chunk合并越界)
 
-    /// <summary>
-    /// Decompresses the d3d11 blob, splits GpuType=33 entries, rebuilds and recompresses.
-    /// Returns: splitMap (old index → new VS+PS indices), reindexMap (old index → new index for non-split entries).
-    /// </summary>
-    private static (Dictionary<int, (int vsIdx, int psIdx)> splitMap, Dictionary<int, int> reindexMap) TransformBlob(
-        AssetTypeValueField shaderData, int d3d11Index, UnityVersion version)
+    private static (Dictionary<int, (int vsIdx, int psIdx)> splitMap, Dictionary<int, int> reindexMap)
+        ReconstructAllBlobsAndSplitD3D11(IShader shader, int d3d11Index, UnityVersion version)
     {
-        // Read blob metadata from ATVF
-        var offsets = shaderData["offsets.Array"];
-        var compressedLengths = shaderData["compressedLengths.Array"];
-        var decompressedLengths = shaderData["decompressedLengths.Array"];
-        byte[] masterBlob = shaderData["compressedBlob.Array"].AsByteArray;
+        var blobs = shader.ReadBlobs();
 
-        uint blobOffset, compLen, decompLen;
-        if (offsets[d3d11Index].Children.Count > 0)
-        {
-            blobOffset = offsets[d3d11Index]["Array"][0].AsUInt;
-            compLen = compressedLengths[d3d11Index]["Array"][0].AsUInt;
-            decompLen = decompressedLengths[d3d11Index]["Array"][0].AsUInt;
-        }
-        else
-        {
-            blobOffset = offsets[d3d11Index].AsUInt;
-            compLen = compressedLengths[d3d11Index].AsUInt;
-            decompLen = decompressedLengths[d3d11Index].AsUInt;
-        }
+        var allCompressedBlobs = new List<byte[]>();
+        var finalOffsets = new List<uint>();
+        var finalCompressedLengths = new List<uint>();
+        var finalDecompressedLengths = new List<uint>();
+        uint currentOffset = 0;
 
-        // Decompress
-        byte[] decompressed = new byte[decompLen];
-        LZ4Codec.Decode(masterBlob, (int)blobOffset, (int)compLen, decompressed, 0, (int)decompLen);
-
-        // Parse blob entries (BlobManager format)
         bool hasSegment = version.GreaterThanOrEquals(2019, 3);
-        int entryFieldSize = hasSegment ? 12 : 8;
+        int entrySize = hasSegment ? 12 : 8;
 
-        using var blobReader = new BinaryReader(new MemoryStream(decompressed));
-        int entryCount = blobReader.ReadInt32();
-        var blobEntries = new List<(int offset, int length, int segment)>();
-        for (int i = 0; i < entryCount; i++)
-        {
-            int off = blobReader.ReadInt32();
-            int len = blobReader.ReadInt32();
-            int seg = hasSegment ? blobReader.ReadInt32() : 0;
-            blobEntries.Add((off, len, seg));
-        }
-
-        // Split GpuType=33 entries and build old→new index mappings
-        var newEntryData = new List<byte[]>();
         var splitMap = new Dictionary<int, (int vsIdx, int psIdx)>();
-        var reindexMap = new Dictionary<int, int>(); // old index → new index for non-split entries
+        var reindexMap = new Dictionary<int, int>();
 
-        for (int i = 0; i < entryCount; i++)
+        for (int i = 0; i < blobs.Length; i++)
         {
-            byte[] rawEntry = new byte[blobEntries[i].length];
-            Array.Copy(decompressed, blobEntries[i].offset, rawEntry, 0, blobEntries[i].length);
+            var blob = blobs[i];
+            byte[] finalDecompressedBlob;
 
-            // Check ProgramType at offset 4 (after blobVersion)
-            int progType = BitConverter.ToInt32(rawEntry, 4);
-
-            if (progType == GpuType_Custom33)
+            var entries = blob.Entries;
+            if (entries == null || entries.Length == 0)
             {
-                var (vsEntry, psEntry) = SplitCustomEntry(rawEntry, version);
-                int vsIdx = newEntryData.Count;
-                newEntryData.Add(vsEntry);
-                int psIdx = newEntryData.Count;
-                newEntryData.Add(psEntry);
-                splitMap[i] = (vsIdx, psIdx);
+                // 处理无代码编译的情况
+                finalDecompressedBlob = new byte[4];
+            }
+            else if (i == d3d11Index)
+            {
+                // 【D3D11 平台】提取并拆分 GpuType33
+                var decompressedBlobSegments = GetSegments(blob);
+                var newEntryData = new List<byte[]>();
+
+                for (int j = 0; j < entries.Length; j++)
+                {
+                    var entryObj = entries[j];
+                    byte[] segmentData = (byte[])decompressedBlobSegments[entryObj.Segment]!;
+                    byte[] rawEntry = new byte[entryObj.Length];
+                    Array.Copy(segmentData, entryObj.Offset, rawEntry, 0, entryObj.Length);
+
+                    int progType = BitConverter.ToInt32(rawEntry, 4);
+                    if (progType == GpuType_Custom33)
+                    {
+                        var (vsEntry, psEntry) = SplitCustomEntry(rawEntry, version);
+                        splitMap[j] = (newEntryData.Count, newEntryData.Count + 1);
+                        newEntryData.Add(vsEntry);
+                        newEntryData.Add(psEntry);
+                    }
+                    else
+                    {
+                        reindexMap[j] = newEntryData.Count;
+                        newEntryData.Add(rawEntry);
+                    }
+                }
+                // RebuildBlobBinary 内部已经固定给所有新生成的 entry 写入 Segment = 0
+                finalDecompressedBlob = RebuildBlobBinary(newEntryData, hasSegment);
             }
             else
             {
-                int newIdx = newEntryData.Count;
-                reindexMap[i] = newIdx;
-                newEntryData.Add(rawEntry);
+                // 【其他平台】执行合并重构，消除原本的多 Segment
+                var decompressedBlobSegments = GetSegments(blob);
+                using var decompressedStream = new MemoryStream();
+                using var writer = new BinaryWriter(decompressedStream);
+
+                int headerSize = 4 + entries.Length * entrySize;
+                writer.BaseStream.Position = headerSize;
+
+                var segmentStartOffsets = new long[decompressedBlobSegments.Count];
+                for (int j = 0; j < decompressedBlobSegments.Count; j++)
+                {
+                    segmentStartOffsets[j] = writer.BaseStream.Position;
+                    writer.Write((byte[])decompressedBlobSegments[j]!);
+                }
+
+                writer.BaseStream.Position = 0;
+                writer.Write(entries.Length);
+
+                foreach (var entryObj in entries)
+                {
+                    long absoluteOffset = segmentStartOffsets[entryObj.Segment] + entryObj.Offset;
+                    writer.Write((int)absoluteOffset);
+                    writer.Write(entryObj.Length);
+
+                    // 【致命错误修复点】：因为之前的数据已经全部合并写入单一 Stream
+                    // 这里必须强行将 Segment ID 写为 0，否则后续读取会越界
+                    if (hasSegment) writer.Write(0);
+                }
+                finalDecompressedBlob = decompressedStream.ToArray();
             }
+
+            // 压紧
+            byte[] compressedPlatformBlob = new byte[LZ4Codec.MaximumOutputSize(finalDecompressedBlob.Length)];
+            int compressedSize = LZ4Codec.Encode(finalDecompressedBlob, compressedPlatformBlob, LZ4Level.L00_FAST);
+            Array.Resize(ref compressedPlatformBlob, compressedSize);
+
+            allCompressedBlobs.Add(compressedPlatformBlob);
+            finalOffsets.Add(currentOffset);
+            finalCompressedLengths.Add((uint)compressedPlatformBlob.Length);
+            finalDecompressedLengths.Add((uint)finalDecompressedBlob.Length);
+
+            currentOffset += (uint)compressedPlatformBlob.Length;
         }
 
-        // Rebuild blob binary
-        byte[] newDecompressed = RebuildBlobBinary(newEntryData, hasSegment);
-
-        // Recompress
-        byte[] newCompressed = new byte[LZ4Codec.MaximumOutputSize(newDecompressed.Length)];
-        int newCompSize = LZ4Codec.Encode(newDecompressed, newCompressed, LZ4Level.L00_FAST);
-        Array.Resize(ref newCompressed, newCompSize);
-
-        // Rebuild master blob (replace d3d11 chunk)
-        using var newMasterStream = new MemoryStream();
-        // Before d3d11
-        newMasterStream.Write(masterBlob, 0, (int)blobOffset);
-        uint newD3d11Offset = (uint)newMasterStream.Position;
-        // New d3d11 data
-        newMasterStream.Write(newCompressed, 0, newCompressed.Length);
-        // After d3d11
-        uint oldEnd = blobOffset + compLen;
-        if (oldEnd < masterBlob.Length)
-            newMasterStream.Write(masterBlob, (int)oldEnd, masterBlob.Length - (int)oldEnd);
-        byte[] newMasterBlob = newMasterStream.ToArray();
-
-        int sizeShift = newCompressed.Length - (int)compLen;
-
-        // Update ATVF blob data
-        shaderData["compressedBlob"]["Array"].Value = new AssetTypeValue(AssetValueType.ByteArray, newMasterBlob);
-
-        // Update offsets/lengths for d3d11 platform
-        UpdateBlobMetadata(offsets, d3d11Index, newD3d11Offset);
-        UpdateBlobMetadata(compressedLengths, d3d11Index, (uint)newCompressed.Length);
-        UpdateBlobMetadata(decompressedLengths, d3d11Index, (uint)newDecompressed.Length);
-
-        // Shift offsets for platforms after d3d11
-        if (sizeShift != 0)
+        // 把一切重写回原生底层的 MasterBlob
+        using var masterBlobStream = new MemoryStream();
+        foreach (var compressedBlob in allCompressedBlobs)
         {
-            for (int i = 0; i < shaderData["platforms.Array"].Children.Count; i++)
-            {
-                if (i == d3d11Index) continue;
-                uint curOffset;
-                if (offsets[i].Children.Count > 0)
-                    curOffset = offsets[i]["Array"][0].AsUInt;
-                else
-                    curOffset = offsets[i].AsUInt;
-
-                if (curOffset > blobOffset)
-                    UpdateBlobMetadata(offsets, i, (uint)(curOffset + sizeShift));
-            }
+            masterBlobStream.Write(compressedBlob, 0, compressedBlob.Length);
         }
 
-        Console.WriteLine($"[GpuType33Transform] Blob: {entryCount} entries → {newEntryData.Count} entries, " +
-                          $"decompressed {decompLen}→{newDecompressed.Length}, compressed {compLen}→{newCompressed.Length}");
+        dynamic dynShader = shader;
+        dynShader.CompressedBlob = masterBlobStream.ToArray();
 
+        // 强行清理旧的多 Chunk 碎片，转为完美单 Chunk 格式
+        ReplaceNestedArray(dynShader.Offsets_AssetList_AssetList_UInt32, finalOffsets);
+        ReplaceNestedArray(dynShader.CompressedLengths_AssetList_AssetList_UInt32, finalCompressedLengths);
+        ReplaceNestedArray(dynShader.DecompressedLengths_AssetList_AssetList_UInt32, finalDecompressedLengths);
+
+        Console.WriteLine("[GpuType33Transform] Successfully reconstructed all blobs into single-chunk format.");
         return (splitMap, reindexMap);
     }
 
-    private static void UpdateBlobMetadata(AssetTypeValueField arrayField, int platformIndex, uint newValue)
+    private static IList GetSegments(object blob)
     {
-        if (arrayField[platformIndex].Children.Count > 0)
-            arrayField[platformIndex]["Array"][0].Value = new AssetTypeValue(AssetValueType.UInt32, newValue);
-        else
-            arrayField[platformIndex].Value = new AssetTypeValue(AssetValueType.UInt32, newValue);
+        var field = blob.GetType().GetField("m_decompressedBlobSegments", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        return (IList)field!.GetValue(blob)!;
     }
 
-    /// <summary>
-    /// Splits a GpuType=33 blob entry into separate VS (type 15) and PS (type 17) entries.
-    /// </summary>
+    private static void ReplaceNestedArray(dynamic outerList, List<uint> newSingleValues)
+    {
+        outerList.Clear();
+        for (int i = 0; i < newSingleValues.Count; i++)
+        {
+            var inner = outerList.AddNew();
+            inner.Add(newSingleValues[i]);
+        }
+    }
+
+    #endregion
+
+    #region Binary Helpers
+
     private static (byte[] vsEntry, byte[] psEntry) SplitCustomEntry(byte[] entryData, UnityVersion version)
     {
         using var reader = new BinaryReader(new MemoryStream(entryData));
-
-        // Read ShaderSubProgram header
-        int blobVersion = reader.ReadInt32();    // custom blobVersion
-        int programType = reader.ReadInt32();    // 33
+        int blobVersion = reader.ReadInt32();
+        int programType = reader.ReadInt32();
         int statsALU = reader.ReadInt32();
         int statsTEX = reader.ReadInt32();
         int statsFlow = reader.ReadInt32();
-        int statsTempReg = reader.ReadInt32();   // present for Unity >= 5.5
+        int statsTempReg = reader.ReadInt32();
 
-        // Read keywords (single merged array for Unity >= 2021.2)
-        // USCSandbox reads: globalKeywordCount + strings (no local keywords for 2021.3)
         int keywordCount = reader.ReadInt32();
         var keywordBytes = new List<byte[]>();
         for (int i = 0; i < keywordCount; i++)
         {
             int len = reader.ReadInt32();
-            byte[] str = reader.ReadBytes(len);
-            keywordBytes.Add(str);
-            // Align to 4 bytes
+            keywordBytes.Add(reader.ReadBytes(len));
             int pad = (4 - ((int)reader.BaseStream.Position % 4)) % 4;
             if (pad > 0) reader.ReadBytes(pad);
         }
 
-        // Read ProgramData
         int programDataSize = reader.ReadInt32();
         byte[] programData = reader.ReadBytes(programDataSize);
-        // Align to 4
         int pdPad = (4 - ((int)reader.BaseStream.Position % 4)) % 4;
         if (pdPad > 0) reader.ReadBytes(pdPad);
 
-        // Read remaining bytes (BindChannels data)
         byte[] tail = reader.ReadBytes((int)(reader.BaseStream.Length - reader.BaseStream.Position));
 
-        // Parse custom ProgramData header to extract two DXBCs
-        int offset1 = BitConverter.ToInt32(programData, PD_Offset1); // 1st DXBC offset (typically 0xB0)
-        int size1 = BitConverter.ToInt32(programData, PD_Size1);     // 1st DXBC size (VS)
-        int offset2 = BitConverter.ToInt32(programData, PD_Offset2); // 2nd DXBC offset
-        int size2 = BitConverter.ToInt32(programData, PD_Size2);     // 2nd DXBC size (PS)
+        int offset1 = BitConverter.ToInt32(programData, PD_Offset1);
+        int size1 = BitConverter.ToInt32(programData, PD_Size1);
+        int offset2 = BitConverter.ToInt32(programData, PD_Offset2);
+        int size2 = BitConverter.ToInt32(programData, PD_Size2);
 
         byte[] vsDxbc = new byte[size1];
         Array.Copy(programData, offset1, vsDxbc, 0, size1);
         byte[] psDxbc = new byte[size2];
         Array.Copy(programData, offset2, psDxbc, 0, size2);
 
-        // Build standard ProgramData: 6-byte header + raw DXBC
-        // SegmentStream uses absolute offset from stream start.
-        // GetDirectXDataOffset returns 6 for version>=5.4, headerVersion<2.
-        // So DXBC starts at byte 6 (0-indexed): [headerVersion(1), zeros(5), DXBC...]
         byte[] vsProgData = new byte[6 + vsDxbc.Length];
-        vsProgData[0] = 0x01; // headerVersion = 1
+        vsProgData[0] = 0x01;
         Array.Copy(vsDxbc, 0, vsProgData, 6, vsDxbc.Length);
 
         byte[] psProgData = new byte[6 + psDxbc.Length];
         psProgData[0] = 0x01;
         Array.Copy(psDxbc, 0, psProgData, 6, psDxbc.Length);
 
-        // Build complete ShaderSubProgram entries
-        byte[] vsEntry = BuildSubProgramEntry(
-            StandardBlobVersion, GpuType_DX11VertexSM40,
-            statsALU, statsTEX, statsFlow, statsTempReg,
-            keywordBytes, vsProgData, tail);
-
-        byte[] psEntry = BuildSubProgramEntry(
-            StandardBlobVersion, GpuType_DX11PixelSM40,
-            statsALU, statsTEX, statsFlow, statsTempReg,
-            keywordBytes, psProgData, tail);
-
-        return (vsEntry, psEntry);
+        return (
+            BuildSubProgramEntry(StandardBlobVersion, GpuType_DX11VertexSM40, statsALU, statsTEX, statsFlow, statsTempReg, keywordBytes, vsProgData, tail),
+            BuildSubProgramEntry(StandardBlobVersion, GpuType_DX11PixelSM40, statsALU, statsTEX, statsFlow, statsTempReg, keywordBytes, psProgData, tail)
+        );
     }
 
-    private static byte[] BuildSubProgramEntry(
-        int blobVersion, int programType,
-        int statsALU, int statsTEX, int statsFlow, int statsTempReg,
-        List<byte[]> keywordBytes, byte[] programData, byte[] tail)
+    private static byte[] BuildSubProgramEntry(int blobVersion, int programType, int statsALU, int statsTEX, int statsFlow, int statsTempReg, List<byte[]> keywordBytes, byte[] programData, byte[] tail)
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-
-        writer.Write(blobVersion);
-        writer.Write(programType);
-        writer.Write(statsALU);
-        writer.Write(statsTEX);
-        writer.Write(statsFlow);
-        writer.Write(statsTempReg);
-
-        // Keywords
+        writer.Write(blobVersion); writer.Write(programType); writer.Write(statsALU); writer.Write(statsTEX); writer.Write(statsFlow); writer.Write(statsTempReg);
         writer.Write(keywordBytes.Count);
         foreach (var kw in keywordBytes)
         {
-            writer.Write(kw.Length);
-            writer.Write(kw);
-            // Align to 4
+            writer.Write(kw.Length); writer.Write(kw);
             int pad = (4 - ((int)ms.Position % 4)) % 4;
             for (int i = 0; i < pad; i++) writer.Write((byte)0);
         }
-
-        // ProgramData
-        writer.Write(programData.Length);
-        writer.Write(programData);
-        // Align to 4
+        writer.Write(programData.Length); writer.Write(programData);
         int pdPad = (4 - ((int)ms.Position % 4)) % 4;
         for (int i = 0; i < pdPad; i++) writer.Write((byte)0);
-
-        // BindChannels + trailing data
         writer.Write(tail);
-
         return ms.ToArray();
     }
 
@@ -346,33 +302,24 @@ internal static class Endfield_1_1_9_GpuType33Transform
     {
         int entryFieldSize = hasSegment ? 12 : 8;
         int headerSize = 4 + entries.Count * entryFieldSize;
-
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-
-        // Reserve header space
         writer.BaseStream.Position = headerSize;
-
         var entryOffsets = new int[entries.Count];
-        var entryLengths = new int[entries.Count];
-
         for (int i = 0; i < entries.Count; i++)
         {
             entryOffsets[i] = (int)writer.BaseStream.Position;
-            entryLengths[i] = entries[i].Length;
             writer.Write(entries[i]);
         }
-
-        // Write header
         writer.BaseStream.Position = 0;
         writer.Write(entries.Count);
         for (int i = 0; i < entries.Count; i++)
         {
             writer.Write(entryOffsets[i]);
-            writer.Write(entryLengths[i]);
-            if (hasSegment) writer.Write(0); // segment = 0
+            writer.Write(entries[i].Length);
+            // 这里之前就是硬编码的 0，这也是为什么 D3D11 没有报 Segment 越界的原因
+            if (hasSegment) writer.Write(0);
         }
-
         return ms.ToArray();
     }
 
@@ -380,305 +327,105 @@ internal static class Endfield_1_1_9_GpuType33Transform
 
     #region PlayerSubPrograms Transform
 
-    /// <summary>
-    /// Updates progVertex PlayerSubPrograms (GpuType 33→15, new BlobIndex)
-    /// and builds progFragment PlayerSubPrograms (GpuType=17, PS BlobIndex).
-    /// Also reindexes ParameterBlobIndices to account for entry index shifts.
-    /// </summary>
     private static void TransformPlayerSubPrograms(
-        AssetTypeValueField shaderData,
+        IShader shader,
         Dictionary<int, (int vsIdx, int psIdx)> splitMap,
         Dictionary<int, int> reindexMap)
     {
-        foreach (var subShader in shaderData["m_ParsedForm"]["m_SubShaders.Array"])
+        dynamic dynShader = shader;
+        foreach (var subShader in dynShader.ParsedForm.SubShaders)
         {
-            foreach (var pass in subShader["m_Passes.Array"])
+            foreach (var pass in subShader.Passes)
             {
-                var progVertex = pass["progVertex"];
-                var progFragment = pass["progFragment"];
+                var progVertex = pass.ProgVertex;
+                var progFragment = pass.ProgFragment;
 
-                if (progVertex.IsDummy) continue;
+                if (progVertex == null) continue;
 
-                var vtxPsp = progVertex["m_PlayerSubPrograms"];
-                if (vtxPsp.IsDummy) continue;
-                var vtxOuter = vtxPsp["Array"];
-                if (vtxOuter.Children.Count == 0) continue;
+                var vtxOuter = progVertex.PlayerSubPrograms;
+                if (vtxOuter == null || vtxOuter.Count == 0) continue;
 
-                var vtxLastVector = vtxOuter.Children[^1];
-                var vtxLastArray = vtxLastVector["Array"];
-                if (vtxLastArray.Children.Count == 0) continue;
+                var vtxLastInner = vtxOuter[vtxOuter.Count - 1];
+                if (vtxLastInner == null || vtxLastInner.Count == 0) continue;
 
-                // Build PS PlayerSubProgram entries, update VS entries, and reindex all BlobIndices
-                var psEntries = new List<AssetTypeValueField>();
+                var psEntriesToBuild = new List<(uint blobIdx, List<ushort> keywords)>();
 
-                foreach (var entry in vtxLastArray)
+                foreach (var entry in vtxLastInner)
                 {
-                    uint oldBlobIndex = entry["m_BlobIndex"].AsUInt;
+                    int oldBlobIndex = (int)entry.BlobIndex;
 
-                    if (entry["m_GpuProgramType"].AsSByte == GpuType_Custom33)
+                    if ((sbyte)entry.GpuProgramType == GpuType_Custom33)
                     {
-                        if (!splitMap.TryGetValue((int)oldBlobIndex, out var mapping)) continue;
+                        if (!splitMap.TryGetValue(oldBlobIndex, out var mapping)) continue;
 
-                        // Update VS: change GpuType to 15, BlobIndex to new VS index
-                        entry["m_GpuProgramType"].Value = new AssetTypeValue(AssetValueType.Int8, GpuType_DX11VertexSM40);
-                        entry["m_BlobIndex"].Value = new AssetTypeValue(AssetValueType.UInt32, (uint)mapping.vsIdx);
+                        entry.GpuProgramType = GpuType_DX11VertexSM40;
+                        entry.BlobIndex = (uint)mapping.vsIdx;
 
-                        // Create PS entry (clone structure with GpuType=17 and PS BlobIndex)
-                        var psEntry = ClonePlayerSubProgramEntry(entry, GpuType_DX11PixelSM40, (uint)mapping.psIdx);
-                        psEntries.Add(psEntry);
+                        var kws = new List<ushort>();
+                        foreach (var kw in entry.KeywordIndices) kws.Add((ushort)kw);
+                        psEntriesToBuild.Add(((uint)mapping.psIdx, kws));
                     }
-                    else if (reindexMap.TryGetValue((int)oldBlobIndex, out int newIdx))
+                    else if (reindexMap.TryGetValue(oldBlobIndex, out int newIdx))
                     {
-                        // Non-GpuType=33 entries (e.g. SPIRV) also need BlobIndex updated
-                        entry["m_BlobIndex"].Value = new AssetTypeValue(AssetValueType.UInt32, (uint)newIdx);
+                        entry.BlobIndex = (uint)newIdx;
                     }
                 }
 
-                // Reindex ParameterBlobIndices in progVertex (they reference param blob entries whose indices shifted)
-                var vtxParamIndices = progVertex["m_ParameterBlobIndices"];
-                if (!vtxParamIndices.IsDummy)
-                    ReindexParameterBlobIndices(vtxParamIndices, reindexMap);
-
-                // Build progFragment's m_PlayerSubPrograms (only if we created PS entries)
-                if (psEntries.Count > 0)
+                if (progVertex.ParameterBlobIndices != null)
                 {
-                    var fragPspNode = BuildPlayerSubProgramsVector(vtxOuter.Children.Count, psEntries);
-                    ReplaceChild(progFragment, "m_PlayerSubPrograms", fragPspNode);
+                    ReindexParameterBlobIndices(progVertex.ParameterBlobIndices, reindexMap);
                 }
 
-                // Build progFragment's m_ParameterBlobIndices (copy reindexed values from progVertex)
-                if (psEntries.Count > 0 && !vtxParamIndices.IsDummy)
+                if (psEntriesToBuild.Count > 0)
                 {
-                    var fragParamNode = CloneParameterBlobIndices(vtxParamIndices);
-                    ReplaceChild(progFragment, "m_ParameterBlobIndices", fragParamNode);
-                }
-            }
-        }
-    }
+                    progFragment.PlayerSubPrograms.Clear();
+                    for (int i = 0; i < vtxOuter.Count; i++)
+                    {
+                        var fragInner = progFragment.PlayerSubPrograms.AddNew();
+                        if (i == vtxOuter.Count - 1)
+                        {
+                            foreach (var psData in psEntriesToBuild)
+                            {
+                                var newEntry = fragInner.AddNew();
+                                newEntry.GpuProgramType = GpuType_DX11PixelSM40;
+                                newEntry.BlobIndex = psData.blobIdx;
+                                foreach (var kw in psData.keywords) newEntry.KeywordIndices.Add(kw);
+                            }
+                        }
+                    }
 
-    /// <summary>
-    /// Updates ParameterBlobIndices in-place using the reindex map.
-    /// </summary>
-    private static void ReindexParameterBlobIndices(AssetTypeValueField paramIndicesNode, Dictionary<int, int> reindexMap)
-    {
-        var outerArray = paramIndicesNode["Array"];
-        foreach (var innerVec in outerArray)
-        {
-            var innerArray = innerVec["Array"];
-            foreach (var val in innerArray)
-            {
-                uint oldIdx = val.AsUInt;
-                if (reindexMap.TryGetValue((int)oldIdx, out int newIdx))
-                {
-                    val.Value = new AssetTypeValue(AssetValueType.UInt32, (uint)newIdx);
+                    if (progVertex.ParameterBlobIndices != null)
+                    {
+                        progFragment.ParameterBlobIndices.Clear();
+                        CloneParameterBlobIndices(progVertex.ParameterBlobIndices, progFragment.ParameterBlobIndices);
+                    }
                 }
             }
         }
     }
 
-    private static AssetTypeValueField ClonePlayerSubProgramEntry(
-        AssetTypeValueField source, sbyte newGpuType, uint newBlobIndex)
+    private static void ReindexParameterBlobIndices(dynamic paramIndices, Dictionary<int, int> reindexMap)
     {
-        // Clone KeywordIndices
-        var kwSrc = source["m_KeywordIndices.Array"];
-        var kwChildren = new List<AssetTypeValueField>();
-        foreach (var kw in kwSrc)
+        foreach (var innerVec in paramIndices)
         {
-            kwChildren.Add(new AssetTypeValueField
+            for (int i = 0; i < innerVec.Count; i++)
             {
-                TemplateField = kw.TemplateField,
-                Value = new AssetTypeValue(AssetValueType.UInt16, kw.AsUShort),
-                Children = new List<AssetTypeValueField>()
-            });
-        }
-
-        var kwSizeTemplate = new AssetTypeTemplateField { Name = "size", Type = "int", ValueType = AssetValueType.Int32, HasValue = true };
-        var kwDataTemplate = new AssetTypeTemplateField { Name = "data", Type = "unsigned short", ValueType = AssetValueType.UInt16, HasValue = true, IsAligned = true };
-        var kwArrayTemplate = new AssetTypeTemplateField
-        {
-            Name = "Array", Type = "Array", IsArray = true, IsAligned = true,
-            ValueType = AssetValueType.Array,
-            Children = new List<AssetTypeTemplateField> { kwSizeTemplate, kwDataTemplate }
-        };
-        var kwVectorTemplate = new AssetTypeTemplateField
-        {
-            Name = "m_KeywordIndices", Type = "vector", ValueType = AssetValueType.None,
-            Children = new List<AssetTypeTemplateField> { kwArrayTemplate }
-        };
-
-        var kwArrayField = new AssetTypeValueField
-        {
-            TemplateField = kwArrayTemplate,
-            Value = new AssetTypeValue(AssetValueType.Array, new AssetTypeArrayInfo { size = kwChildren.Count }),
-            Children = kwChildren
-        };
-        var kwVectorField = new AssetTypeValueField
-        {
-            TemplateField = kwVectorTemplate,
-            Value = null,
-            Children = new List<AssetTypeValueField> { kwArrayField }
-        };
-
-        // Build the PlayerSubProgram node
-        var blobIdxField = new AssetTypeValueField
-        {
-            TemplateField = new AssetTypeTemplateField { Name = "m_BlobIndex", Type = "unsigned int", ValueType = AssetValueType.UInt32, HasValue = true, Children = new List<AssetTypeTemplateField>() },
-            Value = new AssetTypeValue(AssetValueType.UInt32, newBlobIndex),
-            Children = new List<AssetTypeValueField>()
-        };
-        var gpuTypeField = new AssetTypeValueField
-        {
-            TemplateField = new AssetTypeTemplateField { Name = "m_GpuProgramType", Type = "SInt8", ValueType = AssetValueType.Int8, HasValue = true, IsAligned = true, Children = new List<AssetTypeTemplateField>() },
-            Value = new AssetTypeValue(AssetValueType.Int8, newGpuType),
-            Children = new List<AssetTypeValueField>()
-        };
-
-        var children = new List<AssetTypeValueField> { blobIdxField, kwVectorField, gpuTypeField };
-        var template = new AssetTypeTemplateField
-        {
-            Name = "data", Type = "SerializedPlayerSubProgram", ValueType = AssetValueType.None,
-            Children = children.Select(c => c.TemplateField).ToList()
-        };
-
-        return new AssetTypeValueField { TemplateField = template, Children = children };
-    }
-
-    /// <summary>
-    /// Builds a m_PlayerSubPrograms vector with N-1 empty inner vectors + 1 with data.
-    /// Mirrors the structure from progVertex.
-    /// </summary>
-    private static AssetTypeValueField BuildPlayerSubProgramsVector(int outerCount, List<AssetTypeValueField> dataEntries)
-    {
-        // Get the data template from the first entry
-        var dataTemplate = dataEntries[0].TemplateField;
-
-        // Build inner vectors: first (outerCount-1) are empty, last has data
-        var outerChildren = new List<AssetTypeValueField>();
-        for (int i = 0; i < outerCount; i++)
-        {
-            var innerChildren = (i == outerCount - 1) ? dataEntries : new List<AssetTypeValueField>();
-
-            var innerSizeTemplate = new AssetTypeTemplateField { Name = "size", Type = "int", ValueType = AssetValueType.Int32, HasValue = true };
-            var innerArrayTemplate = new AssetTypeTemplateField
-            {
-                Name = "Array", Type = "Array", IsArray = true, IsAligned = true,
-                ValueType = AssetValueType.Array,
-                Children = new List<AssetTypeTemplateField> { innerSizeTemplate, dataTemplate }
-            };
-            var innerVectorTemplate = new AssetTypeTemplateField
-            {
-                Name = "data", Type = "vector", ValueType = AssetValueType.None,
-                Children = new List<AssetTypeTemplateField> { innerArrayTemplate }
-            };
-
-            var innerArrayField = new AssetTypeValueField
-            {
-                TemplateField = innerArrayTemplate,
-                Value = new AssetTypeValue(AssetValueType.Array, new AssetTypeArrayInfo { size = innerChildren.Count }),
-                Children = innerChildren
-            };
-            outerChildren.Add(new AssetTypeValueField
-            {
-                TemplateField = innerVectorTemplate,
-                Value = null,
-                Children = new List<AssetTypeValueField> { innerArrayField }
-            });
-        }
-
-        // Build outer vector
-        var outerInnerTemplate = outerChildren[0].TemplateField;
-        var outerSizeTemplate = new AssetTypeTemplateField { Name = "size", Type = "int", ValueType = AssetValueType.Int32, HasValue = true };
-        var outerArrayTemplate = new AssetTypeTemplateField
-        {
-            Name = "Array", Type = "Array", IsArray = true, IsAligned = true,
-            ValueType = AssetValueType.Array,
-            Children = new List<AssetTypeTemplateField> { outerSizeTemplate, outerInnerTemplate }
-        };
-        var outerVectorTemplate = new AssetTypeTemplateField
-        {
-            Name = "m_PlayerSubPrograms", Type = "vector", ValueType = AssetValueType.None,
-            Children = new List<AssetTypeTemplateField> { outerArrayTemplate }
-        };
-
-        var outerArrayField = new AssetTypeValueField
-        {
-            TemplateField = outerArrayTemplate,
-            Value = new AssetTypeValue(AssetValueType.Array, new AssetTypeArrayInfo { size = outerChildren.Count }),
-            Children = outerChildren
-        };
-        return new AssetTypeValueField
-        {
-            TemplateField = outerVectorTemplate,
-            Value = null,
-            Children = new List<AssetTypeValueField> { outerArrayField }
-        };
-    }
-
-    private static AssetTypeValueField CloneParameterBlobIndices(AssetTypeValueField source)
-    {
-        // Deep clone the m_ParameterBlobIndices structure
-        var outerArray = source["Array"];
-        var outerChildren = new List<AssetTypeValueField>();
-
-        foreach (var innerVec in outerArray)
-        {
-            var innerArray = innerVec["Array"];
-            var innerChildren = new List<AssetTypeValueField>();
-            foreach (var val in innerArray)
-            {
-                innerChildren.Add(new AssetTypeValueField
+                if (reindexMap.TryGetValue((int)innerVec[i], out int newIdx))
                 {
-                    TemplateField = val.TemplateField,
-                    Value = new AssetTypeValue(AssetValueType.UInt32, val.AsUInt),
-                    Children = new List<AssetTypeValueField>()
-                });
+                    innerVec[i] = (uint)newIdx;
+                }
             }
-
-            var clonedInnerArrayTemplate = innerArray.TemplateField;
-            var clonedInnerArrayField = new AssetTypeValueField
-            {
-                TemplateField = clonedInnerArrayTemplate,
-                Value = new AssetTypeValue(AssetValueType.Array, new AssetTypeArrayInfo { size = innerChildren.Count }),
-                Children = innerChildren
-            };
-            outerChildren.Add(new AssetTypeValueField
-            {
-                TemplateField = innerVec.TemplateField,
-                Value = null,
-                Children = new List<AssetTypeValueField> { clonedInnerArrayField }
-            });
         }
-
-        var clonedOuterArrayTemplate = outerArray.TemplateField;
-        var clonedOuterArrayField = new AssetTypeValueField
-        {
-            TemplateField = clonedOuterArrayTemplate,
-            Value = new AssetTypeValue(AssetValueType.Array, new AssetTypeArrayInfo { size = outerChildren.Count }),
-            Children = outerChildren
-        };
-        return new AssetTypeValueField
-        {
-            TemplateField = source.TemplateField,
-            Value = null,
-            Children = new List<AssetTypeValueField> { clonedOuterArrayField }
-        };
     }
 
-    private static void ReplaceChild(AssetTypeValueField parent, string childName, AssetTypeValueField newChild)
+    private static void CloneParameterBlobIndices(dynamic source, dynamic target)
     {
-        for (int i = 0; i < parent.Children.Count; i++)
+        target.Clear();
+        foreach (var innerSrc in source)
         {
-            if (parent.Children[i].TemplateField.Name == childName)
-            {
-                parent.Children[i] = newChild;
-                // Also update the template's children list
-                parent.TemplateField.Children[i] = newChild.TemplateField;
-                return;
-            }
+            var innerTarget = target.AddNew();
+            foreach (var val in innerSrc) innerTarget.Add((uint)val);
         }
-        // If not found, append
-        parent.Children.Add(newChild);
-        parent.TemplateField.Children.Add(newChild.TemplateField);
     }
 
     #endregion

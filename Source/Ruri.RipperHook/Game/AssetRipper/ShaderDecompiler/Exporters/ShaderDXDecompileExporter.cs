@@ -52,9 +52,6 @@ public sealed class ShaderDXDecompileExporter : ShaderExporterBase
 
         AssetTypeValueField shaderData = ShaderAssetCreator.CreateAssetTypeValueField(shader);
 
-        // Endfield v1.1.9: Transform custom GpuType=33 (combined VS+PS) into standard DX11 types
-        shaderData = Endfield_1_1_9_GpuType33Transform.Apply(shaderData, asset.Collection.Version);
-
         var shaderProcessor = new USCSandbox.Processor.ShaderProcessor(shaderData, asset.Collection.Version, USCSandbox.GPUPlatform.d3d11);
 
         string shaderText;
