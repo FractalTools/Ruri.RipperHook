@@ -1,12 +1,11 @@
-using AssetRipper.Assets.Generics;
 using AssetRipper.Assets;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions.Enums.Shader;
 using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
 using AssetRipper.SourceGenerated.Subclasses.SerializedProgram;
-using AssetRipper.SourceGenerated.Subclasses.SerializedProgramParameters;
 using AssetRipper.SourceGenerated.Subclasses.SerializedShaderFloatValue;
 using AssetRipper.SourceGenerated.Subclasses.SerializedShaderRTBlendState;
 using AssetRipper.SourceGenerated.Subclasses.SerializedShaderState;
@@ -34,26 +33,24 @@ internal static class UnityShaderMetadataBuilder
         var parsedForm = shader.ParsedForm!;
         UnityShaderMetadata metadata = new()
         {
-            m_ObjectHideFlags = 0,
-            m_Name = shader.Name,
-            m_CustomEditorName = string.Empty,
-            m_FallbackName = parsedForm.FallbackName?.String ?? string.Empty,
-            platforms = shader.Platforms?.Select(static p => (int)p).ToList() ?? [],
-            compressedBlob = shader.CompressedBlob ?? [],
+            ObjectHideFlags = 0,
+            Name = shader.Name,
+            Platforms = shader.Platforms?.Select(static p => (uint)p).ToList() ?? [],
+            CompressedBlob = shader.CompressedBlob ?? [],
         };
 
-        metadata.m_ParsedForm.m_Name = parsedForm.Name_R;
-        metadata.m_ParsedForm.m_FallbackName = parsedForm.FallbackName?.String ?? string.Empty;
-        metadata.offsets = ReadUInt32Matrix(shader.Offsets_AssetList_AssetList_UInt32, shader.Offsets_AssetList_UInt32);
-        metadata.compressedLengths = ReadUInt32Matrix(shader.CompressedLengths_AssetList_AssetList_UInt32, shader.CompressedLengths_AssetList_UInt32);
-        metadata.decompressedLengths = ReadUInt32Matrix(shader.DecompressedLengths_AssetList_AssetList_UInt32, shader.DecompressedLengths_AssetList_UInt32);
+        metadata.ParsedForm.Name = parsedForm.Name_R;
+        metadata.ParsedForm.FallbackName = parsedForm.FallbackName?.String ?? string.Empty;
+        metadata.Offsets = ReadUInt32Matrix(shader.Offsets_AssetList_AssetList_UInt32, shader.Offsets_AssetList_UInt32);
+        metadata.CompressedLengths = ReadUInt32Matrix(shader.CompressedLengths_AssetList_AssetList_UInt32, shader.CompressedLengths_AssetList_UInt32);
+        metadata.DecompressedLengths = ReadUInt32Matrix(shader.DecompressedLengths_AssetList_AssetList_UInt32, shader.DecompressedLengths_AssetList_UInt32);
 
         if (parsedForm.Has_CustomEditorForRenderPipelines() && parsedForm.CustomEditorForRenderPipelines is not null)
         {
-            metadata.m_CustomEditorForRenderPipelines = parsedForm.CustomEditorForRenderPipelines.Select(static item => new UnitySerializedCustomEditorForRenderPipeline
+            metadata.ParsedForm.CustomEditorForRenderPipelines = parsedForm.CustomEditorForRenderPipelines.Select(static item => new UnitySerializedCustomEditorForRenderPipeline
             {
-                customEditorName = item.CustomEditorName.String,
-                renderPipelineType = item.RenderPipelineType.String,
+                CustomEditorName = item.CustomEditorName.String,
+                RenderPipelineType = item.RenderPipelineType.String,
             }).ToList();
         }
 
@@ -61,42 +58,42 @@ internal static class UnityShaderMetadataBuilder
         {
             foreach (var property in parsedForm.PropInfo.Props)
             {
-                metadata.m_ParsedForm.m_PropInfo.m_Props.Add(new UnitySerializedProperty
+                metadata.ParsedForm.PropInfo.Props.Add(new UnitySerializedProperty
                 {
-                    m_Name = property.Name_R,
-                    m_Description = property.Description,
-                    m_Attributes = property.Attributes?.Select(static s => s.String).ToList() ?? [],
-                    m_Type = (int)property.Type,
-                    m_Flags = (uint)property.Flags,
-                    m_DefValue = [property.DefValue_0_, property.DefValue_1_, property.DefValue_2_, property.DefValue_3_],
-                    m_DefTexture = new UnitySerializedTextureProperty
+                    Name = property.Name_R,
+                    Description = property.Description,
+                    Attributes = property.Attributes?.Select(static s => s.String).ToList() ?? [],
+                    Type = (int)property.Type,
+                    Flags = (uint)property.Flags,
+                    DefValue = [property.DefValue_0_, property.DefValue_1_, property.DefValue_2_, property.DefValue_3_],
+                    DefTexture = new UnitySerializedTextureProperty
                     {
-                        m_DefaultName = property.DefTexture.DefaultName.String,
-                        m_TexDim = (int)property.DefTexture.TexDim,
+                        DefaultName = property.DefTexture.DefaultName.String,
+                        TexDim = (int)property.DefTexture.TexDim,
                     },
                 });
             }
         }
 
-        metadata.m_ParsedForm.m_KeywordNames = parsedForm.KeywordNames?.Select(static s => s.String).ToList() ?? [];
+        metadata.ParsedForm.KeywordNames = parsedForm.KeywordNames?.Select(static s => s.String).ToList() ?? [];
 
         for (int subShaderIndex = 0; subShaderIndex < parsedForm.SubShaders.Count; subShaderIndex++)
         {
             var sourceSubShader = parsedForm.SubShaders[subShaderIndex];
             UnitySerializedSubShader subShader = new()
             {
-                m_LOD = sourceSubShader.LOD,
+                LOD = sourceSubShader.LOD,
             };
-            CopyTags(sourceSubShader.Tags, subShader.m_Tags.tags);
+            CopyTags(sourceSubShader.Tags, subShader.Tags.Tags);
 
             for (int passIndex = 0; passIndex < sourceSubShader.Passes.Count; passIndex++)
             {
                 var sourcePass = sourceSubShader.Passes[passIndex];
                 UnitySerializedPass pass = BuildPass(sourcePass, shader.Collection.Version, platform, enumerateProgramBlobIndices);
-                subShader.m_Passes.Add(pass);
+                subShader.Passes.Add(pass);
             }
 
-            metadata.m_ParsedForm.m_SubShaders.Add(subShader);
+            metadata.ParsedForm.SubShaders.Add(subShader);
         }
 
         return metadata;
@@ -108,20 +105,28 @@ internal static class UnityShaderMetadataBuilder
         {
             ProgramResultLocation location = locations[i];
             DecompileResult result = results[i];
-            UnityProgramData? program = metadata.m_ParsedForm.m_SubShaders[location.SubShaderIndex]
-                .m_Passes[location.PassIndex]
-                .Programs
-                .FirstOrDefault(p => p.Stage == location.Stage && p.BlobIndex == location.BlobIndex && p.ParameterBlobIndex == location.ParameterBlobIndex && p.KeywordIndices.SequenceEqual(location.KeywordIndices));
-            if (program is null)
+
+            UnitySerializedPass pass = metadata.ParsedForm.SubShaders[location.SubShaderIndex].Passes[location.PassIndex];
+            UnitySerializedProgram? programSlot = pass.GetProgramSlot(location.Stage);
+            if (programSlot is null)
             {
                 continue;
             }
 
-            program.Success = result.Success;
-            program.SourceCode = result.SourceCode;
-            program.SourceLanguage = result.SourceLanguage;
-            program.SourceFileExtension = result.SourceFileExtension;
-            program.ErrorMessage = result.ErrorMessage;
+            UnitySerializedSubProgram? subProgram = programSlot.SubPrograms.FirstOrDefault(sp =>
+                sp.BlobIndex == location.BlobIndex
+                && sp.ParameterBlobIndex == location.ParameterBlobIndex
+                && sp.KeywordIndices.SequenceEqual(location.KeywordIndices));
+            if (subProgram is null)
+            {
+                continue;
+            }
+
+            subProgram.Success = result.Success;
+            subProgram.SourceCode = result.SourceCode;
+            subProgram.SourceLanguage = result.SourceLanguage;
+            subProgram.SourceFileExtension = result.SourceFileExtension;
+            subProgram.ErrorMessage = result.ErrorMessage;
         }
     }
 
@@ -137,67 +142,81 @@ internal static class UnityShaderMetadataBuilder
             var pair = sourcePass.NameIndices.GetPair(i);
             nameIndices.Add(new UnitySerializedNameIndex
             {
-                first = pair.Key.ToString(),
-                second = pair.Value,
+                First = pair.Key.ToString(),
+                Second = pair.Value,
             });
         }
 
         UnitySerializedPass pass = new()
         {
-            m_Type = (int)sourcePass.Type,
-            m_UseName = sourcePass.UseName,
-            m_Name = sourcePass.Name,
-            m_TextureName = sourcePass.TextureName,
-            m_ProgramMask = sourcePass.ProgramMask,
-            m_HasInstancingVariant = sourcePass.HasInstancingVariant,
-            m_HasProceduralInstancingVariant = sourcePass.Has_HasProceduralInstancingVariant() && sourcePass.HasProceduralInstancingVariant,
-            m_NameIndices = nameIndices,
-            m_State = new UnitySerializedShaderState
+            Type = (int)sourcePass.Type,
+            UseName = sourcePass.UseName,
+            Name = sourcePass.Name,
+            TextureName = sourcePass.TextureName,
+            ProgramMask = sourcePass.ProgramMask,
+            HasInstancingVariant = sourcePass.HasInstancingVariant,
+            HasProceduralInstancingVariant = sourcePass.Has_HasProceduralInstancingVariant() && sourcePass.HasProceduralInstancingVariant,
+            NameIndices = nameIndices,
+            State = new UnitySerializedShaderState
             {
-                m_Name = sourcePass.State.Name_R,
-                gpuProgramID = sourcePass.State.GpuProgramID,
-                m_LOD = sourcePass.State.LOD,
+                Name = sourcePass.State.Name_R,
+                GpuProgramID = sourcePass.State.GpuProgramID,
+                LOD = sourcePass.State.LOD,
             },
         };
 
-        if (!string.IsNullOrWhiteSpace(pass.m_UseName))
+        if (!string.IsNullOrWhiteSpace(pass.UseName))
         {
             return pass;
         }
 
         BuildPassState(sourcePass.State, pass);
-        AddProgramPlaceholders(sourcePass.ProgVertex, version, platform, pass, "Vertex", enumerateProgramBlobIndices);
-        AddProgramPlaceholders(sourcePass.ProgFragment, version, platform, pass, "Fragment", enumerateProgramBlobIndices);
-        AddProgramPlaceholders(sourcePass.ProgGeometry, version, platform, pass, "Geometry", enumerateProgramBlobIndices);
-        AddProgramPlaceholders(sourcePass.ProgHull, version, platform, pass, "Hull", enumerateProgramBlobIndices);
-        AddProgramPlaceholders(sourcePass.ProgDomain, version, platform, pass, "Domain", enumerateProgramBlobIndices);
-        AddProgramPlaceholders(sourcePass.ProgRayTracing, version, platform, pass, "RayTracing", enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Vertex", sourcePass.ProgVertex, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Fragment", sourcePass.ProgFragment, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Geometry", sourcePass.ProgGeometry, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Hull", sourcePass.ProgHull, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Domain", sourcePass.ProgDomain, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "RayTracing", sourcePass.ProgRayTracing, version, platform, enumerateProgramBlobIndices);
         return pass;
     }
 
-    private static void AddProgramPlaceholders(
-        ISerializedProgram? program,
-        UnityVersion version,
-        GPUPlatform platform,
+    // Build the SerializedProgram for one stage slot and attach it to the pass. The
+    // SubPrograms list is populated from `enumerateProgramBlobIndices` (which already
+    // does the per-platform filtering and dedupes the (Blob, ParamBlob, Keyword) tuples
+    // across SubPrograms + PlayerSubPrograms). PlayerSubPrograms / ParameterBlobIndices /
+    // CommonParameters are intentionally left empty: they're Unity-wire round-trip
+    // fields, and the Writer / decompiler only consume `SubPrograms`. Decompile output
+    // (Success / SourceCode / ErrorMessage) is filled in later by BackfillProgramSources.
+    private static void AssignProgramSlot(
         UnitySerializedPass pass,
         string stage,
+        ISerializedProgram? sourceProgram,
+        UnityVersion version,
+        GPUPlatform platform,
         Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices)
     {
-        if (program is null)
+        if (sourceProgram is null)
         {
             return;
         }
 
-        foreach (ProgramBlobReference blob in enumerateProgramBlobIndices(program, version, platform))
+        UnitySerializedProgram program = new();
+        foreach (ProgramBlobReference blob in enumerateProgramBlobIndices(sourceProgram, version, platform))
         {
-            pass.Programs.Add(new UnityProgramData
+            program.SubPrograms.Add(new UnitySerializedSubProgram
             {
-                Stage = stage,
                 BlobIndex = blob.BlobIndex,
                 ParameterBlobIndex = blob.ParameterBlobIndex,
                 KeywordIndices = blob.KeywordIndices,
             });
         }
+
+        if (program.SubPrograms.Count == 0)
+        {
+            return;
+        }
+
+        pass.SetProgramSlot(stage, program);
     }
 
     private static List<List<uint>> ReadUInt32Matrix(AssetList<AssetList<uint>>? nested, AssetList<uint>? flat)
@@ -215,48 +234,48 @@ internal static class UnityShaderMetadataBuilder
 
     private static void BuildPassState(ISerializedShaderState state, UnitySerializedPass pass)
     {
-        pass.m_State.rtSeparateBlend = state.RtSeparateBlend;
-        pass.m_State.rtBlend0 = BuildRtBlendState(state.RtBlend0);
-        pass.m_State.rtBlend1 = BuildRtBlendState(state.RtBlend1);
-        pass.m_State.rtBlend2 = BuildRtBlendState(state.RtBlend2);
-        pass.m_State.rtBlend3 = BuildRtBlendState(state.RtBlend3);
-        pass.m_State.rtBlend4 = BuildRtBlendState(state.RtBlend4);
-        pass.m_State.rtBlend5 = BuildRtBlendState(state.RtBlend5);
-        pass.m_State.rtBlend6 = BuildRtBlendState(state.RtBlend6);
-        pass.m_State.rtBlend7 = BuildRtBlendState(state.RtBlend7);
-        pass.m_State.stencilOp = BuildStencilOp(state.StencilOp);
-        pass.m_State.stencilOpFront = BuildStencilOp(state.StencilOpFront);
-        pass.m_State.stencilOpBack = BuildStencilOp(state.StencilOpBack);
-        pass.m_State.stencilRef = BuildFloatValue(state.StencilRef.Value, GetFloatValueName(state.StencilRef));
-        pass.m_State.stencilReadMask = BuildFloatValue(state.StencilReadMask.Value, GetFloatValueName(state.StencilReadMask));
-        pass.m_State.stencilWriteMask = BuildFloatValue(state.StencilWriteMask.Value, GetFloatValueName(state.StencilWriteMask));
-        pass.m_State.fogMode = state.FogMode;
-        pass.m_State.fogColor = BuildVectorValue(state.FogColor);
-        pass.m_State.fogDensity = BuildFloatValue(state.FogDensity.Value, GetFloatValueName(state.FogDensity));
-        pass.m_State.fogStart = BuildFloatValue(state.FogStart.Value, GetFloatValueName(state.FogStart));
-        pass.m_State.fogEnd = BuildFloatValue(state.FogEnd.Value, GetFloatValueName(state.FogEnd));
-        pass.m_State.alphaToMask = BuildFloatValue(state.AlphaToMask.Value, GetFloatValueName(state.AlphaToMask));
-        pass.m_State.zClip = state.Has_ZClip() ? BuildFloatValue(state.ZClip!.Value, GetFloatValueName(state.ZClip)) : new UnitySerializedShaderFloatValue();
-        pass.m_State.zTest = BuildFloatValue(state.ZTest.Value, GetFloatValueName(state.ZTest));
-        pass.m_State.zWrite = BuildFloatValue(state.ZWrite.Value, GetFloatValueName(state.ZWrite));
-        pass.m_State.culling = BuildFloatValue(state.Culling.Value, GetFloatValueName(state.Culling));
-        pass.m_State.offsetFactor = BuildFloatValue(state.OffsetFactor.Value, GetFloatValueName(state.OffsetFactor));
-        pass.m_State.offsetUnits = BuildFloatValue(state.OffsetUnits.Value, GetFloatValueName(state.OffsetUnits));
-        pass.m_State.lighting = state.Lighting;
-        CopyTags(state.Tags, pass.m_State.m_Tags.tags);
+        pass.State.RtSeparateBlend = state.RtSeparateBlend;
+        pass.State.RtBlend0 = BuildRtBlendState(state.RtBlend0);
+        pass.State.RtBlend1 = BuildRtBlendState(state.RtBlend1);
+        pass.State.RtBlend2 = BuildRtBlendState(state.RtBlend2);
+        pass.State.RtBlend3 = BuildRtBlendState(state.RtBlend3);
+        pass.State.RtBlend4 = BuildRtBlendState(state.RtBlend4);
+        pass.State.RtBlend5 = BuildRtBlendState(state.RtBlend5);
+        pass.State.RtBlend6 = BuildRtBlendState(state.RtBlend6);
+        pass.State.RtBlend7 = BuildRtBlendState(state.RtBlend7);
+        pass.State.StencilOp = BuildStencilOp(state.StencilOp);
+        pass.State.StencilOpFront = BuildStencilOp(state.StencilOpFront);
+        pass.State.StencilOpBack = BuildStencilOp(state.StencilOpBack);
+        pass.State.StencilRef = BuildFloatValue(state.StencilRef.Value, GetFloatValueName(state.StencilRef));
+        pass.State.StencilReadMask = BuildFloatValue(state.StencilReadMask.Value, GetFloatValueName(state.StencilReadMask));
+        pass.State.StencilWriteMask = BuildFloatValue(state.StencilWriteMask.Value, GetFloatValueName(state.StencilWriteMask));
+        pass.State.FogMode = (int)state.FogMode;
+        pass.State.FogColor = BuildVectorValue(state.FogColor);
+        pass.State.FogDensity = BuildFloatValue(state.FogDensity.Value, GetFloatValueName(state.FogDensity));
+        pass.State.FogStart = BuildFloatValue(state.FogStart.Value, GetFloatValueName(state.FogStart));
+        pass.State.FogEnd = BuildFloatValue(state.FogEnd.Value, GetFloatValueName(state.FogEnd));
+        pass.State.AlphaToMask = BuildFloatValue(state.AlphaToMask.Value, GetFloatValueName(state.AlphaToMask));
+        pass.State.ZClip = state.Has_ZClip() ? BuildFloatValue(state.ZClip!.Value, GetFloatValueName(state.ZClip)) : new UnitySerializedShaderFloatValue();
+        pass.State.ZTest = BuildFloatValue(state.ZTest.Value, GetFloatValueName(state.ZTest));
+        pass.State.ZWrite = BuildFloatValue(state.ZWrite.Value, GetFloatValueName(state.ZWrite));
+        pass.State.Culling = BuildFloatValue(state.Culling.Value, GetFloatValueName(state.Culling));
+        pass.State.OffsetFactor = BuildFloatValue(state.OffsetFactor.Value, GetFloatValueName(state.OffsetFactor));
+        pass.State.OffsetUnits = BuildFloatValue(state.OffsetUnits.Value, GetFloatValueName(state.OffsetUnits));
+        pass.State.Lighting = state.Lighting;
+        CopyTags(state.Tags, pass.State.Tags.Tags);
     }
 
     private static UnitySerializedShaderRTBlendState BuildRtBlendState(ISerializedShaderRTBlendState state)
     {
         return new UnitySerializedShaderRTBlendState
         {
-            srcBlend = BuildFloatValue(state.SourceBlend.Value, GetFloatValueName(state.SourceBlend)),
-            destBlend = BuildFloatValue(state.DestinationBlend.Value, GetFloatValueName(state.DestinationBlend)),
-            srcBlendAlpha = BuildFloatValue(state.SourceBlendAlpha.Value, GetFloatValueName(state.SourceBlendAlpha)),
-            destBlendAlpha = BuildFloatValue(state.DestinationBlendAlpha.Value, GetFloatValueName(state.DestinationBlendAlpha)),
-            blendOp = BuildFloatValue(state.BlendOp.Value, GetFloatValueName(state.BlendOp)),
-            blendOpAlpha = BuildFloatValue(state.BlendOpAlpha.Value, GetFloatValueName(state.BlendOpAlpha)),
-            colMask = BuildFloatValue(state.ColMask.Value, GetFloatValueName(state.ColMask)),
+            SrcBlend = BuildFloatValue(state.SourceBlend.Value, GetFloatValueName(state.SourceBlend)),
+            DestBlend = BuildFloatValue(state.DestinationBlend.Value, GetFloatValueName(state.DestinationBlend)),
+            SrcBlendAlpha = BuildFloatValue(state.SourceBlendAlpha.Value, GetFloatValueName(state.SourceBlendAlpha)),
+            DestBlendAlpha = BuildFloatValue(state.DestinationBlendAlpha.Value, GetFloatValueName(state.DestinationBlendAlpha)),
+            BlendOp = BuildFloatValue(state.BlendOp.Value, GetFloatValueName(state.BlendOp)),
+            BlendOpAlpha = BuildFloatValue(state.BlendOpAlpha.Value, GetFloatValueName(state.BlendOpAlpha)),
+            ColMask = BuildFloatValue(state.ColMask.Value, GetFloatValueName(state.ColMask)),
         };
     }
 
@@ -264,10 +283,10 @@ internal static class UnityShaderMetadataBuilder
     {
         return new UnitySerializedStencilOp
         {
-            pass = BuildFloatValue(state.Pass.Value, GetFloatValueName(state.Pass)),
-            fail = BuildFloatValue(state.Fail.Value, GetFloatValueName(state.Fail)),
-            zFail = BuildFloatValue(state.ZFail.Value, GetFloatValueName(state.ZFail)),
-            comp = BuildFloatValue(state.Comp.Value, GetFloatValueName(state.Comp)),
+            Pass = BuildFloatValue(state.Pass.Value, GetFloatValueName(state.Pass)),
+            Fail = BuildFloatValue(state.Fail.Value, GetFloatValueName(state.Fail)),
+            ZFail = BuildFloatValue(state.ZFail.Value, GetFloatValueName(state.ZFail)),
+            Comp = BuildFloatValue(state.Comp.Value, GetFloatValueName(state.Comp)),
         };
     }
 
@@ -275,10 +294,10 @@ internal static class UnityShaderMetadataBuilder
     {
         return new UnitySerializedShaderVectorValue
         {
-            x = BuildFloatValue(value.X.Value, GetFloatValueName(value.X)),
-            y = BuildFloatValue(value.Y.Value, GetFloatValueName(value.Y)),
-            z = BuildFloatValue(value.Z.Value, GetFloatValueName(value.Z)),
-            w = BuildFloatValue(value.W.Value, GetFloatValueName(value.W)),
+            X = BuildFloatValue(value.X.Value, GetFloatValueName(value.X)),
+            Y = BuildFloatValue(value.Y.Value, GetFloatValueName(value.Y)),
+            Z = BuildFloatValue(value.Z.Value, GetFloatValueName(value.Z)),
+            W = BuildFloatValue(value.W.Value, GetFloatValueName(value.W)),
         };
     }
 
@@ -286,8 +305,8 @@ internal static class UnityShaderMetadataBuilder
     {
         return new UnitySerializedShaderFloatValue
         {
-            val = value,
-            name = name,
+            Val = value,
+            Name = name,
         };
     }
 
@@ -313,8 +332,8 @@ internal static class UnityShaderMetadataBuilder
         {
             destination.Add(new UnityTagMapEntry
             {
-                first = tag.Key.String,
-                second = tag.Value.String,
+                First = tag.Key.String,
+                Second = tag.Value.String,
             });
         }
     }

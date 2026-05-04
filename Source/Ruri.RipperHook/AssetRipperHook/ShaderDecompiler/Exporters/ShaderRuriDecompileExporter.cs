@@ -29,11 +29,11 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 {
     /// <summary>
     /// Optional callback installed by game-specific hooks (e.g. EndField) to rewrite the
-    /// <see cref="ShaderSymbolData"/> for one pass after the standard reader has filled it in.
+    /// <see cref="SerializedProgramData"/> for one pass after the standard reader has filled it in.
     /// Use this to apply proprietary register-decoding, deduplicate duplicate-name bindings,
     /// reorder lookups, etc. The generic exporter must stay free of game-specific branches.
     /// </summary>
-    public static Action<ShaderSymbolData, ShaderSubProgram, ShaderReadContext>? PostProcessSymbols;
+    public static Action<SerializedProgramData, ShaderSubProgram, ShaderReadContext>? PostProcessSymbols;
 
     /// <summary>
     /// Platform priority for the auto-pick. In an ideal world Vulkan comes first because the
@@ -281,9 +281,9 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         }
     }
 
-    private static ShaderSymbolData ReadProgramSymbols(ISerializedProgramParameters? parameters, Dictionary<int, string> nameTable)
+    private static SerializedProgramData ReadProgramSymbols(ISerializedProgramParameters? parameters, Dictionary<int, string> nameTable)
     {
-        ShaderSymbolData data = new();
+        SerializedProgramData data = new();
         if (parameters is null)
         {
             return data;
@@ -293,35 +293,35 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         foreach (var cbuffer in parameters.ConstantBuffers)
         {
-            ConstantBuffer buffer = new()
+            ConstantBufferParameter buffer = new()
             {
                 Name = resolveName(cbuffer.NameIndex),
                 NameIndex = cbuffer.NameIndex,
                 Size = cbuffer.Size,
                 IsPartialCB = cbuffer.Has_IsPartialCB() && cbuffer.IsPartialCB,
-                MatrixParams = cbuffer.MatrixParams.Select(matrix => new MatrixParameter
+                MatrixParameters = cbuffer.MatrixParams.Select(matrix => new MatrixParameter
                 {
                     Name = resolveName(matrix.NameIndex),
                     NameIndex = matrix.NameIndex,
-                    ByteOffset = matrix.Index,
+                    Index = matrix.Index,
                     ArraySize = matrix.ArraySize,
                     Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)matrix.Type,
                     RowCount = unchecked((byte)matrix.RowCount),
                     ColumnCount = 4,
                     IsMatrix = true,
                 }).ToArray(),
-                VectorParams = cbuffer.VectorParams.Select(vector => new VectorParameter
+                VectorParameters = cbuffer.VectorParams.Select(vector => new VectorParameter
                 {
                     Name = resolveName(vector.NameIndex),
                     NameIndex = vector.NameIndex,
-                    ByteOffset = vector.Index,
+                    Index = vector.Index,
                     ArraySize = vector.ArraySize,
                     Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)vector.Type,
                     RowCount = unchecked((byte)vector.Dim),
                     ColumnCount = 1,
                     IsMatrix = false,
                 }).ToArray(),
-                StructParams = cbuffer.StructParams.Select(structParam => new StructParameter
+                StructParameters = cbuffer.StructParams.Select(structParam => new StructParameter
                 {
                     Name = resolveName(structParam.NameIndex),
                     NameIndex = structParam.NameIndex,
@@ -332,7 +332,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                     {
                         Name = $"{resolveName(structParam.NameIndex)}.{resolveName(matrix.NameIndex)}",
                         NameIndex = matrix.NameIndex,
-                        ByteOffset = matrix.Index,
+                        Index = matrix.Index,
                         ArraySize = matrix.ArraySize,
                         Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)matrix.Type,
                         RowCount = unchecked((byte)matrix.RowCount),
@@ -343,7 +343,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                     {
                         Name = $"{resolveName(structParam.NameIndex)}.{resolveName(vector.NameIndex)}",
                         NameIndex = vector.NameIndex,
-                        ByteOffset = vector.Index,
+                        Index = vector.Index,
                         ArraySize = vector.ArraySize,
                         Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)vector.Type,
                         RowCount = unchecked((byte)vector.Dim),
@@ -352,12 +352,12 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                     }).ToArray(),
                 }).ToArray(),
             };
-            data.ConstantBuffers.Add(buffer);
+            data.ConstantBufferParameters.Add(buffer);
         }
 
         foreach (var binding in parameters.ConstantBufferBindings)
         {
-            data.ConstantBufferBindings.Add(new BufferBinding
+            data.BufferBindingParameters.Add(new BufferBindingParameter
             {
                 Name = resolveName(binding.NameIndex),
                 NameIndex = binding.NameIndex,
@@ -381,21 +381,65 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         foreach (var sampler in parameters.Samplers)
         {
-            data.Samplers.Add(new SamplerParameter
+            data.SamplerParameters.Add(new SamplerParameter
             {
                 Sampler = sampler.Sampler,
-                Index = sampler.BindPoint,
+                BindPoint = sampler.BindPoint,
             });
         }
 
         foreach (var uav in parameters.UAVParams)
         {
-            data.UAVs.Add(new UAVParameter
+            data.UAVParameters.Add(new UAVParameter
             {
                 Name = resolveName(uav.NameIndex),
                 NameIndex = uav.NameIndex,
                 Index = uav.Index,
                 OriginalIndex = uav.OriginalIndex,
+            });
+        }
+
+        // Program-level numeric / buffer params (m_VectorParams / m_MatrixParams /
+        // m_BufferParams). Modern Unity packs almost everything into CBs so these
+        // are usually empty; the older flat-uniform path still uses them.
+        foreach (var vector in parameters.VectorParams)
+        {
+            data.VectorParameters.Add(new VectorParameter
+            {
+                Name = resolveName(vector.NameIndex),
+                NameIndex = vector.NameIndex,
+                Index = vector.Index,
+                ArraySize = vector.ArraySize,
+                Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)vector.Type,
+                RowCount = unchecked((byte)vector.Dim),
+                ColumnCount = 1,
+                IsMatrix = false,
+            });
+        }
+
+        foreach (var matrix in parameters.MatrixParams)
+        {
+            data.MatrixParameters.Add(new MatrixParameter
+            {
+                Name = resolveName(matrix.NameIndex),
+                NameIndex = matrix.NameIndex,
+                Index = matrix.Index,
+                ArraySize = matrix.ArraySize,
+                Type = (Ruri.ShaderTools.ShaderParamType)(int)(sbyte)matrix.Type,
+                RowCount = unchecked((byte)matrix.RowCount),
+                ColumnCount = 4,
+                IsMatrix = true,
+            });
+        }
+
+        foreach (var buffer in parameters.BufferParams)
+        {
+            data.BufferParameters.Add(new BufferBindingParameter
+            {
+                Name = resolveName(buffer.NameIndex),
+                NameIndex = buffer.NameIndex,
+                Index = buffer.Index,
+                ArraySize = buffer.Has_ArraySize() ? buffer.ArraySize : 0,
             });
         }
 
@@ -408,7 +452,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         var postProcess = PostProcessSymbols;
         foreach (ShaderReadPass read in reads)
         {
-            ShaderSymbolData symbols = new()
+            SerializedProgramData symbols = new()
             {
                 EntryPoint = "main",
                 DebugName = $"{read.ShaderName}/SubShader{read.SubShaderIndex}/Pass{read.PassIndex}/{read.Stage}/{read.SubProgram.GetProgramType(read.Version)}/{read.BlobIndex}",
@@ -736,34 +780,49 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// that decoder (formerly <c>DecodeUnityBindPoint</c>) is EndField-specific and now lives
     /// in <see cref="PostProcessSymbols"/> game hooks.
     /// </summary>
-    private static void AppendSymbols(ShaderSymbolData target, ShaderSymbolData source)
+    private static void AppendSymbols(SerializedProgramData target, SerializedProgramData source)
     {
-        foreach (ConstantBuffer buffer in source.ConstantBuffers)
+        foreach (ConstantBufferParameter buffer in source.ConstantBufferParameters)
         {
-            target.ConstantBuffers.Add(buffer);
+            target.ConstantBufferParameters.Add(buffer);
         }
 
-        foreach (BufferBinding binding in source.ConstantBufferBindings)
+        foreach (BufferBindingParameter binding in source.BufferBindingParameters)
         {
-            target.ConstantBufferBindings.Add(binding);
+            target.BufferBindingParameters.Add(binding);
         }
 
         foreach (TextureParameter texture in source.TextureParameters)
         {
             target.TextureParameters.Add(texture);
         }
-    }
 
-    private static void AppendRuntimeSymbols(ShaderSymbolData target, ShaderSubProgram subProgram)
-    {
-        foreach (ConstantBuffer buffer in subProgram.ConstantBuffers)
+        foreach (VectorParameter vector in source.VectorParameters)
         {
-            target.ConstantBuffers.Add(buffer);
+            target.VectorParameters.Add(vector);
         }
 
-        foreach (BufferBinding binding in subProgram.ConstantBufferBindings)
+        foreach (MatrixParameter matrix in source.MatrixParameters)
         {
-            target.ConstantBufferBindings.Add(binding);
+            target.MatrixParameters.Add(matrix);
+        }
+
+        foreach (BufferBindingParameter buffer in source.BufferParameters)
+        {
+            target.BufferParameters.Add(buffer);
+        }
+    }
+
+    private static void AppendRuntimeSymbols(SerializedProgramData target, ShaderSubProgram subProgram)
+    {
+        foreach (ConstantBufferParameter buffer in subProgram.ConstantBufferParameters)
+        {
+            target.ConstantBufferParameters.Add(buffer);
+        }
+
+        foreach (BufferBindingParameter binding in subProgram.BufferBindingParameters)
+        {
+            target.BufferBindingParameters.Add(binding);
         }
 
         foreach (TextureParameter texture in subProgram.TextureParameters)
@@ -773,12 +832,27 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         foreach (SamplerParameter sampler in subProgram.SamplerParameters)
         {
-            target.Samplers.Add(sampler);
+            target.SamplerParameters.Add(sampler);
         }
 
         foreach (UAVParameter uav in subProgram.UAVParameters)
         {
-            target.UAVs.Add(uav);
+            target.UAVParameters.Add(uav);
+        }
+
+        foreach (VectorParameter vector in subProgram.VectorParameters)
+        {
+            target.VectorParameters.Add(vector);
+        }
+
+        foreach (MatrixParameter matrix in subProgram.MatrixParameters)
+        {
+            target.MatrixParameters.Add(matrix);
+        }
+
+        foreach (BufferBindingParameter buffer in subProgram.BufferParameters)
+        {
+            target.BufferParameters.Add(buffer);
         }
     }
 
@@ -968,11 +1042,11 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         uint? ParameterBlobIndex,
         List<ushort> KeywordIndices,
         ShaderSubProgram SubProgram,
-        ShaderSymbolData CommonSymbols,
-        ShaderSymbolData ParameterSymbols,
+        SerializedProgramData CommonSymbols,
+        SerializedProgramData ParameterSymbols,
         byte[] Binary,
         string ShaderName,
         UnityVersion Version);
 
-    private sealed record ShaderSymbolPass(ShaderReadPass Read, ShaderSymbolData Symbols);
+    private sealed record ShaderSymbolPass(ShaderReadPass Read, SerializedProgramData Symbols);
 }

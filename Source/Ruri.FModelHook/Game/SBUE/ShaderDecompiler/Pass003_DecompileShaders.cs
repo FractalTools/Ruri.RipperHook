@@ -20,7 +20,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   2. Pick the best material symbol source (UnifiedMaterialReader ->
 //      MaterialJsonSymbolReader). Both are caches; first lookup pays
 //      the JSON-parse cost, repeats are O(1).
-//   3. Assemble final ShaderSymbolData by combining:
+//   3. Assemble final SerializedProgramData by combining:
 //        - runtime symbols (FShaderCodeUniformBuffers + SRT-decoded
 //          texture/sampler/UAV names, refined by the material's
 //          MaterialUniformBufferLayout when available)
@@ -162,7 +162,7 @@ internal static class Pass003_DecompileShaders
         public required byte[] StrippedCode { get; init; }
         public required EngineDecompileOptions EngineOptions { get; init; }
         public required string ProvisionalStem { get; init; }
-        public required ShaderSymbolData Metadata { get; init; }
+        public required SerializedProgramData Metadata { get; init; }
         public ShaderContainerInfo? ContainerInfo { get; init; }
         public HashSet<string>? UsedBy { get; init; }
     }
@@ -194,14 +194,14 @@ internal static class Pass003_DecompileShaders
             state.LogError($"Shader {shaderIndex}: usage has {usedBy!.Count} material(s) (first: {firstMat}) but symbol reader returned null - material CB will be unnamed.");
         }
 
-        ShaderSymbolData metadata = RuntimeSymbolReader.Read(unrealMetadata, bestSource?.MaterialLayout);
+        SerializedProgramData metadata = RuntimeSymbolReader.Read(unrealMetadata, bestSource?.MaterialLayout);
         if (bestSource != null)
         {
-            foreach (ConstantBuffer cb in bestSource.Metadata.ConstantBuffers)
+            foreach (ConstantBufferParameter cb in bestSource.Metadata.ConstantBufferParameters)
             {
-                if (!metadata.ConstantBuffers.Any(existing => string.Equals(existing.Name, cb.Name, StringComparison.Ordinal)))
+                if (!metadata.ConstantBufferParameters.Any(existing => string.Equals(existing.Name, cb.Name, StringComparison.Ordinal)))
                 {
-                    metadata.ConstantBuffers.Add(cb);
+                    metadata.ConstantBufferParameters.Add(cb);
                 }
             }
         }
@@ -538,13 +538,13 @@ internal static class Pass003_DecompileShaders
                 // Defensive copy — caches share metadata across every shader
                 // using the same material; SRT enrichment + texture-name
                 // inferrer mutate it in place.
-                ShaderSymbolData clone = new()
+                SerializedProgramData clone = new()
                 {
-                    ConstantBuffers = new List<ConstantBuffer>(candidate.Metadata.ConstantBuffers),
-                    ConstantBufferBindings = new List<BufferBinding>(candidate.Metadata.ConstantBufferBindings),
+                    ConstantBufferParameters = new List<ConstantBufferParameter>(candidate.Metadata.ConstantBufferParameters),
+                    BufferBindingParameters = new List<BufferBindingParameter>(candidate.Metadata.BufferBindingParameters),
                     TextureParameters = new List<TextureParameter>(candidate.Metadata.TextureParameters),
-                    Samplers = new List<SamplerParameter>(candidate.Metadata.Samplers),
-                    UAVs = new List<UAVParameter>(candidate.Metadata.UAVs),
+                    SamplerParameters = new List<SamplerParameter>(candidate.Metadata.SamplerParameters),
+                    UAVParameters = new List<UAVParameter>(candidate.Metadata.UAVParameters),
                     EntryPoint = candidate.Metadata.EntryPoint,
                     DebugName = candidate.Metadata.DebugName,
                     UsedMaterials = new List<string>(candidate.Metadata.UsedMaterials),
@@ -620,7 +620,7 @@ internal static class Pass003_DecompileShaders
         public string SourceFileExtension { get; set; } = ".hlsl";
         public string? SourceCode { get; set; }
         public string? ErrorMessage { get; set; }
-        public ShaderSymbolData? SymbolMetadata { get; set; }
+        public SerializedProgramData? SymbolMetadata { get; set; }
     }
 }
 
@@ -1080,9 +1080,9 @@ internal static class RuntimeSymbolReader
 {
     private static readonly Regex GeneratedUniformBufferNamePattern = new("^CB\\d+UBO$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static ShaderSymbolData Read(UnrealShaderParser.UnrealMetadata? metadata, MaterialUniformBufferLayout? materialLayout = null)
+    public static SerializedProgramData Read(UnrealShaderParser.UnrealMetadata? metadata, MaterialUniformBufferLayout? materialLayout = null)
     {
-        ShaderSymbolData symbols = new();
+        SerializedProgramData symbols = new();
         if (metadata?.UniformBufferNames == null)
         {
             return symbols;
@@ -1096,7 +1096,7 @@ internal static class RuntimeSymbolReader
                 continue;
             }
 
-            symbols.ConstantBufferBindings.Add(new BufferBinding
+            symbols.BufferBindingParameters.Add(new BufferBindingParameter
             {
                 Name = name,
                 NameIndex = -1,
@@ -1229,10 +1229,10 @@ internal static class ShaderResourceTableDecoder
 }
 
 // =====================================================================
-// ShaderResourceTableSymbolizer - bridges SRT decode to ShaderSymbolData.
+// ShaderResourceTableSymbolizer - bridges SRT decode to SerializedProgramData.
 // =====================================================================
 // Bridges SRT decode + the shader's optional FShaderCodeUniformBuffers
-// list to a ShaderSymbolData populated with named bindings:
+// list to a SerializedProgramData populated with named bindings:
 //   - one BufferBinding per uniform buffer (`b<i>` named `<UBName>`)
 //   - one TextureParameter / SamplerParameter / BufferBinding /
 //     UAVParameter per SRT entry, named `<UBName>_<ResourceLabel>`.
@@ -1250,7 +1250,7 @@ internal static class ShaderResourceTableDecoder
 internal static class ShaderResourceTableSymbolizer
 {
     public static void EnrichSymbolData(
-        ShaderSymbolData target,
+        SerializedProgramData target,
         UnrealShaderParser.UnrealMetadata? unrealMetadata,
         MaterialUniformBufferLayout? materialLayout = null)
     {
@@ -1320,7 +1320,7 @@ internal static class ShaderResourceTableSymbolizer
         }
     }
 
-    private static void AppendUniformBufferBindings(ShaderSymbolData target, IReadOnlyList<string>? uniformBufferNames)
+    private static void AppendUniformBufferBindings(SerializedProgramData target, IReadOnlyList<string>? uniformBufferNames)
     {
         if (uniformBufferNames == null)
         {
@@ -1335,12 +1335,12 @@ internal static class ShaderResourceTableSymbolizer
                 continue;
             }
 
-            if (target.ConstantBufferBindings.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.ConstantBuffer) == 0 && existing.Index == i))
+            if (target.BufferBindingParameters.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.ConstantBuffer) == 0 && existing.Index == i))
             {
                 continue;
             }
 
-            target.ConstantBufferBindings.Add(new BufferBinding
+            target.BufferBindingParameters.Add(new BufferBindingParameter
             {
                 Name = name,
                 NameIndex = -1,
@@ -1350,7 +1350,7 @@ internal static class ShaderResourceTableSymbolizer
         }
     }
 
-    private static void AppendTextureParameter(ShaderSymbolData target, SrtRecord record, string resolvedName)
+    private static void AppendTextureParameter(SerializedProgramData target, SrtRecord record, string resolvedName)
     {
         if (target.TextureParameters.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.Texture) == 0 && existing.Index == record.BindIndex))
         {
@@ -1368,29 +1368,29 @@ internal static class ShaderResourceTableSymbolizer
         });
     }
 
-    private static void AppendSamplerParameter(ShaderSymbolData target, SrtRecord record, string resolvedName)
+    private static void AppendSamplerParameter(SerializedProgramData target, SrtRecord record, string resolvedName)
     {
-        if (target.Samplers.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.Sampler) == 0 && existing.Index == record.BindIndex))
+        if (target.SamplerParameters.Any(existing => target.GetSetIdFor(existing.BindPoint, ShaderResourceType.Sampler) == 0 && existing.BindPoint == record.BindIndex))
         {
             return;
         }
 
-        target.Samplers.Add(new SamplerParameter
+        target.SamplerParameters.Add(new SamplerParameter
         {
             Sampler = (uint)record.BindIndex,
-            Index = record.BindIndex,
+            BindPoint = record.BindIndex,
             Name = resolvedName,
         });
     }
 
-    private static void AppendUavParameter(ShaderSymbolData target, SrtRecord record, string resolvedName)
+    private static void AppendUavParameter(SerializedProgramData target, SrtRecord record, string resolvedName)
     {
-        if (target.UAVs.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.UAV) == 0 && existing.Index == record.BindIndex))
+        if (target.UAVParameters.Any(existing => target.GetSetIdFor(existing.Index, ShaderResourceType.UAV) == 0 && existing.Index == record.BindIndex))
         {
             return;
         }
 
-        target.UAVs.Add(new UAVParameter
+        target.UAVParameters.Add(new UAVParameter
         {
             Name = resolvedName,
             NameIndex = -1,
@@ -1486,13 +1486,13 @@ internal static class MaterialTextureNameInferrer
     private const ushort OpLoad = 61;
     private const ushort OpSampledImage = 86;
 
-    public static int InferAndAppend(byte[] spirv, ShaderSymbolData symbols)
+    public static int InferAndAppend(byte[] spirv, SerializedProgramData symbols)
     {
         if (spirv == null || spirv.Length < SpvOpCode.HeaderWordCount * 4)
         {
             return 0;
         }
-        if (symbols.Samplers.Count == 0)
+        if (symbols.SamplerParameters.Count == 0)
         {
             return 0;
         }
@@ -1575,13 +1575,13 @@ internal static class MaterialTextureNameInferrer
 
         // Build a lookup: bindIndex -> sampler name (only Material samplers).
         Dictionary<int, string> samplerNameByBinding = new();
-        foreach (SamplerParameter sampler in symbols.Samplers)
+        foreach (SamplerParameter sampler in symbols.SamplerParameters)
         {
-            if (symbols.GetSetIdFor(sampler.Index, ShaderResourceType.Sampler) != 0 || string.IsNullOrWhiteSpace(sampler.Name))
+            if (symbols.GetSetIdFor(sampler.BindPoint, ShaderResourceType.Sampler) != 0 || string.IsNullOrWhiteSpace(sampler.Name))
             {
                 continue;
             }
-            samplerNameByBinding[sampler.Index] = sampler.Name!;
+            samplerNameByBinding[sampler.BindPoint] = sampler.Name!;
         }
         if (samplerNameByBinding.Count == 0)
         {

@@ -72,7 +72,7 @@ internal sealed class FMaterialParameterInfo
 // =====================================================================
 internal sealed record MaterialSymbolSource(
     string MaterialPath,
-    ShaderSymbolData Metadata,
+    SerializedProgramData Metadata,
     string Header,
     int Score,
     bool UsedLoadedMaterialResources,
@@ -400,7 +400,7 @@ internal sealed class MaterialJsonSymbolReader
             return null;
         }
 
-        ShaderSymbolData metadata = SymbolBuilder.Build(inputs);
+        SerializedProgramData metadata = SymbolBuilder.Build(inputs);
         string header = SymbolHeaderWriter.Build(inputs);
         int score = inputs.UsedLoadedMaterialResources ? 2 : inputs.NumericParameterInfos.Count > 0 ? 1 : 0;
         MaterialUniformBufferLayout? materialLayout = inputs.MaterialResourceCounts != null
@@ -560,7 +560,7 @@ internal sealed class UnifiedMaterialReader
             return null;
         }
 
-        ShaderSymbolData metadata = SymbolBuilder.Build(inputs);
+        SerializedProgramData metadata = SymbolBuilder.Build(inputs);
         string header = SymbolHeaderWriter.Build(inputs);
         int score = inputs.UsedLoadedMaterialResources ? 2 : inputs.NumericParameterInfos.Count > 0 ? 1 : 0;
         MaterialUniformBufferLayout? materialLayout = inputs.MaterialResourceCounts != null
@@ -813,7 +813,7 @@ internal static class SymbolInputsReader
         return null;
     }
 
-    private static ConstantBuffer? ReadMaterialConstantBuffer(JsonElement uniformExpressionSet)
+    private static ConstantBufferParameter? ReadMaterialConstantBuffer(JsonElement uniformExpressionSet)
     {
         if (!uniformExpressionSet.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement uniformBufferLayoutInitializer) ||
             uniformBufferLayoutInitializer.ValueKind != JsonValueKind.Object)
@@ -847,7 +847,7 @@ internal static class SymbolInputsReader
         }
 
         byte[] opcodeData = Convert.FromBase64String(encodedData);
-        ConstantBuffer materialBuffer = new()
+        ConstantBufferParameter materialBuffer = new()
         {
             Name = "Material",
             Size = checked((int)constantBufferSize)
@@ -897,7 +897,7 @@ internal static class SymbolInputsReader
                 Name = "VTPackedPageTableUniform",
                 NameIndex = -1,
                 Type = ShaderParamType.UInt,
-                ByteOffset = 0,
+                Index = 0,
                 ArraySize = vtPageTableBytes / 16,
                 IsMatrix = false,
                 RowCount = 4,
@@ -914,7 +914,7 @@ internal static class SymbolInputsReader
                 Name = "VTPackedUniform",
                 NameIndex = -1,
                 Type = ShaderParamType.UInt,
-                ByteOffset = vtUniformStart,
+                Index = vtUniformStart,
                 ArraySize = vtUniformBytes / 16,
                 IsMatrix = false,
                 RowCount = 4,
@@ -1029,11 +1029,11 @@ internal static class SymbolInputsReader
             return null;
         }
 
-        materialBuffer.VectorParams = vectorParams
-            .OrderBy(static p => p.ByteOffset)
+        materialBuffer.VectorParameters = vectorParams
+            .OrderBy(static p => p.Index)
             .ToArray();
-        materialBuffer.MatrixParams = matrixParams
-            .OrderBy(static p => p.ByteOffset)
+        materialBuffer.MatrixParameters = matrixParams
+            .OrderBy(static p => p.Index)
             .ToArray();
         return materialBuffer;
     }
@@ -1113,7 +1113,7 @@ internal static class SymbolInputsReader
             Name = name,
             NameIndex = -1,
             Type = type,
-            ByteOffset = byteOffset,
+            Index = byteOffset,
             ArraySize = 1,
             IsMatrix = false,
             RowCount = (byte)rows,
@@ -1128,7 +1128,7 @@ internal static class SymbolInputsReader
             Name = name,
             NameIndex = -1,
             Type = type,
-            ByteOffset = byteOffset,
+            Index = byteOffset,
             ArraySize = 1,
             IsMatrix = true,
             RowCount = 4,
@@ -1612,19 +1612,19 @@ internal static class SymbolInputsReader
 // =====================================================================
 internal static class SymbolBuilder
 {
-    public static ShaderSymbolData Build(SymbolInputs inputs)
+    public static SerializedProgramData Build(SymbolInputs inputs)
     {
-        ShaderSymbolData metadata = new()
+        SerializedProgramData metadata = new()
         {
             DebugName = inputs.MaterialPath
         };
 
         if (inputs.MaterialConstantBuffer != null)
         {
-            metadata.ConstantBuffers.Add(inputs.MaterialConstantBuffer);
+            metadata.ConstantBufferParameters.Add(inputs.MaterialConstantBuffer);
         }
 
-        metadata.ConstantBuffers = metadata.ConstantBuffers
+        metadata.ConstantBufferParameters = metadata.ConstantBufferParameters
             .GroupBy(static buffer => buffer.Name, StringComparer.Ordinal)
             .Select(static group => group.First())
             .ToList();
@@ -1659,11 +1659,11 @@ internal static class SymbolHeaderWriter
 
         if (inputs.MaterialConstantBuffer != null)
         {
-            foreach (NumericShaderParameter parameter in inputs.MaterialConstantBuffer.AllNumericParams
-                         .OrderBy(static p => p.ByteOffset)
+            foreach (NumericShaderParameter parameter in inputs.MaterialConstantBuffer.AllNumericParameters
+                         .OrderBy(static p => p.Index)
                          .Take(32))
             {
-                sb.AppendLine($" * MaterialCB: {parameter.Name} @ byte {parameter.ByteOffset} rows={parameter.RowCount} cols={parameter.ColumnCount}");
+                sb.AppendLine($" * MaterialCB: {parameter.Name} @ byte {parameter.Index} rows={parameter.RowCount} cols={parameter.ColumnCount}");
             }
         }
 
@@ -1678,7 +1678,7 @@ internal sealed class SymbolInputs
     public string MaterialPath { get; set; } = string.Empty;
     public string? ShaderPlatform { get; set; }
     public bool UsedLoadedMaterialResources { get; set; }
-    public ConstantBuffer? MaterialConstantBuffer { get; set; }
+    public ConstantBufferParameter? MaterialConstantBuffer { get; set; }
     public List<FMaterialParameterInfo> NumericParameterInfos { get; } = new();
     public MaterialUniformBufferLayout.MaterialResourceCounts? MaterialResourceCounts { get; set; }
 }

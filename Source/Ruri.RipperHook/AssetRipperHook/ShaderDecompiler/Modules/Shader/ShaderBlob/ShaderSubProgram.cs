@@ -113,14 +113,14 @@ public sealed class ShaderSubProgram
 		List<TextureParameter> textures = new List<TextureParameter>();
 		List<VectorParameter> structVectors = new List<VectorParameter>();
 		List<MatrixParameter> structMatrices = new List<MatrixParameter>();
-		List<BufferBinding> buffers = new List<BufferBinding>();
+		List<BufferBindingParameter> buffers = new List<BufferBindingParameter>();
 		List<UAVParameter>? uavs = HasUAVParameters(unityVersion) ? new List<UAVParameter>() : null;
 		List<SamplerParameter>? samplers = HasSamplerParameters(unityVersion) ? new List<SamplerParameter>() : null;
-		List<BufferBinding> constBindings = new List<BufferBinding>();
+		List<BufferBindingParameter> constBindings = new List<BufferBindingParameter>();
 		List<StructParameter> structs = new List<StructParameter>();
 
 		int paramGroupCount = reader.ReadInt32();
-		ConstantBuffers = new ConstantBuffer[paramGroupCount - 1];
+		ConstantBufferParameters = new ConstantBufferParameter[paramGroupCount - 1];
 		for (int i = 0; i < paramGroupCount; i++)
 		{
 			vectors.Clear();
@@ -209,8 +209,8 @@ public sealed class ShaderSubProgram
 			}
 			else
 			{
-				ConstantBuffer constBuffer = new ConstantBuffer(name, matrices.ToArray(), vectors.ToArray(), structs.ToArray(), usedSize);
-				ConstantBuffers[i - 1] = constBuffer;
+				ConstantBufferParameter constBuffer = new ConstantBufferParameter(name, matrices.ToArray(), vectors.ToArray(), structs.ToArray(), usedSize);
+				ConstantBufferParameters[i - 1] = constBuffer;
 			}
 		}
 
@@ -261,12 +261,12 @@ public sealed class ShaderSubProgram
 			}
 			else if (type == 1)
 			{
-				BufferBinding binding = new BufferBinding(name, index);
+				BufferBindingParameter binding = new BufferBindingParameter(name, index);
 				constBindings.Add(binding);
 			}
 			else if (type == 2)
 			{
-				BufferBinding buffer = new BufferBinding(name, index);
+				BufferBindingParameter buffer = new BufferBindingParameter(name, index);
 				buffers.Add(buffer);
 			}
 			else if (type == 3 && uavs is not null)
@@ -296,7 +296,7 @@ public sealed class ShaderSubProgram
 			SamplerParameters = samplers.ToArray();
 		}
 
-		ConstantBufferBindings = constBindings.ToArray();
+		BufferBindingParameters = constBindings.ToArray();
 		if (HasStructParameters(unityVersion))
 		{
 			StructParameters = structs.ToArray();
@@ -326,11 +326,11 @@ public sealed class ShaderSubProgram
 	public VectorParameter[] VectorParameters { get; set; } = Array.Empty<VectorParameter>();
 	public MatrixParameter[] MatrixParameters { get; set; } = Array.Empty<MatrixParameter>();
 	public TextureParameter[] TextureParameters { get; set; } = Array.Empty<TextureParameter>();
-	public BufferBinding[] BufferParameters { get; set; } = Array.Empty<BufferBinding>();
+	public BufferBindingParameter[] BufferParameters { get; set; } = Array.Empty<BufferBindingParameter>();
 	public UAVParameter[] UAVParameters { get; set; } = Array.Empty<UAVParameter>();
 	public SamplerParameter[] SamplerParameters { get; set; } = Array.Empty<SamplerParameter>();
-	public ConstantBuffer[] ConstantBuffers { get; set; } = Array.Empty<ConstantBuffer>();
-	public BufferBinding[] ConstantBufferBindings { get; set; } = Array.Empty<BufferBinding>();
+	public ConstantBufferParameter[] ConstantBufferParameters { get; set; } = Array.Empty<ConstantBufferParameter>();
+	public BufferBindingParameter[] BufferBindingParameters { get; set; } = Array.Empty<BufferBindingParameter>();
 	public StructParameter[] StructParameters { get; set; } = Array.Empty<StructParameter>();
 	public ParserBindChannels BindChannels { get; set; } = new();
 }
