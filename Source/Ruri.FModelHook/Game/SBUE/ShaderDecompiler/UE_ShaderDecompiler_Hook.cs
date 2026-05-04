@@ -20,8 +20,17 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
     [FModelHook(GameType.UE_ShaderDecompiler)]
     public class UE_ShaderDecompiler_Hook : RuriHook
     {
-        private static bool _hasExportedUnifiedMetadata = false;
-        private static readonly object _mappingLock = new object();
+        // One ExportPipelineState lives for the lifetime of the FModel
+        // session so the cumulative cross-library work (Pass 020 material
+        // scan, Pass 040 IoStore hash extraction, Pass 090 once-only
+        // unified-metadata write) only happens on the first library hit
+        // and reuses its results for subsequent libraries.
+        private static readonly ExportPipelineState _exportState = new()
+        {
+            Log = HookLogger.Log,
+            LogError = HookLogger.LogFailure,
+        };
+        private static readonly object _exportStateLock = new();
 
         // Use RetargetMethod to safely inject C# logic before the original method and fall through (IsReturn = false)
         // Positional args: Type source, string methodName, bool isBefore, bool isReturn
@@ -45,8 +54,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 string exportBasePath = Path.Combine(UserSettings.Default.RawDataDirectory, UserSettings.Default.KeepDirectoryStructure ? entry.PathWithoutExtension : entry.NameWithoutExtension).Replace('\\', '/');
                 bool exportedLibrary = false;
 
-                // 1. Export Shader Library (.ushaderlib)
-                var libraryBytes = ShaderArchiveExporter.SaveShaderLibrary(entry);
+                // 1. Export Shader Library (.ushaderlib) — Pass 010.
+                var libraryBytes = Pass010_SaveShaderArchive.SaveShaderLibrary(entry);
                 if (libraryBytes != null)
                 {
                     string path = exportBasePath + ".ushaderlib";
@@ -63,40 +72,29 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     }
                 }
 
-                // 2. Export library-specific sidecars for every selected library.
+                // 2. Run the export pipeline (Pass 020 -> Pass 090) for
+                //    this library. Cross-library state on `_exportState`
+                //    persists across hook fires so cached passes only run
+                //    once total.
                 if (exportedLibrary)
                 {
                     try
                     {
-                        UnifiedShaderMetadataExporter.ExportLibrarySidecarsOnly(self, entry, exportBasePath);
+                        lock (_exportStateLock)
+                        {
+                            _exportState.Vm = self;
+                            _exportState.Entry = entry;
+                            _exportState.ExportBasePath = exportBasePath;
+                            ExportPipeline.Run(_exportState);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        HookLogger.LogFailure($"[UE_ShaderDecompiler] Failed to export library sidecars: {ex.Message}");
+                        HookLogger.LogFailure($"[UE_ShaderDecompiler] Export pipeline failed: {ex.Message}");
                     }
                 }
 
-                // 3. Export unified verified metadata once.
-                if (!_hasExportedUnifiedMetadata)
-                {
-                    lock (_mappingLock)
-                    {
-                        if (!_hasExportedUnifiedMetadata)
-                        {
-                            try
-                            {
-                                UnifiedShaderMetadataExporter.ExportAll(self, entry, exportBasePath);
-                                _hasExportedUnifiedMetadata = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                HookLogger.LogFailure($"[UE_ShaderDecompiler] Failed to export unified shader metadata: {ex.Message}");
-                            }
-                        }
-                    }
-                }
-
-                // 4. Decompile in-process (mirrors the Unity flow in
+                // 3. Decompile in-process (mirrors the Unity flow in
                 // ShaderRuriDecompileExporter). The unified metadata is
                 // exported once and reused; if it isn't on disk yet we
                 // fall back to sidecar-only resolution.
@@ -136,7 +134,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 LogError = HookLogger.LogFailure,
             });
 
-            HookLogger.LogSuccess($"[UE_ShaderDecompiler] Decompiled {summary.Decompiled}/{summary.TotalShaders} shaders → {outputDir}");
+            HookLogger.LogSuccess($"[UE_ShaderDecompiler] Decompiled {summary.Decompiled}/{summary.TotalShaders} shaders -> {outputDir}");
         }
     }
 }

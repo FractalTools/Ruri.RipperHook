@@ -4,7 +4,7 @@ using System.IO;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 000 — Read the on-disk `.ushaderlib` (FSerializedShaderArchive
+// Pass 010 — Read the on-disk `.ushaderlib` (FSerializedShaderArchive
 // header v2 written by ShaderArchiveExporter) into a structured
 // `ShaderLibrary` object. The on-disk shape mirrors UE's serialized
 // shader archive so anything downstream stays decoupled from FModel's
@@ -19,7 +19,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   uint32 numPreloadEntries;   skipped (16 bytes each — we don't need them post-merge)
 //   uint32 numShaderIndices;    uint32 * N
 //   <remaining stream>          packed shader code buffer
-internal static class Pass000_ReadLibrary
+internal static class Pass110_ReadShaderLibrary
 {
     public static void DoPass(PipelineState state)
     {

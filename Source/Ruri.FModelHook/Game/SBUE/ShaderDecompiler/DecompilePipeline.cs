@@ -1,22 +1,60 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using ShaderDecompilerEngine = Ruri.ShaderTools.ShaderDecompiler;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Top-level orchestrator. Mirrors the AssemblyDumper Pass design
-// (`PassNNN_{Verb}.DoPass(state)` + per-pass timing). Conceptual order
-// is the deferred-rendering G-buffer analogy:
+// Orchestrator. Pass numbers reflect EXECUTION ORDER end-to-end —
+// Export must run first because Decompile reads the sidecars Export
+// produces. 10-increments leave room to insert without renumbering.
 //
-//   Pass 000 — Read .ushaderlib bytes
-//   Pass 001 — Build asset / usage / name index from sidecars + unified
-//              metadata. Both sources iterated in one pass since they
-//              feed the same map.
-//   Pass 002 — Spin up per-material symbol-source readers. Lazy: actual
-//              JSON I/O only happens during Pass 003 lookups.
-//   Pass 003 — Per-shader decompile loop ("Light" stage). Each iteration:
-//              strip UE wrapper → assemble metadata → hand to
-//              ShaderDecompiler.Decompile → write outputs.
+// Each pass is self-contained: it fills typed slots on PipelineState
+// and the orchestrator just sequences them. Passes never call into
+// another pass's helpers; if a piece of logic is shared by multiple
+// passes it lives as a state-attached data type (UnifiedMaterialReader,
+// MaterialUniformBufferLayout, etc.).
+//
+// Export pipeline (FModel-hook side; needs vm.Provider) — orchestrated
+// by ExportPipeline.Run, see ExportPipeline.cs:
+//   Pass 010  Save IoStore archive as flat FSerializedShaderArchive
+//   Pass 020  Scan material packages -> Root.MaterialInterfaces (cached)
+//   Pass 030  FHashedName(CityHash64) resolver (used by Pass 060)
+//   Pass 040  Extract IoStore shader-map hashes (cached)
+//   Pass 050  Per-library archive metadata view
+//   Pass 060  Build per-shader-map stable records
+//   Pass 070  Write `<base>.assetinfo.json`
+//   Pass 080  Write `<base>.stableinfo.json`
+//   Pass 090  Write `UnifiedShaderMetadata.json` (once total)
+//
+// Decompile pipeline (CLI-runnable; reads .ushaderlib + JSON sidecars):
+//   Pass 110  Read .ushaderlib bytes into ShaderLibrary
+//   Pass 120  Load .assetinfo.json     -> ShaderMapToAssets
+//   Pass 130  Load .stableinfo.json    -> hash-fanout + per-shader containers
+//   Pass 140  Load UnifiedShaderMetadata.json -> hash-to-materials index
+//   Pass 150  Compose 120-140 into per-shader-map view + usage / name maps
+//   Pass 160  Spin up per-material symbol-source readers
+//   Pass 170  Build shaderlab `Properties { ... }` from each map's UES
+//   Pass 180  Phase 1 — strip UE wrapper, build SerializedProgramData +
+//             EngineDecompileOptions per shader binary -> ShaderPrepByIndex.
+//   Pass 190  Phase 2 — drive ShaderDecompilerEngine.Decompile across
+//             every prepped binary -> DecompileResultByIndex.
+//   Pass 200  Phase 3 — walk shader-maps in alphabetical order, render
+//             per-map .shader files with variants under `#if defined(...)`
+//             blocks.
+//
+// Pass 190 + Pass 200 are INTERLEAVED per-shader-map by the orchestrator:
+// for each map, decompile its pending binaries (Pass190.DoPassForOneMap)
+// then emit its `.shader` file (Pass200.DoPassForOneMap). This restores
+// the streaming behavior the user wanted — completed `.shader` files
+// land progressively as work advances rather than in a single burst at
+// the end. The cache in `state.DecompileResultByIndex` makes shared
+// binaries decompile once even when N maps own them.
+//
+// Future inserts (e.g. material-asset attribute extraction for
+// SubShader Tags / RenderQueue / ShadingModel) take the next free
+// 10-step slot without renumbering anything else.
 public static class DecompilePipeline
 {
     public static DecompileSummary Run(LibraryDecompileOptions options)
@@ -28,10 +66,32 @@ public static class DecompilePipeline
 
         PipelineState state = new(options);
 
-        using (new TimingCookie(state, "Pass 000: Read .ushaderlib")) Pass000_ReadLibrary.DoPass(state);
-        using (new TimingCookie(state, "Pass 001: Build asset index")) Pass001_BuildAssetIndex.DoPass(state);
-        using (new TimingCookie(state, "Pass 002: Load symbol sources")) Pass002_LoadSymbolSources.DoPass(state);
-        using (new TimingCookie(state, "Pass 003: Decompile shaders")) Pass003_DecompileShaders.DoPass(state);
+        using (new TimingCookie(state, "Pass 110: Read .ushaderlib"))           Pass110_ReadShaderLibrary.DoPass(state);
+        using (new TimingCookie(state, "Pass 120: Load .assetinfo.json"))       Pass120_LoadAssetInfoSidecar.DoPass(state);
+        using (new TimingCookie(state, "Pass 130: Load .stableinfo.json"))      Pass130_LoadStableInfoSidecar.DoPass(state);
+        using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
+        using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
+        using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
+        using (new TimingCookie(state, "Pass 170: Build shaderlab Properties")) Pass170_BuildShaderLabProperties.DoPass(state);
+        using (new TimingCookie(state, "Pass 180: Prepare shader binaries"))    Pass180_PrepareShaderBinaries.DoPass(state);
+
+        // Pass 190 + Pass 200 INTERLEAVED per shader-map for streaming.
+        // The engine instance lives across all maps so its one-time setup
+        // is amortised. Cache via state.DecompileResultByIndex makes
+        // shared binaries decompile only on the first owning map's pass.
+        using (new TimingCookie(state, "Pass 190+200: Decompile + emit per map"))
+        {
+            string outputDir = string.IsNullOrEmpty(state.OutputDirectory)
+                ? Path.GetFullPath(state.Options.OutputDirectory)
+                : state.OutputDirectory;
+            using ShaderDecompilerEngine engine = new(outputDir);
+            foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(static m => m.PrimaryName, StringComparer.OrdinalIgnoreCase))
+            {
+                Pass190_RunEngineDecompile.DoPassForOneMap(state, engine, map);
+                Pass200_EmitShaderLabFiles.DoPassForOneMap(state, map);
+            }
+            state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
+        }
 
         return new DecompileSummary(
             state.Library?.ShaderEntries.Length ?? 0,

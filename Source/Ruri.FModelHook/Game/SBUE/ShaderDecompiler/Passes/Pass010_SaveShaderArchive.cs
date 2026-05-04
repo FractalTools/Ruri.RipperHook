@@ -8,7 +8,12 @@ using FModel.ViewModels;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 {
-    public static class ShaderArchiveExporter
+    // Pass 100 — Convert FModel's IoStore-resident shader archive
+    // (FIoStoreShaderCodeArchive) into a flat FSerializedShaderArchive v2
+    // byte stream so downstream tools can read it without re-implementing
+    // IoStore group resolution. Also handles plain-archive passthrough
+    // when FModel has already deserialised a non-IoStore archive.
+    public static class Pass010_SaveShaderArchive
     {
         public static byte[]? SaveShaderLibrary(GameFile entry)
         {

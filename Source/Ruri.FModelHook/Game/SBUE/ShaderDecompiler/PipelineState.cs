@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
@@ -38,7 +39,18 @@ internal sealed class PipelineState
     // Pass 000 outputs
     public ShaderLibrary? Library { get; set; }
 
-    // Pass 001 outputs (asset/usage/name index, sidecar+unified merged)
+    // Pass 020 — `.assetinfo.json` -> on-disk shader-map hash to assets
+    public Dictionary<string, HashSet<string>> ShaderMapToAssets { get; } = new(StringComparer.OrdinalIgnoreCase);
+    // Pass 030 — `.stableinfo.json` hash-level fan-out (shader-hash ->
+    // asset -> set of frequencies). Used to fan unique shader binaries
+    // out to materials when the owning shader-map didn't list them.
+    public Dictionary<string, Dictionary<string, HashSet<byte>>> ShaderHashToAssetsByFreq { get; } = new(StringComparer.OrdinalIgnoreCase);
+    // Pass 040 — `UnifiedShaderMetadata.json` hash -> materials index
+    // (PackageShaderMapHashes + CookedShaderMapIdHash + ShaderContentHash
+    // folded together). Bridge from on-disk hashes to material paths.
+    public Dictionary<string, HashSet<string>> HashToMaterialsFromUnified { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Pass 050 outputs (asset/usage/name index + per-shader-map view)
     public Dictionary<int, HashSet<string>> UsageByShaderIndex { get; } = new();
     public Dictionary<int, string> NameByShaderIndex { get; } = new();
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; } = new();
@@ -46,7 +58,7 @@ internal sealed class PipelineState
     // returns the ShaderContainerInfo this shader has WHEN VIEWED FROM that map.
     // The same shader binary can appear in multiple maps with different
     // ShaderType/VertexFactoryType because UE deduplicates compiled bytecode
-    // across pipeline permutations. Pass003 emission must consult this so the
+    // across pipeline permutations. Pass080 emission must consult this so the
     // pass-grouping in the .shader file reflects the map's own truth, not
     // whichever map happened to register the shader last.
     public Dictionary<string, Dictionary<int, ShaderContainerInfo>> ContainersByMapAndIndex { get; set; } = new();
@@ -62,6 +74,15 @@ internal sealed class PipelineState
     // Pass 002 outputs (cached per-material symbol sources)
     public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
     public MaterialJsonSymbolReader? MaterialJsonSymbolReader { get; set; }
+
+    // Pass 180 — per-shader-binary prep artefacts (stripped DXBC, engine
+    // options, container metadata). Filled by Pass 180; consumed by
+    // Pass 190 (decompile) and Pass 200 (emit).
+    public Dictionary<int, ShaderPrep> ShaderPrepByIndex { get; } = new();
+
+    // Pass 190 — engine.Decompile result per shader-index, decoded once
+    // per unique binary even when shared across many shader-maps.
+    public Dictionary<int, DecompileResult> DecompileResultByIndex { get; } = new();
 
     // Pass 003 running tallies + outputs
     public int Decompiled;
@@ -120,10 +141,34 @@ internal sealed class ShaderMapInfo
     // be processed last", which is the bug the global ContainerByShaderIndex
     // dictionary suffered from.
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; init; } = new();
+    // Pre-rendered shaderlab `Properties { ... }` block — populated by
+    // Pass070 from the primary asset's FUniformExpressionSet, consumed
+    // by Pass080 emission. Empty when no UES is available (e.g. global
+    // archive shader-maps that have no material side at all).
+    public string PropertiesBlock { get; set; } = string.Empty;
 }
 
 internal sealed class ShaderMapMember
 {
     public int RelativeIndex { get; init; }      // 0..NumShaders-1, == metadata ResourceIndex
     public int ArchiveShaderIndex { get; init; } // global archive index
+}
+
+// Per-shader artefacts the prep pass (Pass 180) collects so Pass 190 only
+// touches binary + options and Pass 200 has everything it needs to write
+// outputs without re-reading metadata. Lives at top-level so it can be
+// referenced from PipelineState's typed dictionary slot.
+internal sealed class ShaderPrep
+{
+    public required int ShaderIndex { get; init; }
+    public required string ContainerKey { get; init; }
+    public required string MaterialName { get; init; }
+    public required string VariantSuffix { get; init; }
+    public required string TypeSuffix { get; init; }
+    public required byte[] StrippedCode { get; init; }
+    public required DecompileOptions EngineOptions { get; init; }
+    public required string ProvisionalStem { get; init; }
+    public required SerializedProgramData Metadata { get; init; }
+    public ShaderContainerInfo? ContainerInfo { get; init; }
+    public HashSet<string>? UsedBy { get; init; }
 }
