@@ -43,9 +43,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // MaterialTextureNameInferrer (OpSampledImage texture-name recovery).
 internal static class Pass003_DecompileShaders
 {
-	// 因为UE的Shader没有容器 必须手动切块Blob 否则就需要等待所有Blob反编译完成才会输出结果
-    private const int DefaultBatchSize = 256;
-
     public static void DoPass(PipelineState state)
     {
         if (state.Library is null) throw new InvalidOperationException("Pass000 must run before Pass003.");
@@ -105,44 +102,29 @@ internal static class Pass003_DecompileShaders
             }
         }
 
-        // Phase 2 — hand the engine the entire request list. With > 1 request it scales
-        // worker count automatically against system CPU; with one it just runs serially
-        // on this same instance. From here it's mostly waiting on dxbc2dxil / dxil-spirv
-        // / spirv-cross subprocesses.
-        var requests = new (byte[] Binary, EngineDecompileOptions Options)[preps.Count];
-        for (int i = 0; i < preps.Count; i++)
-        {
-            requests[i] = (preps[i].StrippedCode, preps[i].EngineOptions);
-        }
-
         using ShaderDecompilerEngine engine = new(outputDir);
 
-        // Phase 3 — process the library in fixed-size chunks so we keep the engine's
-        // internal parallel batch execution, but don't retain one giant result array /
-        // all emitted HLSL for the whole library before writing anything.
-        for (int batchStart = 0; batchStart < preps.Count; batchStart += DefaultBatchSize)
+        foreach (IGrouping<string, ShaderPrep> containerGroup in preps.GroupBy(prep => prep.ContainerKey, StringComparer.Ordinal))
         {
-            int batchCount = Math.Min(DefaultBatchSize, preps.Count - batchStart);
-            var batchRequests = new (byte[] Binary, EngineDecompileOptions Options)[batchCount];
-            for (int i = 0; i < batchCount; i++)
+            ShaderPrep[] containerPreps = containerGroup.ToArray();
+            var requests = new (byte[] Binary, EngineDecompileOptions Options)[containerPreps.Length];
+            for (int i = 0; i < containerPreps.Length; i++)
             {
-                batchRequests[i] = requests[batchStart + i];
+                requests[i] = (containerPreps[i].StrippedCode, containerPreps[i].EngineOptions);
             }
 
-            DecompileResult[] results = engine.Decompile(batchRequests);
+            DecompileResult[] results = engine.Decompile(requests);
 
-            // Finalize each chunk before submitting the next one so outputs appear on disk
-            // incrementally and peak memory scales with batch size, not total shader count.
-            for (int i = 0; i < batchCount; i++)
+            for (int i = 0; i < containerPreps.Length; i++)
             {
                 try
                 {
-                    FinalizeSingleShader(state, preps[batchStart + i], results[i]);
+                    FinalizeSingleShader(state, containerPreps[i], results[i]);
                 }
                 catch (Exception ex)
                 {
                     state.Failed++;
-                    state.LogError($"Shader {preps[batchStart + i].ShaderIndex}: finalize exception: {ex.Message}");
+                    state.LogError($"Shader {containerPreps[i].ShaderIndex}: finalize exception: {ex.Message}");
                 }
             }
         }
@@ -155,6 +137,9 @@ internal static class Pass003_DecompileShaders
     private sealed class ShaderPrep
     {
         public required int ShaderIndex { get; init; }
+        public required string ContainerKey { get; init; }
+        public required string MaterialName { get; init; }
+        public required string VariantSuffix { get; init; }
         public required string TypeSuffix { get; init; }
         public required byte[] StrippedCode { get; init; }
         public required EngineDecompileOptions EngineOptions { get; init; }
@@ -167,10 +152,14 @@ internal static class Pass003_DecompileShaders
     {
         ShaderCodeEntry entry = state.Library!.ShaderEntries[shaderIndex];
         string typeSuffix = ShaderFrequency.ToString(entry.Frequency);
+        ShaderContainerInfo? container = state.ContainerByShaderIndex.TryGetValue(shaderIndex, out ShaderContainerInfo? mappedContainer)
+            ? mappedContainer
+            : null;
+        string containerKey = container?.ContainerKey ?? $"Ungrouped_{typeSuffix}_{shaderIndex:D6}";
+        string materialName = SanitizeFileStem(container?.MaterialName ?? ResolveFinalName(state, shaderIndex));
+        string variantSuffix = BuildVariantSuffix(shaderIndex, container);
 
-        string provisionalStem = state.NameByShaderIndex.TryGetValue(shaderIndex, out string? preMapped) && !string.IsNullOrWhiteSpace(preMapped)
-            ? string.Join("_", preMapped.Split(Path.GetInvalidFileNameChars())) + $"_{typeSuffix}_{shaderIndex}"
-            : $"shader_{typeSuffix}_{shaderIndex:D6}";
+        string provisionalStem = $"{containerKey}_{materialName}_{variantSuffix}";
         string failureDumpDir = Path.Combine(state.FailuresRoot, provisionalStem);
 
         // Strip UE wrapper: produces clean DXBC/DXIL + UnrealMetadata.
@@ -211,6 +200,9 @@ internal static class Pass003_DecompileShaders
         return new ShaderPrep
         {
             ShaderIndex = shaderIndex,
+            ContainerKey = containerKey,
+            MaterialName = materialName,
+            VariantSuffix = variantSuffix,
             TypeSuffix = typeSuffix,
             StrippedCode = strippedCode,
             EngineOptions = engineOptions,
@@ -238,9 +230,7 @@ internal static class Pass003_DecompileShaders
             return;
         }
 
-        string finalName = ResolveFinalName(state, prep.ShaderIndex);
-        finalName = string.Join("_", finalName.Split(Path.GetInvalidFileNameChars()));
-        string outNameStemNoExt = $"{finalName}_{prep.TypeSuffix}_{prep.ShaderIndex}";
+        string outNameStemNoExt = $"{prep.ContainerKey}_{prep.MaterialName}_{prep.VariantSuffix}";
 
         if (prep.UsedBy is { Count: > 0 } usedBy && result.FinalMetadata != null)
         {
@@ -314,6 +304,23 @@ internal static class Pass003_DecompileShaders
             if (!string.IsNullOrWhiteSpace(fileName)) return fileName;
         }
         return "Shader";
+    }
+
+    private static string BuildVariantSuffix(int shaderIndex, ShaderContainerInfo? container)
+    {
+        if (container == null)
+        {
+            return $"idx{shaderIndex:D6}";
+        }
+
+        string perm = container.PermutationId >= 0 ? $"perm{container.PermutationId}" : "permNA";
+        string res = container.ResourceIndex >= 0 ? $"res{container.ResourceIndex}" : "resNA";
+        return $"{perm}_{res}_idx{shaderIndex:D6}";
+    }
+
+    private static string SanitizeFileStem(string value)
+    {
+        return string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
     }
 }
 

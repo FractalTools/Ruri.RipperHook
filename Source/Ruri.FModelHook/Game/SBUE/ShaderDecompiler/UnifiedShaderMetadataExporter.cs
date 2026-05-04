@@ -159,6 +159,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     var mapEntry = library.ShaderMapEntries[shaderMapIndex];
                     var shaderHashes = new List<string>();
                     var frequencies = new List<byte>();
+                    List<StableShaderRecord> shaderRecords = BuildStableShaderRecords(output, library, shaderMapHash, mapEntry);
 
                     for (uint i = 0; i < mapEntry.NumShaders; i++)
                     {
@@ -184,6 +185,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                         Assets = assets,
                         ShaderHashes = shaderHashes,
                         Frequencies = frequencies,
+                        Shaders = shaderRecords,
                         Types = new List<string>(),
                         VertexFactoryTypes = new List<string>(),
                         ShaderTypeHashes = new List<string>(),
@@ -224,6 +226,175 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             }
 
             return map;
+        }
+
+        private static List<StableShaderRecord> BuildStableShaderRecords(
+            UnifiedShaderMetadataRoot output,
+            UnifiedShaderLibraryMetadata library,
+            string shaderMapHash,
+            UnifiedShaderMapArchiveEntry mapEntry)
+        {
+            var result = new List<StableShaderRecord>();
+            Dictionary<int, List<StableShaderRecord>> truthByResourceIndex = BuildTruthByResourceIndex(output, shaderMapHash);
+            List<StableShaderRecord> orderedTruth = BuildOrderedTruthRecords(output, shaderMapHash);
+
+            for (uint i = 0; i < mapEntry.NumShaders; i++)
+            {
+                long indexOffset = mapEntry.ShaderIndicesOffset + i;
+                if (indexOffset < 0 || indexOffset >= library.ShaderIndices.Count)
+                {
+                    continue;
+                }
+
+                uint shaderIndex = library.ShaderIndices[(int)indexOffset];
+                if (shaderIndex >= library.ShaderHashes.Count || shaderIndex >= library.ShaderEntries.Count)
+                {
+                    continue;
+                }
+
+                StableShaderRecord? truth = null;
+                if (truthByResourceIndex.TryGetValue((int)shaderIndex, out List<StableShaderRecord>? exactMatches) && exactMatches.Count > 0)
+                {
+                    truth = exactMatches[0];
+                }
+                else if (i < orderedTruth.Count)
+                {
+                    truth = orderedTruth[(int)i];
+                }
+
+                string shaderTypeHash = truth?.ShaderTypeHash ?? string.Empty;
+                string vfHash = truth?.VertexFactoryTypeHash ?? string.Empty;
+                byte frequency = library.ShaderEntries[(int)shaderIndex].Frequency;
+
+                result.Add(new StableShaderRecord
+                {
+                    ArchiveShaderIndex = (int)shaderIndex,
+                    ResourceIndex = truth?.ResourceIndex ?? (int)shaderIndex,
+                    ShaderHash = library.ShaderHashes[(int)shaderIndex],
+                    Frequency = frequency,
+                    ShaderTypeHash = shaderTypeHash,
+                    VertexFactoryTypeHash = vfHash,
+                    PermutationId = truth?.PermutationId ?? -1,
+                    ContainerKey = BuildContainerKey(shaderMapHash, shaderTypeHash, vfHash, frequency)
+                });
+            }
+
+            return result;
+        }
+
+        private static Dictionary<int, List<StableShaderRecord>> BuildTruthByResourceIndex(UnifiedShaderMetadataRoot output, string shaderMapHash)
+        {
+            var result = new Dictionary<int, List<StableShaderRecord>>();
+            foreach (StableShaderRecord record in BuildOrderedTruthRecords(output, shaderMapHash))
+            {
+                if (!result.TryGetValue(record.ResourceIndex, out List<StableShaderRecord>? list))
+                {
+                    list = new List<StableShaderRecord>();
+                    result[record.ResourceIndex] = list;
+                }
+                list.Add(record);
+            }
+            return result;
+        }
+
+        private static List<StableShaderRecord> BuildOrderedTruthRecords(UnifiedShaderMetadataRoot output, string shaderMapHash)
+        {
+            var result = new List<StableShaderRecord>();
+
+            foreach (UnifiedMaterialMetadata material in output.MaterialInterfaces.Values)
+            {
+                if (material?.LoadedShaderMaps == null)
+                {
+                    continue;
+                }
+
+                foreach (UnifiedShaderMapMetadata shaderMap in material.LoadedShaderMaps)
+                {
+                    if (!MatchesShaderMapHash(shaderMap, shaderMapHash) || shaderMap.MaterialShaderMapContent == null)
+                    {
+                        continue;
+                    }
+
+                    AppendShaderTruthRecords(result, shaderMap.MaterialShaderMapContent);
+                }
+            }
+
+            return result;
+        }
+
+        private static bool MatchesShaderMapHash(UnifiedShaderMapMetadata shaderMap, string shaderMapHash)
+        {
+            return string.Equals(shaderMap.CookedShaderMapIdHash, shaderMapHash, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(shaderMap.ShaderContentHash, shaderMapHash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void AppendShaderTruthRecords(List<StableShaderRecord> result, UnifiedShaderContent content)
+        {
+            int count = Math.Min(content.Shaders.Count, Math.Min(content.ShaderTypeHashes.Count, content.ShaderPermutations.Count));
+            for (int i = 0; i < count; i++)
+            {
+                UnifiedShader shader = content.Shaders[i];
+                result.Add(new StableShaderRecord
+                {
+                    ResourceIndex = shader.ResourceIndex,
+                    ShaderTypeHash = PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i]),
+                    VertexFactoryTypeHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash),
+                    PermutationId = content.ShaderPermutations[i]
+                });
+            }
+
+            foreach (UnifiedOrderedMeshShaderMap meshMap in content.OrderedMeshShaderMaps)
+            {
+                int meshCount = Math.Min(meshMap.Shaders.Count, Math.Min(meshMap.ShaderTypes.Count, meshMap.ShaderPermutations.Count));
+                string meshVf = NormalizeVertexFactoryHash(meshMap.VertexFactoryType?.Hash);
+                for (int i = 0; i < meshCount; i++)
+                {
+                    UnifiedShader shader = meshMap.Shaders[i];
+                    result.Add(new StableShaderRecord
+                    {
+                        ResourceIndex = shader.ResourceIndex,
+                        ShaderTypeHash = PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash),
+                        VertexFactoryTypeHash = PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf),
+                        PermutationId = meshMap.ShaderPermutations[i]
+                    });
+                }
+            }
+        }
+
+        private static string PickNonEmpty(string? preferred, string? fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(preferred))
+            {
+                return preferred!;
+            }
+
+            return fallback ?? string.Empty;
+        }
+
+        private static string NormalizeVertexFactoryHash(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) || string.Equals(value, "0000000000000000", StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : value!;
+        }
+
+        private static string BuildContainerKey(string shaderMapHash, string shaderTypeHash, string vertexFactoryTypeHash, byte frequency)
+        {
+            string mapPart = ShortHash(shaderMapHash, 12);
+            string typePart = ShortHash(shaderTypeHash, 16);
+            string vfPart = string.IsNullOrWhiteSpace(vertexFactoryTypeHash) ? "NOVF" : ShortHash(vertexFactoryTypeHash, 16);
+            return $"SM{mapPart}_T{typePart}_VF{vfPart}_{ShaderFrequency.ToString(frequency)}";
+        }
+
+        private static string ShortHash(string? value, int length)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "UNKNOWN";
+            }
+
+            string normalized = value!.Trim();
+            return normalized.Length <= length ? normalized : normalized[..length];
         }
 
         private static void AddMaterialToHash(Dictionary<string, HashSet<string>> map, string hash, string material)
@@ -560,6 +731,16 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
             result.UniformExpressionSet = BuildUniformExpressionSet(content.MaterialCompilationOutput?.UniformExpressionSet);
 
+            if (content.ShaderTypes != null)
+            {
+                result.ShaderTypeHashes = content.ShaderTypes.Select(type => type.Hash.ToString("X16")).ToList();
+            }
+
+            if (content.ShaderPermutations != null)
+            {
+                result.ShaderPermutations = content.ShaderPermutations.ToList();
+            }
+
             if (content.Shaders != null)
             {
                 result.Shaders = content.Shaders.Select(BuildShader).ToList();
@@ -583,6 +764,11 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                         {
                             Hash = type.Hash.ToString("X16")
                         }).ToList();
+                    }
+
+                    if (meshMap.ShaderPermutations != null)
+                    {
+                        mesh.ShaderPermutations = meshMap.ShaderPermutations.ToList();
                     }
 
                     if (meshMap.Shaders != null)
@@ -947,10 +1133,23 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         public List<string> Assets { get; set; } = new();
         public List<string> ShaderHashes { get; set; } = new();
         public List<byte> Frequencies { get; set; } = new();
+        public List<StableShaderRecord> Shaders { get; set; } = new();
         public List<string> Types { get; set; } = new();
         public List<string> VertexFactoryTypes { get; set; } = new();
         public List<string> ShaderTypeHashes { get; set; } = new();
         public List<string> UniformBufferParameterStructHashes { get; set; } = new();
+    }
+
+    internal sealed class StableShaderRecord
+    {
+        public int ArchiveShaderIndex { get; set; } = -1;
+        public int ResourceIndex { get; set; } = -1;
+        public string ShaderHash { get; set; } = string.Empty;
+        public byte Frequency { get; set; }
+        public string ShaderTypeHash { get; set; } = string.Empty;
+        public string VertexFactoryTypeHash { get; set; } = string.Empty;
+        public int PermutationId { get; set; } = -1;
+        public string ContainerKey { get; set; } = string.Empty;
     }
 
     internal sealed class UnifiedShaderMapArchiveEntry
@@ -1034,6 +1233,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
     internal sealed class UnifiedShaderContent
     {
         public UnifiedUniformExpressionSet? UniformExpressionSet { get; set; }
+        public List<string> ShaderTypeHashes { get; set; } = new();
+        public List<int> ShaderPermutations { get; set; } = new();
         public List<UnifiedShader> Shaders { get; set; } = new();
         public List<UnifiedOrderedMeshShaderMap> OrderedMeshShaderMaps { get; set; } = new();
     }
@@ -1169,6 +1370,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
     {
         public UnifiedHashName? VertexFactoryType { get; set; }
         public List<UnifiedHashName> ShaderTypes { get; set; } = new();
+        public List<int> ShaderPermutations { get; set; } = new();
         public List<UnifiedShader> Shaders { get; set; } = new();
     }
 

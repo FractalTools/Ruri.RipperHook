@@ -29,9 +29,13 @@ internal static class Pass001_BuildAssetIndex
             ? null
             : state.Options.MaterialFilter!.Replace('\\', '/');
 
-        Dictionary<string, HashSet<string>> shaderMapToAssets = LoadAssetInfoSidecar(state.Options.LibraryPath + ".assetinfo.json");
-        Dictionary<string, Dictionary<string, HashSet<byte>>> shaderHashToAssetsByFreq = LoadStableInfoSidecar(state.Options.LibraryPath + ".stableinfo.json");
-        AddSidecarUsage(state, shaderMapToAssets, shaderHashToAssetsByFreq);
+        string sidecarBasePath = GetSidecarBasePath(state.Options.LibraryPath);
+
+        Dictionary<string, HashSet<string>> shaderMapToAssets = LoadAssetInfoSidecar(sidecarBasePath + ".assetinfo.json");
+        Dictionary<string, Dictionary<string, HashSet<byte>>> shaderHashToAssetsByFreq = LoadStableInfoSidecar(sidecarBasePath + ".stableinfo.json");
+        Dictionary<int, ShaderContainerInfo> containersByShaderIndex = LoadContainerInfoSidecar(sidecarBasePath + ".stableinfo.json");
+        state.Log($"    Sidecars: assetinfo={shaderMapToAssets.Count} stable-shaders={shaderHashToAssetsByFreq.Count} containers={containersByShaderIndex.Count}.");
+        AddSidecarUsage(state, shaderMapToAssets, shaderHashToAssetsByFreq, containersByShaderIndex);
 
         if (!string.IsNullOrEmpty(state.Options.UnifiedMetadataPath) && File.Exists(state.Options.UnifiedMetadataPath))
         {
@@ -46,12 +50,21 @@ internal static class Pass001_BuildAssetIndex
         state.Log($"    Asset index: usage entries={state.UsageByShaderIndex.Count}, named={state.NameByShaderIndex.Count}.");
     }
 
+    private static string GetSidecarBasePath(string libraryPath)
+    {
+        const string librarySuffix = ".ushaderlib";
+        return libraryPath.EndsWith(librarySuffix, StringComparison.OrdinalIgnoreCase)
+            ? libraryPath[..^librarySuffix.Length]
+            : libraryPath;
+    }
+
     // ------------- Sidecar fan-in -------------
 
     private static void AddSidecarUsage(
         PipelineState state,
         Dictionary<string, HashSet<string>> shaderMapToAssets,
-        Dictionary<string, Dictionary<string, HashSet<byte>>> shaderHashToAssetsByFreq)
+        Dictionary<string, Dictionary<string, HashSet<byte>>> shaderHashToAssetsByFreq,
+        Dictionary<int, ShaderContainerInfo> containersByShaderIndex)
     {
         ShaderLibrary lib = state.Library!;
         int mapCount = Math.Min(lib.ShaderMapEntries.Length, lib.ShaderMapHashes.Count);
@@ -80,6 +93,11 @@ internal static class Pass001_BuildAssetIndex
             {
                 if (frequencies.Contains(frequency)) AddUsage(state, shaderIndex, asset);
             }
+        }
+
+        foreach ((int shaderIndex, ShaderContainerInfo container) in containersByShaderIndex)
+        {
+            state.ContainerByShaderIndex[shaderIndex] = container;
         }
     }
 
@@ -182,6 +200,63 @@ internal static class Pass001_BuildAssetIndex
         return result;
     }
 
+    private static Dictionary<int, ShaderContainerInfo> LoadContainerInfoSidecar(string path)
+    {
+        Dictionary<int, ShaderContainerInfo> result = new();
+        if (!File.Exists(path)) return result;
+
+        StableInfoRoot? root = JsonSerializer.Deserialize<StableInfoRoot>(File.ReadAllText(path), JsonOptions);
+        if (root?.ShaderMaps == null) return result;
+
+        foreach (StableInfoEntry shaderMap in root.ShaderMaps)
+        {
+            if (shaderMap.Shaders == null || shaderMap.Shaders.Count == 0) continue;
+
+            string firstAsset = shaderMap.Assets?.Where(static a => !string.IsNullOrWhiteSpace(a))
+                .Select(static a => a.Replace('\\', '/'))
+                .OrderBy(static a => a, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault() ?? "UnknownMaterial";
+            string materialName = Path.GetFileNameWithoutExtension(firstAsset);
+            if (string.IsNullOrWhiteSpace(materialName)) materialName = "UnknownMaterial";
+
+            foreach (StableShaderSidecarEntry entry in shaderMap.Shaders)
+            {
+                if (entry.ArchiveShaderIndex < 0) continue;
+
+                result[entry.ArchiveShaderIndex] = new ShaderContainerInfo
+                {
+                    ContainerKey = string.IsNullOrWhiteSpace(entry.ContainerKey)
+                        ? BuildContainerKey(shaderMap.ShaderMapHash, entry.ShaderTypeHash, entry.VertexFactoryTypeHash, entry.Frequency)
+                        : entry.ContainerKey,
+                    MaterialName = materialName,
+                    ShaderMapHash = shaderMap.ShaderMapHash ?? string.Empty,
+                    ShaderTypeHash = entry.ShaderTypeHash ?? string.Empty,
+                    VertexFactoryTypeHash = entry.VertexFactoryTypeHash ?? string.Empty,
+                    PermutationId = entry.PermutationId,
+                    ResourceIndex = entry.ResourceIndex,
+                    Frequency = entry.Frequency
+                };
+            }
+        }
+
+        return result;
+    }
+
+    private static string BuildContainerKey(string? shaderMapHash, string? shaderTypeHash, string? vertexFactoryTypeHash, byte frequency)
+    {
+        string mapPart = ShortHash(shaderMapHash, 12);
+        string typePart = ShortHash(shaderTypeHash, 16);
+        string vfPart = string.IsNullOrWhiteSpace(vertexFactoryTypeHash) ? "NOVF" : ShortHash(vertexFactoryTypeHash, 16);
+        return $"SM{mapPart}_T{typePart}_VF{vfPart}_{ShaderFrequency.ToString(frequency)}";
+    }
+
+    private static string ShortHash(string? value, int length)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "UNKNOWN";
+        string normalized = value!.Trim();
+        return normalized.Length <= length ? normalized : normalized[..length];
+    }
+
     // ------------- Unified metadata reader -------------
 
     private static UnifiedRoot? LoadUnifiedRoot(string jsonPath)
@@ -277,6 +352,19 @@ internal static class Pass001_BuildAssetIndex
         public List<string>? Assets { get; set; }
         public List<string>? ShaderHashes { get; set; }
         public List<byte>? Frequencies { get; set; }
+        public List<StableShaderSidecarEntry>? Shaders { get; set; }
+    }
+
+    private sealed class StableShaderSidecarEntry
+    {
+        public int ArchiveShaderIndex { get; set; }
+        public int ResourceIndex { get; set; }
+        public string? ShaderHash { get; set; }
+        public byte Frequency { get; set; }
+        public string? ShaderTypeHash { get; set; }
+        public string? VertexFactoryTypeHash { get; set; }
+        public int PermutationId { get; set; }
+        public string? ContainerKey { get; set; }
     }
 
     // Unified metadata JSON shapes (only the fields Pass001 needs).

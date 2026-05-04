@@ -41,6 +41,7 @@ internal sealed class PipelineState
     // Pass 001 outputs (asset/usage/name index, sidecar+unified merged)
     public Dictionary<int, HashSet<string>> UsageByShaderIndex { get; } = new();
     public Dictionary<int, string> NameByShaderIndex { get; } = new();
+    public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; } = new();
 
     // Pass 002 outputs (cached per-material symbol sources)
     public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
@@ -59,4 +60,16 @@ internal sealed class PipelineState
         Log = options.Log ?? (_ => { });
         LogError = options.LogError ?? (_ => { });
     }
+}
+
+internal sealed class ShaderContainerInfo
+{
+    public string ContainerKey { get; init; } = string.Empty;
+    public string MaterialName { get; init; } = string.Empty;
+    public string ShaderMapHash { get; init; } = string.Empty;
+    public string ShaderTypeHash { get; init; } = string.Empty;
+    public string VertexFactoryTypeHash { get; init; } = string.Empty;
+    public int PermutationId { get; init; }
+    public int ResourceIndex { get; init; }
+    public byte Frequency { get; init; }
 }
