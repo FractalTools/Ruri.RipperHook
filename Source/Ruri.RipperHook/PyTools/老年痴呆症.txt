@@ -1,0 +1,40 @@
+【自定义引擎版本生成规则（基于源码真实行为）】
+
+最终生成格式：
+[Unity主版本].[Unity次版本].[自定义引擎版本]x[第一层文件夹名]
+
+示例：
+2019.4.300x2
+
+说明：
+- Unity主版本、次版本来自 info.json 的 Version 字段前两段数字
+- 第二层文件夹名中的所有数字会被提取并拼接
+- 第一层文件夹名作为游戏枚举ID（Enum ID）
+
+【目录结构】
+
+根目录/
+  ├── python_script.py
+  ├── output/
+  ├── 2/
+  │   └── 300/
+  │       └── info.json
+  └── 5/
+      └── 0825/
+          └── info.json
+
+【ArknightsEndField 添加步骤】
+
+枚举顺序：
+Genshit = 0
+Houkai = 1
+StarRail = 2
+ZenlessZoneZero = 3
+ExAstris = 4
+ArknightsEndField = 5
+
+步骤：
+1. 创建文件夹：5
+2. 在 5 内创建含数字的文件夹名，如 0825
+3. 放入 info.json
+4. 运行脚本生成：2021.3.0825x5.json（依据 info.json 实际版本）

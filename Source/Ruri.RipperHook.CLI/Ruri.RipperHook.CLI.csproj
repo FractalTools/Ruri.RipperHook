@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<OutputPath>..\..\AssetRipper\Source\0Bins\AssetRipper\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\..\AssetRipper\Source\0Bins\obj\AssetRipper.CLI\$(Configuration)\</IntermediateOutputPath>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AssemblyName>Ruri.RipperHook.CLI</AssemblyName>
+		<RootNamespace>Ruri.RipperHook.CLI</RootNamespace>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Ruri.RipperHook\Ruri.RipperHook.csproj" />
+	</ItemGroup>
+
+</Project>

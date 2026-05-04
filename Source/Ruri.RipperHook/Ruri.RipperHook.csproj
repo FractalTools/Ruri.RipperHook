@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<OutputPath>..\..\AssetRipper\Source\0Bins\AssetRipper\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\..\AssetRipper\Source\0Bins\obj\AssetRipper\$(Configuration)\</IntermediateOutputPath>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AssemblyName>Ruri.RipperHook</AssemblyName>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<InternalsAssemblyNames>AssetRipper.SourceGenerated;Ruri.SourceGenerated</InternalsAssemblyNames>
+		<Configurations>Debug;Release</Configurations>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(PureRelease)' == 'true'">
+		<Optimize>true</Optimize>
+		<DefineConstants>$(DefineConstants);TRACE;RURI_PURE_RELEASE</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(PureRelease)' == 'true'">
+		<Compile Remove="AssetRipperGameHook\**\*.cs" />
+		<EmbeddedResource Remove="AssetRipperGameHook\**\*" />
+		<None Remove="AssetRipperGameHook\**\*" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.0-beta.5" />
+		<PackageReference Include="AsmResolver.PE.File" Version="6.0.0-beta.5" />
+		<PackageReference Include="AssetRipper.Checksum" Version="1.1.0" />
+		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
+		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
+		<PackageReference Include="Oodle.NET" Version="2.2.0" />
+	</ItemGroup>
+
+	<ItemDefinitionGroup Condition="'$(PureRelease)' == 'true'">
+		<ProjectReference>
+			<SetConfiguration>Configuration=Release</SetConfiguration>
+		</ProjectReference>
+	</ItemDefinitionGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Assets\AssetRipper.Assets.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Export.UnityProjects\AssetRipper.Export.UnityProjects.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.GUI.Web\AssetRipper.GUI.Web.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.IO.Files\AssetRipper.IO.Files.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Numerics\AssetRipper.Numerics.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SerializationLogic\AssetRipper.SerializationLogic.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Yaml\AssetRipper.Yaml.csproj" />
+		<ProjectReference Include="..\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj" />
+		<ProjectReference Include="..\Ruri.Hook\Ruri.Hook.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(PureRelease)' != 'true'">
+		<ContentWithTargetPath Include="Libraries\ACL.Houkai.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>ACL.Houkai.dll</TargetPath>
+		</ContentWithTargetPath>
+		<ContentWithTargetPath Include="Libraries\ACL.EndField.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>ACL.EndField.dll</TargetPath>
+		</ContentWithTargetPath>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Ruri.SourceGenerated.dll">
+			<SpecificVersion>False</SpecificVersion>
+			<HintPath>Libraries\Ruri.SourceGenerated.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+</Project>
