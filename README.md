@@ -70,7 +70,6 @@ Ruri-RipperHook 的设计核心是“通用切面 + 场景特化模块”：
 - 提升复杂资源格式下的数据读取成功率。
 - 构建更稳定、更细粒度的导出流程。
 - 为 shader 数据建立更完整的提取、映射和反编译支持链路。
-- 把 UE / FModel 侧数据逐步整理为可复用的 Unity 表示层。
 - 修补上游工具在特定版本、特定格式、特定流程上的兼容性问题。
 - 将零散流程补丁整理为可组合、可复用的工程化模块。
 
@@ -92,14 +91,11 @@ Ruri-RipperHook 的设计核心是“通用切面 + 场景特化模块”：
 
 ## Todo
 
+- 把 UE / FModel 侧的Prefab Model Material Shader之类主要数据直接转换为Unity YAML数据导出。
 - ~~需要优化Block格式的AB包解析(WMW/VFS/BLK等) 内存拆分读取容易过于碎片化导致内存无法分配~~ 我发现这是AR作者去年9月的提交导致的问题 他抽象了文件中间层LocalFileSystem导致现在不会使用虚拟内存加载 问他也不理我说明他不想管这个问题 在此之前是可以用虚拟内存解决的
 - 更小的AssemblyDumper生成 目前有太多代码实际上不需要生成 最小能优化到1mb以下的dll 只需要里面的定义和Read就够了
 - AssemblyDumper生成工作流简化
 - 如果不同游戏版本依赖同样的加密 新版本应该直接依赖旧版本 任何相同的代码都不应该出现2次
-- FModel / UE 数据到等价 Unity YAML 的稳定转换链路
-- 将 Unity 统一表示正式接入 AssetRipper 后续浏览、导出和后处理工作流
-- 利用wrapper官方反编译保证完全准确，Unity 的 shader blob 是无符号的，cb 信息在 ShaderLab，理论上可以向 shader blob（DXBC / DXIL / SPIR-V）添加符号信息实现反编译出准确的 cb，(USC采用的是自行解析汇编所以能完美支持cb反编译 如果使用外置反编译器就只能解析shaderlab的cb符号并注入shader blob了)
-- shader反编译目前已有思路 使用dxbc转dxil转spv 然后用 SPIRV-Cross反编译 注入spv符号绑定已经测试可行了 这样只需要维护spv中间码符号注入即可
 
 ## Special Thanks to
 
