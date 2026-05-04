@@ -67,41 +67,37 @@ internal static class Pass003_DecompileShaders
         state.OutputDirectory = outputDir;
         state.FailuresRoot = Path.Combine(outputDir, "_failures");
 
-        HashSet<string>? materialFilterVariants = string.IsNullOrWhiteSpace(state.Options.MaterialFilter)
-            ? null
-            : MaterialPathVariants.Build(state.Options.MaterialFilter!.Replace('\\', '/'));
-
         ShaderLibrary lib = state.Library;
-
-        // Phase 1 — sequential prep. Each shader's wrapper-strip + symbol-source lookup is
-        // small and CPU-cheap; doing it on the main thread keeps the parallel hot path
-        // (Phase 2) trivially thread-safe (state mutations only happen here and in Phase 3).
-        var preps = new List<ShaderPrep>(lib.ShaderEntries.Length);
-        for (int i = 0; i < lib.ShaderEntries.Length; i++)
+        // Build the set of shader binaries that participate in any
+        // surviving shader-map. Skip everything else (it can be a global
+        // shader unreferenced by the materials we actually want, or a
+        // dedup'd variant outside the filter). This is the new structural
+        // axis: shader-maps drive emission, not the flat archive.
+        HashSet<int> wantedIndices = new();
+        foreach (ShaderMapInfo map in state.ShaderMaps)
         {
-            if (state.Options.ShaderIndexFilter is { Count: > 0 } && !state.Options.ShaderIndexFilter.Contains(i))
+            foreach (ShaderMapMember member in map.Members)
             {
-                state.Skipped++;
-                continue;
+                wantedIndices.Add(member.ArchiveShaderIndex);
             }
+        }
+        if (state.Options.ShaderIndexFilter is { Count: > 0 })
+        {
+            wantedIndices.IntersectWith(state.Options.ShaderIndexFilter);
+        }
 
+        // Phase 1 — sequential prep, one PER UNIQUE SHADER BINARY. Even if a
+        // binary is shared across N shader-maps, its DXBC content is identical
+        // so we strip + decompile once and re-emit per map below.
+        var prepByIndex = new Dictionary<int, ShaderPrep>(wantedIndices.Count);
+        foreach (int i in wantedIndices.OrderBy(static x => x))
+        {
             byte[]? raw = lib.GetShaderCode(i);
             if (raw == null) { state.Skipped++; continue; }
-
-            if (materialFilterVariants is { Count: > 0 })
-            {
-                if (!state.UsageByShaderIndex.TryGetValue(i, out HashSet<string>? usage)
-                    || !usage.Any(m => MaterialPathVariants.Build(m).Overlaps(materialFilterVariants)))
-                {
-                    state.Skipped++;
-                    continue;
-                }
-            }
-
             try
             {
                 ShaderPrep prep = PrepareSingleShader(state, i, raw);
-                preps.Add(prep);
+                prepByIndex[i] = prep;
             }
             catch (Exception ex)
             {
@@ -112,42 +108,125 @@ internal static class Pass003_DecompileShaders
 
         using ShaderDecompilerEngine engine = new(outputDir);
 
-        foreach (IGrouping<string, ShaderPrep> containerGroup in preps.GroupBy(prep => prep.ContainerKey, StringComparer.Ordinal))
+        // Phase 2+3 INTERLEAVED — for each shader-map: decompile its
+        // not-yet-cached binaries, then emit its .shader file IMMEDIATELY.
+        // Streaming per-map emission means the user sees completed shader
+        // files appear one at a time as work progresses, not a batch dump
+        // at the very end. Shared binaries are decompiled once and the
+        // result is reused by every owning map (cache via decompileByIndex).
+        var decompileByIndex = new Dictionary<int, DecompileResult>(prepByIndex.Count);
+
+        foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(m => m.PrimaryName, StringComparer.OrdinalIgnoreCase))
         {
-            ShaderPrep[] containerPreps = containerGroup.ToArray();
-            var requests = new (byte[] Binary, EngineDecompileOptions Options)[containerPreps.Length];
-            List<ContainerOutputEntry> containerOutputs = new(containerPreps.Length);
-            for (int i = 0; i < containerPreps.Length; i++)
+            // Collect this map's binaries that still need decompiling.
+            var pending = new List<ShaderPrep>(map.Members.Count);
+            var pendingSeen = new HashSet<int>();
+            foreach (ShaderMapMember member in map.Members)
             {
-                requests[i] = (containerPreps[i].StrippedCode, containerPreps[i].EngineOptions);
+                if (decompileByIndex.ContainsKey(member.ArchiveShaderIndex)) continue;
+                if (!prepByIndex.TryGetValue(member.ArchiveShaderIndex, out ShaderPrep? prep)) continue;
+                if (!pendingSeen.Add(prep.ShaderIndex)) continue;
+                pending.Add(prep);
             }
 
-            DecompileResult[] results = engine.Decompile(requests);
-
-            for (int i = 0; i < containerPreps.Length; i++)
+            if (pending.Count > 0)
             {
-                try
+                var batch = new (byte[] Binary, EngineDecompileOptions Options)[pending.Count];
+                for (int i = 0; i < pending.Count; i++) batch[i] = (pending[i].StrippedCode, pending[i].EngineOptions);
+                DecompileResult[] batchResults = engine.Decompile(batch);
+                for (int i = 0; i < pending.Count; i++)
                 {
-                    ContainerOutputEntry? output = FinalizeSingleShader(state, containerPreps[i], results[i]);
-                    if (output != null)
-                    {
-                        containerOutputs.Add(output);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    state.Failed++;
-                    state.LogError($"Shader {containerPreps[i].ShaderIndex}: finalize exception: {ex.Message}");
+                    decompileByIndex[pending[i].ShaderIndex] = batchResults[i];
                 }
             }
 
-            if (containerOutputs.Count > 0)
+            EmitShaderMap(state, map, prepByIndex, decompileByIndex);
+        }
+
+        state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
+    }
+
+    private static void EmitShaderMap(
+        PipelineState state,
+        ShaderMapInfo map,
+        Dictionary<int, ShaderPrep> prepByIndex,
+        Dictionary<int, DecompileResult> decompileByIndex)
+    {
+        List<ContainerOutputEntry> outputs = new(map.Members.Count);
+        List<ShaderPrep> preps = new(map.Members.Count);
+        foreach (ShaderMapMember member in map.Members)
+        {
+            if (!prepByIndex.TryGetValue(member.ArchiveShaderIndex, out ShaderPrep? prep)) continue;
+            if (!decompileByIndex.TryGetValue(member.ArchiveShaderIndex, out DecompileResult? result)) continue;
+
+            ContainerOutputEntry? output = FinalizeForMap(state, map, member, prep, result);
+            if (output != null)
             {
-                WriteContainerOutputs(state, containerPreps, containerOutputs);
+                outputs.Add(output);
+                preps.Add(prep);
             }
         }
 
-        state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: total={lib.ShaderEntries.Length} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
+        if (outputs.Count == 0)
+        {
+            state.Skipped++;
+            return;
+        }
+
+        WriteShaderMapOutputs(state, map, outputs);
+    }
+
+    private static ContainerOutputEntry? FinalizeForMap(
+        PipelineState state,
+        ShaderMapInfo map,
+        ShaderMapMember member,
+        ShaderPrep prep,
+        DecompileResult? result)
+    {
+        if (result == null)
+        {
+            state.Failed++;
+            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}): batch worker returned no result.");
+            return null;
+        }
+
+        if (!result.Success)
+        {
+            state.Failed++;
+            string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
+            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage ?? "unknown"}]: {firstLine}");
+            return new ContainerOutputEntry
+            {
+                Prep = prep,
+                Result = result,
+                BasePath = Path.Combine(state.OutputDirectory, BuildShaderMapStem(map)),
+                SourceExtension = string.IsNullOrWhiteSpace(result.SourceFileExtension) ? ".hlsl" : result.SourceFileExtension,
+            };
+        }
+
+        if (result.FinalMetadata != null)
+        {
+            // Per-map UsedMaterials honesty: every emission of a shared
+            // binary lists ONLY the assets of the shader-map this emission
+            // belongs to, not the union across all maps that share the
+            // binary.
+            result.FinalMetadata.UsedMaterials = new List<string>(map.Assets);
+        }
+
+        state.Decompiled++;
+        return new ContainerOutputEntry
+        {
+            Prep = prep,
+            Result = result,
+            BasePath = Path.Combine(state.OutputDirectory, BuildShaderMapStem(map)),
+            SourceExtension = string.IsNullOrWhiteSpace(result.SourceFileExtension) ? ".hlsl" : result.SourceFileExtension,
+        };
+    }
+
+    private static string BuildShaderMapStem(ShaderMapInfo map)
+    {
+        string mapShort = map.ShaderMapHash.Length >= 12 ? map.ShaderMapHash[..12] : map.ShaderMapHash;
+        return SanitizeFileStem($"SM{mapShort}_{map.PrimaryName}");
     }
 
     // Per-shader artefacts the prep pass collects so Phase 2 only touches binary + options
@@ -276,55 +355,66 @@ internal static class Pass003_DecompileShaders
         };
     }
 
-    private static void WriteContainerOutputs(PipelineState state, IReadOnlyList<ShaderPrep> containerPreps, List<ContainerOutputEntry> outputs)
+    private static void WriteShaderMapOutputs(PipelineState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
     {
-        ShaderPrep representative = containerPreps[0];
-        string containerStem = $"{representative.ContainerKey}_{representative.MaterialName}";
+        string containerStem = BuildShaderMapStem(map);
         string containerBasePath = Path.Combine(state.OutputDirectory, containerStem);
 
-        UeShaderLabContainerMetadata metadata = BuildContainerMetadata(containerPreps, outputs);
+        UeShaderLabContainerMetadata metadata = BuildShaderMapMetadata(state, map, outputs);
         File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata));
     }
 
-    private static UeShaderLabContainerMetadata BuildContainerMetadata(IReadOnlyList<ShaderPrep> containerPreps, List<ContainerOutputEntry> outputs)
+    private static UeShaderLabContainerMetadata BuildShaderMapMetadata(PipelineState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
     {
-        ShaderPrep representative = containerPreps[0];
         return new UeShaderLabContainerMetadata
         {
-            Name = representative.MaterialName,
-            ContainerKey = representative.ContainerKey,
-            MaterialName = representative.MaterialName,
-            UsedMaterials = containerPreps
-                .SelectMany(static prep => prep.UsedBy != null ? prep.UsedBy : Enumerable.Empty<string>())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(static material => material, StringComparer.OrdinalIgnoreCase)
-                .ToList(),
+            Name = map.PrimaryName,
+            ContainerKey = $"SM{(map.ShaderMapHash.Length >= 12 ? map.ShaderMapHash[..12] : map.ShaderMapHash)}",
+            MaterialName = map.PrimaryName,
+            UsedMaterials = new List<string>(map.Assets),
             Programs = outputs
-                .OrderBy(static o => o.Prep.TypeSuffix, StringComparer.Ordinal)
+                .OrderBy(static o => StageSortKey(ToUnityStageName(o.Prep.TypeSuffix)))
                 .ThenBy(static o => o.Prep.ShaderIndex)
-                .Select(output => new UeShaderLabProgramData
+                .Select(output =>
                 {
-                    Stage = ToUnityStageName(output.Prep.TypeSuffix),
-                    ShaderIndex = output.Prep.ShaderIndex,
-                    ResourceIndex = output.Prep.ContainerInfo?.ResourceIndex ?? -1,
-                    PermutationId = output.Prep.ContainerInfo?.PermutationId ?? -1,
-                    PipelineTypeHash = output.Prep.ContainerInfo?.PipelineTypeHash ?? string.Empty,
-                    PipelineTypeName = output.Prep.ContainerInfo?.PipelineTypeName ?? string.Empty,
-                    ShaderTypeHash = output.Prep.ContainerInfo?.ShaderTypeHash ?? string.Empty,
-                    ShaderTypeName = output.Prep.ContainerInfo?.ShaderTypeName ?? string.Empty,
-                    VertexFactoryTypeHash = output.Prep.ContainerInfo?.VertexFactoryTypeHash ?? string.Empty,
-                    VertexFactoryTypeName = output.Prep.ContainerInfo?.VertexFactoryTypeName ?? string.Empty,
-                    ShaderMapHash = output.Prep.ContainerInfo?.ShaderMapHash ?? string.Empty,
-                    ShaderHash = output.Prep.ContainerInfo?.ShaderHash ?? string.Empty,
-                    SourceLanguage = output.Result.SourceLanguage,
-                    SourceFileExtension = output.Result.SourceFileExtension,
-                    Success = output.Result.Success,
-                    SourceCode = output.Result.SourceCode,
-                    ErrorMessage = output.Result.ErrorMessage,
-                    SymbolMetadata = output.Result.FinalMetadata,
+                    // Per-map authoritative view first, fallback to the
+                    // last-write-wins prep ContainerInfo.
+                    ShaderContainerInfo? perMap = ResolvePerMapContainer(state, map, output.Prep.ShaderIndex);
+                    ShaderContainerInfo? container = perMap ?? output.Prep.ContainerInfo;
+                    return new UeShaderLabProgramData
+                    {
+                        Stage = ToUnityStageName(output.Prep.TypeSuffix),
+                        ShaderIndex = output.Prep.ShaderIndex,
+                        ResourceIndex = container?.ResourceIndex ?? -1,
+                        PermutationId = container?.PermutationId ?? -1,
+                        PipelineTypeHash = container?.PipelineTypeHash ?? string.Empty,
+                        PipelineTypeName = container?.PipelineTypeName ?? string.Empty,
+                        ShaderTypeHash = container?.ShaderTypeHash ?? string.Empty,
+                        ShaderTypeName = container?.ShaderTypeName ?? string.Empty,
+                        VertexFactoryTypeHash = container?.VertexFactoryTypeHash ?? string.Empty,
+                        VertexFactoryTypeName = container?.VertexFactoryTypeName ?? string.Empty,
+                        ShaderMapHash = map.ShaderMapHash,
+                        ShaderHash = container?.ShaderHash ?? string.Empty,
+                        SourceLanguage = output.Result.SourceLanguage,
+                        SourceFileExtension = output.Result.SourceFileExtension,
+                        Success = output.Result.Success,
+                        SourceCode = output.Result.SourceCode,
+                        ErrorMessage = output.Result.ErrorMessage,
+                        SymbolMetadata = output.Result.FinalMetadata,
+                    };
                 })
                 .ToList()
         };
+    }
+
+    private static ShaderContainerInfo? ResolvePerMapContainer(PipelineState state, ShaderMapInfo map, int archiveShaderIndex)
+    {
+        if (state.ContainersByMapAndIndex.TryGetValue(map.ShaderMapHash, out Dictionary<int, ShaderContainerInfo>? perMap)
+            && perMap.TryGetValue(archiveShaderIndex, out ShaderContainerInfo? info))
+        {
+            return info;
+        }
+        return null;
     }
 
     private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata)
@@ -349,7 +439,7 @@ internal static class Pass003_DecompileShaders
             List<UeShaderLabProgramData> passPrograms = passGroup.OrderBy(static p => StageSortKey(p.Stage)).ThenBy(static p => p.ShaderIndex).ToList();
             sb.AppendLine("        Pass {");
             UeShaderLabProgramData representative = passPrograms[0];
-            sb.AppendLine($"            // PermutationId: {representative.PermutationId}");
+            sb.AppendLine($"            Name \"{BuildPassName(representative)}\"");
             if (!string.IsNullOrWhiteSpace(representative.PipelineTypeName)) sb.AppendLine($"            // PipelineType: {representative.PipelineTypeName}");
             else if (!string.IsNullOrWhiteSpace(representative.PipelineTypeHash)) sb.AppendLine($"            // PipelineTypeHash: {representative.PipelineTypeHash}");
             if (!string.IsNullOrWhiteSpace(representative.ShaderTypeName)) sb.AppendLine($"            // ShaderType: {representative.ShaderTypeName}");
@@ -357,61 +447,97 @@ internal static class Pass003_DecompileShaders
             if (!string.IsNullOrWhiteSpace(representative.VertexFactoryTypeName)) sb.AppendLine($"            // VertexFactoryType: {representative.VertexFactoryTypeName}");
             else if (!string.IsNullOrWhiteSpace(representative.VertexFactoryTypeHash)) sb.AppendLine($"            // VertexFactoryTypeHash: {representative.VertexFactoryTypeHash}");
             if (!string.IsNullOrWhiteSpace(representative.ShaderMapHash)) sb.AppendLine($"            // ShaderMapHash: {representative.ShaderMapHash}");
-            sb.AppendLine("            CGPROGRAM");
-            foreach (UeShaderLabProgramData program in passPrograms)
+
+            sb.AppendLine("            HLSLPROGRAM");
+
+            // ONE #pragma per stage type — Distinct() because passPrograms can
+            // contain many variants of the same stage (different permutations)
+            // but we only declare each stage entry point once for the shaderlab
+            // pass.
+            foreach (string pragma in passPrograms
+                         .Select(p => TryGetStagePragma(p.Stage, out string pr) ? pr : string.Empty)
+                         .Where(static p => !string.IsNullOrEmpty(p))
+                         .Distinct(StringComparer.Ordinal)
+                         .OrderBy(static p => p, StringComparer.Ordinal))
             {
-                if (TryGetStagePragma(program.Stage, out string pragma))
-                {
-                    sb.AppendLine($"            {pragma} main");
-                }
+                sb.AppendLine($"            {pragma} main");
             }
+
+            // multi_compile_local declares EVERY variant keyword this pass
+            // can take, including the synthetic VARIANT_<id> ones we
+            // generate when no real permutation/type info is available.
+            // Without this Unity-style declaration, downstream tooling that
+            // walks the .shader file as a Unity asset can't enumerate the
+            // pass's variant matrix.
+            List<string> variantKeywords = passPrograms
+                .Select(p => BuildVariantKeyword(p))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static k => k, StringComparer.Ordinal)
+                .ToList();
+            if (variantKeywords.Count > 1)
+            {
+                sb.AppendLine($"            #pragma multi_compile_local {string.Join(' ', variantKeywords)}");
+            }
+
             foreach (string permutationKeyword in BuildPassPermutationKeywords(passPrograms))
             {
                 sb.AppendLine($"            #pragma multi_compile_local __ {permutationKeyword}");
             }
             sb.AppendLine();
 
-            foreach (IGrouping<string, UeShaderLabProgramData> stageGroup in passPrograms.GroupBy(static p => p.Stage, StringComparer.Ordinal))
+            foreach (IGrouping<string, UeShaderLabProgramData> stageGroup in passPrograms
+                         .GroupBy(static p => p.Stage, StringComparer.Ordinal)
+                         .OrderBy(static g => StageSortKey(g.Key)))
             {
-                List<UeShaderLabProgramData> stagePrograms = stageGroup.OrderBy(static p => p.PermutationId).ThenBy(static p => p.ShaderIndex).ToList();
+                List<UeShaderLabProgramData> stagePrograms = stageGroup
+                    .OrderBy(static p => p.PermutationId)
+                    .ThenBy(static p => p.ShaderIndex)
+                    .ToList();
                 sb.AppendLine($"            #if defined({GetStageMacro(stageGroup.Key)})");
 
-                List<UeShaderLabProgramData> conditionalPrograms = stagePrograms.Where(static p => p.PermutationId >= 0).ToList();
-                List<UeShaderLabProgramData> unconditionalPrograms = stagePrograms.Where(static p => p.PermutationId < 0).ToList();
-
-                bool wroteConditionalHeader = false;
-                foreach (UeShaderLabProgramData program in conditionalPrograms)
+                // Each variant gets its OWN #if defined(VARIANT_KEYWORD) block,
+                // even when type info is missing. The variant keyword is built
+                // from whichever attributes we have (PermutationId, ShaderHash,
+                // ShaderIndex), so the matrix is always disambiguatable. This
+                // mirrors Unity's shaderlab where every multi_compile pivot
+                // produces a distinct preprocessed variant.
+                bool wroteFirst = false;
+                foreach (UeShaderLabProgramData program in stagePrograms)
                 {
-                    sb.AppendLine($"            {(wroteConditionalHeader ? "#elif" : "#if")} defined({BuildPermutationKeyword(program.PermutationId)})");
-                    wroteConditionalHeader = true;
+                    string keyword = BuildVariantKeyword(program);
+                    sb.AppendLine($"            {(wroteFirst ? "#elif" : "#if")} defined({keyword})");
+                    wroteFirst = true;
                     WriteProgramBlock(sb, program);
                     sb.AppendLine();
                 }
 
-                for (int i = 0; i < unconditionalPrograms.Count; i++)
-                {
-                    UeShaderLabProgramData program = unconditionalPrograms[i];
-                    if (wroteConditionalHeader && i == 0)
-                    {
-                        sb.AppendLine("            #else");
-                    }
-                    WriteProgramBlock(sb, program);
-                    sb.AppendLine();
-                }
-
-                if (wroteConditionalHeader)
+                if (wroteFirst)
                 {
                     sb.AppendLine("            #endif");
                 }
                 sb.AppendLine("            #endif");
                 sb.AppendLine();
             }
-            sb.AppendLine("            ENDCG");
+            sb.AppendLine("            ENDHLSL");
             sb.AppendLine("        }");
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    // Pass name surfaces the most identifying shader-type fragment we have.
+    // Falls back to a hash so each pass still has a unique label even when
+    // type names couldn't be recovered.
+    private static string BuildPassName(UeShaderLabProgramData rep)
+    {
+        if (!string.IsNullOrWhiteSpace(rep.ShaderTypeName)) return rep.ShaderTypeName;
+        if (!string.IsNullOrWhiteSpace(rep.PipelineTypeName)) return rep.PipelineTypeName;
+        string typePart = string.IsNullOrWhiteSpace(rep.ShaderTypeHash) ? "NOTYPE" : (rep.ShaderTypeHash.Length >= 8 ? rep.ShaderTypeHash[..8] : rep.ShaderTypeHash);
+        string vfPart = string.IsNullOrWhiteSpace(rep.VertexFactoryTypeName)
+            ? (string.IsNullOrWhiteSpace(rep.VertexFactoryTypeHash) ? string.Empty : (rep.VertexFactoryTypeHash.Length >= 8 ? rep.VertexFactoryTypeHash[..8] : rep.VertexFactoryTypeHash))
+            : rep.VertexFactoryTypeName;
+        return string.IsNullOrEmpty(vfPart) ? $"Pass_{typePart}" : $"Pass_{typePart}_{vfPart}";
     }
 
     private static bool TryGetStagePragma(string stage, out string pragma)
@@ -488,6 +614,71 @@ internal static class Pass003_DecompileShaders
     }
 
     private static string BuildPermutationKeyword(int permutationId) => $"PERM_{permutationId}";
+
+    // Variant keyword that uniquely identifies a single shader binary
+    // within its (Stage,Pass) group.
+    //
+    // Identifier-priority precedes hash-priority because Unity-equivalent
+    // shaderlab keywords are author-readable: when we know the cooked
+    // ShaderType + VertexFactoryType + PermutationId, we encode them in
+    // the keyword (e.g. VARIANT_FLumenCardPS_FLocalVertexFactory_PERM_0)
+    // and downstream Unity-style tooling can match against them. Only
+    // when names are stripped do we fall through to ShaderHash and finally
+    // ShaderIndex — both stable but opaque.
+    private static string BuildVariantKeyword(UeShaderLabProgramData program)
+    {
+        bool hasShaderType = !string.IsNullOrWhiteSpace(program.ShaderTypeName);
+        bool hasVf = !string.IsNullOrWhiteSpace(program.VertexFactoryTypeName);
+        if (hasShaderType || hasVf)
+        {
+            string typePart = hasShaderType ? SanitizeIdent(program.ShaderTypeName) : "ANYTYPE";
+            string vfPart = hasVf ? SanitizeIdent(program.VertexFactoryTypeName) : "NOVF";
+            string permPart = program.PermutationId >= 0 ? $"_PERM_{program.PermutationId}" : string.Empty;
+            return $"VARIANT_{typePart}_{vfPart}{permPart}";
+        }
+        if (program.PermutationId >= 0)
+        {
+            return $"VARIANT_PERM_{program.PermutationId}";
+        }
+        if (!string.IsNullOrWhiteSpace(program.ShaderHash))
+        {
+            string shortHash = program.ShaderHash.Length >= 12 ? program.ShaderHash[..12] : program.ShaderHash;
+            return $"VARIANT_H_{shortHash}";
+        }
+        return $"VARIANT_IDX_{program.ShaderIndex:D6}";
+    }
+
+    // Replace HLSL-illegal characters with underscores so the resulting
+    // string is safe to use as a `#pragma multi_compile_local` keyword
+    // and as a `#if defined(...)` operand. UE shader-type names contain
+    // template arguments (`<>`), namespace separators (`::`), and commas
+    // for multi-arg templates — all forbidden in C-style identifiers.
+    private static string SanitizeIdent(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        StringBuilder sb = new(raw.Length);
+        foreach (char c in raw)
+        {
+            sb.Append((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ? c : '_');
+        }
+        // Collapse runs of underscores for readability.
+        StringBuilder collapsed = new(sb.Length);
+        bool prevUnderscore = false;
+        foreach (char c in sb.ToString())
+        {
+            if (c == '_')
+            {
+                if (!prevUnderscore) collapsed.Append('_');
+                prevUnderscore = true;
+            }
+            else
+            {
+                collapsed.Append(c);
+                prevUnderscore = false;
+            }
+        }
+        return collapsed.ToString().Trim('_');
+    }
 
     private static int StageSortKey(string stage) => stage switch
     {

@@ -159,7 +159,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     var mapEntry = library.ShaderMapEntries[shaderMapIndex];
                     var shaderHashes = new List<string>();
                     var frequencies = new List<byte>();
-                    List<StableShaderRecord> shaderRecords = BuildStableShaderRecords(output, library, shaderMapHash, mapEntry);
+                    string shaderPlatform = ExtractShaderPlatform(library.LibraryName);
+                    List<StableShaderRecord> shaderRecords = BuildStableShaderRecords(output, library, shaderMapHash, mapEntry, hashToMaterials, shaderPlatform);
 
                     for (uint i = 0; i < mapEntry.NumShaders; i++)
                     {
@@ -228,15 +229,37 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             return map;
         }
 
+        // Extract UE shader-platform string (SP_<plat>) from a library's
+        // archive name like `ShaderArchive-PineForestPack_Demo-PCD3D_SM5-PCD3D_SM5`.
+        // This is the join key against `UnifiedShaderMapMetadata.ShaderPlatform`
+        // ("SP_PCD3D_SM5") used to pick the right LoadedShaderMaps entry when
+        // a material has multiple platforms cooked in.
+        private static string ExtractShaderPlatform(string libraryName)
+        {
+            if (string.IsNullOrWhiteSpace(libraryName)) return string.Empty;
+            // ShaderArchive-{Project|Global}-{plat}-{plat}
+            int firstDash = libraryName.IndexOf('-');
+            if (firstDash < 0) return string.Empty;
+            int secondDash = libraryName.IndexOf('-', firstDash + 1);
+            if (secondDash < 0) return string.Empty;
+            int thirdDash = libraryName.IndexOf('-', secondDash + 1);
+            string plat = thirdDash >= 0
+                ? libraryName.Substring(secondDash + 1, thirdDash - secondDash - 1)
+                : libraryName.Substring(secondDash + 1);
+            return string.IsNullOrWhiteSpace(plat) ? string.Empty : "SP_" + plat;
+        }
+
         private static List<StableShaderRecord> BuildStableShaderRecords(
             UnifiedShaderMetadataRoot output,
             UnifiedShaderLibraryMetadata library,
             string shaderMapHash,
-            UnifiedShaderMapArchiveEntry mapEntry)
+            UnifiedShaderMapArchiveEntry mapEntry,
+            Dictionary<string, HashSet<string>> hashToMaterials,
+            string shaderPlatform)
         {
             var result = new List<StableShaderRecord>();
-            Dictionary<int, List<StableShaderRecord>> truthByResourceIndex = BuildTruthByResourceIndex(output, shaderMapHash);
-            List<StableShaderRecord> orderedTruth = BuildOrderedTruthRecords(output, shaderMapHash);
+            Dictionary<int, List<StableShaderRecord>> truthByResourceIndex = BuildTruthByResourceIndex(output, shaderMapHash, hashToMaterials, shaderPlatform);
+            List<StableShaderRecord> orderedTruth = BuildOrderedTruthRecords(output, shaderMapHash, hashToMaterials, shaderPlatform);
 
             for (uint i = 0; i < mapEntry.NumShaders; i++)
             {
@@ -252,8 +275,13 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     continue;
                 }
 
+                // The unified metadata's `ResourceIndex` is the shader-map-RELATIVE
+                // slot inside this map (0..NumShaders-1) -- the same `i` we use to
+                // walk ShaderIndices[]. The previous lookup used the GLOBAL
+                // `shaderIndex`, which never matched, so every record fell through
+                // to the empty defaults and stripped all type/permutation symbols.
                 StableShaderRecord? truth = null;
-                if (truthByResourceIndex.TryGetValue((int)shaderIndex, out List<StableShaderRecord>? exactMatches) && exactMatches.Count > 0)
+                if (truthByResourceIndex.TryGetValue((int)i, out List<StableShaderRecord>? exactMatches) && exactMatches.Count > 0)
                 {
                     truth = exactMatches[0];
                 }
@@ -263,18 +291,26 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 }
 
                 string shaderTypeHash = truth?.ShaderTypeHash ?? string.Empty;
+                string shaderTypeName = truth?.ShaderTypeName ?? string.Empty;
                 string vfHash = truth?.VertexFactoryTypeHash ?? string.Empty;
+                string vfName = truth?.VertexFactoryTypeName ?? string.Empty;
+                string pipelineHash = truth?.PipelineTypeHash ?? string.Empty;
+                string pipelineName = truth?.PipelineTypeName ?? string.Empty;
                 byte frequency = library.ShaderEntries[(int)shaderIndex].Frequency;
 
                 result.Add(new StableShaderRecord
                 {
                     ArchiveShaderIndex = (int)shaderIndex,
-                    ResourceIndex = truth?.ResourceIndex ?? (int)shaderIndex,
+                    ResourceIndex = truth?.ResourceIndex ?? (int)i,
                     ShaderHash = library.ShaderHashes[(int)shaderIndex],
                     Frequency = frequency,
                     ShaderTypeHash = shaderTypeHash,
+                    ShaderTypeName = shaderTypeName,
                     VertexFactoryTypeHash = vfHash,
+                    VertexFactoryTypeName = vfName,
                     PermutationId = truth?.PermutationId ?? -1,
+                    PipelineTypeHash = pipelineHash,
+                    PipelineTypeName = pipelineName,
                     ContainerKey = BuildContainerKey(shaderMapHash, shaderTypeHash, vfHash)
                 });
             }
@@ -282,10 +318,14 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             return result;
         }
 
-        private static Dictionary<int, List<StableShaderRecord>> BuildTruthByResourceIndex(UnifiedShaderMetadataRoot output, string shaderMapHash)
+        private static Dictionary<int, List<StableShaderRecord>> BuildTruthByResourceIndex(
+            UnifiedShaderMetadataRoot output,
+            string shaderMapHash,
+            Dictionary<string, HashSet<string>> hashToMaterials,
+            string shaderPlatform)
         {
             var result = new Dictionary<int, List<StableShaderRecord>>();
-            foreach (StableShaderRecord record in BuildOrderedTruthRecords(output, shaderMapHash))
+            foreach (StableShaderRecord record in BuildOrderedTruthRecords(output, shaderMapHash, hashToMaterials, shaderPlatform))
             {
                 if (!result.TryGetValue(record.ResourceIndex, out List<StableShaderRecord>? list))
                 {
@@ -297,28 +337,135 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             return result;
         }
 
-        private static List<StableShaderRecord> BuildOrderedTruthRecords(UnifiedShaderMetadataRoot output, string shaderMapHash)
+        // Resolve the right material(s) for an on-disk shader-map hash:
+        //   1. Try the direct hash → material match (CookedShaderMapIdHash /
+        //      ShaderContentHash equals the on-disk hash). Editor / non-IoStore
+        //      cooks tend to use this.
+        //   2. If that misses, fall through to the asset-info bridge: the
+        //      `hashToMaterials` map (built from sidecar + unified package
+        //      hashes) tells us which material(s) own this on-disk hash, and
+        //      we then pick each material's LoadedShaderMaps entry whose
+        //      ShaderPlatform matches the archive being processed. IoStore
+        //      cooks NEED this path because the package-level shader-map
+        //      hash does NOT equal CookedShaderMapIdHash.
+        private static List<StableShaderRecord> BuildOrderedTruthRecords(
+            UnifiedShaderMetadataRoot output,
+            string shaderMapHash,
+            Dictionary<string, HashSet<string>> hashToMaterials,
+            string shaderPlatform)
         {
             var result = new List<StableShaderRecord>();
 
+            // Direct match first.
             foreach (UnifiedMaterialMetadata material in output.MaterialInterfaces.Values)
             {
-                if (material?.LoadedShaderMaps == null)
-                {
-                    continue;
-                }
-
+                if (material?.LoadedShaderMaps == null) continue;
                 foreach (UnifiedShaderMapMetadata shaderMap in material.LoadedShaderMaps)
                 {
-                    if (!MatchesShaderMapHash(shaderMap, shaderMapHash) || shaderMap.MaterialShaderMapContent == null)
-                    {
-                        continue;
-                    }
+                    if (!MatchesShaderMapHash(shaderMap, shaderMapHash) || shaderMap.MaterialShaderMapContent == null) continue;
+                    if (!MatchesShaderPlatform(shaderMap, shaderPlatform)) continue;
+                    Dictionary<string, string> nameByHash = BuildPerMapNameDictionary(shaderMap);
+                    AppendShaderTruthRecords(result, shaderMap.MaterialShaderMapContent, nameByHash);
+                }
+            }
+            if (result.Count > 0) return result;
 
-                    AppendShaderTruthRecords(result, shaderMap.MaterialShaderMapContent);
+            // Asset-info bridge for IoStore cooks.
+            bool found = hashToMaterials.TryGetValue(shaderMapHash, out HashSet<string>? materials);
+            if (DebugTrace) HookLogger.Log($"[TruthLookup] hash={shaderMapHash} platform={shaderPlatform} bridgeFound={found} materialCount={materials?.Count ?? 0}");
+            if (found)
+            {
+                foreach (string materialPath in materials!)
+                {
+                    bool inMI = output.MaterialInterfaces.TryGetValue(materialPath, out UnifiedMaterialMetadata? material);
+                    if (DebugTrace) HookLogger.Log($"[TruthLookup]   material={materialPath} inMI={inMI} shaderMaps={material?.LoadedShaderMaps?.Count ?? 0}");
+                    if (!inMI || material?.LoadedShaderMaps == null) continue;
+                    foreach (UnifiedShaderMapMetadata shaderMap in material.LoadedShaderMaps)
+                    {
+                        bool platformOk = MatchesShaderPlatform(shaderMap, shaderPlatform);
+                        if (DebugTrace) HookLogger.Log($"[TruthLookup]     sm.platform={shaderMap.ShaderPlatform} matches={platformOk} hasContent={shaderMap.MaterialShaderMapContent != null}");
+                        if (shaderMap.MaterialShaderMapContent == null) continue;
+                        if (!platformOk) continue;
+                        Dictionary<string, string> nameByHash = BuildPerMapNameDictionary(shaderMap);
+                        int before = result.Count;
+                        HookLogger.Log($"[TruthLookup-FORCE] before-call result.Count={before} nameByHash.Count={nameByHash.Count} content.Shaders={shaderMap.MaterialShaderMapContent.Shaders?.Count ?? -1} meshMaps={shaderMap.MaterialShaderMapContent.OrderedMeshShaderMaps?.Count ?? -1}");
+                        try
+                        {
+                            AppendShaderTruthRecords(result, shaderMap.MaterialShaderMapContent, nameByHash);
+                        }
+                        catch (Exception ex)
+                        {
+                            HookLogger.LogFailure($"[TruthLookup-FORCE] AppendShaderTruthRecords threw: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                            throw;
+                        }
+                        HookLogger.Log($"[TruthLookup-FORCE] after-call result.Count={result.Count} delta={result.Count - before}");
+                    }
                 }
             }
 
+            return result;
+        }
+
+        private static readonly bool DebugTrace = string.Equals(Environment.GetEnvironmentVariable("RURI_TRUTH_DEBUG"), "1", StringComparison.Ordinal);
+
+        private static bool MatchesShaderPlatform(UnifiedShaderMapMetadata shaderMap, string shaderPlatform)
+        {
+            // Empty platform string disables filtering (used for global archives
+            // and unit tests); otherwise require an exact match against the
+            // material's per-shader-map ShaderPlatform field.
+            return string.IsNullOrEmpty(shaderPlatform)
+                || string.Equals(shaderMap.ShaderPlatform, shaderPlatform, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Per-map FHashedName -> name dictionary built from the cooked
+        // metadata's TypeDependencies and pointer table. UE strips Names
+        // from the on-disk pointer table (UnifiedHashName.Name is null
+        // for cooked builds) but records the full type-name list in
+        // TypeDependencies. Hashing each TypeDependencies entry with
+        // FHashedName recovers the hash -> name mapping for everything
+        // referenced by THIS shader-map -- no UE source scan needed.
+        //
+        // This is the "non-hardcoded" path: names come from the game's
+        // own cooked data, not from regex-matching IMPLEMENT_SHADER_TYPE
+        // macros in a specific UE version's source tree.
+        private static Dictionary<string, string> BuildPerMapNameDictionary(UnifiedShaderMapMetadata shaderMap)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            UnifiedPointerTable? table = shaderMap.ShaderMapPointerTable;
+            if (table == null) return result;
+
+            // Hash every TypeDependencies entry's name and index by hash.
+            // The metadata may also include explicit hash-with-name pairs
+            // (older cooks, editor builds) so harvest those too.
+            if (table.TypeDependencies != null)
+            {
+                foreach (UnifiedTypeDependency dep in table.TypeDependencies)
+                {
+                    if (string.IsNullOrWhiteSpace(dep.Name)) continue;
+                    string hash = UeHashedNameResolver.HashName(dep.Name);
+                    result.TryAdd(hash, dep.Name);
+                }
+            }
+            if (table.Types != null)
+            {
+                foreach (UnifiedHashName entry in table.Types)
+                {
+                    if (!string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.Hash))
+                    {
+                        result.TryAdd(entry.Hash, entry.Name!);
+                    }
+                }
+            }
+            if (table.VertexFactoryTypes != null)
+            {
+                foreach (UnifiedHashName entry in table.VertexFactoryTypes)
+                {
+                    if (!string.IsNullOrWhiteSpace(entry.Name) && !string.IsNullOrWhiteSpace(entry.Hash))
+                    {
+                        result.TryAdd(entry.Hash, entry.Name!);
+                    }
+                }
+            }
             return result;
         }
 
@@ -328,19 +475,21 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 || string.Equals(shaderMap.ShaderContentHash, shaderMapHash, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static void AppendShaderTruthRecords(List<StableShaderRecord> result, UnifiedShaderContent content)
+        private static void AppendShaderTruthRecords(List<StableShaderRecord> result, UnifiedShaderContent content, Dictionary<string, string> nameByHash)
         {
             int count = Math.Min(content.Shaders.Count, Math.Min(content.ShaderTypeHashes.Count, content.ShaderPermutations.Count));
             for (int i = 0; i < count; i++)
             {
                 UnifiedShader shader = content.Shaders[i];
+                string typeHash = PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i]);
+                string vfHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash);
                 result.Add(new StableShaderRecord
                 {
                     ResourceIndex = shader.ResourceIndex,
-                    ShaderTypeHash = PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i]),
-                    ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i])),
-                    VertexFactoryTypeHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash),
-                    VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash)),
+                    ShaderTypeHash = typeHash,
+                    ShaderTypeName = ResolveName(typeHash, nameByHash, UeHashedNameResolver.ResolveShaderTypeName),
+                    VertexFactoryTypeHash = vfHash,
+                    VertexFactoryTypeName = ResolveName(vfHash, nameByHash, UeHashedNameResolver.ResolveVertexFactoryTypeName),
                     PermutationId = content.ShaderPermutations[i]
                 });
             }
@@ -352,13 +501,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 for (int i = 0; i < meshCount; i++)
                 {
                     UnifiedShader shader = meshMap.Shaders[i];
+                    string typeHash = PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash);
+                    string vfHash = PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf);
                     result.Add(new StableShaderRecord
                     {
                         ResourceIndex = shader.ResourceIndex,
-                        ShaderTypeHash = PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash),
-                        ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash)),
-                        VertexFactoryTypeHash = PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf),
-                        VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf)),
+                        ShaderTypeHash = typeHash,
+                        ShaderTypeName = ResolveName(typeHash, nameByHash, UeHashedNameResolver.ResolveShaderTypeName),
+                        VertexFactoryTypeHash = vfHash,
+                        VertexFactoryTypeName = ResolveName(vfHash, nameByHash, UeHashedNameResolver.ResolveVertexFactoryTypeName),
                         PermutationId = meshMap.ShaderPermutations[i]
                     });
                 }
@@ -370,19 +521,33 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 for (int i = 0; i < pipelineCount; i++)
                 {
                     UnifiedShader shader = pipeline.Shaders[i];
+                    string vfHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash);
                     result.Add(new StableShaderRecord
                     {
                         ResourceIndex = shader.ResourceIndex,
                         ShaderTypeHash = shader.TypeHash,
-                        ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(shader.TypeHash),
-                        VertexFactoryTypeHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash),
-                        VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash)),
+                        ShaderTypeName = ResolveName(shader.TypeHash, nameByHash, UeHashedNameResolver.ResolveShaderTypeName),
+                        VertexFactoryTypeHash = vfHash,
+                        VertexFactoryTypeName = ResolveName(vfHash, nameByHash, UeHashedNameResolver.ResolveVertexFactoryTypeName),
                         PermutationId = pipeline.PermutationIds[i],
                         PipelineTypeHash = pipeline.TypeHash,
-                        PipelineTypeName = UeHashedNameResolver.ResolvePipelineTypeName(pipeline.TypeHash)
+                        PipelineTypeName = ResolveName(pipeline.TypeHash, nameByHash, UeHashedNameResolver.ResolvePipelineTypeName)
                     });
                 }
             }
+        }
+
+        // Per-map TypeDependencies dictionary takes precedence — it's
+        // truthful for THIS specific cook, while the UE-source fallback
+        // can lie for forks or version skews. Empty hash returns empty.
+        private static string ResolveName(string hash, Dictionary<string, string> nameByHash, Func<string, string> fallback)
+        {
+            if (string.IsNullOrWhiteSpace(hash)) return string.Empty;
+            if (nameByHash.TryGetValue(hash, out string? perMap) && !string.IsNullOrWhiteSpace(perMap))
+            {
+                return perMap;
+            }
+            return fallback(hash);
         }
 
         private static string PickNonEmpty(string? preferred, string? fallback)
@@ -593,10 +758,17 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             HookLogger.Log($"[UnifiedShaderMetadataExporter] Material scan: candidates={considered}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
         }
 
-        // Tighter than the original `Path.Contains("/Material")`. The old
-        // check matched things like `/Game/UI/Materials/WBP_ShadowSample`
-        // (a Widget Blueprint) which then exploded inside LoadPackageObject.
-        // Here we require the asset to live in a `/Materials/` (or `/Material/`)
+        // Tighter than the original `Path.Contains("/Material")`. Old check
+        // matched things like `/Game/UI/Materials/WBP_ShadowSample` (a
+        // Widget Blueprint) which exploded inside LoadPackageObject. Here we
+        // exclude obvious non-material prefixes, then accept a much wider
+        // heuristic: any `Material` substring (case-insensitive) anywhere
+        // in the path. Engine materials live under
+        // `/Engine/Content/EngineMaterials/`, `/Engine/Content/EditorMaterials/`,
+        // `/Engine/Content/EngineDebugMaterials/`, etc. — those need to load
+        // because the asset-info sidecar links cooked shader-maps back to
+        // them, and stripping them stripped the type-name back-fill source
+        // for all engine-material shader-maps.
         // directory or to use one of UE's standard material naming prefixes,
         // and we explicitly exclude Blueprint / Widget Blueprint / DataAsset
         // prefixes that can sit in the same folder.
@@ -617,13 +789,22 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             }
 
             string path = file.Path;
-            return path.Contains("/Materials/", StringComparison.OrdinalIgnoreCase)
-                || path.Contains("/Material/", StringComparison.OrdinalIgnoreCase)
-                || name.StartsWith("M_", StringComparison.OrdinalIgnoreCase)
+            // Material naming conventions (asset-side): hard accept.
+            if (name.StartsWith("M_", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith("MI_", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith("MF_", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith("MPC_", StringComparison.OrdinalIgnoreCase)
-                || name.StartsWith("MAT_", StringComparison.OrdinalIgnoreCase);
+                || name.StartsWith("MAT_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            // Path-side accept: any path containing "Material" (case-insensitive).
+            // Catches "/Materials/", "/EngineMaterials/", "/EditorMaterials/",
+            // "/EngineDebugMaterials/", "/MasterMaterials/", "/EngineSky/" (no, that
+            // doesn't have Material — fine, won't accept). The caller still gates
+            // on `asset is UMaterialInterface` so the LoadPackageObject failures
+            // are non-fatal and just contribute to skipped-on-error.
+            return path.Contains("Material", StringComparison.OrdinalIgnoreCase);
         }
 
         private static UnifiedMaterialMetadata? ExtractMaterialContext(UMaterialInterface material, string materialPath)

@@ -34,8 +34,13 @@ internal static class Pass001_BuildAssetIndex
         Dictionary<string, HashSet<string>> shaderMapToAssets = LoadAssetInfoSidecar(sidecarBasePath + ".assetinfo.json");
         Dictionary<string, Dictionary<string, HashSet<byte>>> shaderHashToAssetsByFreq = LoadStableInfoSidecar(sidecarBasePath + ".stableinfo.json");
         Dictionary<int, ShaderContainerInfo> containersByShaderIndex = LoadContainerInfoSidecar(sidecarBasePath + ".stableinfo.json");
+        Dictionary<string, Dictionary<int, ShaderContainerInfo>> containersByMap = LoadContainerInfoSidecarPerMap(sidecarBasePath + ".stableinfo.json");
         state.Log($"    Sidecars: assetinfo={shaderMapToAssets.Count} stable-shaders={shaderHashToAssetsByFreq.Count} containers={containersByShaderIndex.Count}.");
         AddSidecarUsage(state, shaderMapToAssets, shaderHashToAssetsByFreq, containersByShaderIndex);
+        // Stash per-map containers for Pass003 to look up authoritative
+        // type info per shader-map, instead of falling back to the
+        // global last-write-wins dict.
+        state.ContainersByMapAndIndex = containersByMap;
 
         if (!string.IsNullOrEmpty(state.Options.UnifiedMetadataPath) && File.Exists(state.Options.UnifiedMetadataPath))
         {
@@ -47,7 +52,93 @@ internal static class Pass001_BuildAssetIndex
             }
         }
 
-        state.Log($"    Asset index: usage entries={state.UsageByShaderIndex.Count}, named={state.NameByShaderIndex.Count}.");
+        BuildShaderMapView(state, shaderMapToAssets, normalizedFilter);
+
+        state.Log($"    Asset index: usage entries={state.UsageByShaderIndex.Count}, named={state.NameByShaderIndex.Count}, shader-maps={state.ShaderMaps.Count}.");
+    }
+
+    // Walk the on-disk archive once and build a per-shader-map view that
+    // pairs each map's shader-binary indices with its asset list. Each map
+    // becomes one .shader file downstream. The `Assets` list is the
+    // single-source-of-truth from the asset-info sidecar — same map can
+    // legitimately serve multiple materials (deduplicated cook), and that
+    // many-to-one association IS the file's `UsedMaterials` block.
+    private static void BuildShaderMapView(
+        PipelineState state,
+        Dictionary<string, HashSet<string>> shaderMapToAssets,
+        string? normalizedFilter)
+    {
+        ShaderLibrary lib = state.Library!;
+        HashSet<string> filterVariants = MaterialPathVariants.Build(normalizedFilter);
+        int mapCount = Math.Min(lib.ShaderMapEntries.Length, lib.ShaderMapHashes.Count);
+
+        for (int mapIndex = 0; mapIndex < mapCount; mapIndex++)
+        {
+            string mapHash = lib.ShaderMapHashes[mapIndex];
+            ShaderMapEntry mapEntry = lib.ShaderMapEntries[mapIndex];
+            List<string> assets;
+            if (shaderMapToAssets.TryGetValue(mapHash, out HashSet<string>? assetSet) && assetSet.Count > 0)
+            {
+                assets = assetSet.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+            else
+            {
+                assets = new List<string>();
+            }
+
+            // Material filter applies at the shader-map level: a map survives
+            // the filter if any of its assets matches.
+            if (filterVariants.Count > 0)
+            {
+                bool matches = false;
+                foreach (string asset in assets)
+                {
+                    if (MaterialPathVariants.Build(asset).Overlaps(filterVariants))
+                    {
+                        matches = true;
+                        break;
+                    }
+                }
+                if (!matches) continue;
+            }
+
+            List<ShaderMapMember> members = new((int)mapEntry.NumShaders);
+            for (uint i = 0; i < mapEntry.NumShaders; i++)
+            {
+                long offset = mapEntry.ShaderIndicesOffset + i;
+                if (offset < 0 || offset >= lib.ShaderIndices.Length) continue;
+                int shaderIndex = (int)lib.ShaderIndices[offset];
+                if (shaderIndex < 0 || shaderIndex >= lib.ShaderEntries.Length) continue;
+
+                members.Add(new ShaderMapMember
+                {
+                    RelativeIndex = (int)i,
+                    ArchiveShaderIndex = shaderIndex,
+                });
+            }
+
+            string primaryAsset = assets.Count > 0 ? assets[0] : string.Empty;
+            string primaryName = string.IsNullOrEmpty(primaryAsset)
+                ? $"ShaderMap_{ShortHashSafe(mapHash, 12)}"
+                : Path.GetFileNameWithoutExtension(primaryAsset);
+            if (string.IsNullOrWhiteSpace(primaryName)) primaryName = $"ShaderMap_{ShortHashSafe(mapHash, 12)}";
+
+            state.ShaderMaps.Add(new ShaderMapInfo
+            {
+                ShaderMapIndex = mapIndex,
+                ShaderMapHash = mapHash,
+                Assets = assets,
+                PrimaryAsset = primaryAsset,
+                PrimaryName = primaryName,
+                Members = members,
+            });
+        }
+    }
+
+    private static string ShortHashSafe(string value, int length)
+    {
+        if (string.IsNullOrEmpty(value)) return "UNKNOWN";
+        return value.Length <= length ? value : value[..length];
     }
 
     private static string GetSidecarBasePath(string libraryPath)
@@ -223,28 +314,75 @@ internal static class Pass001_BuildAssetIndex
             {
                 if (entry.ArchiveShaderIndex < 0) continue;
 
-                result[entry.ArchiveShaderIndex] = new ShaderContainerInfo
-                {
-                    ContainerKey = string.IsNullOrWhiteSpace(entry.ContainerKey)
-                        ? BuildContainerKey(shaderMap.ShaderMapHash, entry.ShaderTypeHash, entry.VertexFactoryTypeHash)
-                        : entry.ContainerKey,
-                    MaterialName = materialName,
-                    ShaderMapHash = shaderMap.ShaderMapHash ?? string.Empty,
-                    ShaderTypeHash = entry.ShaderTypeHash ?? string.Empty,
-                    ShaderTypeName = entry.ShaderTypeName ?? string.Empty,
-                    VertexFactoryTypeHash = entry.VertexFactoryTypeHash ?? string.Empty,
-                    VertexFactoryTypeName = entry.VertexFactoryTypeName ?? string.Empty,
-                    PipelineTypeHash = entry.PipelineTypeHash ?? string.Empty,
-                    PipelineTypeName = entry.PipelineTypeName ?? string.Empty,
-                    PermutationId = entry.PermutationId,
-                    ResourceIndex = entry.ResourceIndex,
-                    Frequency = entry.Frequency,
-                    ShaderHash = entry.ShaderHash ?? string.Empty
-                };
+                // Last-write-wins is intentional for the GLOBAL fallback dict;
+                // the per-map authoritative view is built separately in
+                // `LoadContainerInfoSidecarPerMap` and is what Pass003
+                // emission consults first. Keeping the global one alive lets
+                // callers that don't know the owning map still resolve a
+                // best-effort name (good enough for log lines).
+                result[entry.ArchiveShaderIndex] = BuildContainerInfo(shaderMap, entry, materialName);
             }
         }
 
         return result;
+    }
+
+    private static Dictionary<string, Dictionary<int, ShaderContainerInfo>> LoadContainerInfoSidecarPerMap(string path)
+    {
+        Dictionary<string, Dictionary<int, ShaderContainerInfo>> result = new(StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(path)) return result;
+
+        StableInfoRoot? root = JsonSerializer.Deserialize<StableInfoRoot>(File.ReadAllText(path), JsonOptions);
+        if (root?.ShaderMaps == null) return result;
+
+        foreach (StableInfoEntry shaderMap in root.ShaderMaps)
+        {
+            if (string.IsNullOrWhiteSpace(shaderMap.ShaderMapHash)) continue;
+            if (shaderMap.Shaders == null || shaderMap.Shaders.Count == 0) continue;
+
+            string firstAsset = shaderMap.Assets?.Where(static a => !string.IsNullOrWhiteSpace(a))
+                .Select(static a => a.Replace('\\', '/'))
+                .OrderBy(static a => a, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault() ?? "UnknownMaterial";
+            string materialName = Path.GetFileNameWithoutExtension(firstAsset);
+            if (string.IsNullOrWhiteSpace(materialName)) materialName = "UnknownMaterial";
+
+            if (!result.TryGetValue(shaderMap.ShaderMapHash!, out Dictionary<int, ShaderContainerInfo>? perMap))
+            {
+                perMap = new Dictionary<int, ShaderContainerInfo>();
+                result[shaderMap.ShaderMapHash!] = perMap;
+            }
+
+            foreach (StableShaderSidecarEntry entry in shaderMap.Shaders)
+            {
+                if (entry.ArchiveShaderIndex < 0) continue;
+                perMap[entry.ArchiveShaderIndex] = BuildContainerInfo(shaderMap, entry, materialName);
+            }
+        }
+
+        return result;
+    }
+
+    private static ShaderContainerInfo BuildContainerInfo(StableInfoEntry shaderMap, StableShaderSidecarEntry entry, string materialName)
+    {
+        return new ShaderContainerInfo
+        {
+            ContainerKey = string.IsNullOrWhiteSpace(entry.ContainerKey)
+                ? BuildContainerKey(shaderMap.ShaderMapHash, entry.ShaderTypeHash, entry.VertexFactoryTypeHash)
+                : entry.ContainerKey,
+            MaterialName = materialName,
+            ShaderMapHash = shaderMap.ShaderMapHash ?? string.Empty,
+            ShaderTypeHash = entry.ShaderTypeHash ?? string.Empty,
+            ShaderTypeName = entry.ShaderTypeName ?? string.Empty,
+            VertexFactoryTypeHash = entry.VertexFactoryTypeHash ?? string.Empty,
+            VertexFactoryTypeName = entry.VertexFactoryTypeName ?? string.Empty,
+            PipelineTypeHash = entry.PipelineTypeHash ?? string.Empty,
+            PipelineTypeName = entry.PipelineTypeName ?? string.Empty,
+            PermutationId = entry.PermutationId,
+            ResourceIndex = entry.ResourceIndex,
+            Frequency = entry.Frequency,
+            ShaderHash = entry.ShaderHash ?? string.Empty
+        };
     }
 
     private static string BuildContainerKey(string? shaderMapHash, string? shaderTypeHash, string? vertexFactoryTypeHash)

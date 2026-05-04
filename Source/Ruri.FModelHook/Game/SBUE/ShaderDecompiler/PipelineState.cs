@@ -42,6 +42,22 @@ internal sealed class PipelineState
     public Dictionary<int, HashSet<string>> UsageByShaderIndex { get; } = new();
     public Dictionary<int, string> NameByShaderIndex { get; } = new();
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; } = new();
+    // Authoritative per-map view: containersByMapAndIndex[mapHash][archiveShaderIndex]
+    // returns the ShaderContainerInfo this shader has WHEN VIEWED FROM that map.
+    // The same shader binary can appear in multiple maps with different
+    // ShaderType/VertexFactoryType because UE deduplicates compiled bytecode
+    // across pipeline permutations. Pass003 emission must consult this so the
+    // pass-grouping in the .shader file reflects the map's own truth, not
+    // whichever map happened to register the shader last.
+    public Dictionary<string, Dictionary<int, ShaderContainerInfo>> ContainersByMapAndIndex { get; set; } = new();
+    // Per-shader-map view: each shader-map produces ONE .shader file. A
+    // shader binary referenced by multiple maps appears in each owning
+    // .shader, decompiled-once-cached-many. This is the "right axis" for
+    // grouping: assets-per-map are 1:N (asset-info sidecar truth), but a
+    // shader-binary's ownership is one-per-map plus sharing — so emitting
+    // per-map keeps UsedMaterials honest (the map's own assets) instead of
+    // unioning every material that ever touched the dedup'd binary.
+    public List<ShaderMapInfo> ShaderMaps { get; } = new();
 
     // Pass 002 outputs (cached per-material symbol sources)
     public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
@@ -77,4 +93,37 @@ internal sealed class ShaderContainerInfo
     public int ResourceIndex { get; init; }
     public byte Frequency { get; init; }
     public string ShaderHash { get; init; } = string.Empty;
+}
+
+// Per-shader-map record. There is a 1:N relationship from a single
+// shader-map to materials (the `Assets` list is the canonical truth from
+// the asset-info sidecar). Each shader-map gets its own .shader output.
+//
+// `MemberIndices` walks the on-disk archive in shader-map order — the
+// `i`-th entry is the i-th binary belonging to this map (also = the
+// metadata's per-map `ResourceIndex`). Use it when emitting variants so
+// permutation ids and shader-type hashes line up the way UE serialised
+// them, rather than the global archive ordering which is an arbitrary
+// allocation artefact.
+internal sealed class ShaderMapInfo
+{
+    public int ShaderMapIndex { get; init; }
+    public string ShaderMapHash { get; init; } = string.Empty;
+    public List<string> Assets { get; init; } = new();
+    public string PrimaryAsset { get; init; } = string.Empty;
+    public string PrimaryName { get; init; } = string.Empty;
+    public List<ShaderMapMember> Members { get; init; } = new();
+    // Per-map view of each shader binary's type/VF/permutation metadata.
+    // The same shader binary can be a member of multiple shader-maps, and
+    // each map records its own type/VF/permutation truth — populated from
+    // that map's own stableinfo entries, not "whichever map happened to
+    // be processed last", which is the bug the global ContainerByShaderIndex
+    // dictionary suffered from.
+    public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; init; } = new();
+}
+
+internal sealed class ShaderMapMember
+{
+    public int RelativeIndex { get; init; }      // 0..NumShaders-1, == metadata ResourceIndex
+    public int ArchiveShaderIndex { get; init; } // global archive index
 }

@@ -23,6 +23,17 @@ internal static class UeHashedNameResolver
     public static string ResolveVertexFactoryTypeName(string hash) => Resolve(hash, Ensure().vertexFactories);
     public static string ResolvePipelineTypeName(string hash) => Resolve(hash, Ensure().pipelines);
 
+    // FHashedName-equivalent hash. Mirror of
+    // Engine/Source/Runtime/Core/Private/Serialization/MemoryImage.cpp:1159-1214:
+    // input is uppercased, ANSI-direct (or UTF-8 for wide) bytes, hashed
+    // with CityHash64WithSeed(InternalNumber). For shader/struct type
+    // names the FName has no number suffix so seed=0.
+    //
+    // Public so other components (notably the unified-metadata exporter)
+    // can hash TypeDependencies entries to recover symbolic names without
+    // scanning the entire UE source tree.
+    public static string HashName(string name) => ComputeHashedName(name);
+
     private static string Resolve(string hash, Dictionary<string, string> map)
     {
         if (string.IsNullOrWhiteSpace(hash)) return string.Empty;
@@ -85,14 +96,20 @@ internal static class UeHashedNameResolver
         return hash.ToString("X16");
     }
 
+    // CityHash relies on naturally-wrapping ulong arithmetic, but this
+    // project compiles with `<CheckForOverflowUnderflow>true</...>` which
+    // makes EVERY ulong * ulong / ulong - ulong throw OverflowException
+    // the first time a result wraps. Mark the full hash machinery
+    // `unchecked` so the CityHash-spec-correct wrapping is preserved.
+
     // Minimal CityHash64WithSeed port for FHashedName(name, number=0).
-    private static ulong CityHash64WithSeed(byte[] s, ulong seed)
-    {
-        return HashLen16(CityHash64(s) - seed, seed ^ 0x9ae16a3b2f90404fUL);
-    }
+    private static ulong CityHash64WithSeed(byte[] s, ulong seed) => unchecked(
+        HashLen16(CityHash64(s) - seed, seed ^ 0x9ae16a3b2f90404fUL));
 
     private static ulong CityHash64(byte[] s)
     {
+        unchecked
+        {
         int len = s.Length;
         if (len <= 16) return HashLen0to16(s);
         if (len <= 32) return HashLen17to32(s);
@@ -122,10 +139,13 @@ internal static class UeHashedNameResolver
         } while (len != 0);
 
         return HashLen16(HashLen16(v.low, w.low) + ShiftMix(y) * 0x9ddfea08eb382d69UL + z, HashLen16(v.high, w.high) + x);
+        }
     }
 
     private static ulong HashLen0to16(byte[] s)
     {
+        unchecked
+        {
         int len = s.Length;
         if (len >= 8)
         {
@@ -152,10 +172,13 @@ internal static class UeHashedNameResolver
             return ShiftMix(y * 0x9ddfea08eb382d69UL ^ z * 0xc3a5c85c97cb3127UL) * 0x9ddfea08eb382d69UL;
         }
         return 0x9ae16a3b2f90404fUL;
+        }
     }
 
     private static ulong HashLen17to32(byte[] s)
     {
+        unchecked
+        {
         int len = s.Length;
         ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
         ulong a = Fetch64(s, 0) * 0xc3a5c85c97cb3127UL;
@@ -163,10 +186,13 @@ internal static class UeHashedNameResolver
         ulong c = Fetch64(s, len - 8) * mul;
         ulong d = Fetch64(s, len - 16) * 0x9ddfea08eb382d69UL;
         return HashLen16(RotateRight(a + b, 43) + RotateRight(c, 30) + d, a + RotateRight(b + 0x9ae16a3b2f90404fUL, 18) + c, mul);
+        }
     }
 
     private static ulong HashLen33to64(byte[] s)
     {
+        unchecked
+        {
         int len = s.Length;
         ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
         ulong a = Fetch64(s, 0) * 0x9ddfea08eb382d69UL;
@@ -186,10 +212,13 @@ internal static class UeHashedNameResolver
         a = ReverseBytes((x + z) * mul + y) + b;
         b = ShiftMix((z + a) * mul + d + h) * mul;
         return b + x;
+        }
     }
 
     private static (ulong low, ulong high) WeakHashLen32WithSeeds(byte[] s, int offset, ulong a, ulong b)
     {
+        unchecked
+        {
         ulong w = Fetch64(s, offset);
         ulong x = Fetch64(s, offset + 8);
         ulong y = Fetch64(s, offset + 16);
@@ -200,22 +229,26 @@ internal static class UeHashedNameResolver
         a += x + y;
         b += RotateRight(a, 44);
         return (a + z, b + c);
+        }
     }
 
     private static ulong HashLen16(ulong u, ulong v) => HashLen16(u, v, 0x9ddfea08eb382d69UL);
 
     private static ulong HashLen16(ulong u, ulong v, ulong mul)
     {
+        unchecked
+        {
         ulong a = (u ^ v) * mul;
         a ^= a >> 47;
         ulong b = (v ^ a) * mul;
         b ^= b >> 47;
         b *= mul;
         return b;
+        }
     }
 
-    private static ulong ShiftMix(ulong val) => val ^ (val >> 47);
-    private static ulong RotateRight(ulong val, int shift) => (val >> shift) | (val << (64 - shift));
+    private static ulong ShiftMix(ulong val) => unchecked(val ^ (val >> 47));
+    private static ulong RotateRight(ulong val, int shift) => unchecked((val >> shift) | (val << (64 - shift)));
     private static ulong ReverseBytes(ulong value) => BinaryPrimitives.ReverseEndianness(value);
     private static uint Fetch32(byte[] s, int pos) => BitConverter.ToUInt32(s, pos);
     private static ulong Fetch64(byte[] s, int pos) => BitConverter.ToUInt64(s, pos);

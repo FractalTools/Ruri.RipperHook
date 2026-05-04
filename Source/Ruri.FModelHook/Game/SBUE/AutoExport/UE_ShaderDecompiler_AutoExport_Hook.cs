@@ -43,6 +43,7 @@ namespace Ruri.FModelHook.Game.SBUE.AutoExport
         private static volatile bool _autoExportRequested;
         private static volatile bool _shaderOnly;
         private static volatile bool _quitWhenDone = true;
+        private static volatile bool _skipGlobal;
         private static int _readyTimeoutSec = 180;
         private static int _runOnceGuard;
 
@@ -164,8 +165,17 @@ namespace Ruri.FModelHook.Game.SBUE.AutoExport
             return count;
         }
 
-        private static bool IsShaderBytecode(GameFile file) =>
-            file.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase);
+        private static bool IsShaderBytecode(GameFile file)
+        {
+            if (!file.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase)) return false;
+            // Optional speed-up for iterative decompiler tests: Global
+            // archives are heavy (~4k engine-internal shaders) and produce
+            // no asset-linked output, so they're noise during a focused
+            // material self-test. The flag is opt-in (--skip-global); when
+            // off the auto-export still processes them.
+            if (_skipGlobal && file.Name.IndexOf("ShaderArchive-Global", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            return true;
+        }
 
         private static bool IsMaterialAsset(GameFile file)
         {
@@ -194,6 +204,10 @@ namespace Ruri.FModelHook.Game.SBUE.AutoExport
                 else if (string.Equals(a, "--no-quit", StringComparison.OrdinalIgnoreCase))
                 {
                     _quitWhenDone = false;
+                }
+                else if (string.Equals(a, "--skip-global", StringComparison.OrdinalIgnoreCase))
+                {
+                    _skipGlobal = true;
                 }
                 else if (string.Equals(a, "--ready-timeout-sec", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && int.TryParse(args[i + 1], out int v))
                 {
