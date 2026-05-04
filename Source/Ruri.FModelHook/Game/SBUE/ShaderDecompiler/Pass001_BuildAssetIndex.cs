@@ -226,15 +226,20 @@ internal static class Pass001_BuildAssetIndex
                 result[entry.ArchiveShaderIndex] = new ShaderContainerInfo
                 {
                     ContainerKey = string.IsNullOrWhiteSpace(entry.ContainerKey)
-                        ? BuildContainerKey(shaderMap.ShaderMapHash, entry.ShaderTypeHash, entry.VertexFactoryTypeHash, entry.Frequency)
+                        ? BuildContainerKey(shaderMap.ShaderMapHash, entry.ShaderTypeHash, entry.VertexFactoryTypeHash)
                         : entry.ContainerKey,
                     MaterialName = materialName,
                     ShaderMapHash = shaderMap.ShaderMapHash ?? string.Empty,
                     ShaderTypeHash = entry.ShaderTypeHash ?? string.Empty,
+                    ShaderTypeName = entry.ShaderTypeName ?? string.Empty,
                     VertexFactoryTypeHash = entry.VertexFactoryTypeHash ?? string.Empty,
+                    VertexFactoryTypeName = entry.VertexFactoryTypeName ?? string.Empty,
+                    PipelineTypeHash = entry.PipelineTypeHash ?? string.Empty,
+                    PipelineTypeName = entry.PipelineTypeName ?? string.Empty,
                     PermutationId = entry.PermutationId,
                     ResourceIndex = entry.ResourceIndex,
-                    Frequency = entry.Frequency
+                    Frequency = entry.Frequency,
+                    ShaderHash = entry.ShaderHash ?? string.Empty
                 };
             }
         }
@@ -242,12 +247,12 @@ internal static class Pass001_BuildAssetIndex
         return result;
     }
 
-    private static string BuildContainerKey(string? shaderMapHash, string? shaderTypeHash, string? vertexFactoryTypeHash, byte frequency)
+    private static string BuildContainerKey(string? shaderMapHash, string? shaderTypeHash, string? vertexFactoryTypeHash)
     {
         string mapPart = ShortHash(shaderMapHash, 12);
         string typePart = ShortHash(shaderTypeHash, 16);
         string vfPart = string.IsNullOrWhiteSpace(vertexFactoryTypeHash) ? "NOVF" : ShortHash(vertexFactoryTypeHash, 16);
-        return $"SM{mapPart}_T{typePart}_VF{vfPart}_{ShaderFrequency.ToString(frequency)}";
+        return $"SM{mapPart}_T{typePart}_VF{vfPart}";
     }
 
     private static string ShortHash(string? value, int length)
@@ -362,7 +367,11 @@ internal static class Pass001_BuildAssetIndex
         public string? ShaderHash { get; set; }
         public byte Frequency { get; set; }
         public string? ShaderTypeHash { get; set; }
+        public string? ShaderTypeName { get; set; }
         public string? VertexFactoryTypeHash { get; set; }
+        public string? VertexFactoryTypeName { get; set; }
+        public string? PipelineTypeHash { get; set; }
+        public string? PipelineTypeName { get; set; }
         public int PermutationId { get; set; }
         public string? ContainerKey { get; set; }
     }

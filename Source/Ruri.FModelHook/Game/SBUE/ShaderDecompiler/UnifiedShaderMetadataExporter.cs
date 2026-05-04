@@ -275,7 +275,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     ShaderTypeHash = shaderTypeHash,
                     VertexFactoryTypeHash = vfHash,
                     PermutationId = truth?.PermutationId ?? -1,
-                    ContainerKey = BuildContainerKey(shaderMapHash, shaderTypeHash, vfHash, frequency)
+                    ContainerKey = BuildContainerKey(shaderMapHash, shaderTypeHash, vfHash)
                 });
             }
 
@@ -338,7 +338,9 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 {
                     ResourceIndex = shader.ResourceIndex,
                     ShaderTypeHash = PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i]),
+                    ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(PickNonEmpty(shader.TypeHash, content.ShaderTypeHashes[i])),
                     VertexFactoryTypeHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash),
+                    VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash)),
                     PermutationId = content.ShaderPermutations[i]
                 });
             }
@@ -354,8 +356,30 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     {
                         ResourceIndex = shader.ResourceIndex,
                         ShaderTypeHash = PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash),
+                        ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(PickNonEmpty(shader.TypeHash, meshMap.ShaderTypes[i].Hash)),
                         VertexFactoryTypeHash = PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf),
+                        VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(PickNonEmpty(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash), meshVf)),
                         PermutationId = meshMap.ShaderPermutations[i]
+                    });
+                }
+            }
+
+            foreach (UnifiedShaderPipeline pipeline in content.ShaderPipelines)
+            {
+                int pipelineCount = Math.Min(pipeline.Shaders.Count, pipeline.PermutationIds.Count);
+                for (int i = 0; i < pipelineCount; i++)
+                {
+                    UnifiedShader shader = pipeline.Shaders[i];
+                    result.Add(new StableShaderRecord
+                    {
+                        ResourceIndex = shader.ResourceIndex,
+                        ShaderTypeHash = shader.TypeHash,
+                        ShaderTypeName = UeHashedNameResolver.ResolveShaderTypeName(shader.TypeHash),
+                        VertexFactoryTypeHash = NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash),
+                        VertexFactoryTypeName = UeHashedNameResolver.ResolveVertexFactoryTypeName(NormalizeVertexFactoryHash(shader.VertexFactoryTypeHash)),
+                        PermutationId = pipeline.PermutationIds[i],
+                        PipelineTypeHash = pipeline.TypeHash,
+                        PipelineTypeName = UeHashedNameResolver.ResolvePipelineTypeName(pipeline.TypeHash)
                     });
                 }
             }
@@ -378,12 +402,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 : value!;
         }
 
-        private static string BuildContainerKey(string shaderMapHash, string shaderTypeHash, string vertexFactoryTypeHash, byte frequency)
+        private static string BuildContainerKey(string shaderMapHash, string shaderTypeHash, string vertexFactoryTypeHash)
         {
             string mapPart = ShortHash(shaderMapHash, 12);
             string typePart = ShortHash(shaderTypeHash, 16);
             string vfPart = string.IsNullOrWhiteSpace(vertexFactoryTypeHash) ? "NOVF" : ShortHash(vertexFactoryTypeHash, 16);
-            return $"SM{mapPart}_T{typePart}_VF{vfPart}_{ShaderFrequency.ToString(frequency)}";
+            return $"SM{mapPart}";
         }
 
         private static string ShortHash(string? value, int length)
@@ -643,7 +667,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
                 if (shaderMap.Content is FMaterialShaderMapContent materialContent)
                 {
-                    shaderMapMetadata.MaterialShaderMapContent = BuildShaderContent(materialContent);
+                    shaderMapMetadata.MaterialShaderMapContent = BuildShaderContent(materialContent, shaderMap.PointerTable as FShaderMapPointerTable);
                 }
 
                 metadata.LoadedShaderMaps.Add(shaderMapMetadata);
@@ -725,7 +749,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             return result;
         }
 
-        private static UnifiedShaderContent BuildShaderContent(FMaterialShaderMapContent content)
+        private static UnifiedShaderContent BuildShaderContent(FMaterialShaderMapContent content, FShaderMapPointerTable? pointerTable)
         {
             var result = new UnifiedShaderContent();
 
@@ -743,7 +767,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
             if (content.Shaders != null)
             {
-                result.Shaders = content.Shaders.Select(BuildShader).ToList();
+                result.Shaders = content.Shaders.Select(shader => BuildShader(shader, pointerTable)).ToList();
+            }
+
+            if (content.ShaderPipelines != null)
+            {
+                result.ShaderPipelines = content.ShaderPipelines.Select(pipeline => BuildShaderPipeline(pipeline, pointerTable)).ToList();
             }
 
             if (content.OrderedMeshShaderMaps != null)
@@ -773,7 +802,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
                     if (meshMap.Shaders != null)
                     {
-                        mesh.Shaders = meshMap.Shaders.Where(shader => shader != null).Select(BuildShader).ToList();
+                        mesh.Shaders = meshMap.Shaders.Where(shader => shader != null).Select(shader => BuildShader(shader, pointerTable)).ToList();
                     }
 
                     return mesh;
@@ -992,15 +1021,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             };
         }
 
-        private static UnifiedShader BuildShader(FShader shader)
+        private static UnifiedShader BuildShader(FShader shader, FShaderMapPointerTable? pointerTable)
         {
             return new UnifiedShader
             {
                 ResourceIndex = shader.ResourceIndex,
                 NumInstructions = shader.NumInstructions,
                 SortKey = shader.SortKey,
-                TypeHash = shader.Type.ToString("X16"),
-                VertexFactoryTypeHash = shader.VFType.ToString("X16"),
+                TypeHash = ResolveIndexedTypeHash(shader.Type, pointerTable?.Types),
+                VertexFactoryTypeHash = ResolveIndexedTypeHash(shader.VFType, pointerTable?.VFTypes),
                 UniformBufferParameterStructHashes = shader.UniformBufferParameterStructs?.Select(x => x.Hash.ToString("X16")).ToList() ?? new List<string>(),
                 UniformBufferParameterStructs = shader.UniformBufferParameterStructs?.Select(x => new UnifiedHashName
                 {
@@ -1010,6 +1039,30 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 Bindings = BuildShaderBindings(shader.Bindings),
                 ParameterMapInfo = BuildShaderParameterMapInfo(shader.ParameterMapInfo)
             };
+        }
+
+        private static UnifiedShaderPipeline BuildShaderPipeline(FShaderPipeline pipeline, FShaderMapPointerTable? pointerTable)
+        {
+            return new UnifiedShaderPipeline
+            {
+                TypeHash = pipeline.TypeName.Hash.ToString("X16"),
+                Shaders = pipeline.Shaders?.Where(shader => shader != null).Select(shader => BuildShader(shader, pointerTable)).ToList() ?? new List<UnifiedShader>(),
+                PermutationIds = pipeline.PermutationIds?.ToList() ?? new List<int>()
+            };
+        }
+
+        private static string ResolveIndexedTypeHash(ulong packedIndexedPtr, FHashedName[]? table)
+        {
+            if ((packedIndexedPtr & 1UL) != 0 && table != null)
+            {
+                ulong index = packedIndexedPtr >> 1;
+                if (index < (ulong)table.Length)
+                {
+                    return table[(int)index].Hash.ToString("X16");
+                }
+            }
+
+            return packedIndexedPtr != 0 ? packedIndexedPtr.ToString("X16") : string.Empty;
         }
 
         private static UnifiedShaderBindings BuildShaderBindings(FShaderParameterBindings bindings)
@@ -1147,8 +1200,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         public string ShaderHash { get; set; } = string.Empty;
         public byte Frequency { get; set; }
         public string ShaderTypeHash { get; set; } = string.Empty;
+        public string ShaderTypeName { get; set; } = string.Empty;
         public string VertexFactoryTypeHash { get; set; } = string.Empty;
+        public string VertexFactoryTypeName { get; set; } = string.Empty;
         public int PermutationId { get; set; } = -1;
+        public string PipelineTypeHash { get; set; } = string.Empty;
+        public string PipelineTypeName { get; set; } = string.Empty;
         public string ContainerKey { get; set; } = string.Empty;
     }
 
@@ -1236,7 +1293,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         public List<string> ShaderTypeHashes { get; set; } = new();
         public List<int> ShaderPermutations { get; set; } = new();
         public List<UnifiedShader> Shaders { get; set; } = new();
+        public List<UnifiedShaderPipeline> ShaderPipelines { get; set; } = new();
         public List<UnifiedOrderedMeshShaderMap> OrderedMeshShaderMaps { get; set; } = new();
+    }
+
+    internal sealed class UnifiedShaderPipeline
+    {
+        public string TypeHash { get; set; } = string.Empty;
+        public List<UnifiedShader> Shaders { get; set; } = new();
+        public List<int> PermutationIds { get; set; } = new();
     }
 
     internal sealed class UnifiedUniformExpressionSet

@@ -43,6 +43,14 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // MaterialTextureNameInferrer (OpSampledImage texture-name recovery).
 internal static class Pass003_DecompileShaders
 {
+    private sealed class ContainerOutputEntry
+    {
+        public required ShaderPrep Prep { get; init; }
+        public required DecompileResult Result { get; init; }
+        public required string BasePath { get; init; }
+        public required string SourceExtension { get; init; }
+    }
+
     public static void DoPass(PipelineState state)
     {
         if (state.Library is null) throw new InvalidOperationException("Pass000 must run before Pass003.");
@@ -108,6 +116,7 @@ internal static class Pass003_DecompileShaders
         {
             ShaderPrep[] containerPreps = containerGroup.ToArray();
             var requests = new (byte[] Binary, EngineDecompileOptions Options)[containerPreps.Length];
+            List<ContainerOutputEntry> containerOutputs = new(containerPreps.Length);
             for (int i = 0; i < containerPreps.Length; i++)
             {
                 requests[i] = (containerPreps[i].StrippedCode, containerPreps[i].EngineOptions);
@@ -119,13 +128,22 @@ internal static class Pass003_DecompileShaders
             {
                 try
                 {
-                    FinalizeSingleShader(state, containerPreps[i], results[i]);
+                    ContainerOutputEntry? output = FinalizeSingleShader(state, containerPreps[i], results[i]);
+                    if (output != null)
+                    {
+                        containerOutputs.Add(output);
+                    }
                 }
                 catch (Exception ex)
                 {
                     state.Failed++;
                     state.LogError($"Shader {containerPreps[i].ShaderIndex}: finalize exception: {ex.Message}");
                 }
+            }
+
+            if (containerOutputs.Count > 0)
+            {
+                WriteContainerOutputs(state, containerPreps, containerOutputs);
             }
         }
 
@@ -145,6 +163,7 @@ internal static class Pass003_DecompileShaders
         public required EngineDecompileOptions EngineOptions { get; init; }
         public required string ProvisionalStem { get; init; }
         public required ShaderSymbolData Metadata { get; init; }
+        public ShaderContainerInfo? ContainerInfo { get; init; }
         public HashSet<string>? UsedBy { get; init; }
     }
 
@@ -208,17 +227,18 @@ internal static class Pass003_DecompileShaders
             EngineOptions = engineOptions,
             ProvisionalStem = provisionalStem,
             Metadata = metadata,
+            ContainerInfo = container,
             UsedBy = hadUsage ? usedBy : null,
         };
     }
 
-    private static void FinalizeSingleShader(PipelineState state, ShaderPrep prep, DecompileResult? result)
+    private static ContainerOutputEntry? FinalizeSingleShader(PipelineState state, ShaderPrep prep, DecompileResult? result)
     {
         if (result is null)
         {
             state.Failed++;
             state.LogError($"Shader {prep.ShaderIndex} ({prep.ProvisionalStem}): batch worker returned no result.");
-            return;
+            return null;
         }
 
         if (!result.Success)
@@ -227,7 +247,13 @@ internal static class Pass003_DecompileShaders
             string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
             string dumpHint = string.IsNullOrEmpty(result.DebugDumpDirectory) ? "" : $" (dumped: {result.DebugDumpDirectory})";
             state.LogError($"Shader {prep.ShaderIndex} ({prep.ProvisionalStem}) [stage={result.FailedStage ?? "unknown"}]: {firstLine}{dumpHint}");
-            return;
+            return new ContainerOutputEntry
+            {
+                Prep = prep,
+                Result = result,
+                BasePath = Path.Combine(state.OutputDirectory, $"{prep.ContainerKey}_{prep.MaterialName}_{prep.VariantSuffix}"),
+                SourceExtension = string.IsNullOrWhiteSpace(result.SourceFileExtension) ? ".hlsl" : result.SourceFileExtension,
+            };
         }
 
         string outNameStemNoExt = $"{prep.ContainerKey}_{prep.MaterialName}_{prep.VariantSuffix}";
@@ -240,16 +266,259 @@ internal static class Pass003_DecompileShaders
         }
 
         string sourceExtension = string.IsNullOrWhiteSpace(result.SourceFileExtension) ? ".hlsl" : result.SourceFileExtension;
-        string outputFilePath = Path.Combine(state.OutputDirectory, outNameStemNoExt + sourceExtension);
-        string basePath = Path.Combine(state.OutputDirectory, outNameStemNoExt);
-        File.WriteAllText(outputFilePath, result.SourceCode ?? string.Empty);
-
-        if (result.FinalMetadata != null)
+        state.Decompiled++;
+        return new ContainerOutputEntry
         {
-            File.WriteAllText(basePath + ".metadata.json", JsonConvert.SerializeObject(result.FinalMetadata, Formatting.Indented));
+            Prep = prep,
+            Result = result,
+            BasePath = Path.Combine(state.OutputDirectory, outNameStemNoExt),
+            SourceExtension = sourceExtension,
+        };
+    }
+
+    private static void WriteContainerOutputs(PipelineState state, IReadOnlyList<ShaderPrep> containerPreps, List<ContainerOutputEntry> outputs)
+    {
+        ShaderPrep representative = containerPreps[0];
+        string containerStem = $"{representative.ContainerKey}_{representative.MaterialName}";
+        string containerBasePath = Path.Combine(state.OutputDirectory, containerStem);
+
+        UeShaderLabContainerMetadata metadata = BuildContainerMetadata(containerPreps, outputs);
+        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata));
+    }
+
+    private static UeShaderLabContainerMetadata BuildContainerMetadata(IReadOnlyList<ShaderPrep> containerPreps, List<ContainerOutputEntry> outputs)
+    {
+        ShaderPrep representative = containerPreps[0];
+        return new UeShaderLabContainerMetadata
+        {
+            Name = representative.MaterialName,
+            ContainerKey = representative.ContainerKey,
+            MaterialName = representative.MaterialName,
+            UsedMaterials = containerPreps
+                .SelectMany(static prep => prep.UsedBy != null ? prep.UsedBy : Enumerable.Empty<string>())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static material => material, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            Programs = outputs
+                .OrderBy(static o => o.Prep.TypeSuffix, StringComparer.Ordinal)
+                .ThenBy(static o => o.Prep.ShaderIndex)
+                .Select(output => new UeShaderLabProgramData
+                {
+                    Stage = ToUnityStageName(output.Prep.TypeSuffix),
+                    ShaderIndex = output.Prep.ShaderIndex,
+                    ResourceIndex = output.Prep.ContainerInfo?.ResourceIndex ?? -1,
+                    PermutationId = output.Prep.ContainerInfo?.PermutationId ?? -1,
+                    PipelineTypeHash = output.Prep.ContainerInfo?.PipelineTypeHash ?? string.Empty,
+                    PipelineTypeName = output.Prep.ContainerInfo?.PipelineTypeName ?? string.Empty,
+                    ShaderTypeHash = output.Prep.ContainerInfo?.ShaderTypeHash ?? string.Empty,
+                    ShaderTypeName = output.Prep.ContainerInfo?.ShaderTypeName ?? string.Empty,
+                    VertexFactoryTypeHash = output.Prep.ContainerInfo?.VertexFactoryTypeHash ?? string.Empty,
+                    VertexFactoryTypeName = output.Prep.ContainerInfo?.VertexFactoryTypeName ?? string.Empty,
+                    ShaderMapHash = output.Prep.ContainerInfo?.ShaderMapHash ?? string.Empty,
+                    ShaderHash = output.Prep.ContainerInfo?.ShaderHash ?? string.Empty,
+                    SourceLanguage = output.Result.SourceLanguage,
+                    SourceFileExtension = output.Result.SourceFileExtension,
+                    Success = output.Result.Success,
+                    SourceCode = output.Result.SourceCode,
+                    ErrorMessage = output.Result.ErrorMessage,
+                    SymbolMetadata = output.Result.FinalMetadata,
+                })
+                .ToList()
+        };
+    }
+
+    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata)
+    {
+        StringBuilder sb = new();
+        sb.AppendLine($"Shader \"{metadata.Name}\" {{");
+        sb.AppendLine($"    // UE ContainerKey: {metadata.ContainerKey}");
+        sb.AppendLine($"    // Material: {metadata.MaterialName}");
+        if (metadata.UsedMaterials.Count > 0)
+        {
+            sb.AppendLine("    // UsedMaterials:");
+            foreach (string material in metadata.UsedMaterials)
+            {
+                sb.AppendLine($"    //   {material}");
+            }
+        }
+        sb.AppendLine("    SubShader {");
+        foreach (IGrouping<string, UeShaderLabProgramData> passGroup in metadata.Programs
+                     .GroupBy(BuildPassGroupKey, StringComparer.Ordinal)
+                     .OrderBy(static g => g.Key, StringComparer.Ordinal))
+        {
+            List<UeShaderLabProgramData> passPrograms = passGroup.OrderBy(static p => StageSortKey(p.Stage)).ThenBy(static p => p.ShaderIndex).ToList();
+            sb.AppendLine("        Pass {");
+            UeShaderLabProgramData representative = passPrograms[0];
+            sb.AppendLine($"            // PermutationId: {representative.PermutationId}");
+            if (!string.IsNullOrWhiteSpace(representative.PipelineTypeName)) sb.AppendLine($"            // PipelineType: {representative.PipelineTypeName}");
+            else if (!string.IsNullOrWhiteSpace(representative.PipelineTypeHash)) sb.AppendLine($"            // PipelineTypeHash: {representative.PipelineTypeHash}");
+            if (!string.IsNullOrWhiteSpace(representative.ShaderTypeName)) sb.AppendLine($"            // ShaderType: {representative.ShaderTypeName}");
+            else if (!string.IsNullOrWhiteSpace(representative.ShaderTypeHash)) sb.AppendLine($"            // ShaderTypeHash: {representative.ShaderTypeHash}");
+            if (!string.IsNullOrWhiteSpace(representative.VertexFactoryTypeName)) sb.AppendLine($"            // VertexFactoryType: {representative.VertexFactoryTypeName}");
+            else if (!string.IsNullOrWhiteSpace(representative.VertexFactoryTypeHash)) sb.AppendLine($"            // VertexFactoryTypeHash: {representative.VertexFactoryTypeHash}");
+            if (!string.IsNullOrWhiteSpace(representative.ShaderMapHash)) sb.AppendLine($"            // ShaderMapHash: {representative.ShaderMapHash}");
+            sb.AppendLine("            CGPROGRAM");
+            foreach (UeShaderLabProgramData program in passPrograms)
+            {
+                if (TryGetStagePragma(program.Stage, out string pragma))
+                {
+                    sb.AppendLine($"            {pragma} main");
+                }
+            }
+            foreach (string permutationKeyword in BuildPassPermutationKeywords(passPrograms))
+            {
+                sb.AppendLine($"            #pragma multi_compile_local __ {permutationKeyword}");
+            }
+            sb.AppendLine();
+
+            foreach (IGrouping<string, UeShaderLabProgramData> stageGroup in passPrograms.GroupBy(static p => p.Stage, StringComparer.Ordinal))
+            {
+                List<UeShaderLabProgramData> stagePrograms = stageGroup.OrderBy(static p => p.PermutationId).ThenBy(static p => p.ShaderIndex).ToList();
+                sb.AppendLine($"            #if defined({GetStageMacro(stageGroup.Key)})");
+
+                List<UeShaderLabProgramData> conditionalPrograms = stagePrograms.Where(static p => p.PermutationId >= 0).ToList();
+                List<UeShaderLabProgramData> unconditionalPrograms = stagePrograms.Where(static p => p.PermutationId < 0).ToList();
+
+                bool wroteConditionalHeader = false;
+                foreach (UeShaderLabProgramData program in conditionalPrograms)
+                {
+                    sb.AppendLine($"            {(wroteConditionalHeader ? "#elif" : "#if")} defined({BuildPermutationKeyword(program.PermutationId)})");
+                    wroteConditionalHeader = true;
+                    WriteProgramBlock(sb, program);
+                    sb.AppendLine();
+                }
+
+                for (int i = 0; i < unconditionalPrograms.Count; i++)
+                {
+                    UeShaderLabProgramData program = unconditionalPrograms[i];
+                    if (wroteConditionalHeader && i == 0)
+                    {
+                        sb.AppendLine("            #else");
+                    }
+                    WriteProgramBlock(sb, program);
+                    sb.AppendLine();
+                }
+
+                if (wroteConditionalHeader)
+                {
+                    sb.AppendLine("            #endif");
+                }
+                sb.AppendLine("            #endif");
+                sb.AppendLine();
+            }
+            sb.AppendLine("            ENDCG");
+            sb.AppendLine("        }");
+        }
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static bool TryGetStagePragma(string stage, out string pragma)
+    {
+        pragma = stage switch
+        {
+            "Vertex" => "#pragma vertex",
+            "Fragment" => "#pragma fragment",
+            "Geometry" => "#pragma geometry",
+            "Hull" => "#pragma hull",
+            "Domain" => "#pragma domain",
+            "Compute" => "#pragma kernel",
+            _ => string.Empty,
+        };
+        return !string.IsNullOrWhiteSpace(pragma);
+    }
+
+    private static string GetStageMacro(string stage) => stage switch
+    {
+        "Vertex" => "SHADER_STAGE_VERTEX",
+        "Fragment" => "SHADER_STAGE_FRAGMENT",
+        "Geometry" => "SHADER_STAGE_GEOMETRY",
+        "Hull" => "SHADER_STAGE_HULL",
+        "Domain" => "SHADER_STAGE_DOMAIN",
+        "Compute" => "SHADER_STAGE_COMPUTE",
+        _ => $"SHADER_STAGE_{stage.ToUpperInvariant()}"
+    };
+
+    private static string BuildPassGroupKey(UeShaderLabProgramData program)
+    {
+        string pipeline = string.IsNullOrWhiteSpace(program.PipelineTypeHash) ? "NOPIPE" : program.PipelineTypeHash;
+        string vf = string.IsNullOrWhiteSpace(program.VertexFactoryTypeHash) ? "NOVF" : program.VertexFactoryTypeHash;
+        string type = string.IsNullOrWhiteSpace(program.ShaderTypeHash) ? "NOTYPE" : program.ShaderTypeHash;
+        return $"P{pipeline}_V{vf}_S{type}";
+    }
+
+    private static void WriteProgramBlock(StringBuilder sb, UeShaderLabProgramData program)
+    {
+        sb.AppendLine($"            // Stage: {program.Stage}");
+        sb.AppendLine($"            // ShaderIndex: {program.ShaderIndex}");
+        sb.AppendLine($"            // ResourceIndex: {program.ResourceIndex}");
+        sb.AppendLine($"            // PermutationId: {program.PermutationId}");
+        if (!string.IsNullOrWhiteSpace(program.ShaderHash)) sb.AppendLine($"            // ShaderHash: {program.ShaderHash}");
+
+        if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
+        {
+            foreach (string line in SplitLines(program.SourceCode!))
+            {
+                sb.Append("            ");
+                sb.AppendLine(line);
+            }
+            return;
         }
 
-        state.Decompiled++;
+        sb.AppendLine("            // Decompile failed.");
+        if (!string.IsNullOrWhiteSpace(program.ErrorMessage))
+        {
+            foreach (string line in SplitLines(program.ErrorMessage!))
+            {
+                sb.Append("            // ");
+                sb.AppendLine(line);
+            }
+        }
+    }
+
+    private static List<string> BuildPassPermutationKeywords(List<UeShaderLabProgramData> programs)
+    {
+        return programs
+            .Where(static p => p.PermutationId >= 0)
+            .Select(static p => BuildPermutationKeyword(p.PermutationId))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static p => p, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static string BuildPermutationKeyword(int permutationId) => $"PERM_{permutationId}";
+
+    private static int StageSortKey(string stage) => stage switch
+    {
+        "Vertex" => 0,
+        "Hull" => 1,
+        "Domain" => 2,
+        "Geometry" => 3,
+        "Fragment" => 4,
+        "Compute" => 5,
+        _ => 100,
+    };
+
+    private static string ToUnityStageName(string typeSuffix) => typeSuffix switch
+    {
+        "VS" => "Vertex",
+        "PS" => "Fragment",
+        "GS" => "Geometry",
+        "HS" => "Hull",
+        "DS" => "Domain",
+        "CS" => "Compute",
+        _ => typeSuffix,
+    };
+
+    private static IEnumerable<string> SplitLines(string text)
+    {
+        using StringReader reader = new(text);
+        string? line;
+        while ((line = reader.ReadLine()) != null)
+        {
+            yield return line;
+        }
     }
 
     private static MaterialSymbolSource? ResolveBestSymbolSource(PipelineState state, HashSet<string> usedBy, byte frequency)
@@ -321,6 +590,37 @@ internal static class Pass003_DecompileShaders
     private static string SanitizeFileStem(string value)
     {
         return string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private sealed class UeShaderLabContainerMetadata
+    {
+        public string Name { get; set; } = string.Empty;
+        public string ContainerKey { get; set; } = string.Empty;
+        public string MaterialName { get; set; } = string.Empty;
+        public List<string> UsedMaterials { get; set; } = new();
+        public List<UeShaderLabProgramData> Programs { get; set; } = new();
+    }
+
+    private sealed class UeShaderLabProgramData
+    {
+        public string Stage { get; set; } = string.Empty;
+        public int ShaderIndex { get; set; }
+        public int ResourceIndex { get; set; }
+        public int PermutationId { get; set; }
+        public string PipelineTypeHash { get; set; } = string.Empty;
+        public string PipelineTypeName { get; set; } = string.Empty;
+        public string ShaderTypeHash { get; set; } = string.Empty;
+        public string ShaderTypeName { get; set; } = string.Empty;
+        public string VertexFactoryTypeHash { get; set; } = string.Empty;
+        public string VertexFactoryTypeName { get; set; } = string.Empty;
+        public string ShaderMapHash { get; set; } = string.Empty;
+        public string ShaderHash { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string SourceLanguage { get; set; } = "hlsl";
+        public string SourceFileExtension { get; set; } = ".hlsl";
+        public string? SourceCode { get; set; }
+        public string? ErrorMessage { get; set; }
+        public ShaderSymbolData? SymbolMetadata { get; set; }
     }
 }
 

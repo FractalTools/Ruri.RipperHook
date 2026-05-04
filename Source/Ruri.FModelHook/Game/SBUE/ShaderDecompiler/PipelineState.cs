@@ -68,8 +68,13 @@ internal sealed class ShaderContainerInfo
     public string MaterialName { get; init; } = string.Empty;
     public string ShaderMapHash { get; init; } = string.Empty;
     public string ShaderTypeHash { get; init; } = string.Empty;
+    public string ShaderTypeName { get; init; } = string.Empty;
     public string VertexFactoryTypeHash { get; init; } = string.Empty;
+    public string VertexFactoryTypeName { get; init; } = string.Empty;
+    public string PipelineTypeHash { get; init; } = string.Empty;
+    public string PipelineTypeName { get; init; } = string.Empty;
     public int PermutationId { get; init; }
     public int ResourceIndex { get; init; }
     public byte Frequency { get; init; }
+    public string ShaderHash { get; init; } = string.Empty;
 }
