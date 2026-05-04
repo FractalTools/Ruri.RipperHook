@@ -126,15 +126,7 @@ internal static class Pass150_BuildShaderMapView
         {
             string mapHash = lib.ShaderMapHashes[mapIndex];
             ShaderMapEntry mapEntry = lib.ShaderMapEntries[mapIndex];
-            List<string> assets;
-            if (state.ShaderMapToAssets.TryGetValue(mapHash, out HashSet<string>? assetSet) && assetSet.Count > 0)
-            {
-                assets = assetSet.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();
-            }
-            else
-            {
-                assets = new List<string>();
-            }
+            List<string> assets = ResolveShaderMapAssets(state, mapHash);
 
             // Material filter applies at the shader-map level: a map
             // survives iff at least one of its assets matches.
@@ -169,9 +161,9 @@ internal static class Pass150_BuildShaderMapView
 
             string primaryAsset = assets.Count > 0 ? assets[0] : string.Empty;
             string primaryName = string.IsNullOrEmpty(primaryAsset)
-                ? $"ShaderMap_{ShortHash(mapHash, 12)}"
+                ? "UnknownMaterial"
                 : Path.GetFileNameWithoutExtension(primaryAsset);
-            if (string.IsNullOrWhiteSpace(primaryName)) primaryName = $"ShaderMap_{ShortHash(mapHash, 12)}";
+            if (string.IsNullOrWhiteSpace(primaryName)) primaryName = "UnknownMaterial";
 
             state.ShaderMaps.Add(new ShaderMapInfo
             {
@@ -199,5 +191,23 @@ internal static class Pass150_BuildShaderMapView
     {
         if (string.IsNullOrEmpty(value)) return "UNKNOWN";
         return value.Length <= length ? value : value[..length];
+    }
+
+    private static List<string> ResolveShaderMapAssets(PipelineState state, string mapHash)
+    {
+        if (state.ShaderMapToAssets.TryGetValue(mapHash, out HashSet<string>? assetSet) && assetSet.Count > 0)
+        {
+            return assetSet.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        // UnifiedShaderMetadata.json carries a second exact map->materials bridge
+        // (PackageShaderMapHashes / LoadedShaderMaps hashes). Use it as the
+        // per-map fallback before dropping to anonymous material naming.
+        if (state.HashToMaterialsFromUnified.TryGetValue(mapHash, out HashSet<string>? materials) && materials.Count > 0)
+        {
+            return materials.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        return new List<string>();
     }
 }

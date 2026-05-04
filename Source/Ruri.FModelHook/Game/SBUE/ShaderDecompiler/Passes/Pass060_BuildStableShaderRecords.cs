@@ -148,6 +148,10 @@ internal static class Pass060_BuildStableShaderRecords
                 {
                     AddMaterialToHash(map, sm!.CookedShaderMapIdHash!, kvp.Key);
                 }
+                if (!string.IsNullOrWhiteSpace(sm?.ShaderContentHash))
+                {
+                    AddMaterialToHash(map, sm!.ShaderContentHash!, kvp.Key);
+                }
             }
         }
 

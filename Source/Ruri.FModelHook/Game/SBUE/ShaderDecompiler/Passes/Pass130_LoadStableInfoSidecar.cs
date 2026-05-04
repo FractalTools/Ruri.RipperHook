@@ -44,6 +44,24 @@ internal static class Pass130_LoadStableInfoSidecar
 
         foreach (StableInfoEntry shaderMap in root.ShaderMaps)
         {
+            // Merge stableinfo's per-map asset list into the shared
+            // ShaderMapToAssets index. assetinfo is the primary source, but
+            // stableinfo carries the same association and can rescue maps the
+            // assetinfo sidecar missed.
+            if (!string.IsNullOrWhiteSpace(shaderMap.ShaderMapHash) && shaderMap.Assets != null)
+            {
+                if (!state.ShaderMapToAssets.TryGetValue(shaderMap.ShaderMapHash!, out HashSet<string>? assets))
+                {
+                    assets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    state.ShaderMapToAssets[shaderMap.ShaderMapHash!] = assets;
+                }
+
+                foreach (string asset in shaderMap.Assets.Where(static a => !string.IsNullOrWhiteSpace(a)))
+                {
+                    assets.Add(asset.Replace('\\', '/'));
+                }
+            }
+
             // Slot 1: hash-level fan-out.
             if (shaderMap.ShaderHashes != null && shaderMap.Frequencies != null && shaderMap.Assets != null)
             {
