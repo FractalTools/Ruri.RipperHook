@@ -13,16 +13,22 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
     // byte stream so downstream tools can read it without re-implementing
     // IoStore group resolution. Also handles plain-archive passthrough
     // when FModel has already deserialised a non-IoStore archive.
-    public static class Pass010_SaveShaderArchive
+    internal static class Pass010_SaveShaderArchive
     {
-        public static byte[]? SaveShaderLibrary(GameFile entry)
+        public static byte[]? SaveShaderLibrary(GameFile entry, ExportPipelineState? state = null)
         {
             var headerAr = entry.CreateReader();
             var archive = new FShaderCodeArchive(headerAr);
 
             if (archive.SerializedShaders is not FIoStoreShaderCodeArchive ioArchive)
             {
-                // Already a serialized shader archive layout; export the original bytes unchanged.
+                // Already a serialized shader archive layout; export the
+                // original bytes unchanged. Hash extraction for the
+                // non-IoStore path isn't wired here — Pass020's fallback
+                // full scan handles that case at the cost of a slower scan,
+                // which is acceptable because IoStore is the dominant cook
+                // format and the legacy path is small.
+                if (state != null) state.CurrentArchiveShaderMapHashes.Clear();
                 return entry.Read();
             }
 
@@ -31,6 +37,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 // IoStore shader archive export requires access to the backing IoStore reader so group chunks can be resolved.
                 return null;
             }
+
+            // Stash this archive's shader-map hashes on the export state so
+            // Pass020 can scope its material scan to packages that actually
+            // reference shaders in this archive (vs. iterating every UAsset
+            // in the provider, which is a 5-figure-files hang on big games).
+            if (state != null) PopulateArchiveHashes(state, ioArchive.ShaderMapHashes);
 
             using var outStream = new MemoryStream();
             using var writer = new BinaryWriter(outStream);
@@ -184,6 +196,21 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             codeBuffer.CopyTo(outStream);
 
             return outStream.ToArray();
+        }
+
+        // Reset + repopulate the per-archive hash set from the parsed
+        // shader-map-hash array. Each archive export sees a fresh hash
+        // set; cached materials from prior exports are kept in
+        // state.LoadedMaterialCache so a second archive that overlaps
+        // doesn't re-load already-extracted UAssets.
+        private static void PopulateArchiveHashes(ExportPipelineState state, FSHAHash[]? hashes)
+        {
+            state.CurrentArchiveShaderMapHashes.Clear();
+            if (hashes == null) return;
+            foreach (FSHAHash hash in hashes)
+            {
+                state.CurrentArchiveShaderMapHashes.Add(hash.ToString());
+            }
         }
 
         private static byte[] DecompressShaderChunk(byte[] data, int expectedSize)

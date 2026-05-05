@@ -32,17 +32,85 @@ internal static class Pass020_ScanMaterialPackages
 {
     public static void DoPass(ExportPipelineState state)
     {
-        if (state.MaterialsScanned) return;
         AbstractVfsFileProvider? provider = state.Vm?.Provider;
         if (provider == null) return;
 
-        BuildMaterialContexts(provider, state.Root, state.Log);
-        state.MaterialsScanned = true;
+        BuildMaterialContexts(state, provider);
     }
 
-    private static void BuildMaterialContexts(AbstractVfsFileProvider provider, UnifiedShaderMetadataRoot output, Action<string> log)
+    // Two scan modes, chosen by what's available on `state`:
+    //
+    // 1. **Hash-scoped scan** (preferred) — when Pass010 stashed the current
+    //    archive's shader-map hashes AND Pass040 already built the
+    //    package -> hash index, walk only the packages whose hashes
+    //    intersect. On a 5k+ asset game this turns a multi-minute scan
+    //    into a few seconds because each shader-archive only references
+    //    the materials in its chunk.
+    //
+    // 2. **Full provider scan** (fallback) — older non-IoStore paks (or
+    //    games that don't populate the per-package hash list in the
+    //    container header) leave Pass040's index empty. We fall back to
+    //    walking every UAsset and filter by `IsMaterialCandidate`. Same
+    //    behaviour as the original implementation, just guarded so we
+    //    don't take the slow path when the fast path is available.
+    //
+    // Both modes funnel through `LoadAndCacheMaterial` so the same
+    // (PathWithoutExtension -> UnifiedMaterialMetadata?) cache is
+    // reused across multiple archive exports in the same FModel session.
+    // A null cache value is a "tried and failed" marker — don't retry.
+    private static void BuildMaterialContexts(ExportPipelineState state, AbstractVfsFileProvider provider)
+    {
+        var output = state.Root;
+        var log = state.Log;
+        var cache = state.LoadedMaterialCache;
+        var archiveHashes = state.CurrentArchiveShaderMapHashes;
+        var packageHashIndex = state.Root.PackageShaderMapHashes;
+
+        if (archiveHashes.Count > 0 && packageHashIndex.Count > 0)
+        {
+            int candidates = 0;
+            int reused = 0;
+            int loaded = 0;
+            int extracted = 0;
+            int loadFailures = 0;
+
+            foreach (KeyValuePair<string, List<string>> kvp in packageHashIndex)
+            {
+                string packagePath = kvp.Key;
+                List<string> packageHashes = kvp.Value;
+                if (!HashesIntersect(packageHashes, archiveHashes)) continue;
+                candidates++;
+
+                if (cache.TryGetValue(packagePath, out UnifiedMaterialMetadata? cached))
+                {
+                    reused++;
+                    if (cached != null) output.MaterialInterfaces[packagePath] = cached;
+                    continue;
+                }
+
+                UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
+                cache[packagePath] = metadata;
+                if (metadata != null)
+                {
+                    output.MaterialInterfaces[packagePath] = metadata;
+                    extracted++;
+                }
+            }
+
+            log($"    Material scan (hash-scoped): archive-hashes={archiveHashes.Count}, candidates={candidates}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+            return;
+        }
+
+        // Fallback path — no IoStore hash index available, do the full
+        // provider walk. Cache is still honoured so re-export of the
+        // same archive in a session is cheap.
+        FullProviderScan(provider, output, cache, log);
+    }
+
+    private static void FullProviderScan(AbstractVfsFileProvider provider, UnifiedShaderMetadataRoot output, Dictionary<string, UnifiedMaterialMetadata?> cache, Action<string> log)
     {
         int considered = 0;
+        int reused = 0;
         int loaded = 0;
         int loadFailures = 0;
         int extracted = 0;
@@ -52,51 +120,70 @@ internal static class Pass020_ScanMaterialPackages
             if (!IsMaterialCandidate(file)) continue;
             considered++;
 
-            CUE4Parse.UE4.Assets.Exports.UObject? asset;
-            try
+            string packagePath = file.PathWithoutExtension;
+            if (cache.TryGetValue(packagePath, out UnifiedMaterialMetadata? cached))
             {
-                asset = provider.LoadPackageObject(file.PathWithoutExtension);
-                loaded++;
-            }
-            catch (Exception ex)
-            {
-                // One bad asset (Widget Blueprint, broken FName, missing
-                // schema, etc.) used to abort the whole loop and leave
-                // UnifiedShaderMetadata.json unwritten — which in turn
-                // collapses the decompiler's name resolution to a counter
-                // for every shader. Skip and keep going.
-                loadFailures++;
-                HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] Skipped {file.Path}: {ex.GetType().Name}: {ex.Message}");
+                reused++;
+                if (cached != null) output.MaterialInterfaces[packagePath] = cached;
                 continue;
             }
 
-            if (asset is not UMaterialInterface material)
+            UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
+            cache[packagePath] = metadata;
+            if (metadata != null)
             {
-                continue;
+                output.MaterialInterfaces[packagePath] = metadata;
+                extracted++;
             }
-
-            UnifiedMaterialMetadata? metadata;
-            try
-            {
-                metadata = ExtractMaterialContext(material, file.PathWithoutExtension);
-            }
-            catch (Exception ex)
-            {
-                loadFailures++;
-                HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] ExtractMaterialContext failed for {file.Path}: {ex.GetType().Name}: {ex.Message}");
-                continue;
-            }
-
-            if (metadata == null)
-            {
-                continue;
-            }
-
-            output.MaterialInterfaces[file.PathWithoutExtension] = metadata;
-            extracted++;
         }
 
-        log($"    Material scan: candidates={considered}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+        log($"    Material scan (full): candidates={considered}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+    }
+
+    // Shared loader: load the package, downcast to UMaterialInterface,
+    // extract metadata. Returns null on any failure (already logged
+    // through HookLogger). The mutated counters are by-ref so the
+    // caller can record stats per scan mode.
+    private static UnifiedMaterialMetadata? LoadAndExtractByPath(AbstractVfsFileProvider provider, string packagePath, ref int loaded, ref int loadFailures)
+    {
+        CUE4Parse.UE4.Assets.Exports.UObject? asset;
+        try
+        {
+            asset = provider.LoadPackageObject(packagePath);
+            loaded++;
+        }
+        catch (Exception ex)
+        {
+            loadFailures++;
+            HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] Skipped {packagePath}: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+
+        if (asset is not UMaterialInterface material) return null;
+
+        try
+        {
+            return ExtractMaterialContext(material, packagePath);
+        }
+        catch (Exception ex)
+        {
+            loadFailures++;
+            HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] ExtractMaterialContext failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
+    // Linear scan against the archive's hash set. The archive set is
+    // typically a few thousand hashes, the package list is shorter
+    // (one-or-two hashes per package), so this beats building a hash
+    // map for the small inner list.
+    private static bool HashesIntersect(List<string> packageHashes, HashSet<string> archiveHashes)
+    {
+        for (int i = 0; i < packageHashes.Count; i++)
+        {
+            if (archiveHashes.Contains(packageHashes[i])) return true;
+        }
+        return false;
     }
 
     // Tighter than the original `Path.Contains("/Material")`. Old check

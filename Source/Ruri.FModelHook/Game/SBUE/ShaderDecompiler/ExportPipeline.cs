@@ -16,9 +16,13 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //
 // Export pipeline (FModel-hook side; needs vm.Provider):
 //   Pass 010  Save IoStore archive as flat FSerializedShaderArchive  (runs from hook)
-//   Pass 020  Scan material packages -> Root.MaterialInterfaces      (cached)
-//   Pass 030  FHashedName resolver utility                            (used by Pass 060)
+//             also stashes the archive's shader-map hashes on state for Pass020 scoping
 //   Pass 040  Extract IoStore shader-map hashes -> Root.PackageShaderMapHashes (cached)
+//             RUNS BEFORE 020 because 020 uses its package->hash index to scope
+//             the scan to materials that actually reference the current archive
+//   Pass 020  Scan material packages whose hashes intersect the current archive
+//             -> Root.MaterialInterfaces (cumulative cache across hook fires)
+//   Pass 030  FHashedName resolver utility                            (used by Pass 060)
 //   Pass 050  Build per-library archive view -> Root.ShaderCodeArchives[lib]
 //   Pass 060  Build stable shader records -> state.AssetInfo + state.StableInfo
 //   Pass 070  Write `<base>.assetinfo.json` from state.AssetInfo
@@ -30,8 +34,8 @@ internal static class ExportPipeline
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
 
-        using (new TimingCookie(state, "Pass 020: Scan material packages"))      Pass020_ScanMaterialPackages.DoPass(state);
         using (new TimingCookie(state, "Pass 040: Extract IoStore shader-map hashes")) Pass040_ExtractIoStoreShaderMapHashes.DoPass(state);
+        using (new TimingCookie(state, "Pass 020: Scan material packages"))      Pass020_ScanMaterialPackages.DoPass(state);
         using (new TimingCookie(state, "Pass 050: Build shader-library metadata")) Pass050_BuildShaderLibraryMetadata.DoPass(state);
         using (new TimingCookie(state, "Pass 060: Build stable shader records"))   Pass060_BuildStableShaderRecords.DoPass(state);
         using (new TimingCookie(state, "Pass 070: Write .assetinfo.json sidecar")) Pass070_WriteAssetInfoSidecar.DoPass(state);

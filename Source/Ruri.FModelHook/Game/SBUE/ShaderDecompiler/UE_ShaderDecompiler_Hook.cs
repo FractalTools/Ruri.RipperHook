@@ -84,7 +84,9 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 bool exportedLibrary = false;
 
                 // 1. Export Shader Library (.ushaderlib) — Pass 010.
-                var libraryBytes = Pass010_SaveShaderArchive.SaveShaderLibrary(entry);
+                // Pass state so Pass010 can stash the archive's shader-map
+                // hash set on it; Pass020 reads that to scope the scan.
+                var libraryBytes = Pass010_SaveShaderArchive.SaveShaderLibrary(entry, _exportState);
                 if (libraryBytes != null)
                 {
                     string path = exportBasePath + ".ushaderlib";
