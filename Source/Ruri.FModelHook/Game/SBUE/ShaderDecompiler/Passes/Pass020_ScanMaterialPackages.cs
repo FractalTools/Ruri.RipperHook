@@ -89,6 +89,16 @@ internal static class Pass020_ScanMaterialPackages
                 }
 
                 UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
+                if (metadata != null)
+                {
+                    // Copy the IoStore-derived shader-map hashes onto the
+                    // material so the unified file is self-contained.
+                    // PackageShaderMapHashes is the AUTHORITATIVE bridge
+                    // for IoStore cooks (modern UE5) — without this copy
+                    // the consumer can't link back from a shader-archive
+                    // hash to a material when LoadedShaderMaps is empty.
+                    metadata.PackageShaderMapHashes = new List<string>(packageHashes);
+                }
                 cache[packagePath] = metadata;
                 if (metadata != null)
                 {
@@ -129,6 +139,10 @@ internal static class Pass020_ScanMaterialPackages
             }
 
             UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
+            if (metadata != null && output.PackageShaderMapHashes.TryGetValue(packagePath, out List<string>? hashes))
+            {
+                metadata.PackageShaderMapHashes = new List<string>(hashes);
+            }
             cache[packagePath] = metadata;
             if (metadata != null)
             {
@@ -223,20 +237,62 @@ internal static class Pass020_ScanMaterialPackages
         {
             return true;
         }
+        // Niagara package naming conventions: `NS_` (NiagaraSystem),
+        // `NE_` (NiagaraEmitter), `NSC_` / `NSCS_` (NiagaraScripts),
+        // `NM_` (NiagaraModule). These compile per-stage GPU shaders that
+        // ship in the same `.ushaderbytecode` archives as material shaders,
+        // so without scanning them here every Niagara compute/sprite
+        // shader would emit as `UnknownMaterial` even though the package
+        // owning the shader-map hash is right there in the IoStore
+        // container header.
+        //
+        // The downstream `LoadPackageObject` cast is intentionally still
+        // `is UMaterialInterface` — Niagara assets fail that check so
+        // they're skipped silently, but the per-package shader-map hash
+        // mirror Pass020 builds (state.Root.PackageShaderMapHashes) IS
+        // populated regardless. That mirror is what Pass140 + Pass150
+        // walk to fill `state.NameByShaderIndex` with `NS_<name>` /
+        // `NE_<name>` filename stems instead of "UnknownMaterial".
+        //
+        // We don't extract Niagara parameter names here — Niagara stores
+        // them under FNiagaraShaderScript / FNiagaraShaderMapContent
+        // (see CUE4Parse Exports/Niagara/) which has a different
+        // FUniformExpressionSet equivalent that the cached-expression
+        // reader doesn't probe. Adding Niagara symbol extraction is a
+        // separate, larger task — see TODO at end of this file.
+        if (name.StartsWith("NS_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("NE_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("NSC_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("NSCS_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("NM_", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
         // Path-side accept: any path containing "Material" (case-insensitive).
-        // The caller still gates on `asset is UMaterialInterface` so the
-        // LoadPackageObject failures are non-fatal and just contribute to
-        // skipped-on-error.
+        // We deliberately do NOT broaden to /FX/ or /VFX/ — those bucket
+        // names are commonly used for non-Niagara content (sound cues,
+        // post-process curves, prop blueprints) and the LoadPackageObject
+        // failure cost on a 5-figure asset count is non-trivial.
+        // Niagara packages whose names already start with NS_/NE_/NSC_
+        // are picked up above; that's the supported coverage today.
         return path.Contains("Material", StringComparison.OrdinalIgnoreCase);
     }
+    // TODO: Niagara symbol extraction — UNiagaraScript carries
+    // `LoadedScriptResources : FNiagaraShaderScript[]` (only when
+    // `Owner.Provider.ReadShaderMaps == true`); each FNiagaraShaderScript's
+    // `ShaderMap` is a TShaderMap<FNiagaraShaderMapContent, ...> which
+    // includes per-binding parameter info under its frozen-archive blob.
+    // CUE4Parse's FNiagaraShaderMapContent currently only decodes
+    // FriendlyName / DebugDescription / ShaderMapId — extending it to
+    // also decode `FNiagaraDataInterfaceParamInfo[]` (and the
+    // `FShaderParameterMapInfo` carried on each member FShader) would
+    // give the same parameter-name table that materials carry under
+    // FUniformExpressionSet. Pass020 would then call into the Niagara
+    // path when `material is UNiagaraScript`, materially matching what
+    // the existing UMaterialInterface branch does for FMaterialResource.
 
     private static UnifiedMaterialMetadata? ExtractMaterialContext(UMaterialInterface material, string materialPath)
     {
-        if (material.LoadedMaterialResources == null || material.LoadedMaterialResources.Count == 0)
-        {
-            return null;
-        }
-
         var metadata = new UnifiedMaterialMetadata
         {
             MaterialPath = materialPath,
@@ -249,42 +305,66 @@ internal static class Pass020_ScanMaterialPackages
             RenderState = BuildRenderState(material)
         };
 
-        foreach (var resource in material.LoadedMaterialResources)
+        // Source 1 — inline shader-map blob (older cooks / non-IoStore).
+        // When ShareCode-style external shader libraries are off, this is
+        // populated and carries the full UniformExpressionSet (the gold
+        // standard for parameter-name/byte-offset pairing).
+        if (material.LoadedMaterialResources != null && material.LoadedMaterialResources.Count > 0)
         {
-            if (resource.LoadedShaderMap == null)
+            foreach (var resource in material.LoadedMaterialResources)
             {
-                continue;
+                if (resource.LoadedShaderMap == null)
+                {
+                    continue;
+                }
+
+                var shaderMap = resource.LoadedShaderMap;
+                var shaderMapMetadata = new UnifiedShaderMapMetadata
+                {
+                    ShaderPlatform = shaderMap.ShaderPlatform.ToString(),
+                    CookedShaderMapIdHash = shaderMap.ShaderMapId.CookedShaderMapIdHash?.ToString(),
+                    ShaderContentHash = shaderMap.Content is FMaterialShaderMapContent materialShaderMapContent
+                        ? materialShaderMapContent.ShaderContentHash.ToString()
+                        : null
+                };
+
+                if (shaderMap.PointerTable is FShaderMapPointerTable pointerTable)
+                {
+                    shaderMapMetadata.ShaderMapPointerTable = BuildPointerTable(pointerTable);
+                }
+
+                if (shaderMap.FrozenArchive != null)
+                {
+                    shaderMapMetadata.MemoryImageResult = BuildFrozenArchive(shaderMap.FrozenArchive);
+                }
+
+                if (shaderMap.Content is FMaterialShaderMapContent materialContent)
+                {
+                    shaderMapMetadata.MaterialShaderMapContent = BuildShaderContent(materialContent, shaderMap.PointerTable as FShaderMapPointerTable);
+                }
+
+                metadata.LoadedShaderMaps.Add(shaderMapMetadata);
             }
-
-            var shaderMap = resource.LoadedShaderMap;
-            var shaderMapMetadata = new UnifiedShaderMapMetadata
-            {
-                ShaderPlatform = shaderMap.ShaderPlatform.ToString(),
-                CookedShaderMapIdHash = shaderMap.ShaderMapId.CookedShaderMapIdHash?.ToString(),
-                ShaderContentHash = shaderMap.Content is FMaterialShaderMapContent materialShaderMapContent
-                    ? materialShaderMapContent.ShaderContentHash.ToString()
-                    : null
-            };
-
-            if (shaderMap.PointerTable is FShaderMapPointerTable pointerTable)
-            {
-                shaderMapMetadata.ShaderMapPointerTable = BuildPointerTable(pointerTable);
-            }
-
-            if (shaderMap.FrozenArchive != null)
-            {
-                shaderMapMetadata.MemoryImageResult = BuildFrozenArchive(shaderMap.FrozenArchive);
-            }
-
-            if (shaderMap.Content is FMaterialShaderMapContent materialContent)
-            {
-                shaderMapMetadata.MaterialShaderMapContent = BuildShaderContent(materialContent, shaderMap.PointerTable as FShaderMapPointerTable);
-            }
-
-            metadata.LoadedShaderMaps.Add(shaderMapMetadata);
         }
 
-        return metadata.LoadedShaderMaps.Count > 0 ? metadata : null;
+        // Source 2 — defensive walk of CachedExpressionData / property-bag
+        // overrides / typed expression graph for parameter NAMES that
+        // survive shipping cook even when the inline shader map is gone.
+        // No engine-internal struct names are baked in here — the reader
+        // probes-then-falls-through so custom UE forks keep working.
+        metadata.CachedParameters = MaterialCachedExpressionReader.Read(material);
+
+        // Source 3 — IoStore container-header shader-map hashes for THIS
+        // material's package. Pass040 has already populated the
+        // (package -> hashes) index on the export root; we copy the
+        // matching list onto the material so consumers don't need to
+        // round-trip through PackageShaderMapHashes when reading
+        // UnifiedShaderMetadata.json.
+        // The lookup is best-effort and tries a couple of path-spelling
+        // variants because Pass040 keys by `gameFile.PathWithoutExtension`
+        // while the caller passes a path that may or may not include the
+        // `.MaterialName` object suffix.
+        return metadata;
     }
 
     // Reads the render-state UProperties from a material UObject and returns

@@ -211,28 +211,149 @@ internal sealed class UnifiedMaterialReader
             return null;
         }
 
+        // Path 1 — UniformExpressionSet from the inline shader map (older /
+        // non-IoStore cooks). When present, this is the gold standard
+        // because it carries name + byte-offset + type for every CB
+        // member in `Material_m0[N]`.
         JsonElement? uniformExpressionSet = SelectUniformExpressionSet(materialEntry, shaderPlatform);
-        if (!uniformExpressionSet.HasValue)
+        if (uniformExpressionSet.HasValue)
         {
-            _cache[cacheKey] = null;
+            SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(normalizedPath, shaderPlatform, uniformExpressionSet.Value);
+            if (inputs != null)
+            {
+                MaterialSymbolSource source = new(
+                    normalizedPath,
+                    MaterialSymbolMetadataBuilder.Build(inputs),
+                    inputs.UsedLoadedMaterialResources ? 2 : inputs.NumericParameterInfos.Count > 0 ? 1 : 0,
+                    inputs.UsedLoadedMaterialResources,
+                    inputs.MaterialResourceCounts != null ? new MaterialUniformBufferLayout(inputs.MaterialResourceCounts) : null);
+                _cache[cacheKey] = source;
+                return source;
+            }
+        }
+
+        // Path 2 — CachedParameters (parameter NAMES only). Used when the
+        // inline shader map is gone (modern UE5 IoStore cook). We can't
+        // reconstruct byte offsets from cached data alone, so the
+        // resulting source has parameter names but no constant-buffer
+        // layout — downstream patcher uses the names for OpName patches
+        // and falls through to anonymous Material_Tn for unnamed CB
+        // members. The author-facing names (vs `Material_m0`) are still
+        // a 100% improvement over the no-symbol baseline.
+        if (materialEntry.TryGetProperty("CachedParameters", out JsonElement cached2)
+            && cached2.ValueKind == JsonValueKind.Object)
+        {
+            MaterialSymbolSource? cachedSource = BuildSourceFromCachedParameters(normalizedPath, cached2);
+            _cache[cacheKey] = cachedSource;
+            return cachedSource;
+        }
+
+        _cache[cacheKey] = null;
+        return null;
+    }
+
+    private static MaterialSymbolSource? BuildSourceFromCachedParameters(string materialPath, JsonElement cachedParams)
+    {
+        var metadata = new SerializedProgramData
+        {
+            DebugName = materialPath,
+        };
+
+        // Best-effort: collect every name from the typed buckets the
+        // CachedParameterNames DTO writes. Bucket-name collisions are
+        // tolerated — duplicates land in the same flat name list.
+        List<string> textureNames = new();
+        AppendStringArray(cachedParams, "TextureNames", textureNames);
+        AppendStringArray(cachedParams, "RuntimeVirtualTextureNames", textureNames);
+        AppendStringArray(cachedParams, "SparseVolumeTextureNames", textureNames);
+        AppendStringArray(cachedParams, "FontNames", textureNames);
+
+        // Texture parameter names go directly into the metadata's
+        // TextureParameters slot — the patcher matches by texture
+        // bind index, not by name, so the order here doesn't matter
+        // structurally. Each name takes a synthetic bind index.
+        for (int i = 0; i < textureNames.Count; i++)
+        {
+            metadata.TextureParameters.Add(new TextureParameter
+            {
+                Name = textureNames[i],
+                NameIndex = -1,
+                Index = i,
+                SamplerIndex = -1,
+                MultiSampled = false,
+                Dim = 2,
+            });
+        }
+
+        // Numeric parameter names go onto a synthetic `Material` cbuffer
+        // entry. Without byte offsets we can't pin them to specific
+        // packoffset c-N slots, so we just expose the name list — the
+        // patcher will leave individual members anonymous but spirv-cross
+        // will still emit the cbuffer name as `Material` (vs `type_Material`
+        // with no friendly name). The list is preserved so a future
+        // resolution pass (e.g. preshader replay) can reorder them.
+        var materialCb = new ConstantBufferParameter
+        {
+            Name = "Material",
+            Size = 0,
+        };
+        List<VectorParameter> vectorParams = new();
+        int slot = 0;
+        AppendNumericVectorParams(cachedParams, "ScalarNames", ref slot, vectorParams);
+        AppendNumericVectorParams(cachedParams, "VectorNames", ref slot, vectorParams);
+        AppendNumericVectorParams(cachedParams, "StaticSwitchNames", ref slot, vectorParams);
+        AppendNumericVectorParams(cachedParams, "UnknownKindNames", ref slot, vectorParams);
+        if (vectorParams.Count > 0)
+        {
+            materialCb.VectorParameters = vectorParams.ToArray();
+            metadata.ConstantBufferParameters.Add(materialCb);
+        }
+
+        if (metadata.TextureParameters.Count == 0 && metadata.ConstantBufferParameters.Count == 0)
+        {
             return null;
         }
 
-        SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(normalizedPath, shaderPlatform, uniformExpressionSet.Value);
-        if (inputs == null)
-        {
-            _cache[cacheKey] = null;
-            return null;
-        }
+        // Score = 1 — non-zero so the source is preferred over a null
+        // result, but lower than score = 2 reserved for the inline-shader-
+        // map path (which has byte-offset accuracy).
+        return new MaterialSymbolSource(materialPath, metadata, Score: 1, UsedLoadedMaterialResources: false, MaterialLayout: null);
+    }
 
-        MaterialSymbolSource source = new(
-            normalizedPath,
-            MaterialSymbolMetadataBuilder.Build(inputs),
-            inputs.UsedLoadedMaterialResources ? 2 : inputs.NumericParameterInfos.Count > 0 ? 1 : 0,
-            inputs.UsedLoadedMaterialResources,
-            inputs.MaterialResourceCounts != null ? new MaterialUniformBufferLayout(inputs.MaterialResourceCounts) : null);
-        _cache[cacheKey] = source;
-        return source;
+    private static void AppendStringArray(JsonElement owner, string property, List<string> dest)
+    {
+        if (!owner.TryGetProperty(property, out JsonElement arr) || arr.ValueKind != JsonValueKind.Array) return;
+        foreach (JsonElement v in arr.EnumerateArray())
+        {
+            if (v.ValueKind == JsonValueKind.String)
+            {
+                string? s = v.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) dest.Add(s!);
+            }
+        }
+    }
+
+    private static void AppendNumericVectorParams(JsonElement owner, string property, ref int slot, List<VectorParameter> dest)
+    {
+        if (!owner.TryGetProperty(property, out JsonElement arr) || arr.ValueKind != JsonValueKind.Array) return;
+        foreach (JsonElement v in arr.EnumerateArray())
+        {
+            if (v.ValueKind != JsonValueKind.String) continue;
+            string? name = v.GetString();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            dest.Add(new VectorParameter
+            {
+                Name = name!,
+                NameIndex = -1,
+                Type = ShaderParamType.Float,
+                Index = slot * 16,        // synthetic byte offset; byte-offset pinning relies on the inline-shader-map path
+                ArraySize = 1,
+                IsMatrix = false,
+                RowCount = 4,
+                ColumnCount = 1,
+            });
+            slot++;
+        }
     }
 
     private bool TryResolveMaterialEntry(string materialPath, out JsonElement entry)

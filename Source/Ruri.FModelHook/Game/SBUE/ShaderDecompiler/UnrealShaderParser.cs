@@ -59,11 +59,26 @@ public class UnrealShaderParser
             }
             else
             {
-                int shexOffset = FindSequence(remaining, [0x53, 0x48, 0x45, 0x58]);
-                if (shexOffset >= 0)
+                // SM 6.0+ shaders emitted via DXC may ship with their
+                // bitcode payload directly (no DXBC container, no DXIL
+                // chunk magic). Fall through to a raw LLVM bitcode magic
+                // probe before giving up — `BC \xC0\xDE` at the very
+                // start signals a bare DXIL module that dxil-spirv
+                // accepts on its --raw-llvm path.
+                int bitcodeOffset = FindSequence(remaining, [0x42, 0x43, 0xC0, 0xDE]);
+                if (bitcodeOffset >= 0)
                 {
-                    codeStart = currentPos;
-                    arch = ShaderArchitecture.Dxbc;
+                    codeStart = currentPos + bitcodeOffset;
+                    arch = ShaderArchitecture.Dxil;
+                }
+                else
+                {
+                    int shexOffset = FindSequence(remaining, [0x53, 0x48, 0x45, 0x58]);
+                    if (shexOffset >= 0)
+                    {
+                        codeStart = currentPos;
+                        arch = ShaderArchitecture.Dxbc;
+                    }
                 }
             }
         }
@@ -376,8 +391,28 @@ public class UnrealShaderParser
     private static bool IsDxbc(byte[] data)
         => data.Length >= 4 && data[0] == 0x44 && data[1] == 0x58 && data[2] == 0x42 && data[3] == 0x43;
 
+    // True when `data` STARTS with the DXIL chunk magic. Distinct from
+    // ShaderDecompiler.IsDxil which scans inside a DXBC container — this
+    // method intentionally checks ONLY the start because it's used after
+    // the parser has already located the chunk start via FindSequence.
+    //
+    // SM 6.0+ shaders emitted by DXC arrive with the DXIL chunk preceded
+    // by the DXBC container header; the chunk offset (16 bytes after the
+    // container start) is what FindSequence resolves to before this
+    // check fires.
+    //
+    // We also accept a bare LLVM bitcode magic (`BC \xC0\xDE`) so shaders
+    // hand-extracted from a container still route through the DXIL path.
     private static bool IsDxil(byte[] data)
-        => data.Length >= 4 && data[0] == 0x44 && data[1] == 0x58 && data[2] == 0x49 && data[3] == 0x4C;
+    {
+        if (data.Length < 4) return false;
+        // 'D' 'X' 'I' 'L' container chunk magic.
+        if (data[0] == 0x44 && data[1] == 0x58 && data[2] == 0x49 && data[3] == 0x4C) return true;
+        // 'B' 'C' 0xC0 0xDE — bare LLVM bitcode (raw DXIL outside the
+        // DXBC envelope). dxil-spirv handles this with --raw-llvm.
+        if (data[0] == 0x42 && data[1] == 0x43 && data[2] == 0xC0 && data[3] == 0xDE) return true;
+        return false;
+    }
 
     private static int FindSequence(byte[] haystack, byte[] needle)
     {
