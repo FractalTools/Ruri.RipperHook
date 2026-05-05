@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Headless console driver for the FModel hook. Same hook surface as
+    Ruri.FModelHook.GUI, but with no Hooks-menu UI, no shader-decompiler
+    settings dialog, and the FModel WPF main window started hidden so a
+    long auto-export run looks like a normal CLI tool from the outside.
+
+    Output goes to the same bin folder as the GUI exe so all native
+    dependencies (CUE4Parse-Natives, Oodle, dxbc2dxil & friends) sit
+    next to the entry exe. Choosing OutputType=Exe (vs WinExe) keeps
+    a real console window attached so the auto-export progress lines
+    are visible in any cmd / pwsh / bash session.
+  -->
+  <PropertyGroup>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net8.0-windows\win-x64\</OutputPath>
+    <IntermediateOutputPath>..\..\FModel\FModel\obj\Ruri.FModelHook.CLI\$(Configuration)\</IntermediateOutputPath>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Ruri.FModelHook.CLI</AssemblyName>
+    <RootNamespace>Ruri.FModelHook.CLI</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ruri.Hook\Ruri.Hook.csproj" />
+    <ProjectReference Include="..\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj" />
+    <ProjectReference Include="..\Ruri.FModelHook\Ruri.FModelHook.csproj" />
+    <ProjectReference Include="..\..\FModel\FModel\FModel.csproj" />
+  </ItemGroup>
+
+</Project>

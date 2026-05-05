@@ -75,13 +75,36 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                 string materialPath = NormalizeMaterialPathKey(kvp.Key);
                 if (!MatchesFilter(materialPath, filterVariants)) continue;
 
-                List<UnifiedShaderMapEntry>? shaderMaps = kvp.Value?.LoadedShaderMaps;
-                if (shaderMaps == null) continue;
+                UnifiedMaterialEntry? mat = kvp.Value;
+                if (mat == null) continue;
 
-                foreach (UnifiedShaderMapEntry sm in shaderMaps)
+                // Bridge 1: hashes the inline shader-map carries (older /
+                // non-IoStore cooks).
+                List<UnifiedShaderMapEntry>? shaderMaps = mat.LoadedShaderMaps;
+                if (shaderMaps != null)
                 {
-                    if (!string.IsNullOrWhiteSpace(sm?.CookedShaderMapIdHash)) AddHash(state.HashToMaterialsFromUnified, sm!.CookedShaderMapIdHash!, materialPath);
-                    if (!string.IsNullOrWhiteSpace(sm?.ShaderContentHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ShaderContentHash!, materialPath);
+                    foreach (UnifiedShaderMapEntry sm in shaderMaps)
+                    {
+                        if (!string.IsNullOrWhiteSpace(sm?.CookedShaderMapIdHash)) AddHash(state.HashToMaterialsFromUnified, sm!.CookedShaderMapIdHash!, materialPath);
+                        if (!string.IsNullOrWhiteSpace(sm?.ShaderContentHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ShaderContentHash!, materialPath);
+                    }
+                }
+
+                // Bridge 2: per-material PackageShaderMapHashes copy
+                // (Pass020 mirrors the IoStore container header's
+                // shader-map-hash list onto every UMaterialInterface entry
+                // it scans). This is the AUTHORITATIVE bridge for modern
+                // UE5 IoStore cooks where the inline shader-map blob is
+                // empty — without it, every shader produced by an
+                // externalised shader-archive falls back to "UnknownMaterial"
+                // even though the material UAsset is right there.
+                List<string>? perMaterialHashes = mat.PackageShaderMapHashes;
+                if (perMaterialHashes != null)
+                {
+                    foreach (string h in perMaterialHashes)
+                    {
+                        if (!string.IsNullOrWhiteSpace(h)) AddHash(state.HashToMaterialsFromUnified, h, materialPath);
+                    }
                 }
             }
         }
@@ -125,6 +148,12 @@ internal static class Pass140_LoadUnifiedMetadataIndex
     {
         public string? MaterialPath { get; set; }
         public List<UnifiedShaderMapEntry>? LoadedShaderMaps { get; set; }
+        // Mirror of the IoStore container header's shader-map-hash list
+        // for THIS material's package. Pass020 fills it from
+        // `state.Root.PackageShaderMapHashes[<package>]` so the unified
+        // file carries an authoritative bridge even when the inline
+        // shader map is gone.
+        public List<string>? PackageShaderMapHashes { get; set; }
     }
     private sealed class UnifiedShaderMapEntry
     {

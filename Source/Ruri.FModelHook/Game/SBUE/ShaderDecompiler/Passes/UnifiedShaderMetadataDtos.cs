@@ -107,6 +107,46 @@ internal sealed class UnifiedMaterialMetadata
     // the asset wasn't a UMaterial / UMaterialInstance (e.g. a function or
     // collection).
     public UnifiedMaterialRenderState? RenderState { get; set; }
+
+    // Names harvested from the material's persistent CachedExpressionData
+    // property bag (FMaterialCachedExpressionData on the UAsset). Populated
+    // even when LoadedMaterialResources is empty (modern UE5 IoStore cooks
+    // externalize the shader-map blob to .ushaderbytecode and leave the
+    // inline list empty, but author-facing parameter names still live on
+    // the material UAsset).
+    //
+    // The reader walks the property bag recursively to extract any
+    // FMaterialParameterInfo / FName fields rather than relying on a fixed
+    // engine layout — custom UE forks rename these fields and the cache
+    // shape evolves between minor versions.
+    public CachedParameterNames? CachedParameters { get; set; }
+
+    // The on-disk shader-map hashes that the IoStore container header lists
+    // for THIS material's package. Captured here so consumers don't have to
+    // round-trip through the separate `PackageShaderMapHashes` map to
+    // associate a material with the shader maps it produced. Empty when
+    // Pass040 didn't see any (non-IoStore cook, hash list missing, or the
+    // material has no compiled shader-maps in this archive).
+    public List<string> PackageShaderMapHashes { get; set; } = new();
+}
+
+// Defensive parameter-name capture from CachedExpressionData. Only carries
+// raw names + a coarse "kind" tag — no offsets, no engine struct mirroring,
+// no value decoding. Anything beyond names is read via the inline shader
+// map path when available, since the cache doesn't carry register layout.
+internal sealed class CachedParameterNames
+{
+    public List<string> ScalarNames { get; set; } = new();
+    public List<string> VectorNames { get; set; } = new();
+    public List<string> StaticSwitchNames { get; set; } = new();
+    public List<string> TextureNames { get; set; } = new();
+    public List<string> RuntimeVirtualTextureNames { get; set; } = new();
+    public List<string> SparseVolumeTextureNames { get; set; } = new();
+    public List<string> FontNames { get; set; } = new();
+    // Names that came back from the recursive walk but didn't fit any of
+    // the typed buckets above. Useful as a debug crumb for new UE forks
+    // without dropping data.
+    public List<string> UnknownKindNames { get; set; } = new();
 }
 
 // User-facing render-state UProperties that survive shipping cook on the

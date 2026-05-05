@@ -119,11 +119,37 @@ internal static class Pass180_PrepareShaderBinaries
 
         SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource);
 
+        // Per-shader shader-model selection. The library-level option is
+        // a default that callers tune to the lowest model they expect; an
+        // individual shader can request a higher model via either:
+        //   * `unrealMetadata.IsSm6Shader == true` (the parser already
+        //      decoded the optional-data `'6'` flag UE writes for any
+        //      cooked DXC-compiled shader). Bump to 60 so spirv-cross
+        //      emits SM 6.0-conformant HLSL (resource heap usage,
+        //      `[[vk::binding]]` -> `register(...)` mapping rules,
+        //      DXIL-only intrinsics like `WaveActiveSum`).
+        //   * Format == Dxil with a DXC-style container chunk. The
+        //      lowest model dxil-spirv reliably produces SPV for is 6.0;
+        //      bumping is harmless for SM 6.x containers (spirv-cross
+        //      only uses the model to gate intrinsic emission, never to
+        //      reject input).
+        // Untouched when the parser said SM 5.x — we still default to
+        // the caller's library option (51 / 50) so the existing UE 5.4
+        // SM 5.1 fixture stays byte-identical.
+        uint perShaderModel = state.Options.ShaderModel;
+        bool optionallyMarkedSm6 = unrealMetadata?.IsSm6Shader == true;
+        if (optionallyMarkedSm6 || detectedFormat == ShaderArchitecture.Dxil)
+        {
+            // Only bump UPWARDS. If the caller explicitly asked for SM
+            // 6.2 / 6.6 we keep that.
+            if (perShaderModel < 60) perShaderModel = 60;
+        }
+
         EngineDecompileOptions engineOptions = new()
         {
             Format = detectedFormat,
             Metadata = metadata,
-            ShaderModel = state.Options.ShaderModel,
+            ShaderModel = perShaderModel,
             MetadataEnricher = static (spv, md) => MaterialTextureNameInferrer.InferAndAppend(spv, md),
             DebugDumpDirectory = state.Options.DumpFailures ? failureDumpDir : null,
             DebugDumpStem = state.Options.DumpFailures ? (bestSource != null ? "with-symbols" : "no-symbols") : null,
