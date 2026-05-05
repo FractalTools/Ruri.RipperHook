@@ -102,6 +102,43 @@ internal sealed class UnifiedMaterialMetadata
 {
     public string MaterialPath { get; set; } = string.Empty;
     public List<UnifiedShaderMapMetadata> LoadedShaderMaps { get; set; } = new();
+    // Rendering pipeline state captured from the material UProperty bag.
+    // Survives shipping cook because it drives runtime PSO setup. Null when
+    // the asset wasn't a UMaterial / UMaterialInstance (e.g. a function or
+    // collection).
+    public UnifiedMaterialRenderState? RenderState { get; set; }
+}
+
+// User-facing render-state UProperties that survive shipping cook on the
+// `UMaterialInterface` UObject. CUE4Parse parses them via the property bag —
+// these are NOT engine-binary mirrors. Only fields that change ShaderLab
+// output go in here; engine-internal RHI state objects (per-pass stencil
+// initializers etc.) are NOT recoverable from cooked data and are left out.
+internal sealed class UnifiedMaterialRenderState
+{
+    // EBlendMode — drives ShaderLab Blend/ZWrite/Tags["Queue"].
+    public string BlendMode { get; set; } = "BLEND_Opaque";
+    // EMaterialShadingModel — drives Tags["RenderType"].
+    public string ShadingModel { get; set; } = "MSM_DefaultLit";
+    // EMaterialDomain — drives PassType / Tags["RenderType"] suffix.
+    public string MaterialDomain { get; set; } = "MD_Surface";
+    // ETranslucencyLightingMode — annotation only (no direct ShaderLab map).
+    public string TranslucencyLightingMode { get; set; } = "TLM_VolumetricNonDirectional";
+    // EBlendableLocation — for PostProcess materials only.
+    public string? BlendableLocation { get; set; }
+    public bool TwoSided { get; set; }
+    public bool DisableDepthTest { get; set; }
+    public bool IsMasked { get; set; }
+    public bool DitheredLODTransition { get; set; }
+    public float OpacityMaskClipValue { get; set; } = 0.333f;
+    // For UMaterialInstance only — true when BasePropertyOverrides was
+    // present in the cooked archive.
+    public bool HasInstanceOverrides { get; set; }
+    // True when the parameter came from the FMaterialInstanceBasePropertyOverrides
+    // struct (instance-only override) rather than the parent UMaterial.
+    public bool BlendModeOverridden { get; set; }
+    public bool ShadingModelOverridden { get; set; }
+    public bool OpacityMaskClipValueOverridden { get; set; }
 }
 
 internal sealed class UnifiedShaderMapMetadata

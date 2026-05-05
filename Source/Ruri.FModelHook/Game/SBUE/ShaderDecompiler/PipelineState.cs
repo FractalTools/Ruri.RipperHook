@@ -146,6 +146,17 @@ internal sealed class ShaderMapInfo
     // by Pass080 emission. Empty when no UES is available (e.g. global
     // archive shader-maps that have no material side at all).
     public string PropertiesBlock { get; set; } = string.Empty;
+    // Pre-rendered SubShader-level Tags + Pass-level render-state lines —
+    // populated by Pass175 from the primary asset's RenderState UProperty
+    // bag (see UnifiedMaterialMetadata.RenderState). Two outputs:
+    //   * SubShaderTags: full `Tags { ... }` block to drop inside SubShader,
+    //     before the Pass.
+    //   * PassCommands: per-Pass shaderlab commands (Cull, Blend, ZWrite,
+    //     ZTest, ColorMask, AlphaToMask) one per line, no leading indent.
+    // Both empty when the shader-map has no material backing (global
+    // archive entries) or the unified metadata predates render-state writes.
+    public string SubShaderTags { get; set; } = string.Empty;
+    public string PassCommands { get; set; } = string.Empty;
 }
 
 internal sealed class ShaderMapMember

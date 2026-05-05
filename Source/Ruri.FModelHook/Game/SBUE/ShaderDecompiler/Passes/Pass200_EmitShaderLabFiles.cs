@@ -23,7 +23,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // All emission helpers are inlined here:
 //   - WriteContainerShaderFile          renders the .shader text
 //   - BuildVariantKeyword / BuildPermutationKeyword
-//   - TryGetStagePragma / GetStageMacro / StageSortKey / ToUnityStageName
+//   - TryGetStagePragma / StageSortKey / ToUnityStageName
 //   - WriteProgramBlock / SplitLines
 //   - BuildShaderMapMetadata / BuildShaderMapStem
 //   - ResolvePerMapContainer / FinalizeForMap / WriteShaderMapOutputs
@@ -161,6 +161,10 @@ internal static class Pass200_EmitShaderLabFiles
             // primary asset's UniformExpressionSet. Empty when the
             // pipeline ran without a UnifiedShaderMetadata.json.
             PropertiesBlock = map.PropertiesBlock,
+            // Render-state blocks are pre-rendered by Pass 175 from the
+            // primary asset's RenderState UProperty bag.
+            SubShaderTags = map.SubShaderTags,
+            PassCommands = map.PassCommands,
             Programs = outputs
                 .OrderBy(static o => StageSortKey(ToUnityStageName(o.Prep.TypeSuffix)))
                 .ThenBy(static o => o.Prep.ShaderIndex)
@@ -233,6 +237,17 @@ internal static class Pass200_EmitShaderLabFiles
             }
         }
         sb.AppendLine("    SubShader {");
+        // SubShader-level Tags block — RenderType / Queue / annotation tags
+        // built from the material's BlendMode + MaterialDomain by Pass175.
+        if (!string.IsNullOrEmpty(metadata.SubShaderTags))
+        {
+            foreach (string line in metadata.SubShaderTags.Split('\n'))
+            {
+                string trimmed = line.TrimEnd('\r');
+                if (trimmed.Length == 0) sb.AppendLine();
+                else sb.AppendLine("        " + trimmed);
+            }
+        }
         // SINGLE Pass per shader-map. Variants stay inside it as
         // #if defined(VARIANT_<keyword>) blocks. UE shader-maps don't have
         // a Unity-LIGHTMODE-style splitting axis at the cooked level —
@@ -247,8 +262,27 @@ internal static class Pass200_EmitShaderLabFiles
                 .ThenBy(static p => p.ShaderIndex)
                 .ToList();
             sb.AppendLine("        Pass {");
-            sb.AppendLine($"            Name \"{metadata.MaterialName}\"");
+            // No Pass `Name "..."` line: UE shader-maps don't carry a
+            // canonical pass name (a map fans out to many ShaderType *
+            // VertexFactory * Permutation tuples), and substituting the
+            // material name would be misleading boilerplate. Real Unity
+            // Pass names come from the LightMode tag downstream tooling
+            // already keys off — that's the right axis here, not a single
+            // string per shader-map.
             if (!string.IsNullOrWhiteSpace(metadata.ContainerKey)) sb.AppendLine($"            // ContainerKey: {metadata.ContainerKey}");
+            // Per-Pass render-state commands (Cull / Blend / ZWrite / ZTest /
+            // ColorMask / AlphaToMask) — built from material UProperties by
+            // Pass175. Empty when every command would have been the shaderlab
+            // default for an opaque material.
+            if (!string.IsNullOrEmpty(metadata.PassCommands))
+            {
+                foreach (string line in metadata.PassCommands.Split('\n'))
+                {
+                    string trimmed = line.TrimEnd('\r');
+                    if (trimmed.Length == 0) continue;
+                    sb.AppendLine("            " + trimmed);
+                }
+            }
             // Surface the unique ShaderType / VF set this shader-map
             // contains so a reader can see the variant matrix at a glance
             // without scrolling through every `#if` block.
@@ -311,14 +345,24 @@ internal static class Pass200_EmitShaderLabFiles
                     .OrderBy(static p => p.PermutationId)
                     .ThenBy(static p => p.ShaderIndex)
                     .ToList();
-                sb.AppendLine($"            #if defined({GetStageMacro(stageGroup.Key)})");
+
+                // Stage delimiter is a comment block, not a `#if defined(SHADER_STAGE_*)`
+                // wrapper. The per-stage HLSL bodies under this banner each have their
+                // own globals/types/entry function and won't compile concatenated, but
+                // ShaderLab readers consume this file as documentation rather than feed
+                // it to a compiler — comments make the structure obvious without
+                // implying the file is a single compilable translation unit.
+                sb.AppendLine($"            // ============================================================");
+                sb.AppendLine($"            // Stage: {stageGroup.Key}");
+                sb.AppendLine($"            // ============================================================");
 
                 // Each variant gets its OWN #if defined(VARIANT_KEYWORD) block,
-                // even when type info is missing. The variant keyword is built
-                // from whichever attributes we have (PermutationId, ShaderHash,
-                // ShaderIndex), so the matrix is always disambiguatable. This
-                // mirrors Unity's shaderlab where every multi_compile pivot
-                // produces a distinct preprocessed variant.
+                // even when type info is missing. BuildVariantKeyword always
+                // appends ShaderHash (or ShaderIndex) as a final disambiguator
+                // so two binaries that share (ShaderType,VF,Perm) still get
+                // distinct keywords — without that tail every branch in the
+                // chain would carry the same condition and the chain would be
+                // a malformed `#if/#elif/#elif/...` with no real branching.
                 bool wroteFirst = false;
                 foreach (UeShaderLabProgramData program in stagePrograms)
                 {
@@ -333,7 +377,7 @@ internal static class Pass200_EmitShaderLabFiles
                 {
                     sb.AppendLine("            #endif");
                 }
-                sb.AppendLine("            #endif");
+                sb.AppendLine($"            // ===== End Stage: {stageGroup.Key} =====");
                 sb.AppendLine();
             }
             sb.AppendLine("            ENDHLSL");
@@ -342,20 +386,6 @@ internal static class Pass200_EmitShaderLabFiles
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();
-    }
-
-    // Pass name surfaces the most identifying shader-type fragment we have.
-    // Falls back to a hash so each pass still has a unique label even when
-    // type names couldn't be recovered.
-    private static string BuildPassName(UeShaderLabProgramData rep)
-    {
-        if (!string.IsNullOrWhiteSpace(rep.ShaderTypeName)) return rep.ShaderTypeName;
-        if (!string.IsNullOrWhiteSpace(rep.PipelineTypeName)) return rep.PipelineTypeName;
-        string typePart = string.IsNullOrWhiteSpace(rep.ShaderTypeHash) ? "NOTYPE" : (rep.ShaderTypeHash.Length >= 8 ? rep.ShaderTypeHash[..8] : rep.ShaderTypeHash);
-        string vfPart = string.IsNullOrWhiteSpace(rep.VertexFactoryTypeName)
-            ? (string.IsNullOrWhiteSpace(rep.VertexFactoryTypeHash) ? string.Empty : (rep.VertexFactoryTypeHash.Length >= 8 ? rep.VertexFactoryTypeHash[..8] : rep.VertexFactoryTypeHash))
-            : rep.VertexFactoryTypeName;
-        return string.IsNullOrEmpty(vfPart) ? $"Pass_{typePart}" : $"Pass_{typePart}_{vfPart}";
     }
 
     private static bool TryGetStagePragma(string stage, out string pragma)
@@ -372,17 +402,6 @@ internal static class Pass200_EmitShaderLabFiles
         };
         return !string.IsNullOrWhiteSpace(pragma);
     }
-
-    private static string GetStageMacro(string stage) => stage switch
-    {
-        "Vertex" => "SHADER_STAGE_VERTEX",
-        "Fragment" => "SHADER_STAGE_FRAGMENT",
-        "Geometry" => "SHADER_STAGE_GEOMETRY",
-        "Hull" => "SHADER_STAGE_HULL",
-        "Domain" => "SHADER_STAGE_DOMAIN",
-        "Compute" => "SHADER_STAGE_COMPUTE",
-        _ => $"SHADER_STAGE_{stage.ToUpperInvariant()}"
-    };
 
     private static string BuildPassGroupKey(UeShaderLabProgramData program)
     {
@@ -436,34 +455,42 @@ internal static class Pass200_EmitShaderLabFiles
     // Variant keyword that uniquely identifies a single shader binary
     // within its (Stage,Pass) group.
     //
-    // Identifier-priority precedes hash-priority because Unity-equivalent
-    // shaderlab keywords are author-readable: when we know the cooked
-    // ShaderType + VertexFactoryType + PermutationId, we encode them in
-    // the keyword (e.g. VARIANT_FLumenCardPS_FLocalVertexFactory_PERM_0)
-    // and downstream Unity-style tooling can match against them. Only
-    // when names are stripped do we fall through to ShaderHash and finally
-    // ShaderIndex — both stable but opaque.
+    // Always appends a final disambiguator — ShaderHash short prefix when
+    // available, otherwise ShaderIndex — so two binaries with the same
+    // (ShaderType, VertexFactory, PermutationId) still produce distinct
+    // keywords. Without that tail, multiple cooked variants of the same
+    // shader-type collapse onto the same keyword and the surrounding
+    // `#if/#elif` chain becomes malformed (every branch with identical
+    // condition).
     private static string BuildVariantKeyword(UeShaderLabProgramData program)
     {
-        bool hasShaderType = !string.IsNullOrWhiteSpace(program.ShaderTypeName);
-        bool hasVf = !string.IsNullOrWhiteSpace(program.VertexFactoryTypeName);
-        if (hasShaderType || hasVf)
+        StringBuilder sb = new();
+        sb.Append("VARIANT");
+
+        if (!string.IsNullOrWhiteSpace(program.ShaderTypeName))
         {
-            string typePart = hasShaderType ? SanitizeIdent(program.ShaderTypeName) : "ANYTYPE";
-            string vfPart = hasVf ? SanitizeIdent(program.VertexFactoryTypeName) : "NOVF";
-            string permPart = program.PermutationId >= 0 ? $"_PERM_{program.PermutationId}" : string.Empty;
-            return $"VARIANT_{typePart}_{vfPart}{permPart}";
+            sb.Append('_').Append(SanitizeIdent(program.ShaderTypeName));
+        }
+        if (!string.IsNullOrWhiteSpace(program.VertexFactoryTypeName))
+        {
+            sb.Append('_').Append(SanitizeIdent(program.VertexFactoryTypeName));
         }
         if (program.PermutationId >= 0)
         {
-            return $"VARIANT_PERM_{program.PermutationId}";
+            sb.Append("_PERM_").Append(program.PermutationId);
         }
+
         if (!string.IsNullOrWhiteSpace(program.ShaderHash))
         {
-            string shortHash = program.ShaderHash.Length >= 12 ? program.ShaderHash[..12] : program.ShaderHash;
-            return $"VARIANT_H_{shortHash}";
+            string shortHash = program.ShaderHash.Length >= 8 ? program.ShaderHash[..8] : program.ShaderHash;
+            sb.Append('_').Append(shortHash);
         }
-        return $"VARIANT_IDX_{program.ShaderIndex:D6}";
+        else
+        {
+            sb.Append("_IDX").Append(program.ShaderIndex.ToString("D6"));
+        }
+
+        return sb.ToString();
     }
 
     // Replace HLSL-illegal characters with underscores so the resulting
@@ -547,6 +574,12 @@ internal static class Pass200_EmitShaderLabFiles
         // metadata is available (e.g. global archive entries that have no
         // material side at all).
         public string PropertiesBlock { get; set; } = string.Empty;
+        // Pre-rendered SubShader Tags block (Pass175 output, from RenderState
+        // UProperties). Empty when no material backing.
+        public string SubShaderTags { get; set; } = string.Empty;
+        // Pre-rendered per-Pass shaderlab commands (Cull/Blend/ZWrite/...).
+        // One command per line, no leading whitespace; the emitter indents.
+        public string PassCommands { get; set; } = string.Empty;
     }
 
     private sealed class UeShaderLabProgramData

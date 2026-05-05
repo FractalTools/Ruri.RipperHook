@@ -164,6 +164,31 @@ internal sealed class UnifiedMaterialReader
         return SelectUniformExpressionSet(materialEntry, shaderPlatform);
     }
 
+    // Returns the JsonElement for the material's `RenderState` field if it
+    // was populated by Pass020. Null when the asset wasn't a UMaterialInterface
+    // subclass that carries render state (functions, collections), or when
+    // the unified metadata file pre-dates the render-state writer.
+    public JsonElement? TryGetRenderState(string materialPath)
+    {
+        if (_materialInterfaces == null)
+        {
+            return null;
+        }
+
+        string normalizedPath = materialPath.Replace('\\', '/');
+        if (!TryResolveMaterialEntry(normalizedPath, out JsonElement materialEntry))
+        {
+            return null;
+        }
+
+        if (!materialEntry.TryGetProperty("RenderState", out JsonElement renderState) || renderState.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return renderState.Clone();
+    }
+
     public MaterialSymbolSource? GetSource(string materialPath, string? shaderPlatform = null)
     {
         if (_materialInterfaces == null)

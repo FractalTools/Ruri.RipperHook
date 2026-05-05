@@ -9,6 +9,7 @@ using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Objects.RenderCore;
 using CUE4Parse.UE4.Shaders;
 using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
@@ -151,7 +152,14 @@ internal static class Pass020_ScanMaterialPackages
 
         var metadata = new UnifiedMaterialMetadata
         {
-            MaterialPath = materialPath
+            MaterialPath = materialPath,
+            // Read render-state UProperties off the material UObject. These survive
+            // shipping cook because the runtime needs them for PSO setup. Source:
+            // UMaterial typed fields where the asset is a UMaterial, falling back
+            // to FMaterialInstanceBasePropertyOverrides for UMaterialInstance.
+            // MaterialDomain/BlendableLocation are read via the property bag
+            // because CUE4Parse doesn't ship typed enum mirrors for them.
+            RenderState = BuildRenderState(material)
         };
 
         foreach (var resource in material.LoadedMaterialResources)
@@ -190,6 +198,81 @@ internal static class Pass020_ScanMaterialPackages
         }
 
         return metadata.LoadedShaderMaps.Count > 0 ? metadata : null;
+    }
+
+    // Reads the render-state UProperties from a material UObject and returns
+    // the unified DTO. Tries the typed UMaterial fields first, then
+    // FMaterialInstanceBasePropertyOverrides for instances; finally probes
+    // the raw property bag for fields CUE4Parse doesn't expose typed
+    // (MaterialDomain, BlendableLocation, DitheredLODTransition).
+    //
+    // Returns null only when the asset is neither a UMaterial nor a
+    // UMaterialInstance — in practice every UMaterialInterface this scan
+    // sees yields at least the default surface-opaque set.
+    private static UnifiedMaterialRenderState? BuildRenderState(UMaterialInterface material)
+    {
+        UnifiedMaterialRenderState rs = new();
+
+        // Typed UMaterial properties (live as fields on the C# type after
+        // UMaterial.Deserialize; absent when the asset is a UMaterialInstance
+        // or any other UMaterialInterface subclass).
+        if (material is UMaterial umat)
+        {
+            rs.BlendMode = umat.BlendMode.ToString();
+            rs.ShadingModel = umat.ShadingModel.ToString();
+            rs.TranslucencyLightingMode = umat.TranslucencyLightingMode.ToString();
+            rs.TwoSided = umat.TwoSided;
+            rs.DisableDepthTest = umat.bDisableDepthTest;
+            rs.IsMasked = umat.bIsMasked;
+            rs.OpacityMaskClipValue = umat.OpacityMaskClipValue;
+        }
+
+        // Instance-level overrides take precedence over the parent's UMaterial
+        // values when present. UMaterialInstance carries a typed
+        // FMaterialInstanceBasePropertyOverrides struct; UE only writes
+        // members that were actually overridden in editor.
+        if (material is UMaterialInstance instance && instance.BasePropertyOverrides != null)
+        {
+            rs.HasInstanceOverrides = true;
+            rs.BlendModeOverridden = true;
+            rs.BlendMode = instance.BasePropertyOverrides.BlendMode.ToString();
+            rs.ShadingModelOverridden = true;
+            rs.ShadingModel = instance.BasePropertyOverrides.ShadingModel.ToString();
+            rs.OpacityMaskClipValueOverridden = true;
+            rs.OpacityMaskClipValue = instance.BasePropertyOverrides.OpacityMaskClipValue;
+            rs.DitheredLODTransition = instance.BasePropertyOverrides.DitheredLODTransition;
+
+            // Walk one level up through Parent to fill in fields the override
+            // struct doesn't carry (TwoSided, DisableDepthTest, IsMasked,
+            // TranslucencyLightingMode). UE evaluates these from the parent
+            // material at runtime when the instance doesn't override them.
+            if (instance.Parent is UMaterial parentMat)
+            {
+                if (!rs.TwoSided) rs.TwoSided = parentMat.TwoSided;
+                if (!rs.DisableDepthTest) rs.DisableDepthTest = parentMat.bDisableDepthTest;
+                if (!rs.IsMasked) rs.IsMasked = parentMat.bIsMasked;
+                rs.TranslucencyLightingMode = parentMat.TranslucencyLightingMode.ToString();
+            }
+        }
+
+        // Property-bag probes for fields without a typed CUE4Parse mirror.
+        // GetOrDefault<FName> returns the raw enum literal name as text on
+        // byte-backed enum properties; empty when the property wasn't
+        // serialised (i.e. the editor default applies).
+        if (material.TryGetValue(out FName domainName, "MaterialDomain") && !domainName.IsNone)
+        {
+            rs.MaterialDomain = domainName.Text;
+        }
+        if (material.TryGetValue(out FName blendableLoc, "BlendableLocation") && !blendableLoc.IsNone)
+        {
+            rs.BlendableLocation = blendableLoc.Text;
+        }
+        if (!rs.DitheredLODTransition && material.TryGetValue(out bool dithered, "DitheredLODTransition"))
+        {
+            rs.DitheredLODTransition = dithered;
+        }
+
+        return rs;
     }
 
     private static UnifiedPointerTable BuildPointerTable(FShaderMapPointerTable pointerTable)

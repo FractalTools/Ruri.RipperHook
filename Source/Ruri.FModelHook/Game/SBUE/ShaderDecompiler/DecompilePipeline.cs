@@ -36,6 +36,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   Pass 150  Compose 120-140 into per-shader-map view + usage / name maps
 //   Pass 160  Spin up per-material symbol-source readers
 //   Pass 170  Build shaderlab `Properties { ... }` from each map's UES
+//   Pass 175  Build SubShader Tags + per-Pass render-state lines from each
+//             map's RenderState UProperty bag (BlendMode/TwoSided/etc.)
 //   Pass 180  Phase 1 — strip UE wrapper, build SerializedProgramData +
 //             EngineDecompileOptions per shader binary -> ShaderPrepByIndex.
 //   Pass 190  Phase 2 — drive ShaderDecompilerEngine.Decompile across
@@ -73,6 +75,7 @@ public static class DecompilePipeline
         using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
         using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
         using (new TimingCookie(state, "Pass 170: Build shaderlab Properties")) Pass170_BuildShaderLabProperties.DoPass(state);
+        using (new TimingCookie(state, "Pass 175: Build render-state block"))   Pass175_BuildRenderStateBlock.DoPass(state);
         using (new TimingCookie(state, "Pass 180: Prepare shader binaries"))    Pass180_PrepareShaderBinaries.DoPass(state);
 
         // Pass 190 + Pass 200 INTERLEAVED per shader-map for streaming.
