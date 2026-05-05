@@ -3,7 +3,7 @@ using CUE4Parse.UE4.IO;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 040 — Walk every mounted IoStore reader and harvest the
+// Pass 020 — Walk every mounted IoStore reader and harvest the
 // per-package shader-map-hash list straight out of the container header
 // (`StoreEntries[i].ShaderMapHashes`). Result populates
 // `state.Root.PackageShaderMapHashes` keyed by package
@@ -11,13 +11,17 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //
 // This is the IoStore-side data source for the on-disk shader-map hash.
 // It's distinct from the per-material `CookedShaderMapIdHash` /
-// `ShaderContentHash` populated by Pass 020 — IoStore cooks store the
+// `ShaderContentHash` populated by Pass 030 — IoStore cooks store the
 // on-disk hash here, NOT inside the material's UAsset, so without this
 // pass the asset-info sidecar links are missing for IoStore packages.
 //
+// Runs FIRST inside ExportPipeline.Run so Pass 030's material scan can
+// scope itself to packages whose hashes intersect the current archive
+// (instead of walking every UAsset in the provider).
+//
 // Cached: same FModel session keeps the same provider, so this only
 // runs once per `ExportPipelineState`.
-internal static class Pass040_ExtractIoStoreShaderMapHashes
+internal static class Pass020_ExtractIoStoreShaderMapHashes
 {
     public static void DoPass(ExportPipelineState state)
     {

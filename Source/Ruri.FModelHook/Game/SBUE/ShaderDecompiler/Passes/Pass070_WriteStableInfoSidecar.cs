@@ -3,15 +3,15 @@ using Newtonsoft.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 080 — Write the per-library `<ExportBasePath>.stableinfo.json`
-// from the `state.StableInfo` DTO that Pass 060 just composed. This is
+// Pass 070 — Write the per-library `<ExportBasePath>.stableinfo.json`
+// from the `state.StableInfo` DTO that Pass 050 just composed. This is
 // the per-shader-map breakdown (shader hashes, frequencies, type/VF/
 // permutation truth) consumed by Pass 130 (LoadStableInfoSidecar) on
 // the decompile side.
 //
-// Skipped silently when StableInfo is null — symmetric with Pass 070's
+// Skipped silently when StableInfo is null — symmetric with Pass 060's
 // behaviour for the assetinfo sidecar.
-internal static class Pass080_WriteStableInfoSidecar
+internal static class Pass070_WriteStableInfoSidecar
 {
     public static void DoPass(ExportPipelineState state)
     {

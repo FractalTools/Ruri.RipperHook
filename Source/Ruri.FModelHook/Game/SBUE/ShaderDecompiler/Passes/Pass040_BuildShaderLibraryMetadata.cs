@@ -5,7 +5,7 @@ using CUE4Parse.UE4.Shaders;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 050 — Build the per-library `UnifiedShaderLibraryMetadata` view
+// Pass 040 — Build the per-library `UnifiedShaderLibraryMetadata` view
 // for the current `state.Entry` and stash it under
 // `state.Root.ShaderCodeArchives[entry.PathWithoutExtension]`.
 //
@@ -19,7 +19,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //
 // Runs every library hit (no caching gate) — a single FModel session
 // can export multiple libraries and each gets its own archive entry.
-internal static class Pass050_BuildShaderLibraryMetadata
+internal static class Pass040_BuildShaderLibraryMetadata
 {
     public static void DoPass(ExportPipelineState state)
     {

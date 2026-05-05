@@ -5,8 +5,8 @@ using Ruri.Hook.Core;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 060 — Compose the per-library `.assetinfo`/`.stableinfo` payloads
-// (in-memory DTOs only; the actual file writes are Pass 070/080). For
+// Pass 050 — Compose the per-library `.assetinfo`/`.stableinfo` payloads
+// (in-memory DTOs only; the actual file writes are Pass 060/070). For
 // each shader-map in the current library:
 //
 //   1. Resolve owning materials via the combined hash -> materials map
@@ -17,12 +17,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   2. Walk the shader-map's `ShaderIndicesOffset` slice to build the
 //      hash + frequency lists, plus per-shader stable records that join
 //      type/VF/permutation truth from the unified metadata graph using
-//      `Pass030_ResolveHashedNames` to recover symbolic names from hashes.
+//      `HashedNamesResolver` to recover symbolic names from hashes.
 //
 // All of the helpers below are consumed by exactly this pass; they were
-// moved out of the old Pass020_BuildUnifiedShaderMetadata monolith and
-// inlined per the "no helpers outside passes" rule.
-internal static class Pass060_BuildStableShaderRecords
+// moved out of the old monolithic build pass and inlined per the
+// "no helpers outside passes" rule.
+internal static class Pass050_BuildStableShaderRecords
 {
     private static readonly bool DebugTrace = string.Equals(Environment.GetEnvironmentVariable("RURI_TRUTH_DEBUG"), "1", StringComparison.Ordinal);
 
@@ -122,7 +122,7 @@ internal static class Pass060_BuildStableShaderRecords
 
         state.AssetInfo = assetInfo;
         state.StableInfo = stableInfo;
-        HookLogger.Log($"[Pass060_BuildStableShaderRecords] {state.Entry.NameWithoutExtension}: linked={linked} shader-maps, unlinked={unlinked}.");
+        HookLogger.Log($"[Pass050_BuildStableShaderRecords] {state.Entry.NameWithoutExtension}: linked={linked} shader-maps, unlinked={unlinked}.");
     }
 
     private static Dictionary<string, HashSet<string>> BuildHashToMaterialsMap(UnifiedShaderMetadataRoot output)
@@ -360,7 +360,7 @@ internal static class Pass060_BuildStableShaderRecords
             foreach (UnifiedTypeDependency dep in table.TypeDependencies)
             {
                 if (string.IsNullOrWhiteSpace(dep.Name)) continue;
-                string hash = Pass030_ResolveHashedNames.HashName(dep.Name);
+                string hash = HashedNamesResolver.HashName(dep.Name);
                 result.TryAdd(hash, dep.Name);
                 if (DebugTrace && (dep.Name.Contains("LumenCard") || dep.Name.Contains("BasePass") || dep.Name.Contains("Hit"))) HookLogger.Log($"[NameMap] {dep.Name} -> {hash}");
             }
@@ -406,9 +406,9 @@ internal static class Pass060_BuildStableShaderRecords
             {
                 ResourceIndex = shader.ResourceIndex,
                 ShaderTypeHash = typeHash,
-                ShaderTypeName = ResolveName(typeHash, nameByHash, Pass030_ResolveHashedNames.ResolveShaderTypeName),
+                ShaderTypeName = ResolveName(typeHash, nameByHash, HashedNamesResolver.ResolveShaderTypeName),
                 VertexFactoryTypeHash = vfHash,
-                VertexFactoryTypeName = ResolveName(vfHash, nameByHash, Pass030_ResolveHashedNames.ResolveVertexFactoryTypeName),
+                VertexFactoryTypeName = ResolveName(vfHash, nameByHash, HashedNamesResolver.ResolveVertexFactoryTypeName),
                 PermutationId = content.ShaderPermutations[i]
             });
         }
@@ -426,9 +426,9 @@ internal static class Pass060_BuildStableShaderRecords
                 {
                     ResourceIndex = shader.ResourceIndex,
                     ShaderTypeHash = typeHash,
-                    ShaderTypeName = ResolveName(typeHash, nameByHash, Pass030_ResolveHashedNames.ResolveShaderTypeName),
+                    ShaderTypeName = ResolveName(typeHash, nameByHash, HashedNamesResolver.ResolveShaderTypeName),
                     VertexFactoryTypeHash = vfHash,
-                    VertexFactoryTypeName = ResolveName(vfHash, nameByHash, Pass030_ResolveHashedNames.ResolveVertexFactoryTypeName),
+                    VertexFactoryTypeName = ResolveName(vfHash, nameByHash, HashedNamesResolver.ResolveVertexFactoryTypeName),
                     PermutationId = meshMap.ShaderPermutations[i]
                 });
             }
@@ -445,12 +445,12 @@ internal static class Pass060_BuildStableShaderRecords
                 {
                     ResourceIndex = shader.ResourceIndex,
                     ShaderTypeHash = shader.TypeHash,
-                    ShaderTypeName = ResolveName(shader.TypeHash, nameByHash, Pass030_ResolveHashedNames.ResolveShaderTypeName),
+                    ShaderTypeName = ResolveName(shader.TypeHash, nameByHash, HashedNamesResolver.ResolveShaderTypeName),
                     VertexFactoryTypeHash = vfHash,
-                    VertexFactoryTypeName = ResolveName(vfHash, nameByHash, Pass030_ResolveHashedNames.ResolveVertexFactoryTypeName),
+                    VertexFactoryTypeName = ResolveName(vfHash, nameByHash, HashedNamesResolver.ResolveVertexFactoryTypeName),
                     PermutationId = pipeline.PermutationIds[i],
                     PipelineTypeHash = pipeline.TypeHash,
-                    PipelineTypeName = ResolveName(pipeline.TypeHash, nameByHash, Pass030_ResolveHashedNames.ResolvePipelineTypeName)
+                    PipelineTypeName = ResolveName(pipeline.TypeHash, nameByHash, HashedNamesResolver.ResolvePipelineTypeName)
                 });
             }
         }

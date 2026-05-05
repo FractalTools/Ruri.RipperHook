@@ -3,15 +3,15 @@ using Newtonsoft.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 070 — Write the per-library `<ExportBasePath>.assetinfo.json` from
-// the `state.AssetInfo` DTO that Pass 060 just composed. This is the
+// Pass 060 — Write the per-library `<ExportBasePath>.assetinfo.json` from
+// the `state.AssetInfo` DTO that Pass 050 just composed. This is the
 // shader-map-hash → assets[] sidecar consumed downstream by Pass 120
 // (LoadAssetInfoSidecar) on the decompile side.
 //
-// Skipped silently when AssetInfo is null — Pass 060 may have decided
+// Skipped silently when AssetInfo is null — Pass 050 may have decided
 // the library has nothing to link (e.g. global shader archive with no
 // material side at all).
-internal static class Pass070_WriteAssetInfoSidecar
+internal static class Pass060_WriteAssetInfoSidecar
 {
     public static void DoPass(ExportPipelineState state)
     {

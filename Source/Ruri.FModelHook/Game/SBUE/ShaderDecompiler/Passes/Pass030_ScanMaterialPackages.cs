@@ -13,9 +13,16 @@ using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 020 — Walk every material UAsset known to FModel's provider and
-// fold its `LoadedMaterialResources[*].LoadedShaderMap` graph into
+// Pass 030 — Walk every material UAsset known to FModel's provider and
+// fold its `LoadedMaterialResources[*].LoadedShaderMap` graph (when
+// inline shader-maps survived) plus `CachedExpressionData` parameter
+// names + the IoStore container's `PackageShaderMapHashes` mirror into
 // `state.Root.MaterialInterfaces`.
+//
+// Runs AFTER Pass 020 so we can scope the scan to packages whose
+// shader-map hashes intersect the current archive (the IoStore hash
+// index Pass 020 builds turns a multi-minute full-provider walk into a
+// few-second targeted load).
 //
 // This is the expensive step: each candidate UAsset is loaded via
 // `provider.LoadPackageObject`, parsed, and unrolled into the unified
@@ -28,7 +35,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // exactly one method (`ExtractMaterialContext`); they are inlined per the
 // "no helpers outside passes" rule. Splitting them into per-DTO files
 // would create a dense one-way using-cycle without any reuse benefit.
-internal static class Pass020_ScanMaterialPackages
+internal static class Pass030_ScanMaterialPackages
 {
     public static void DoPass(ExportPipelineState state)
     {
@@ -169,7 +176,7 @@ internal static class Pass020_ScanMaterialPackages
         catch (Exception ex)
         {
             loadFailures++;
-            HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] Skipped {packagePath}: {ex.GetType().Name}: {ex.Message}");
+            HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] Skipped {packagePath}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
 
@@ -182,7 +189,7 @@ internal static class Pass020_ScanMaterialPackages
         catch (Exception ex)
         {
             loadFailures++;
-            HookLogger.LogWarning($"[Pass020_ScanMaterialPackages] ExtractMaterialContext failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
+            HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] ExtractMaterialContext failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }

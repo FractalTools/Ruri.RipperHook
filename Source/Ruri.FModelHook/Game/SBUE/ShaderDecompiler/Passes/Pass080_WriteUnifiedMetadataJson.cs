@@ -4,7 +4,7 @@ using Ruri.Hook.Core;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 090 — Write `<RawDataDirectory>/<projectName>/UnifiedShaderMetadata.json`
+// Pass 080 — Write `<RawDataDirectory>/<projectName>/UnifiedShaderMetadata.json`
 // after EVERY archive export. The export pipeline accumulates data on
 // `state.Root` across consecutive `ExportData_Hook` fires (one per
 // `.ushaderbytecode`), and downstream consumers (the in-process
@@ -15,12 +15,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // caused materials added by archive N+1 to never make it into the JSON
 // the decompile uses — which is the root cause of every "UnknownMaterial"
 // shader emitted out of any archive other than the FIRST one exported in
-// a given FModel session. Pass090 is now idempotent: cheap rewrite (atomic
+// a given FModel session. Pass 080 is now idempotent: cheap rewrite (atomic
 // move via Replace) is preferable to a stale file.
 //
 // Skips when there's nothing to write (no materials, no IoStore hashes,
 // no archives) — same guard the original `ExportAll` had.
-internal static class Pass090_WriteUnifiedMetadataJson
+internal static class Pass080_WriteUnifiedMetadataJson
 {
     public static void DoPass(ExportPipelineState state)
     {
@@ -29,7 +29,7 @@ internal static class Pass090_WriteUnifiedMetadataJson
             && output.PackageShaderMapHashes.Count == 0
             && output.ShaderCodeArchives.Count == 0)
         {
-            HookLogger.LogWarning("[Pass090_WriteUnifiedMetadataJson] No verified shader metadata found to export.");
+            HookLogger.LogWarning("[Pass080_WriteUnifiedMetadataJson] No verified shader metadata found to export.");
             return;
         }
 
@@ -58,6 +58,6 @@ internal static class Pass090_WriteUnifiedMetadataJson
         }
 
         state.UnifiedMetadataWritten = true;
-        HookLogger.LogSuccess($"[Pass090_WriteUnifiedMetadataJson] Wrote unified metadata: {output.MaterialInterfaces.Count} materials, {output.PackageShaderMapHashes.Count} package->shader-map associations, {output.ShaderCodeArchives.Count} archives.");
+        HookLogger.LogSuccess($"[Pass080_WriteUnifiedMetadataJson] Wrote unified metadata: {output.MaterialInterfaces.Count} materials, {output.PackageShaderMapHashes.Count} package->shader-map associations, {output.ShaderCodeArchives.Count} archives.");
     }
 }

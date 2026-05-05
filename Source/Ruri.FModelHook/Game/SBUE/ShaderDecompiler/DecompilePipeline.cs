@@ -17,16 +17,18 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // MaterialUniformBufferLayout, etc.).
 //
 // Export pipeline (FModel-hook side; needs vm.Provider) — orchestrated
-// by ExportPipeline.Run, see ExportPipeline.cs:
-//   Pass 010  Save IoStore archive as flat FSerializedShaderArchive
-//   Pass 020  Scan material packages -> Root.MaterialInterfaces (cached)
-//   Pass 030  FHashedName(CityHash64) resolver (used by Pass 060)
-//   Pass 040  Extract IoStore shader-map hashes (cached)
-//   Pass 050  Per-library archive metadata view
-//   Pass 060  Build per-shader-map stable records
-//   Pass 070  Write `<base>.assetinfo.json`
-//   Pass 080  Write `<base>.stableinfo.json`
-//   Pass 090  Write `UnifiedShaderMetadata.json` (once total)
+// by ExportPipeline.Run, see ExportPipeline.cs. Pass digits == execution
+// order. The `HashedNamesResolver` static utility (no Pass number) is
+// consumed on demand by Pass 050; it has no execution slot so it doesn't
+// take one of the numeric labels.
+//   Pass 010  Save IoStore archive as flat FSerializedShaderArchive (from hook)
+//   Pass 020  Extract IoStore shader-map hashes (cached)
+//   Pass 030  Scan material packages -> Root.MaterialInterfaces (cached)
+//   Pass 040  Per-library archive metadata view
+//   Pass 050  Build per-shader-map stable records
+//   Pass 060  Write `<base>.assetinfo.json`
+//   Pass 070  Write `<base>.stableinfo.json`
+//   Pass 080  Write `UnifiedShaderMetadata.json` (rewritten every archive)
 //
 // Decompile pipeline (CLI-runnable; reads .ushaderlib + JSON sidecars):
 //   Pass 110  Read .ushaderlib bytes into ShaderLibrary

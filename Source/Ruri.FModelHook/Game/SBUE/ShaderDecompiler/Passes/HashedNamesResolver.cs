@@ -8,20 +8,26 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 120 — FHashedName-equivalent resolver. UE's FHashedName
+// HashedNamesResolver — FHashedName-equivalent resolver. UE's FHashedName
 // (Engine/Source/Runtime/Core/Public/Serialization/MemoryImage.h:850)
 // hashes UPPERCASED UTF-8 / ASCII bytes with CityHash64WithSeed where
 // the seed is the FName's internal number (0 for shader/struct type
 // names). Cooked metadata strips type names but keeps the 64-bit hash;
 // to recover names we either:
 //   (a) hash everything in TypeDependencies and look up in that map
-//       (preferred — purely metadata-driven; what Pass110 uses), or
+//       (preferred — purely metadata-driven; what Pass 050 uses), or
 //   (b) scan UE source's `IMPLEMENT_*_SHADER_TYPE` macros and hash the
 //       captured names (fallback — works without TypeDependencies).
 //
 // Both paths converge on `HashName()`, the public CityHash entry; the
 // `Resolve*` accessors are the (b)-path UE-source-scan fallback.
-internal static class Pass030_ResolveHashedNames
+//
+// This is a STATIC UTILITY, not a sequenced pass — it's consumed on
+// demand by Pass 050 (BuildStableShaderRecords) when it needs to
+// translate an FHashedName 64-bit hash back to a readable type name.
+// That's why it lacks a "Pass NNN_" prefix: it has no execution slot
+// in the pipeline; the orchestrator never calls it directly.
+internal static class HashedNamesResolver
 {
     private static readonly object Lock = new();
     private static Dictionary<string, string>? _shaderTypeNames;
