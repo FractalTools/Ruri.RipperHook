@@ -28,6 +28,9 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //             shader-map hashes intersect the current archive's hashes;
 //             cached in `LoadedMaterialCache` across hook fires so a second
 //             archive that references the same material loads it once.
+//   - Pass 035 fills `Root.NiagaraShaderMapHashes` from
+//             FNiagaraShaderMap.ResourceHash (independent ID space; gated
+//             by NiagaraBridgeExtracted)
 //   - Pass 040 fills `Root.ShaderCodeArchives[entry.PathWithoutExtension]` per-library
 //   - Pass 050 fills `AssetInfo` + `StableInfo` per-library
 //   - Pass 060 writes `<ExportBasePath>.assetinfo.json` from AssetInfo
@@ -63,6 +66,7 @@ internal sealed class ExportPipelineState
 
     // Once-only gates.
     public bool IoStoreHashesExtracted { get; set; }
+    public bool NiagaraBridgeExtracted { get; set; }
     public bool UnifiedMetadataWritten { get; set; }
 
     // Per-library scratch — Pass 050 populates, Pass 060/070 consume.

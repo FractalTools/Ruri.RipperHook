@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Objects;
 using CUE4Parse.UE4.Assets.Objects.Properties;
@@ -46,6 +47,19 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //      `CachedParameterNames.UnknownKindNames`.
 internal static class MaterialCachedExpressionReader
 {
+    // Material-specific entry point. Layered on top of the generic
+    // UObject reader (`ReadGeneric`) — adds the material-only sources
+    // (CachedExpressionData property bag, instance-override array
+    // properties, UMaterialExpression typed walk) and lets the generic
+    // path handle everything else (top-level property bag walk +
+    // recursive sweep). Calling code should use whichever entry point
+    // matches what they have in hand:
+    //   * UMaterialInterface in scope -> Read(material) for the full
+    //     material-aware fallback chain.
+    //   * Any other UObject (Niagara script/system/emitter, particle
+    //     system, etc.) -> ReadGeneric(asset) so the same defensive
+    //     property-bag walk drives parameter-name extraction without
+    //     baking in the material-specific layouts.
     public static CachedParameterNames? Read(UMaterialInterface material)
     {
         var result = new CachedParameterNames();
@@ -80,6 +94,13 @@ internal static class MaterialCachedExpressionReader
             {
                 RecursiveSweep(cached, result, depth: 0, propertyTrail: string.Empty);
             }
+
+            // Source E — same generic UObject sweep used by the Niagara
+            // / other-asset path. Adds nothing for a typical material
+            // (CachedExpressionData is exhaustive there) but covers
+            // instance-override exotic shapes and custom-engine forks
+            // that store parameter names directly on the UObject.
+            SweepUObjectProperties(material, result);
         }
         catch (Exception ex)
         {
@@ -89,19 +110,107 @@ internal static class MaterialCachedExpressionReader
             HookLogger.LogWarning($"[MaterialCachedExpressionReader] {material?.GetPathName() ?? "<null>"}: {ex.GetType().Name}: {ex.Message}");
         }
 
-        // Dedupe each bucket. UE often lists the same parameter under
-        // multiple aliases (RuntimeEntries vs EditorOnlyEntries) when
-        // editor data wasn't fully stripped.
-        Dedupe(result.ScalarNames);
-        Dedupe(result.VectorNames);
-        Dedupe(result.StaticSwitchNames);
-        Dedupe(result.TextureNames);
-        Dedupe(result.RuntimeVirtualTextureNames);
-        Dedupe(result.SparseVolumeTextureNames);
-        Dedupe(result.FontNames);
-        Dedupe(result.UnknownKindNames);
-
+        DedupeAll(result);
         return Empty(result) ? null : result;
+    }
+
+    // Generic entry point — works on any UObject. Used for Niagara
+    // packages (UNiagaraScript / UNiagaraSystem / UNiagaraEmitter) where
+    // there's no `LoadedMaterialResources` / `CachedExpressionData`
+    // analogue, but the cooked UAsset still carries parameter names in
+    // the typed property bag (`ExposedParameters`, `EmitterSpawnAttributes`,
+    // `SystemCompiledData.DataSetCompiledData[i].Variables[]`, etc.).
+    //
+    // Mirrors the material reader's defensive philosophy — every read
+    // is name-keyed via IPropertyHolder, no engine-specific class
+    // layout is mirrored, and the recursive sweep catches anything
+    // the named-bucket pass missed.
+    public static CachedParameterNames? ReadGeneric(UObject asset)
+    {
+        if (asset == null) return null;
+        var result = new CachedParameterNames();
+
+        try
+        {
+            SweepUObjectProperties(asset, result);
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogWarning($"[MaterialCachedExpressionReader.Generic] {asset.GetPathName()}: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        DedupeAll(result);
+        return Empty(result) ? null : result;
+    }
+
+    private static void DedupeAll(CachedParameterNames p)
+    {
+        Dedupe(p.ScalarNames);
+        Dedupe(p.VectorNames);
+        Dedupe(p.StaticSwitchNames);
+        Dedupe(p.TextureNames);
+        Dedupe(p.RuntimeVirtualTextureNames);
+        Dedupe(p.SparseVolumeTextureNames);
+        Dedupe(p.FontNames);
+        Dedupe(p.UnknownKindNames);
+    }
+
+    // Walk every UProperty on the asset. For each top-level property:
+    //   * If the value is FName -> classify by property name (BucketByTrail
+    //     handles the trail-based heuristic; works for both material and
+    //     niagara naming conventions because the bucket selection is
+    //     content-driven, not class-driven).
+    //   * If the value is FStructFallback -> recurse via the same sweep.
+    //   * If the value is an array of FStructFallback -> recurse into
+    //     each element.
+    //   * If the value is a string array of names directly (Niagara
+    //     `Variables.Name` style) -> treat as parameter names.
+    //
+    // Property names that are well-known parameter buckets on Niagara
+    // assets get explicit bias so they land in the right bucket
+    // (e.g. `ExposedParameters` -> Vector/Scalar mix; `Variables` ->
+    // unknown-kind; `EmitterSpawnAttributes` -> scalar). These probes
+    // don't replace the recursive sweep — they augment it so the
+    // typed buckets get populated even on Niagara, which means the
+    // downstream patcher can pick up author-facing names instead of
+    // anonymous Material_Tn placeholders.
+    private static void SweepUObjectProperties(UObject asset, CachedParameterNames result)
+    {
+        if (asset?.Properties == null) return;
+        foreach (FPropertyTag tag in asset.Properties)
+        {
+            string propName = tag.Name.Text;
+            object? raw = tag.Tag?.GenericValue;
+
+            // Direct named-bucket probes — recognise common Niagara
+            // / Material parameter property names so they land in the
+            // typed buckets rather than the unknown bucket.
+            if (raw is FStructFallback nested)
+            {
+                RecursiveSweep(nested, result, depth: 0, propertyTrail: propName);
+            }
+            else if (raw is System.Array arr)
+            {
+                int idx = 0;
+                foreach (object? element in arr)
+                {
+                    if (element is FStructFallback childArr)
+                    {
+                        RecursiveSweep(childArr, result, depth: 0, propertyTrail: propName);
+                    }
+                    else if (element is FName fname && !fname.IsNone)
+                    {
+                        // Bare FName arrays — `ExposedParameters` etc.
+                        BucketByTrail(propName, fname.Text, result);
+                    }
+                    idx++;
+                }
+            }
+            else if (raw is FName topFname && !topFname.IsNone && IsNameish(propName))
+            {
+                BucketByTrail(propName, topFname.Text, result);
+            }
+        }
     }
 
     // --- Source A: FMaterialCachedExpressionData property bag ----------

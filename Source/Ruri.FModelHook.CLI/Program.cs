@@ -99,7 +99,8 @@ public static class Program
             {
                 explicitConfig.EnabledHooks.Add(id);
             }
-            HookLogger.Log($"[Ruri.FModelHook.CLI] CLI hooks: {string.Join(", ", opts.Hooks)}");
+            EnsureAutoExportHookEnabled(explicitConfig);
+            HookLogger.Log($"[Ruri.FModelHook.CLI] CLI hooks: {string.Join(", ", explicitConfig.EnabledHooks)}");
             RuriHook.ApplyHooks(explicitConfig);
             return;
         }
@@ -117,20 +118,78 @@ public static class Program
         }
         else
         {
-            HookLogger.Log($"[Ruri.FModelHook.CLI] Persisted hooks: {string.Join(", ", config.EnabledHooks)}");
+            // CRITICAL: always force the AutoExport hook into the enabled set
+            // for CLI mode. The persisted config from a GUI session typically
+            // only enables the interactive `UE_ShaderDecompiler_` hook (because
+            // GUI users export by clicking, not by auto-driving). Without
+            // `UE_ShaderDecompiler_AutoExport_` in the set, the hook's
+            // `Initialize()` never runs and the `MainWindow.OnLoaded` detour
+            // is never installed — so the CLI boots, shows the FModel main
+            // window mounted, and then... sits there forever doing nothing.
+            // This is the entire point of the CLI; force-enable unconditionally
+            // and merge the result back into the user's persisted set so the
+            // next run sees it too (avoids the silent-hang surprise on retry).
+            int before = config.EnabledHooks.Count;
+            EnsureAutoExportHookEnabled(config);
+            if (config.EnabledHooks.Count != before)
+            {
+                HookLogger.Log($"[Ruri.FModelHook.CLI] Auto-added missing AutoExport hook to enabled set; CLI mode requires it.");
+            }
+            HookLogger.Log($"[Ruri.FModelHook.CLI] Enabled hooks: {string.Join(", ", config.EnabledHooks)}");
         }
         RuriHook.ApplyHooks(config);
+    }
+
+    // The AutoExport hook is the load-bearing piece for CLI mode — its
+    // `MainWindow.OnLoaded` detour is what flips the host from
+    // "interactive WPF app waiting for user clicks" into
+    // "headless export driver". This helper picks the right hook id by
+    // walking the discovered hook list (instead of hardcoding the
+    // `GameName_Version` string) so a future rename in the hook
+    // assembly doesn't silently break CLI mode again.
+    private static void EnsureAutoExportHookEnabled(HookConfig target)
+    {
+        foreach (var (type, attr) in RuriHook.GetAvailableHooks())
+        {
+            if (!type.Name.Contains("AutoExport", StringComparison.OrdinalIgnoreCase)) continue;
+            string id = $"{attr.GameName}_{attr.Version}";
+            target.EnabledHooks.Add(id);
+        }
     }
 
     private static void WireModuleSettings(HookConfig config, string configPath, CliOptions opts)
     {
         ShaderDecompilerSettings shader = config.GetModuleSettings<ShaderDecompilerSettings>(ShaderDecompilerSettings.ModuleKey) ?? new ShaderDecompilerSettings();
-        if (opts.SplitVariants is bool sv && shader.SplitVariantsToHlslFiles != sv)
+
+        // CRITICAL for headless mode: the in-process ExportData hook puts up
+        // a YES/NO `AdonisUI.MessageBox` when mappings aren't detected as
+        // loaded into `Provider.MappingsContainer`. In CLI mode the WPF
+        // dispatcher IS up (we use `app.Run()` to keep it alive for the
+        // hook's `MainWindow.OnLoaded` detour), but the main window is
+        // hidden — so the dialog renders into a hidden window and returns
+        // a default-cancelled `None`/`No` result the moment WPF's modal
+        // pump sees no foreground click. Result: every shader export
+        // bails with "Skipped: user cancelled (no mappings loaded)".
+        //
+        // Force `WarnIfNoMappings = false` for CLI mode so the hook takes
+        // its already-implemented "user opted out of the prompt" path
+        // (silent proceed). The user invoked the CLI on purpose; if they
+        // wanted the dialog they'd be running the GUI exe.
+        //
+        // Edge case: when --show-window IS passed AND --keep-alive is also
+        // passed (i.e. the user is debugging the hook interactively from
+        // the CLI), respect the persisted setting so dialogs DO appear —
+        // the only no-window case where the dialog is a footgun is the
+        // default headless mode.
+        bool forceSuppress = !opts.ShowWindow;
+
+        if (opts.SplitVariants is bool sv && shader.SplitVariantsToHlslFiles != sv
+            || (forceSuppress && shader.WarnIfNoMappings))
         {
             shader = new ShaderDecompilerSettings
             {
-                SplitVariantsToHlslFiles = sv,
-                WarnIfNoMappings = shader.WarnIfNoMappings,
+                SplitVariantsToHlslFiles = opts.SplitVariants ?? shader.SplitVariantsToHlslFiles,
+                WarnIfNoMappings = forceSuppress ? false : shader.WarnIfNoMappings,
             };
         }
         ShaderDecompilerSettingsAccess.Replace(shader);

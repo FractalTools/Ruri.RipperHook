@@ -19,6 +19,27 @@ internal sealed class UnifiedShaderMetadataRoot
     public Dictionary<string, List<string>> PackageShaderMapHashes { get; set; } = new();
     public Dictionary<string, UnifiedMaterialMetadata> MaterialInterfaces { get; set; } = new();
     public Dictionary<string, UnifiedShaderLibraryMetadata> ShaderCodeArchives { get; set; } = new();
+
+    // INDEPENDENT bridge for Niagara compute / sprite GPU shaders. The
+    // material side uses `PackageShaderMapHashes` (IoStore container header)
+    // and per-material `LoadedShaderMaps[*].CookedShaderMapIdHash` (inline
+    // FMaterialShaderMapId). Niagara uses neither — its shader-maps are
+    // identified by the engine via `FNiagaraShaderMapId` (CompilerVersion +
+    // DI type set + script hash + permutation), and the only on-disk hash
+    // that matches the `.ushaderbytecode` archive's `ShaderMapHashes` array
+    // for a Niagara shader-map is the `FShaderMapBase.ResourceHash` written
+    // when `bShareCode=true` (modern shipping cooks).
+    //
+    // This dict is populated by Pass 035 (ExtractNiagaraShaderMapBridge) by
+    // walking every Niagara package, loading every UNiagaraScript export,
+    // and reading
+    //   `LoadedScriptResources[i].RenderingThreadShaderMap.ResourceHash`.
+    //
+    // Pass 140 consumes it as a third hash bridge alongside the existing
+    // material bridges, which is what fixes "all-UnknownMaterial" archives
+    // like X6Game_10_2537 that contain orphan Niagara compute shaders
+    // unreferenced from the IoStore container header.
+    public Dictionary<string, List<string>> NiagaraShaderMapHashes { get; set; } = new();
 }
 
 internal sealed class UnifiedShaderLibraryMetadata

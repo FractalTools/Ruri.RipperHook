@@ -27,6 +27,7 @@ internal static class Pass080_WriteUnifiedMetadataJson
         var output = state.Root;
         if (output.MaterialInterfaces.Count == 0
             && output.PackageShaderMapHashes.Count == 0
+            && output.NiagaraShaderMapHashes.Count == 0
             && output.ShaderCodeArchives.Count == 0)
         {
             HookLogger.LogWarning("[Pass080_WriteUnifiedMetadataJson] No verified shader metadata found to export.");
@@ -58,6 +59,6 @@ internal static class Pass080_WriteUnifiedMetadataJson
         }
 
         state.UnifiedMetadataWritten = true;
-        HookLogger.LogSuccess($"[Pass080_WriteUnifiedMetadataJson] Wrote unified metadata: {output.MaterialInterfaces.Count} materials, {output.PackageShaderMapHashes.Count} package->shader-map associations, {output.ShaderCodeArchives.Count} archives.");
+        HookLogger.LogSuccess($"[Pass080_WriteUnifiedMetadataJson] Wrote unified metadata: {output.MaterialInterfaces.Count} materials, {output.PackageShaderMapHashes.Count} package->shader-map associations, {output.NiagaraShaderMapHashes.Count} Niagara hash bridges, {output.ShaderCodeArchives.Count} archives.");
     }
 }

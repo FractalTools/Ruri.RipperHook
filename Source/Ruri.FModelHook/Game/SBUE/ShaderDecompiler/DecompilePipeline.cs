@@ -24,6 +24,9 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   Pass 010  Save IoStore archive as flat FSerializedShaderArchive (from hook)
 //   Pass 020  Extract IoStore shader-map hashes (cached)
 //   Pass 030  Scan material packages -> Root.MaterialInterfaces (cached)
+//   Pass 035  Extract Niagara FShaderMap.ResourceHash bridge (cached) —
+//             independent ID space from material side, required for
+//             archives containing Niagara-only shader-maps
 //   Pass 040  Per-library archive metadata view
 //   Pass 050  Build per-shader-map stable records
 //   Pass 060  Write `<base>.assetinfo.json`

@@ -161,10 +161,21 @@ internal static class Pass030_ScanMaterialPackages
         log($"    Material scan (full): candidates={considered}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
     }
 
-    // Shared loader: load the package, downcast to UMaterialInterface,
-    // extract metadata. Returns null on any failure (already logged
-    // through HookLogger). The mutated counters are by-ref so the
-    // caller can record stats per scan mode.
+    // Shared loader: load the package, route to the right metadata
+    // builder. Materials go through `ExtractMaterialContext` (the full
+    // material-aware path with LoadedMaterialResources / CachedExpressionData /
+    // RenderState). Other UObjects — primarily `UNiagaraScript` /
+    // `UNiagaraSystem` / `UNiagaraEmitter` — go through
+    // `ExtractGenericContext` which uses the generic UObject reader and
+    // returns a metadata stub with `CachedParameters` populated from the
+    // property-bag sweep. Either way, the per-package
+    // `PackageShaderMapHashes` mirror is stamped on the result by the
+    // caller, which is what bridges the shader-map hash back to a
+    // package name (instead of "UnknownMaterial") downstream.
+    //
+    // Returns null on any failure (already logged through HookLogger).
+    // The mutated counters are by-ref so the caller can record stats
+    // per scan mode.
     private static UnifiedMaterialMetadata? LoadAndExtractByPath(AbstractVfsFileProvider provider, string packagePath, ref int loaded, ref int loadFailures)
     {
         CUE4Parse.UE4.Assets.Exports.UObject? asset;
@@ -180,18 +191,54 @@ internal static class Pass030_ScanMaterialPackages
             return null;
         }
 
-        if (asset is not UMaterialInterface material) return null;
+        if (asset == null) return null;
 
         try
         {
-            return ExtractMaterialContext(material, packagePath);
+            if (asset is UMaterialInterface material)
+            {
+                return ExtractMaterialContext(material, packagePath);
+            }
+            // Anything else that survived the candidate filter — the
+            // dominant case is Niagara (NS_/NE_/NSC_/NM_). The generic
+            // path produces a stub metadata entry: no LoadedShaderMaps
+            // (Niagara has its own separate shader-map graph that we
+            // don't fold into the unified file today), no RenderState
+            // (Niagara doesn't drive material PSO state), but the
+            // CachedParameters bucket gets populated and the caller
+            // stamps the package's shader-map hashes on top.
+            //
+            // Returning a stub-with-CachedParameters is intentionally
+            // additive: it lets the downstream Pass 140 hash bridge see
+            // these packages and the file-naming chain (Pass 150)
+            // surface "NS_Foo" instead of "UnknownMaterial".
+            return ExtractGenericContext(asset, packagePath);
         }
         catch (Exception ex)
         {
             loadFailures++;
-            HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] ExtractMaterialContext failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
+            HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] Extract failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    // Build a stub `UnifiedMaterialMetadata` for any non-material
+    // UObject. The only enrichment we get out of the asset itself is
+    // the parameter-name property-bag sweep — everything material-
+    // specific (LoadedShaderMaps inline blob, render-state UProperties
+    // BlendMode/ShadingModel/etc., MaterialCompilationOutput
+    // UniformExpressionSet) is skipped because the asset doesn't carry
+    // those fields. The caller stamps `PackageShaderMapHashes` on top
+    // before returning, which is what gives the file a name in the
+    // downstream pipeline.
+    private static UnifiedMaterialMetadata? ExtractGenericContext(CUE4Parse.UE4.Assets.Exports.UObject asset, string packagePath)
+    {
+        var metadata = new UnifiedMaterialMetadata
+        {
+            MaterialPath = packagePath,
+            CachedParameters = MaterialCachedExpressionReader.ReadGeneric(asset),
+        };
+        return metadata;
     }
 
     // Linear scan against the archive's hash set. The archive set is

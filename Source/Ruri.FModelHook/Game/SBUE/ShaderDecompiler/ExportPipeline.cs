@@ -26,6 +26,11 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //             to scope the scan to materials that reference the current archive
 //   Pass 030  Scan material packages whose hashes intersect the current archive
 //             -> Root.MaterialInterfaces (cumulative cache across hook fires)
+//   Pass 035  Extract Niagara shader-map ResourceHash bridge -> Root.NiagaraShaderMapHashes
+//             Independent ID space from material side; required for archives
+//             whose shader-maps come from Niagara compute scripts (e.g.
+//             X6Game_10_2537 — 101 maps with zero IoStore-side overlap).
+//             Cached: like Pass 020 it's whole-provider scoped, runs once.
 //   ----      HashedNamesResolver — utility, no number, called by Pass 050
 //   Pass 040  Build per-library archive view -> Root.ShaderCodeArchives[lib]
 //   Pass 050  Build stable shader records -> state.AssetInfo + state.StableInfo
@@ -40,6 +45,7 @@ internal static class ExportPipeline
 
         using (new TimingCookie(state, "Pass 020: Extract IoStore shader-map hashes")) Pass020_ExtractIoStoreShaderMapHashes.DoPass(state);
         using (new TimingCookie(state, "Pass 030: Scan material packages"))            Pass030_ScanMaterialPackages.DoPass(state);
+        using (new TimingCookie(state, "Pass 035: Extract Niagara shader-map bridge")) Pass035_ExtractNiagaraShaderMapBridge.DoPass(state);
         using (new TimingCookie(state, "Pass 040: Build shader-library metadata"))     Pass040_BuildShaderLibraryMetadata.DoPass(state);
         using (new TimingCookie(state, "Pass 050: Build stable shader records"))       Pass050_BuildStableShaderRecords.DoPass(state);
         using (new TimingCookie(state, "Pass 060: Write .assetinfo.json sidecar"))     Pass060_WriteAssetInfoSidecar.DoPass(state);
