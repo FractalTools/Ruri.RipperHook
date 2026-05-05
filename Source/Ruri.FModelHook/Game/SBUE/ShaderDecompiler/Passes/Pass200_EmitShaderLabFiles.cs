@@ -384,7 +384,18 @@ internal static class Pass200_EmitShaderLabFiles
             }
             if (!string.IsNullOrWhiteSpace(passPrograms[0].ShaderMapHash)) sb.AppendLine($"            // ShaderMapHash: {passPrograms[0].ShaderMapHash}");
 
-            sb.AppendLine("            HLSLPROGRAM");
+            // Pick a language tag that reflects what's actually in the
+            // body. spirv-cross may have fallen back to GLSL for shaders
+            // whose cbuffer layout (e.g. UE bindless `uint _m0[N]` with
+            // ArrayStride 4) can't be expressed in HLSL packoffset rules,
+            // or whose stage uses raytracing/mesh builtins HLSL doesn't
+            // model. When *any* program in this pass landed as GLSL we
+            // emit `GLSLPROGRAM` so a downstream consumer doesn't try to
+            // compile the GLSL body as HLSL. Mixed-language passes (rare
+            // in practice — same pass typically uses one toolchain end
+            // to end) take the lowest-common-denominator GLSL tag.
+            bool anyGlsl = passPrograms.Any(p => string.Equals(p.SourceLanguage, "glsl", StringComparison.OrdinalIgnoreCase));
+            sb.AppendLine(anyGlsl ? "            GLSLPROGRAM" : "            HLSLPROGRAM");
 
             // ONE #pragma per stage type — Distinct() because passPrograms can
             // contain many variants of the same stage (different permutations)
@@ -477,7 +488,8 @@ internal static class Pass200_EmitShaderLabFiles
                 }
                 sb.AppendLine();
             }
-            sb.AppendLine("            ENDHLSL");
+            // Match the close tag to whatever opening tag we picked above.
+            sb.AppendLine(anyGlsl ? "            ENDGLSL" : "            ENDHLSL");
             sb.AppendLine("        }");
         }
         sb.AppendLine("    }");
