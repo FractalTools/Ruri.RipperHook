@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows;
 using Newtonsoft.Json;
 using Ruri.Hook;
 using Ruri.Hook.Attributes;
@@ -14,6 +15,10 @@ using CUE4Parse.FileProvider.Vfs;
 using Ruri.Hook.Core;
 using CUE4Parse.FileProvider;
 using Ruri.FModelHook.Attributes;
+using AdonisUI.Controls;
+using AdonisMessageBox = AdonisUI.Controls.MessageBox;
+using AdonisMessageBoxImage = AdonisUI.Controls.MessageBoxImage;
+using AdonisMessageBoxResult = AdonisUI.Controls.MessageBoxResult;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 {
@@ -31,6 +36,13 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             LogError = HookLogger.LogFailure,
         };
         private static readonly object _exportStateLock = new();
+
+        // One-shot per session: warn the user the first time they trigger a
+        // shader export without mappings loaded, then remember their choice
+        // so a 200-shader-archive bulk export doesn't pop up 200 dialogs.
+        // 0 = ungated, 1 = user accepted "yes, continue without mappings",
+        // 2 = user rejected (suppress all subsequent shader exports).
+        private static volatile int _mappingsWarningChoice;
 
         // Use RetargetMethod to safely inject C# logic before the original method and fall through (IsReturn = false)
         // Positional args: Type source, string methodName, bool isBefore, bool isReturn
@@ -51,6 +63,23 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             // Only trigger on Shader Bytecode Library export
             if (entry.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase))
             {
+                // Mappings gate. Without a .usmap loaded, CUE4Parse can still
+                // load most assets but UMaterial property serialisation falls
+                // back to legacy schema-less reading: the FUniformExpressionSet
+                // tree we lean on (UniformNumericParameters / UniformTextureParameters /
+                // UniformBufferLayoutInitializer) reads as opaque structs and
+                // every author-facing parameter name disappears. The decompile
+                // still runs but the output collapses to anonymous Material_Tn /
+                // Material_<TypedSlot> placeholders, with zero of the per-material
+                // parameter names and shaderlab Property entries the user sees
+                // when mappings ARE loaded. Pop a warning so they can either
+                // load a .usmap first or knowingly accept the symbol-stripped run.
+                if (!ConfirmMappingsOrAbort(self))
+                {
+                    HookLogger.Log("[UE_ShaderDecompiler] Skipped: user cancelled (no mappings loaded).");
+                    return;
+                }
+
                 string exportBasePath = Path.Combine(UserSettings.Default.RawDataDirectory, UserSettings.Default.KeepDirectoryStructure ? entry.PathWithoutExtension : entry.NameWithoutExtension).Replace('\\', '/');
                 bool exportedLibrary = false;
 
@@ -110,6 +139,73 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     }
                 }
             }
+        }
+
+        // Returns true when export should proceed, false when the user
+        // cancelled. Behaviour:
+        //   * Mappings loaded         -> ungated (cache _mappingsWarningChoice = 1).
+        //   * Mappings missing, first call this session -> dispatch a yes/no
+        //     dialog on the UI thread. Cache the answer.
+        //   * Mappings missing, subsequent calls -> obey the cached answer.
+        // The dispatcher detour is necessary because ExportData_Hook can fire
+        // from the FModel worker thread when ExportData is invoked from a
+        // batch loop; AdonisUI's MessageBox must run on the dispatcher.
+        private static bool ConfirmMappingsOrAbort(CUE4ParseViewModel vm)
+        {
+            if (vm?.Provider?.MappingsContainer != null)
+            {
+                _mappingsWarningChoice = 1;
+                return true;
+            }
+
+            int cached = _mappingsWarningChoice;
+            if (cached == 1) return true;
+            if (cached == 2) return false;
+
+            const string warningText =
+                "Shader Decompiler: no mappings (.usmap) currently loaded.\n\n" +
+                "Without a type-tree mappings file, CUE4Parse cannot resolve material UProperty schemas. " +
+                "Every per-material symbol (UniformNumericParameters, UniformTextureParameters, ParameterInfo names, " +
+                "UniformBufferLayoutInitializer.Resources) reads as an opaque struct, and the resulting .shader files " +
+                "lose all author-facing parameter names and shaderlab Property entries.\n\n" +
+                "Recommended: cancel, load a .usmap via Settings -> General -> Local Mapping File, then re-run.\n\n" +
+                "Continue export anyway? (Output will use anonymous Material_Tn / Material_<TypedSlot> placeholders.)";
+
+            bool proceed = false;
+            try
+            {
+                if (Application.Current?.Dispatcher != null)
+                {
+                    proceed = Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var model = new MessageBoxModel
+                        {
+                            Text = warningText,
+                            Caption = "Mappings missing",
+                            Icon = AdonisMessageBoxImage.Warning,
+                            Buttons = MessageBoxButtons.YesNo(),
+                            IsSoundEnabled = false,
+                        };
+                        AdonisMessageBox.Show(model);
+                        return model.Result == AdonisMessageBoxResult.Yes;
+                    });
+                }
+                else
+                {
+                    // Headless / no dispatcher (CLI run) — preserve legacy
+                    // behaviour and let the export proceed; the user explicitly
+                    // wired up a non-UI run loop.
+                    proceed = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[UE_ShaderDecompiler] Mappings prompt failed: {ex.Message}");
+                proceed = true;
+            }
+
+            _mappingsWarningChoice = proceed ? 1 : 2;
+            return proceed;
         }
 
         private static void DecompileLibraryInProcess(CUE4ParseViewModel vm, string exportBasePath)
