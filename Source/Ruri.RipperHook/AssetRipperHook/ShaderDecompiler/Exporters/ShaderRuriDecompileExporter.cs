@@ -536,9 +536,27 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             unityMetadata,
             symbols.Select(static s => new UnityShaderMetadataBuilder.ProgramResultLocation(s.Read.SubShaderIndex, s.Read.PassIndex, s.Read.Stage, s.Read.BlobIndex, s.Read.ParameterBlobIndex, s.Read.KeywordIndices)).ToArray(),
             results);
-        File.WriteAllText(outputPath, UnityShaderLabWriter.Write(unityMetadata));
 
-        Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes)");
+        // Variant split: each subprogram body lands in
+        // `<shaderStem>/<variantKey>.hlsl`, the .shader file references them
+        // via `#include`. The folder name matches the .shader's filename
+        // (sans extension) so paths stay human-readable.
+        string variantFolderStem = Path.GetFileNameWithoutExtension(outputPath);
+        UnityShaderLabResult result = UnityShaderLabWriter.WriteSplit(unityMetadata, variantFolderStem);
+        File.WriteAllText(outputPath, result.ShaderText);
+
+        if (result.VariantFiles.Count > 0)
+        {
+            string outputDir = Path.GetDirectoryName(outputPath) ?? string.Empty;
+            string variantDir = Path.Combine(outputDir, variantFolderStem);
+            Directory.CreateDirectory(variantDir);
+            foreach (var (filename, body) in result.VariantFiles)
+            {
+                File.WriteAllText(Path.Combine(variantDir, filename), body);
+            }
+        }
+
+        Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes, {result.VariantFiles.Count} variants)");
     }
 
     private static IEnumerable<UnityShaderMetadataBuilder.ProgramBlobReference> EnumerateProgramBlobIndices(ISerializedProgram program, UnityVersion version, GPUPlatform platform)

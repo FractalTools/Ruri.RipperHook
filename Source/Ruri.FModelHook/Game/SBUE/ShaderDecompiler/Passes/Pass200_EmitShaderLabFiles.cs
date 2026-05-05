@@ -24,7 +24,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //   - WriteContainerShaderFile          renders the .shader text
 //   - BuildVariantKeyword / BuildPermutationKeyword
 //   - TryGetStagePragma / StageSortKey / ToUnityStageName
-//   - WriteProgramBlock / SplitLines
+//   - WriteVariantHlslFile / SplitLines
 //   - BuildShaderMapMetadata / BuildShaderMapStem
 //   - ResolvePerMapContainer / FinalizeForMap / WriteShaderMapOutputs
 //   - UeShaderLabProgramData / UeShaderLabContainerMetadata / ContainerOutputEntry
@@ -146,7 +146,68 @@ internal static class Pass200_EmitShaderLabFiles
         string containerBasePath = Path.Combine(state.OutputDirectory, containerStem);
 
         UeShaderLabContainerMetadata metadata = BuildShaderMapMetadata(state, map, outputs);
-        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata));
+
+        // Per-variant body split: each shader binary's decompiled source lands
+        // in its own .hlsl file under `<containerStem>/<variant_keyword>.hlsl`,
+        // and the `.shader` file becomes a distributor with `#include` lines.
+        // Splitting keeps individual variant bodies in standalone files the
+        // user can diff / search against, while the `.shader` distributor
+        // remains a compact map of (stage * variant) -> file.
+        string variantFolder = containerBasePath; // sibling folder named after the .shader stem
+        if (metadata.Programs.Count > 0)
+        {
+            Directory.CreateDirectory(variantFolder);
+            foreach (UeShaderLabProgramData program in metadata.Programs)
+            {
+                string keyword = BuildVariantKeyword(program);
+                string hlslPath = Path.Combine(variantFolder, keyword + ".hlsl");
+                File.WriteAllText(hlslPath, WriteVariantHlslFile(metadata, program, keyword));
+            }
+        }
+
+        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, containerStem));
+    }
+
+    // Per-variant HLSL body file. Header carries every identifying datum so the
+    // file stands alone away from the .shader distributor. Body is the raw
+    // decompiled SourceCode (or the GLSL fallback / failure note).
+    private static string WriteVariantHlslFile(UeShaderLabContainerMetadata metadata, UeShaderLabProgramData program, string keyword)
+    {
+        StringBuilder sb = new();
+        sb.AppendLine("// =============================================================");
+        sb.AppendLine($"// Variant: {keyword}");
+        sb.AppendLine($"// Shader: {metadata.Name}");
+        sb.AppendLine($"// ContainerKey: {metadata.ContainerKey}");
+        sb.AppendLine($"// Stage: {program.Stage}");
+        sb.AppendLine($"// ShaderIndex: {program.ShaderIndex}");
+        sb.AppendLine($"// ResourceIndex: {program.ResourceIndex}");
+        sb.AppendLine($"// PermutationId: {program.PermutationId}");
+        if (!string.IsNullOrWhiteSpace(program.ShaderHash)) sb.AppendLine($"// ShaderHash: {program.ShaderHash}");
+        if (!string.IsNullOrWhiteSpace(program.ShaderTypeName)) sb.AppendLine($"// ShaderType: {program.ShaderTypeName}");
+        if (!string.IsNullOrWhiteSpace(program.VertexFactoryTypeName)) sb.AppendLine($"// VertexFactoryType: {program.VertexFactoryTypeName}");
+        if (!string.IsNullOrWhiteSpace(program.PipelineTypeName)) sb.AppendLine($"// PipelineType: {program.PipelineTypeName}");
+        sb.AppendLine("// =============================================================");
+        sb.AppendLine();
+
+        if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
+        {
+            foreach (string line in SplitLines(program.SourceCode!))
+            {
+                sb.AppendLine(line);
+            }
+            return sb.ToString();
+        }
+
+        sb.AppendLine("// Decompile failed.");
+        if (!string.IsNullOrWhiteSpace(program.ErrorMessage))
+        {
+            foreach (string line in SplitLines(program.ErrorMessage!))
+            {
+                sb.Append("// ");
+                sb.AppendLine(line);
+            }
+        }
+        return sb.ToString();
     }
 
     private static UeShaderLabContainerMetadata BuildShaderMapMetadata(PipelineState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
@@ -210,7 +271,7 @@ internal static class Pass200_EmitShaderLabFiles
         return null;
     }
 
-    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata)
+    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem)
     {
         StringBuilder sb = new();
         sb.AppendLine($"Shader \"{metadata.Name}\" {{");
@@ -356,28 +417,33 @@ internal static class Pass200_EmitShaderLabFiles
                 sb.AppendLine($"            // Stage: {stageGroup.Key}");
                 sb.AppendLine($"            // ============================================================");
 
-                // Each variant gets its OWN #if defined(VARIANT_KEYWORD) block,
-                // even when type info is missing. BuildVariantKeyword always
-                // appends ShaderHash (or ShaderIndex) as a final disambiguator
-                // so two binaries that share (ShaderType,VF,Perm) still get
-                // distinct keywords — without that tail every branch in the
-                // chain would carry the same condition and the chain would be
-                // a malformed `#if/#elif/#elif/...` with no real branching.
+                // Each variant gets its OWN #if defined(VARIANT_KEYWORD)
+                // -> #include "<stem>/<keyword>.hlsl" line. The variant body
+                // lives in a sibling per-variant .hlsl file written alongside
+                // the .shader distributor (see WriteVariantHlslFile). This
+                // keeps each binary's decompiled source addressable on its
+                // own without a thousand-line monolithic .shader file.
+                //
+                // BuildVariantKeyword always appends ShaderHash (or ShaderIndex)
+                // as a final disambiguator so two binaries that share
+                // (ShaderType,VF,Perm) still get distinct keywords — without
+                // that tail every branch in the chain would carry the same
+                // condition and the chain would be a malformed
+                // `#if/#elif/#elif/...` with no real branching.
                 bool wroteFirst = false;
                 foreach (UeShaderLabProgramData program in stagePrograms)
                 {
                     string keyword = BuildVariantKeyword(program);
                     sb.AppendLine($"            {(wroteFirst ? "#elif" : "#if")} defined({keyword})");
                     wroteFirst = true;
-                    WriteProgramBlock(sb, program);
-                    sb.AppendLine();
+                    string includePath = $"{variantFolderStem}/{keyword}.hlsl";
+                    sb.AppendLine($"            #include \"{includePath}\"");
                 }
 
                 if (wroteFirst)
                 {
                     sb.AppendLine("            #endif");
                 }
-                sb.AppendLine($"            // ===== End Stage: {stageGroup.Key} =====");
                 sb.AppendLine();
             }
             sb.AppendLine("            ENDHLSL");
@@ -409,35 +475,6 @@ internal static class Pass200_EmitShaderLabFiles
         string vf = string.IsNullOrWhiteSpace(program.VertexFactoryTypeHash) ? "NOVF" : program.VertexFactoryTypeHash;
         string type = string.IsNullOrWhiteSpace(program.ShaderTypeHash) ? "NOTYPE" : program.ShaderTypeHash;
         return $"P{pipeline}_V{vf}_S{type}";
-    }
-
-    private static void WriteProgramBlock(StringBuilder sb, UeShaderLabProgramData program)
-    {
-        sb.AppendLine($"            // Stage: {program.Stage}");
-        sb.AppendLine($"            // ShaderIndex: {program.ShaderIndex}");
-        sb.AppendLine($"            // ResourceIndex: {program.ResourceIndex}");
-        sb.AppendLine($"            // PermutationId: {program.PermutationId}");
-        if (!string.IsNullOrWhiteSpace(program.ShaderHash)) sb.AppendLine($"            // ShaderHash: {program.ShaderHash}");
-
-        if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
-        {
-            foreach (string line in SplitLines(program.SourceCode!))
-            {
-                sb.Append("            ");
-                sb.AppendLine(line);
-            }
-            return;
-        }
-
-        sb.AppendLine("            // Decompile failed.");
-        if (!string.IsNullOrWhiteSpace(program.ErrorMessage))
-        {
-            foreach (string line in SplitLines(program.ErrorMessage!))
-            {
-                sb.Append("            // ");
-                sb.AppendLine(line);
-            }
-        }
     }
 
     private static List<string> BuildPassPermutationKeywords(List<UeShaderLabProgramData> programs)
