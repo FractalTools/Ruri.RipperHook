@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Always-on UI infrastructure for the FModel host. Adds a "Hooks" top-
+    level menu to FModel's MainWindow for hook toggles + per-module
+    settings (Shader Decompiler today; future modules slot in here).
+
+    Not a [FModelHook] / GameType — running FModelHook MEANS hooking
+    FModel, and this menu is the only user-facing entry point into the
+    hook configuration. Ruri.FModelHook.Program.Main() instantiates it
+    unconditionally, bypassing the EnabledHooks config that gates real
+    game-specific hooks.
+  -->
+  <PropertyGroup>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net8.0-windows\win-x64\</OutputPath>
+    <IntermediateOutputPath>..\..\FModel\FModel\obj\Ruri.FModelHook.GUI\$(Configuration)\</IntermediateOutputPath>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Ruri.FModelHook.GUI</AssemblyName>
+    <RootNamespace>Ruri.FModelHook.GUI</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ruri.Hook\Ruri.Hook.csproj" />
+    <ProjectReference Include="..\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj" />
+    <ProjectReference Include="..\Ruri.FModelHook\Ruri.FModelHook.csproj" />
+    <ProjectReference Include="..\..\FModel\FModel\FModel.csproj" />
+  </ItemGroup>
+
+</Project>

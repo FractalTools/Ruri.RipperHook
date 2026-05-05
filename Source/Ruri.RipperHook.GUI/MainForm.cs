@@ -107,6 +107,11 @@ public partial class MainForm : Form
 		_configPath = configPath;
 		InitializeComponent();
 		InitializeHookMenu();
+		// Append the generic per-module Hooks menu (Shader Decompiler
+		// settings + future modules). Lives outside the designer so adding
+		// a new module is a one-line edit in HooksMenuBuilder.Append
+		// rather than a touch on the designer file.
+		Components.HooksMenuBuilder.Append(menuStrip1, this, _configPath);
 		ResetForm();
 		UpdateHookStatus();
 	}

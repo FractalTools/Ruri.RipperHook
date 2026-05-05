@@ -121,6 +121,7 @@
   <Project Path="Source/Ruri.RipperHook/Ruri.RipperHook.csproj" />
   <Project Path="Source/Ruri.RipperHook.CLI/Ruri.RipperHook.CLI.csproj" />
   <Project Path="Source/Ruri.RipperHook.GUI/Ruri.RipperHook.GUI.csproj" />
+  <Project Path="Source/Ruri.FModelHook.GUI/Ruri.FModelHook.GUI.csproj" />
   <Project Path="Source/Ruri.FModelHook/Ruri.FModelHook.csproj" />
   <Project Path="Source/Ruri.ShaderDecompiler/Ruri.ShaderDecompiler.csproj" />
   <Project Path="Source/Ruri.SourceGenerated/Ruri.SourceGenerated.csproj" />

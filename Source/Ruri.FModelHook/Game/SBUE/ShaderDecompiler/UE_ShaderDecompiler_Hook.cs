@@ -44,6 +44,27 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         // 2 = user rejected (suppress all subsequent shader exports).
         private static volatile int _mappingsWarningChoice;
 
+        // Live read from the persisted `ShaderDecompilerSettings` snapshot
+        // (loaded at startup by Program.cs and mutated by the in-app
+        // Hooks settings dialog). The setter is kept for the legacy
+        // `--split-variants` CLI flag in the AutoExport hook — flipping
+        // it through this property bypasses the persistence layer, which
+        // is fine for one-off command-line invocations.
+        public static bool SplitVariantsToHlslFiles
+        {
+            get => Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+            set
+            {
+                var current = Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current;
+                if (current.SplitVariantsToHlslFiles == value) return;
+                Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Replace(new Ruri.ShaderTools.ShaderDecompilerSettings
+                {
+                    SplitVariantsToHlslFiles = value,
+                    WarnIfNoMappings = current.WarnIfNoMappings,
+                });
+            }
+        }
+
         // Use RetargetMethod to safely inject C# logic before the original method and fall through (IsReturn = false)
         // Positional args: Type source, string methodName, bool isBefore, bool isReturn
         [RetargetMethod(typeof(CUE4ParseViewModel), "ExportData", true, false)]
@@ -160,6 +181,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 return true;
             }
 
+            // User opted out of the prompt entirely via settings — silently
+            // proceed (matches the behaviour you'd want for a long-running
+            // headless export setup that intentionally doesn't load mappings).
+            if (!Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.WarnIfNoMappings)
+            {
+                _mappingsWarningChoice = 1;
+                return true;
+            }
+
             int cached = _mappingsWarningChoice;
             if (cached == 1) return true;
             if (cached == 2) return false;
@@ -228,6 +258,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 OutputDirectory = outputDir,
                 UnifiedMetadataPath = File.Exists(unifiedMetadataPath) ? unifiedMetadataPath : null,
                 RecreateOutputDirectory = true,
+                SplitVariantsToHlslFiles = SplitVariantsToHlslFiles,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });

@@ -21,6 +21,15 @@ public sealed class LibraryDecompileOptions
     // letting users diff pre-rewrite vs post-rewrite vs post-patch
     // SPIR-V offline.
     public bool DumpFailures { get; init; } = true;
+    // When true and a shader-map's stage has more than one variant, each
+    // variant's HLSL body is emitted to a sibling `<stem>/<variant>.hlsl`
+    // file and the .shader file uses `#include` lines per `#if defined`
+    // branch. When false (default), all variants stay inline inside the
+    // .shader file under their `#if defined(VARIANT_*)` blocks (legacy
+    // single-file layout). Stages with exactly one variant always inline,
+    // regardless of this flag — distribution is only useful when there's
+    // actually a chain to slim down.
+    public bool SplitVariantsToHlslFiles { get; init; }
     public Action<string>? Log { get; init; }
     public Action<string>? LogError { get; init; }
 }

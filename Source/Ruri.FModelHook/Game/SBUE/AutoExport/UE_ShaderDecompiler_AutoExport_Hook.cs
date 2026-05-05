@@ -214,6 +214,14 @@ namespace Ruri.FModelHook.Game.SBUE.AutoExport
                     _readyTimeoutSec = Math.Max(10, v);
                     i++;
                 }
+                else if (string.Equals(a, "--split-variants", StringComparison.OrdinalIgnoreCase))
+                {
+                    Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook.SplitVariantsToHlslFiles = true;
+                }
+                else if (string.Equals(a, "--no-split-variants", StringComparison.OrdinalIgnoreCase))
+                {
+                    Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook.SplitVariantsToHlslFiles = false;
+                }
             }
         }
     }

@@ -55,20 +55,69 @@ namespace Ruri.Hook
 
             foreach (var assembly in assemblies)
             {
+                // Skip framework / system assemblies up front. They never
+                // carry our hooks and walking them is the bulk of the cost
+                // (and the most likely source of GetTypes / GetAttributes
+                // failures). Match on AssemblyName so framework facades and
+                // dynamically-loaded ones are covered.
+                string? name = assembly.GetName().Name;
+                if (name is null) continue;
+                if (name.StartsWith("System.", StringComparison.Ordinal) ||
+                    name.StartsWith("Microsoft.", StringComparison.Ordinal) ||
+                    name.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("mscorlib", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("WindowsBase", StringComparison.Ordinal) ||
+                    name.Equals("PresentationCore", StringComparison.Ordinal) ||
+                    name.Equals("PresentationFramework", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                Type[] types;
                 try
                 {
-                    foreach (var type in assembly.GetTypes())
-                    {
-                        var attr = type.GetCustomAttribute<GameHookAttribute>();
-                        if (attr != null)
-                        {
-                            hooks.Add((type, attr));
-                        }
-                    }
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException tle)
+                {
+                    // GetTypes() on assemblies with unresolved transitive
+                    // deps throws but exposes the partial list. Use what
+                    // we got — the old behaviour discarded the whole DLL.
+                    types = tle.Types.Where(t => t != null).ToArray()!;
                 }
                 catch
                 {
-                    // Ignore assemblies that can't be inspected
+                    continue;
+                }
+
+                foreach (var type in types)
+                {
+                    if (type == null) continue;
+
+                    // Use the non-generic GetCustomAttributes(inherit:false)
+                    // and a runtime `is` cast instead of GetCustomAttribute<T>.
+                    // The generic form has been known to miss derived
+                    // attribute classes when the requested base lives in a
+                    // different assembly under certain trim / load-context
+                    // configurations; the runtime cast is bulletproof.
+                    object[] attrs;
+                    try
+                    {
+                        attrs = type.GetCustomAttributes(inherit: false);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    foreach (object a in attrs)
+                    {
+                        if (a is GameHookAttribute gha)
+                        {
+                            hooks.Add((type, gha));
+                            break;
+                        }
+                    }
                 }
             }
 

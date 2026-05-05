@@ -147,25 +147,48 @@ internal static class Pass200_EmitShaderLabFiles
 
         UeShaderLabContainerMetadata metadata = BuildShaderMapMetadata(state, map, outputs);
 
-        // Per-variant body split: each shader binary's decompiled source lands
-        // in its own .hlsl file under `<containerStem>/<variant_keyword>.hlsl`,
-        // and the `.shader` file becomes a distributor with `#include` lines.
-        // Splitting keeps individual variant bodies in standalone files the
-        // user can diff / search against, while the `.shader` distributor
-        // remains a compact map of (stage * variant) -> file.
-        string variantFolder = containerBasePath; // sibling folder named after the .shader stem
-        if (metadata.Programs.Count > 0)
+        // Per-stage split decision. A stage gets distributed to per-variant
+        // .hlsl files only when (a) the user opted into split mode AND
+        // (b) the stage actually has more than one variant — a single-variant
+        // stage stays inline because there's no chain to slim down.
+        // The set of stages-to-split also tells us which variant files
+        // to write next to the .shader.
+        HashSet<string> splittableStages = ComputeSplittableStages(metadata.Programs, state.Options.SplitVariantsToHlslFiles);
+
+        if (splittableStages.Count > 0)
         {
-            Directory.CreateDirectory(variantFolder);
+            Directory.CreateDirectory(containerBasePath); // sibling folder named after the .shader stem
             foreach (UeShaderLabProgramData program in metadata.Programs)
             {
+                if (!splittableStages.Contains(program.Stage)) continue;
                 string keyword = BuildVariantKeyword(program);
-                string hlslPath = Path.Combine(variantFolder, keyword + ".hlsl");
+                string hlslPath = Path.Combine(containerBasePath, keyword + ".hlsl");
                 File.WriteAllText(hlslPath, WriteVariantHlslFile(metadata, program, keyword));
             }
         }
 
-        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, containerStem));
+        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, containerStem, splittableStages));
+    }
+
+    // Returns the set of stage names whose programs should be emitted as
+    // sibling .hlsl files (with `#include` references in the .shader). A
+    // stage qualifies only when split mode is on AND it has >1 variant —
+    // single-variant stages stay inline regardless of the flag because
+    // distribution adds files without simplifying the .shader text.
+    private static HashSet<string> ComputeSplittableStages(List<UeShaderLabProgramData> programs, bool splitEnabled)
+    {
+        HashSet<string> result = new(StringComparer.Ordinal);
+        if (!splitEnabled) return result;
+        Dictionary<string, int> counts = new(StringComparer.Ordinal);
+        foreach (UeShaderLabProgramData program in programs)
+        {
+            counts[program.Stage] = counts.GetValueOrDefault(program.Stage) + 1;
+        }
+        foreach (var kvp in counts)
+        {
+            if (kvp.Value > 1) result.Add(kvp.Key);
+        }
+        return result;
     }
 
     // Per-variant HLSL body file. Header carries every identifying datum so the
@@ -271,7 +294,7 @@ internal static class Pass200_EmitShaderLabFiles
         return null;
     }
 
-    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem)
+    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem, HashSet<string> splittableStages)
     {
         StringBuilder sb = new();
         sb.AppendLine($"Shader \"{metadata.Name}\" {{");
@@ -417,32 +440,40 @@ internal static class Pass200_EmitShaderLabFiles
                 sb.AppendLine($"            // Stage: {stageGroup.Key}");
                 sb.AppendLine($"            // ============================================================");
 
-                // Each variant gets its OWN #if defined(VARIANT_KEYWORD)
-                // -> #include "<stem>/<keyword>.hlsl" line. The variant body
-                // lives in a sibling per-variant .hlsl file written alongside
-                // the .shader distributor (see WriteVariantHlslFile). This
-                // keeps each binary's decompiled source addressable on its
-                // own without a thousand-line monolithic .shader file.
-                //
-                // BuildVariantKeyword always appends ShaderHash (or ShaderIndex)
-                // as a final disambiguator so two binaries that share
-                // (ShaderType,VF,Perm) still get distinct keywords — without
-                // that tail every branch in the chain would carry the same
-                // condition and the chain would be a malformed
-                // `#if/#elif/#elif/...` with no real branching.
-                bool wroteFirst = false;
-                foreach (UeShaderLabProgramData program in stagePrograms)
-                {
-                    string keyword = BuildVariantKeyword(program);
-                    sb.AppendLine($"            {(wroteFirst ? "#elif" : "#if")} defined({keyword})");
-                    wroteFirst = true;
-                    string includePath = $"{variantFolderStem}/{keyword}.hlsl";
-                    sb.AppendLine($"            #include \"{includePath}\"");
-                }
+                bool stageSplit = splittableStages.Contains(stageGroup.Key);
 
-                if (wroteFirst)
+                if (stagePrograms.Count == 1)
                 {
-                    sb.AppendLine("            #endif");
+                    // Single-variant stage: no `#if defined(VARIANT_*)` wrapper —
+                    // there's nothing to disambiguate, so the chain would just
+                    // be dead boilerplate. Body goes inline (or via a single
+                    // `#include` if the user explicitly opted into split mode
+                    // for this stage; with the > 1 gate in ComputeSplittableStages
+                    // the include path won't actually fire here).
+                    UeShaderLabProgramData only = stagePrograms[0];
+                    EmitProgramBlock(sb, only, variantFolderStem, splitInclude: stageSplit);
+                }
+                else
+                {
+                    // Multi-variant stage: walk the chain. BuildVariantKeyword
+                    // always appends ShaderHash (or ShaderIndex) as a final
+                    // disambiguator so two binaries that share (ShaderType,VF,Perm)
+                    // still get distinct keywords — without that tail every branch
+                    // in the chain would carry the same condition and the chain
+                    // would be a malformed `#if/#elif/...` with no real branching.
+                    bool wroteFirst = false;
+                    foreach (UeShaderLabProgramData program in stagePrograms)
+                    {
+                        string keyword = BuildVariantKeyword(program);
+                        sb.AppendLine($"            {(wroteFirst ? "#elif" : "#if")} defined({keyword})");
+                        wroteFirst = true;
+                        EmitProgramBlock(sb, program, variantFolderStem, splitInclude: stageSplit);
+                    }
+
+                    if (wroteFirst)
+                    {
+                        sb.AppendLine("            #endif");
+                    }
                 }
                 sb.AppendLine();
             }
@@ -475,6 +506,48 @@ internal static class Pass200_EmitShaderLabFiles
         string vf = string.IsNullOrWhiteSpace(program.VertexFactoryTypeHash) ? "NOVF" : program.VertexFactoryTypeHash;
         string type = string.IsNullOrWhiteSpace(program.ShaderTypeHash) ? "NOTYPE" : program.ShaderTypeHash;
         return $"P{pipeline}_V{vf}_S{type}";
+    }
+
+    // Inline-or-include emission for one program body. When `splitInclude`
+    // is true the body lives in a sibling `<variantFolderStem>/<keyword>.hlsl`
+    // and we emit a single `#include` line; otherwise the body is inlined
+    // verbatim under a `// Stage: ...` header comment that mirrors the
+    // metadata the per-variant file would have carried.
+    private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, string variantFolderStem, bool splitInclude)
+    {
+        if (splitInclude)
+        {
+            string keyword = BuildVariantKeyword(program);
+            string includePath = $"{variantFolderStem}/{keyword}.hlsl";
+            sb.AppendLine($"            #include \"{includePath}\"");
+            return;
+        }
+
+        sb.AppendLine($"            // Stage: {program.Stage}");
+        sb.AppendLine($"            // ShaderIndex: {program.ShaderIndex}");
+        sb.AppendLine($"            // ResourceIndex: {program.ResourceIndex}");
+        sb.AppendLine($"            // PermutationId: {program.PermutationId}");
+        if (!string.IsNullOrWhiteSpace(program.ShaderHash)) sb.AppendLine($"            // ShaderHash: {program.ShaderHash}");
+
+        if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
+        {
+            foreach (string line in SplitLines(program.SourceCode!))
+            {
+                sb.Append("            ");
+                sb.AppendLine(line);
+            }
+            return;
+        }
+
+        sb.AppendLine("            // Decompile failed.");
+        if (!string.IsNullOrWhiteSpace(program.ErrorMessage))
+        {
+            foreach (string line in SplitLines(program.ErrorMessage!))
+            {
+                sb.Append("            // ");
+                sb.AppendLine(line);
+            }
+        }
     }
 
     private static List<string> BuildPassPermutationKeywords(List<UeShaderLabProgramData> programs)

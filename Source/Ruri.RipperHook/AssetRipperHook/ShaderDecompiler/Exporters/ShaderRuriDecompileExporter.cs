@@ -36,6 +36,30 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     public static Action<SerializedProgramData, ShaderSubProgram, ShaderReadContext>? PostProcessSymbols;
 
     /// <summary>
+    /// Live-read from the persisted ShaderDecompilerSettings snapshot
+    /// (loaded at host startup, mutated by the host's settings UI).
+    /// When true, multi-variant stages get their HLSL bodies emitted to
+    /// sibling `<shaderStem>/<variantKey>.hlsl` files and the `.shader`
+    /// references them via `#include`. When false (default), variants
+    /// stay inline inside the `.shader` file under their
+    /// `#if defined(KEYWORD)` blocks. Single-variant stages always inline.
+    /// </summary>
+    public static bool SplitVariantsToHlslFiles
+    {
+        get => ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+        set
+        {
+            var current = ShaderDecompilerSettingsAccess.Current;
+            if (current.SplitVariantsToHlslFiles == value) return;
+            ShaderDecompilerSettingsAccess.Replace(new ShaderDecompilerSettings
+            {
+                SplitVariantsToHlslFiles = value,
+                WarnIfNoMappings = current.WarnIfNoMappings,
+            });
+        }
+    }
+
+    /// <summary>
     /// Platform priority for the auto-pick. In an ideal world Vulkan comes first because the
     /// downstream <see cref="ShaderDecompiler"/> already speaks SPIR-V natively — but Unity's
     /// Vulkan bytecode is wrapped with SMOL-V (Aras P.'s compressed-SPIR-V format) and we don't
@@ -537,26 +561,37 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             symbols.Select(static s => new UnityShaderMetadataBuilder.ProgramResultLocation(s.Read.SubShaderIndex, s.Read.PassIndex, s.Read.Stage, s.Read.BlobIndex, s.Read.ParameterBlobIndex, s.Read.KeywordIndices)).ToArray(),
             results);
 
-        // Variant split: each subprogram body lands in
-        // `<shaderStem>/<variantKey>.hlsl`, the .shader file references them
-        // via `#include`. The folder name matches the .shader's filename
-        // (sans extension) so paths stay human-readable.
-        string variantFolderStem = Path.GetFileNameWithoutExtension(outputPath);
-        UnityShaderLabResult result = UnityShaderLabWriter.WriteSplit(unityMetadata, variantFolderStem);
-        File.WriteAllText(outputPath, result.ShaderText);
-
-        if (result.VariantFiles.Count > 0)
+        // Variant emission strategy is controlled by SplitVariantsToHlslFiles:
+        //   - true:  multi-variant stages spool to sibling
+        //            `<shaderStem>/<variantKey>.hlsl` files; .shader uses
+        //            `#include` lines per `#if defined(KEYWORD)` branch.
+        //   - false: every variant body stays inline inside the .shader file
+        //            (legacy single-file layout).
+        // Either way, single-variant stages skip the `#if` chain entirely.
+        if (SplitVariantsToHlslFiles)
         {
-            string outputDir = Path.GetDirectoryName(outputPath) ?? string.Empty;
-            string variantDir = Path.Combine(outputDir, variantFolderStem);
-            Directory.CreateDirectory(variantDir);
-            foreach (var (filename, body) in result.VariantFiles)
-            {
-                File.WriteAllText(Path.Combine(variantDir, filename), body);
-            }
-        }
+            string variantFolderStem = Path.GetFileNameWithoutExtension(outputPath);
+            UnityShaderLabResult result = UnityShaderLabWriter.WriteSplit(unityMetadata, variantFolderStem);
+            File.WriteAllText(outputPath, result.ShaderText);
 
-        Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes, {result.VariantFiles.Count} variants)");
+            if (result.VariantFiles.Count > 0)
+            {
+                string outputDir = Path.GetDirectoryName(outputPath) ?? string.Empty;
+                string variantDir = Path.Combine(outputDir, variantFolderStem);
+                Directory.CreateDirectory(variantDir);
+                foreach (var (filename, body) in result.VariantFiles)
+                {
+                    File.WriteAllText(Path.Combine(variantDir, filename), body);
+                }
+            }
+
+            Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes, {result.VariantFiles.Count} variant files)");
+        }
+        else
+        {
+            File.WriteAllText(outputPath, UnityShaderLabWriter.Write(unityMetadata));
+            Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes, inline)");
+        }
     }
 
     private static IEnumerable<UnityShaderMetadataBuilder.ProgramBlobReference> EnumerateProgramBlobIndices(ISerializedProgram program, UnityVersion version, GPUPlatform platform)
