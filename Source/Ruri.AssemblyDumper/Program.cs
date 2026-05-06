@@ -1,152 +1,193 @@
-﻿using AssetRipper.DocExtraction.DataStructures;
-using AssetRipper.DocExtraction.MetaData;
-using AssetRipper.Primitives;
+using Ruri.AssemblyDumper.Pipeline;
 using System.Diagnostics;
-using System.Reflection;
 
-namespace AssetRipper.DocExtraction.ConsoleApp;
+namespace Ruri.AssemblyDumper;
 
+/// <summary>
+/// 一键工作流：JSON typetree → AR passes → emit dll → recompile → dotnet build → deploy。
+///
+/// AR 的所有 pass 行为定制都在 <see cref="ArHooks"/> 用 MonoMod 运行时 hook 实现，
+/// AssetRipper.AssemblyDumper 子模块要保持上游干净（CLAUDE.md frozen-area 规则）。
+/// const <c>SharedState.AssemblyName</c> 不能 hook，由 <see cref="PostProcess"/> 在 Pass998 之前
+/// 改 Module/Assembly/Namespace 等价实现。
+///
+/// 默认 build 模式：
+///   1. 把 <c>consolidated.json / native_enums.json / engine_assets.tpk / assemblies.json /
+///      type_tree.tpk</c> 从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 镜像到 cwd
+///   2. 安装 MonoMod hooks（ArHooks 复刻 AR 子模块 9 文件 diff）
+///   3. 反射调 AR 的 60+ 个 pass，顺序与 AR Program.cs 1:1
+///   4. PostProcess 重命名 AssetRipper.SourceGenerated → Ruri.SourceGenerated
+///   5. Pass998 写出 <c>Ruri.SourceGenerated.dll</c>
+///   6. AR.AssemblyDumper.Recompiler 反编译到 <c>Source/Ruri.SourceGenerated/Ruri/SourceGenerated</c>
+///   7. <c>dotnet build Ruri.SourceGenerated.csproj</c> — 它的 &lt;CopyAfterBuild&gt; 把 dll 同步到
+///      <c>Source/Ruri.RipperHook/Libraries/Ruri.SourceGenerated.dll</c>
+///
+/// 旧模式：<c>hook</c>（ClassHookGenerator）/ <c>docs</c>（PDB → consolidated.json）。
+/// </summary>
 internal static class Program
 {
-    // [Config] 根目录
-    private static readonly string RootInputDirectory = @"D:\Ruri\02.Unity\Tools\Unity";
-
-    // [Config] PDB 搜索路径配置
-    private static readonly List<(string Path, string Version)> PdbSearchConfigs = new()
+    public static int Main(string[] args)
     {
-        // 2023.2.0x1 Unstripped Release - 包含最全的信息
-        (Path.Combine(RootInputDirectory, @"2023.2.0x1\Release"), "2023.2.0x1"),
-        // 2021 Editor - 作为补充
-        (Path.Combine(RootInputDirectory, @"2021.3.39f1\Editor"), "2021.3.39f1")
-    };
-
-    // [Config] 核心 PDB 白名单 (忽略 mono, bee, il2cpp 等无关文件)
-    // 注意：文件名不区分大小写，不需要后缀
-    private static readonly HashSet<string> PriorityPdbNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Unity_x64",          // 核心编辑器/引擎 (Windows)
-        "Unity",              // 旧版本或某些构建的核心名称
-        "UnityPlayer",        // 播放器核心
-        "UnityPlayer_Win64",  // 64位播放器
-        "unity_bridge",       // 编辑器桥接库 (有时包含 Editor 特有枚举)
-        "UnityShaderCompiler" // Shader编译器 (可选，保留以防万一)
-    };
-
-    static void Main(string[] args)
-    {
-        Stopwatch stopwatch = Stopwatch.StartNew();
-
-        // [Hook Mode]
-        if (args.Length > 0 && args[0] == "hook")
-        {
-            Console.WriteLine("Starting Hook Generation...");
-            ClassHookGenerator.Generate();
-            stopwatch.Stop();
-            Console.WriteLine($"Hook Generation finished in {stopwatch.ElapsedMilliseconds} ms");
-            return;
-        }
-
-        string consolidatedPath = @"consolidated.json";
-        string nativeEnumsPath = @"native_enums.json";
-        string outputDirectory = Path.GetDirectoryName(Path.GetFullPath(consolidatedPath)) ?? Environment.CurrentDirectory;
-
-        // 1. 生成 Native Enums (仅针对核心 PDB)
-        GenerateMergedNativeEnums(nativeEnumsPath);
-
-        // 2. 生成 Consolidated Documentation
-        Console.WriteLine($"Starting Consolidated Documentation Extraction from: {RootInputDirectory}");
-        ConsolidatedExtractor.ExtractAndSave(RootInputDirectory, consolidatedPath);
-
-        // 3. 导出嵌入数据
-        ExportAllGeneratedData(outputDirectory);
-
-        stopwatch.Stop();
-        Console.WriteLine($"All tasks finished in {stopwatch.ElapsedMilliseconds} ms");
-    }
-
-    private static void GenerateMergedNativeEnums(string outputPath)
-    {
-        Console.WriteLine("Starting Merged Native Enum Extraction (Core PDBs Only)...");
-
-        Dictionary<string, EnumDocumentation> mergedEnums = new();
-        string finalVersion = "2023.2.0x1";
-
-        foreach (var config in PdbSearchConfigs)
-        {
-            if (!Directory.Exists(config.Path))
-            {
-                Console.WriteLine($"Warning: Directory not found: {config.Path}");
-                continue;
-            }
-
-            // 获取目录下所有 pdb
-            string[] allPdbFiles = Directory.GetFiles(config.Path, "*.pdb", SearchOption.AllDirectories);
-
-            // 过滤白名单
-            var targetPdbs = allPdbFiles
-                .Where(f => PriorityPdbNames.Any(name => Path.GetFileNameWithoutExtension(f).Contains(name, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-
-            Console.WriteLine($"Scanning {config.Path}: Found {targetPdbs.Count} core PDBs (out of {allPdbFiles.Length} total).");
-
-            foreach (string pdbFile in targetPdbs)
-            {
-                NativeEnumExtractor.MergeFromPdb(pdbFile, mergedEnums);
-            }
-        }
-
-        if (mergedEnums.Count > 0)
-        {
-            DocumentationFile docFile = new DocumentationFile
-            {
-                UnityVersion = finalVersion,
-                Enums = mergedEnums.Values.OrderBy(e => e.FullName).ToList(),
-                Classes = new(),
-                Structs = new()
-            };
-            docFile.SaveAsJson(outputPath);
-            Console.WriteLine($"Successfully generated {outputPath} with {docFile.Enums.Count} enums.");
-        }
-        else
-        {
-            Console.WriteLine("[Error] No enums extracted. Check if PDB paths are correct.");
-        }
-    }
-
-    private static void ExportAllGeneratedData(string outputDirectory)
-    {
+        var sw = Stopwatch.StartNew();
         try
         {
-            var dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AssetRipper.SourceGenerated.dll");
-            if (File.Exists(dllPath))
+            string mode = (args.Length > 0 ? args[0] : "build").ToLowerInvariant();
+            return mode switch
             {
-                Assembly.LoadFrom(dllPath);
-            }
+                "docs" => RunDocs(),
+                "hook" => RunHook(),
+                _ => RunBuild(),
+            };
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Warning: Could not load AssetRipper.SourceGenerated.dll. {ex.Message}");
+            Console.WriteLine($"[Ruri.AssemblyDumper] FATAL: {ex}");
+            return 1;
         }
-
-        ExportGeneratedData("AssetRipper.SourceGenerated.ReferenceAssembliesJsonData", Path.Combine(outputDirectory, "assemblies.json"));
-        ExportGeneratedData("AssetRipper.SourceGenerated.EngineAssetsTpkData", Path.Combine(outputDirectory, "engine_assets.tpk"));
+        finally
+        {
+            sw.Stop();
+            Console.WriteLine($"[Ruri.AssemblyDumper] Total: {sw.ElapsedMilliseconds} ms");
+        }
     }
 
-    private static void ExportGeneratedData(string typeName, string outputPath)
+    // -----------------------------------------------------------------
+    // build (default)
+    // -----------------------------------------------------------------
+
+    private static int RunBuild()
     {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        string repoRoot = LocateRepoRoot();
+        string runDir = AppContext.BaseDirectory;
+        string tpkPath = Path.Combine(runDir, "type_tree.tpk");
+        string emittedDllPath = Path.Combine(runDir, "Ruri.SourceGenerated.dll");
+
+        Console.WriteLine($"[Build] repo={repoRoot}");
+        Console.WriteLine($"[Build] runDir={runDir}");
+
+        EnsureRequiredArtifacts(runDir, repoRoot);
+        if (!File.Exists(tpkPath))
         {
-            var type = assembly.GetType(typeName, false);
-            if (type == null) continue;
-
-            var field = type.GetField("data", BindingFlags.Static | BindingFlags.NonPublic);
-            if (field == null) continue;
-
-            var data = (byte[])field.GetValue(null);
-            File.WriteAllBytes(outputPath, data);
-            Console.WriteLine($"Exported {Path.GetFileName(outputPath)}");
-            return;
+            Console.WriteLine($"[Build] type_tree.tpk missing at {tpkPath}; aborting.");
+            return 2;
         }
-        Console.WriteLine($"Could not find type {typeName} to export.");
+
+        Directory.SetCurrentDirectory(runDir);
+        new ArAssemblyDumperHook().Initialize();
+        PassRunner.RunAllExceptSave(tpkPath);
+        PostProcess.RenameAssemblyAndNamespaces();
+        PassRunner.RunSave();
+
+        if (!File.Exists(emittedDllPath))
+        {
+            Console.WriteLine($"[Build] {emittedDllPath} not produced; aborting.");
+            return 3;
+        }
+
+        string ruriSrcGenDir = Path.Combine(repoRoot, "Source", "Ruri.SourceGenerated");
+        string ruriSrcGenSourceTree = Path.Combine(ruriSrcGenDir, "Ruri", "SourceGenerated");
+        string version = ReadEmittedAssemblyVersion(emittedDllPath);
+
+        int rcode = RecompileStage.Decompile(emittedDllPath, ruriSrcGenSourceTree, version);
+        if (rcode != 0) { Console.WriteLine($"[Build] Recompiler returned {rcode}."); return rcode; }
+
+        // Recompiler emits a generic AssetRipper.SourceGenerated.csproj inside the source tree —
+        // delete it so the parent Ruri.SourceGenerated.csproj keeps owning the build.
+        Try.Delete(Path.Combine(ruriSrcGenSourceTree, "AssetRipper.SourceGenerated.csproj"));
+
+        string ruriSrcGenCsproj = Path.Combine(ruriSrcGenDir, "Ruri.SourceGenerated.csproj");
+        int bcode = RecompileStage.Build(ruriSrcGenCsproj);
+        if (bcode != 0) { Console.WriteLine($"[Build] dotnet build returned {bcode}."); return bcode; }
+
+        string finalDll = Path.Combine(repoRoot, "Source", "Ruri.RipperHook", "Libraries", "Ruri.SourceGenerated.dll");
+        Console.WriteLine($"[Build] Done. Deployed: {finalDll}");
+        return 0;
+    }
+
+    /// <summary>
+    /// AR 的 SharedState / Pass039 / Pass557 / Pass558 等会在 cwd 找几个外部资源文件，
+    /// 都从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 镜像过来。
+    /// </summary>
+    private static void EnsureRequiredArtifacts(string runDir, string repoRoot)
+    {
+        foreach (string fileName in new[] { "consolidated.json", "native_enums.json", "engine_assets.tpk", "assemblies.json", "type_tree.tpk" })
+        {
+            CopyIntoRunDir(runDir, repoRoot, fileName);
+        }
+    }
+
+    private static void CopyIntoRunDir(string runDir, string repoRoot, string fileName)
+    {
+        string target = Path.Combine(runDir, fileName);
+        if (File.Exists(target)) return;
+        foreach (string probe in new[]
+                 {
+                     Path.Combine(repoRoot, "AssetRipper", "Source", "0Bins", "AssetRipper.AssemblyDumper", "Release", fileName),
+                     Path.Combine(repoRoot, "AssetRipper", "Source", "0Bins", "AssetRipper.AssemblyDumper", "Debug", fileName),
+                     Path.Combine(repoRoot, "Source", "Ruri.AssemblyDumper", fileName),
+                 })
+        {
+            if (File.Exists(probe))
+            {
+                File.Copy(probe, target);
+                Console.WriteLine($"[Build] Copied {fileName} from {probe}");
+                return;
+            }
+        }
+        Console.WriteLine($"[Build] WARN: {fileName} not found anywhere; downstream passes may fail.");
+    }
+
+    // -----------------------------------------------------------------
+    // legacy modes
+    // -----------------------------------------------------------------
+
+    private static int RunHook()
+    {
+        Console.WriteLine("[Hook] ClassHookGenerator (legacy)");
+        global::AssetRipper.DocExtraction.ConsoleApp.ClassHookGenerator.Generate();
+        return 0;
+    }
+
+    private static int RunDocs()
+    {
+        Console.WriteLine("[Docs] PDB → consolidated.json + native_enums.json");
+        const string consolidated = "consolidated.json", nativeEnums = "native_enums.json";
+        string outputDir = Path.GetDirectoryName(Path.GetFullPath(consolidated)) ?? Environment.CurrentDirectory;
+        global::AssetRipper.DocExtraction.ConsoleApp.LegacyDocsRunner.RunDocsExtraction(consolidated, nativeEnums);
+        global::AssetRipper.DocExtraction.ConsoleApp.LegacyDocsRunner.ExportEmbeddedTpkAndAssembliesJson(outputDir);
+        return 0;
+    }
+
+    // -----------------------------------------------------------------
+    // utilities
+    // -----------------------------------------------------------------
+
+    private static string ReadEmittedAssemblyVersion(string dllPath)
+    {
+        try
+        {
+            var module = AsmResolver.DotNet.ModuleDefinition.FromFile(dllPath);
+            return module.Assembly?.Version.ToString() ?? "1.0.0.0";
+        }
+        catch { return "1.0.0.0"; }
+    }
+
+    private static string LocateRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Directory.Build.props")) &&
+                Directory.Exists(Path.Combine(dir.FullName, "AssetRipper")) &&
+                Directory.Exists(Path.Combine(dir.FullName, "Source")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+    }
+
+    private static class Try
+    {
+        public static void Delete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
     }
 }
