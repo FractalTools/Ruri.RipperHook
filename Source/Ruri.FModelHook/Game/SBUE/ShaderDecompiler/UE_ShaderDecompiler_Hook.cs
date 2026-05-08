@@ -106,22 +106,31 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
                 // 1. Export Shader Library (.ushaderlib) — Pass 010.
                 // Pass state so Pass010 can stash the archive's shader-map
-                // hash set on it; Pass020 reads that to scope the scan.
-                var libraryBytes = Pass010_SaveShaderArchive.SaveShaderLibrary(entry, _exportState);
-                if (libraryBytes != null)
+                // hash set on it; Pass 030 reads that to scope the scan.
+                //
+                // Streaming write path: SaveShaderLibrary takes the output
+                // path and writes the FSerializedShaderArchive v2 layout
+                // directly to a FileStream, bypassing the old "buffer
+                // everything in MemoryStream then File.WriteAllBytes" path
+                // that broke on the master archive (4GB+ peak RSS, hit
+                // MemoryStream's int.MaxValue and threw "Stream was too
+                // long"). Streaming is bounded by ~200MB of metadata +
+                // per-shader-bytes-as-they-stream-through, so peak RSS for
+                // a 4GB archive is ~200MB instead of ~6-8GB.
+                string path = exportBasePath + ".ushaderlib";
+                try
                 {
-                    string path = exportBasePath + ".ushaderlib";
-                    try
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    if (Pass010_SaveShaderArchive.SaveShaderLibrary(entry, path, _exportState))
                     {
-                        Directory.CreateDirectory(Path.GetDirectoryName(path));
-                        File.WriteAllBytes(path, libraryBytes);
                         HookLogger.LogSuccess($"[+] Exported ShaderLibrary: {path}");
                         exportedLibrary = true;
                     }
-                    catch (Exception ex)
-                    {
-                        HookLogger.LogFailure($"Failed to save .ushaderlib: {ex.Message}");
-                    }
+                }
+                catch (Exception ex)
+                {
+                    HookLogger.LogFailure($"Failed to save .ushaderlib: {ex.Message}");
+                    try { if (File.Exists(path)) File.Delete(path); } catch { }
                 }
 
                 // 2. Run the export pipeline (Pass 020 -> Pass 090) for
@@ -158,7 +167,11 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                     }
                     catch (Exception ex)
                     {
-                        HookLogger.LogFailure($"[UE_ShaderDecompiler] In-process decompile crashed: {ex.Message}");
+                        // Full stack trace + inner exceptions: master
+                        // archive's 6.8GB ushaderlib + 261k shader-map
+                        // entries can hit overflow paths in inner libs
+                        // that the bare `.Message` string doesn't pinpoint.
+                        HookLogger.LogFailure($"[UE_ShaderDecompiler] In-process decompile crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
                     }
                 }
             }

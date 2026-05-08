@@ -12,6 +12,24 @@ public class UnrealShaderParser
         metadata = null;
         using var reader = new BinaryReader(new MemoryStream(data));
 
+        // CRITICAL ordering: deep-scan for "DXBC magic + DXIL chunk inside"
+        // BEFORE the surface IsDxbc check. SM 6.0+ shaders compiled by DXC
+        // ship with the legacy DXBC container header so the runtime's
+        // DXBC-style chunk loader can pick them up — but the actual bytecode
+        // inside is DXIL. Returning `Dxbc` for these mis-routes them to the
+        // dxbc2dxil tool (which only accepts SM 5.x and earlier and refuses
+        // SM 6.0 Wave ops / non-float texture sampling), and ALSO causes
+        // Pass 180 to skip the SM-bump heuristic so spirv-cross gets handed
+        // `--shader-model 51` and rejects the Wave ops with
+        // "Wave ops requires SM 6.0 or higher" / "Sampling non-float textures
+        // is not supported in HLSL SM < 6.7" (35/36 of the Global archive's
+        // _failures observed empirically). The deep scan is ~µs work since
+        // the chunk table sits within the first 256 bytes of any DXBC blob.
+        if (IsDxbcWrappedDxil(data))
+        {
+            architecture = ShaderArchitecture.Dxil;
+            return data;
+        }
         if (IsDxbc(data))
         {
             architecture = ShaderArchitecture.Dxbc;
@@ -46,8 +64,24 @@ public class UnrealShaderParser
         int dxbcOffset = FindSequence(remaining, [0x44, 0x58, 0x42, 0x43]);
         if (dxbcOffset >= 0)
         {
-            codeStart = currentPos + dxbcOffset;
+            int absStart = (int)currentPos + dxbcOffset;
+            codeStart = absStart;
+
+            // Deep-scan the DXBC slice for an embedded DXIL chunk too;
+            // SM 6.0+ shaders sit inside a DXBC container even though
+            // their bytecode is DXIL. Same SM6-routing rationale as the
+            // entry-of-Parse() check above.
             arch = ShaderArchitecture.Dxbc;
+            int slice = data.Length - absStart;
+            if (slice >= 32)
+            {
+                byte[] view = new byte[slice];
+                Array.Copy(data, absStart, view, 0, slice);
+                if (IsDxbcWrappedDxil(view))
+                {
+                    arch = ShaderArchitecture.Dxil;
+                }
+            }
         }
         else
         {
@@ -390,6 +424,34 @@ public class UnrealShaderParser
 
     private static bool IsDxbc(byte[] data)
         => data.Length >= 4 && data[0] == 0x44 && data[1] == 0x58 && data[2] == 0x42 && data[3] == 0x43;
+
+    // Mirror of `ShaderDecompiler.IsDxil`'s deep-chunk-scan path. The DXBC
+    // container header is 32 bytes; chunk count sits at offset 28; the
+    // chunk-offset table starts at 32 and runs `count*4` bytes. We walk
+    // every chunk and look for `DXIL` (the actual bitcode chunk) or
+    // `ILDB`/`ILDN` (DXC's debug-info chunks that are emitted alongside
+    // DXIL on `-Zi` / `-Qstrip_reflect` builds). Either signal proves
+    // the container is SM 6.0+ even though the outer magic is DXBC.
+    //
+    // Capped at 256 chunks as a sanity gate against malformed headers
+    // (real cooked shaders ship with 5-12 chunks max).
+    private static bool IsDxbcWrappedDxil(byte[] data)
+    {
+        if (!IsDxbc(data) || data.Length < 32) return false;
+        int count = BitConverter.ToInt32(data, 28);
+        if (count <= 0 || count > 256 || 32 + (count * 4) > data.Length) return false;
+        for (int i = 0; i < count; i++)
+        {
+            int offset = BitConverter.ToInt32(data, 32 + (i * 4));
+            if (offset < 0 || offset + 4 > data.Length) continue;
+            // 'D' 'X' 'I' 'L'
+            if (data[offset] == 0x44 && data[offset + 1] == 0x58 && data[offset + 2] == 0x49 && data[offset + 3] == 0x4C) return true;
+            // 'I' 'L' 'D' 'B' / 'I' 'L' 'D' 'N' — DXC debug-info chunks.
+            if (data[offset] == 0x49 && data[offset + 1] == 0x4C && data[offset + 2] == 0x44 &&
+                (data[offset + 3] == 0x42 || data[offset + 3] == 0x4E)) return true;
+        }
+        return false;
+    }
 
     // True when `data` STARTS with the DXIL chunk magic. Distinct from
     // ShaderDecompiler.IsDxil which scans inside a DXBC container — this

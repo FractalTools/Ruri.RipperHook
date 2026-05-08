@@ -124,15 +124,27 @@ internal static class Pass180_PrepareShaderBinaries
         // individual shader can request a higher model via either:
         //   * `unrealMetadata.IsSm6Shader == true` (the parser already
         //      decoded the optional-data `'6'` flag UE writes for any
-        //      cooked DXC-compiled shader). Bump to 60 so spirv-cross
-        //      emits SM 6.0-conformant HLSL (resource heap usage,
+        //      cooked DXC-compiled shader). Bump to 67 so spirv-cross
+        //      accepts the full SM 6.x feature set (resource heap usage,
         //      `[[vk::binding]]` -> `register(...)` mapping rules,
-        //      DXIL-only intrinsics like `WaveActiveSum`).
+        //      DXIL-only intrinsics like `WaveActiveSum`, sampling
+        //      non-float textures via Sample/SampleLevel, payload
+        //      access qualifiers, etc.).
         //   * Format == Dxil with a DXC-style container chunk. The
         //      lowest model dxil-spirv reliably produces SPV for is 6.0;
         //      bumping is harmless for SM 6.x containers (spirv-cross
         //      only uses the model to gate intrinsic emission, never to
         //      reject input).
+        //
+        // We bump to **67** specifically because spirv-cross gates two
+        // common feature checks at SM versions higher than 60:
+        //   - "Wave ops requires SM 6.0 or higher" (gated at 60)
+        //   - "Sampling non-float textures is not supported in HLSL SM < 6.7"
+        // 67 covers both without forcing the user to know which version
+        // each shader needs. The lower-bound bump matches the highest
+        // common-case feature gate observed in the X6Game cook (35/36
+        // _failures in the Global archive were one of these two errors).
+        //
         // Untouched when the parser said SM 5.x — we still default to
         // the caller's library option (51 / 50) so the existing UE 5.4
         // SM 5.1 fixture stays byte-identical.
@@ -141,8 +153,8 @@ internal static class Pass180_PrepareShaderBinaries
         if (optionallyMarkedSm6 || detectedFormat == ShaderArchitecture.Dxil)
         {
             // Only bump UPWARDS. If the caller explicitly asked for SM
-            // 6.2 / 6.6 we keep that.
-            if (perShaderModel < 60) perShaderModel = 60;
+            // 6.2 / 6.6 we keep that (a higher caller intent wins).
+            if (perShaderModel < 67) perShaderModel = 67;
         }
 
         EngineDecompileOptions engineOptions = new()
