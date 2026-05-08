@@ -73,39 +73,51 @@ public static class DecompilePipeline
 
         PipelineState state = new(options);
 
-        using (new TimingCookie(state, "Pass 110: Read .ushaderlib"))           Pass110_ReadShaderLibrary.DoPass(state);
-        using (new TimingCookie(state, "Pass 120: Load .assetinfo.json"))       Pass120_LoadAssetInfoSidecar.DoPass(state);
-        using (new TimingCookie(state, "Pass 130: Load .stableinfo.json"))      Pass130_LoadStableInfoSidecar.DoPass(state);
-        using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
-        using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
-        using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
-        using (new TimingCookie(state, "Pass 170: Build shaderlab Properties")) Pass170_BuildShaderLabProperties.DoPass(state);
-        using (new TimingCookie(state, "Pass 175: Build render-state block"))   Pass175_BuildRenderStateBlock.DoPass(state);
-        using (new TimingCookie(state, "Pass 180: Prepare shader binaries"))    Pass180_PrepareShaderBinaries.DoPass(state);
-
-        // Pass 190 + Pass 200 INTERLEAVED per shader-map for streaming.
-        // The engine instance lives across all maps so its one-time setup
-        // is amortised. Cache via state.DecompileResultByIndex makes
-        // shared binaries decompile only on the first owning map's pass.
-        using (new TimingCookie(state, "Pass 190+200: Decompile + emit per map"))
+        try
         {
-            string outputDir = string.IsNullOrEmpty(state.OutputDirectory)
-                ? Path.GetFullPath(state.Options.OutputDirectory)
-                : state.OutputDirectory;
-            using ShaderDecompilerEngine engine = new(outputDir);
-            foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(static m => m.PrimaryName, StringComparer.OrdinalIgnoreCase))
-            {
-                Pass190_RunEngineDecompile.DoPassForOneMap(state, engine, map);
-                Pass200_EmitShaderLabFiles.DoPassForOneMap(state, map);
-            }
-            state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
-        }
+            using (new TimingCookie(state, "Pass 110: Read .ushaderlib"))           Pass110_ReadShaderLibrary.DoPass(state);
+            using (new TimingCookie(state, "Pass 120: Load .assetinfo.json"))       Pass120_LoadAssetInfoSidecar.DoPass(state);
+            using (new TimingCookie(state, "Pass 130: Load .stableinfo.json"))      Pass130_LoadStableInfoSidecar.DoPass(state);
+            using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
+            using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
+            using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
+            using (new TimingCookie(state, "Pass 170: Build shaderlab Properties")) Pass170_BuildShaderLabProperties.DoPass(state);
+            using (new TimingCookie(state, "Pass 175: Build render-state block"))   Pass175_BuildRenderStateBlock.DoPass(state);
+            using (new TimingCookie(state, "Pass 180: Prepare shader binaries"))    Pass180_PrepareShaderBinaries.DoPass(state);
 
-        return new DecompileSummary(
-            state.Library?.ShaderEntries.Length ?? 0,
-            state.Decompiled,
-            state.Skipped,
-            state.Failed);
+            // Pass 190 + Pass 200 INTERLEAVED per shader-map for streaming.
+            // The engine instance lives across all maps so its one-time setup
+            // is amortised. Cache via state.DecompileResultByIndex makes
+            // shared binaries decompile only on the first owning map's pass.
+            using (new TimingCookie(state, "Pass 190+200: Decompile + emit per map"))
+            {
+                string outputDir = string.IsNullOrEmpty(state.OutputDirectory)
+                    ? Path.GetFullPath(state.Options.OutputDirectory)
+                    : state.OutputDirectory;
+                using ShaderDecompilerEngine engine = new(outputDir);
+                foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(static m => m.PrimaryName, StringComparer.OrdinalIgnoreCase))
+                {
+                    Pass190_RunEngineDecompile.DoPassForOneMap(state, engine, map);
+                    Pass200_EmitShaderLabFiles.DoPassForOneMap(state, map);
+                }
+                state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
+            }
+
+            return new DecompileSummary(
+                state.Library?.ShaderEntries.Length ?? 0,
+                state.Decompiled,
+                state.Skipped,
+                state.Failed);
+        }
+        finally
+        {
+            // Release the .ushaderlib FileStream that ShaderLibrary holds
+            // open for streaming code-body reads. Without this, the file
+            // stays locked until GC kicks in — bad for batch CLI runs that
+            // process N archives back-to-back and may want to read/move
+            // the .ushaderlib afterwards.
+            state.Library?.Dispose();
+        }
     }
 
     private readonly struct TimingCookie : IDisposable

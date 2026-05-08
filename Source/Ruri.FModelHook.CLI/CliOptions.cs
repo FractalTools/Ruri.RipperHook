@@ -20,6 +20,13 @@ internal sealed class CliOptions
     public int  ReadyTimeoutSec { get; set; } = 600;
     public bool? SplitVariants { get; set; } // null = leave persisted setting alone
     public List<string> Hooks { get; } = new();
+    // Decompile-only debug mode. When set, the CLI skips launching FModel
+    // entirely and just calls DecompilePipeline.Run against the supplied
+    // .ushaderlib (its sidecars must already sit next to it). Lets us
+    // validate Pass 110 / 180 / 190 / 200 fixes against a single archive
+    // without re-running the export side, which for the master 6.8 GB
+    // archive takes 10-15 minutes per iteration.
+    public string? DecompileOnly { get; set; }
 
     public static CliOptions Parse(string[] args)
     {
@@ -70,6 +77,13 @@ internal sealed class CliOptions
                         i++;
                     }
                     break;
+                case "--decompile-only":
+                    if (i + 1 < args.Length)
+                    {
+                        opts.DecompileOnly = args[i + 1];
+                        i++;
+                    }
+                    break;
                 default:
                     // Pass-through: forwarded to the hook-side ParseCliArgs so
                     // any future flags it grows are auto-consumed without a
@@ -100,6 +114,10 @@ internal sealed class CliOptions
         "  --no-split-variants   Force keeping variants in the .shader file.",
         "  --hook <id>           Enable a specific hook id (repeatable). Default: enable",
         "                        every discovered hook (matches GUI default).",
+        "  --decompile-only PATH Skip FModel boot; just run DecompilePipeline against",
+        "                        an existing <basename>.ushaderlib (sidecars must sit",
+        "                        next to it). Useful for re-iterating decompile-side",
+        "                        fixes without re-exporting the archive.",
         "  --list-hooks          Print discovered hook ids and exit.",
         "  -h, --help            Print this help and exit.",
         "",

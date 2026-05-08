@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Windows;
+using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 using Ruri.Hook;
 using Ruri.Hook.Config;
 using Ruri.Hook.Core;
@@ -47,6 +48,15 @@ public static class Program
             return RunListHooks();
         }
 
+        // Decompile-only debug path. Skip FModel boot entirely; just run
+        // DecompilePipeline against the supplied .ushaderlib. The export
+        // side already wrote it on a previous run, plus the .assetinfo /
+        // .stableinfo / UnifiedShaderMetadata sidecars next to it.
+        if (!string.IsNullOrWhiteSpace(opts.DecompileOnly))
+        {
+            return RunDecompileOnly(opts.DecompileOnly!);
+        }
+
         // Persisted config drives every other module setting (e.g. shader
         // decompiler split-variants); CLI flags can only ADD to the enabled
         // hook set, not subtract from it (matches the GUI flow).
@@ -71,6 +81,67 @@ public static class Program
         catch (Exception ex)
         {
             HookLogger.LogFailure($"[Ruri.FModelHook.CLI] FModel crashed: {ex}");
+            return 1;
+        }
+    }
+
+    // Decompile-only debug runner. Resolves UnifiedShaderMetadata.json by
+    // walking up to the project root (`<RawDataDirectory>/<ProjectName>/UnifiedShaderMetadata.json`,
+    // matching what UE_ShaderDecompiler_Hook does). Output lands at
+    // `<libraryDir>/Decompiled/<libraryStem>/` so the dump matches the
+    // shape produced by the full export+decompile pipeline.
+    private static int RunDecompileOnly(string libraryPath)
+    {
+        if (!File.Exists(libraryPath))
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --decompile-only: file not found: {libraryPath}");
+            return 1;
+        }
+        string libDir = Path.GetDirectoryName(Path.GetFullPath(libraryPath))!;
+        string libStem = Path.GetFileNameWithoutExtension(libraryPath);
+        string outDir = Path.Combine(libDir, "Decompiled", libStem);
+
+        // Resolve UnifiedShaderMetadata.json. The hook writes it under
+        // `<RawDataDirectory>/<ProjectName>/UnifiedShaderMetadata.json`.
+        // For decompile-only we don't have a CUE4ParseViewModel handy, so
+        // walk upwards from the .ushaderlib looking for the file. The
+        // export pipeline always sites it at the project-root level.
+        string? unifiedPath = null;
+        DirectoryInfo? probe = new(libDir);
+        while (probe != null)
+        {
+            string candidate = Path.Combine(probe.FullName, "UnifiedShaderMetadata.json");
+            if (File.Exists(candidate)) { unifiedPath = candidate; break; }
+            probe = probe.Parent;
+        }
+
+        HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: library={libraryPath}");
+        HookLogger.Log($"[Ruri.FModelHook.CLI]                   output={outDir}");
+        HookLogger.Log($"[Ruri.FModelHook.CLI]                   unified={(unifiedPath ?? "(none — names will fall back to sidecars)")}");
+
+        try
+        {
+            // SplitVariants flag obeys the persisted setting (loaded by the
+            // CLI's WireModuleSettings path normally; here we read the
+            // public access shim directly to avoid booting HookConfig).
+            bool splitVariants = ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+
+            DecompileSummary summary = DecompilePipeline.Run(new LibraryDecompileOptions
+            {
+                LibraryPath = libraryPath,
+                OutputDirectory = outDir,
+                UnifiedMetadataPath = unifiedPath,
+                RecreateOutputDirectory = true,
+                SplitVariantsToHlslFiles = splitVariants,
+                Log = HookLogger.Log,
+                LogError = HookLogger.LogFailure,
+            });
+            HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: done. shaders={summary.TotalShaders} decompiled={summary.Decompiled} skipped={summary.Skipped} failed={summary.Failed}");
+            return summary.Failed > 0 ? 2 : 0;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --decompile-only: crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
             return 1;
         }
     }
