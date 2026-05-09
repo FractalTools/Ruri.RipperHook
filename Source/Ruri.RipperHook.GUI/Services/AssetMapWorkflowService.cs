@@ -1,4 +1,5 @@
 using AssetRipper.GUI.Web;
+using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Extensions;
 using MessagePack;
@@ -112,9 +113,11 @@ internal sealed class AssetMapWorkflowService
 					}
 				}
 			}
-			catch
+			catch (Exception ex)
 			{
-				// Ignore unreadable files while scanning a mixed game directory.
+				// 扫描混合目录时,某些文件读不动是预期的 (头文件已经被 Hash 过, 或者别的游戏的格式).
+				// 但完全静默的话遇到调试问题没法定位 — 用 Verbose 级把文件名和异常类型记下来.
+				Logger.Verbose(LogCategory.Import, $"Skipping unreadable file '{file}': {ex.GetType().Name}: {ex.Message}");
 			}
 			finally
 			{

@@ -1,3 +1,4 @@
+using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_2;
 using AssetRipper.SourceGenerated.Classes.ClassID_25;
@@ -1387,8 +1388,11 @@ public partial class MainForm : Form
 				bitmap.UnlockBits(data);
 			}
 		}
-		catch
+		catch (Exception ex)
 		{
+			// PNG 损坏 / GL 上下文丢失 / OOM 都会落到这里. 调用方靠 textureId == 0 判定失败,
+			// 但 GUI 用户看不到原因; 用 Warning 级让 logger sink 把详情记下来.
+			Logger.Warning(LogCategory.General, $"TryUploadTexture failed: {ex.GetType().Name}: {ex.Message}");
 			return 0;
 		}
 	}
