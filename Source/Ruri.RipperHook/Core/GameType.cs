@@ -16,4 +16,5 @@ public enum GameType
     AR_BundledAssetsExportMode,
     AR_SkipProcessingAnimation,
     AR_ExportDirectly,
+    AR_AnimationExport,
 }
