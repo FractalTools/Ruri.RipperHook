@@ -159,11 +159,12 @@ public partial class MainForm : Form
 			return;
 		}
 
-		string[] paths = File.ReadAllLines(dialog.FileName)
+		string fileName = dialog.FileName;
+		string[] paths = await Task.Run(() => File.ReadAllLines(fileName)
 			.Select(static line => line.Trim())
 			.Where(static line => !string.IsNullOrWhiteSpace(line))
 			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.ToArray();
+			.ToArray());
 
 		if (paths.Length == 0)
 		{
