@@ -5,10 +5,7 @@ using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Endian;
 using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated;
-using MonoMod.Cil;
 using Ruri.Hook;
-using Ruri.Hook.Core;
-using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.Core;
 
 namespace Ruri.RipperHook;
@@ -108,15 +105,11 @@ public abstract class RipperHookCommon : RuriHook
         Assembly? ruriAssembly = null;
         try
         {
-            ruriAssembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == generatedAssemblyNamespace);
-            if (ruriAssembly == null)
-            {
-                ruriAssembly = Assembly.Load(generatedAssemblyNamespace);
-            }
+            ruriAssembly = ResolveGeneratedAssembly(generatedAssemblyNamespace);
         }
-        catch
+        catch (Exception ex)
         {
-            Console.WriteLine($"[RipperHook] Warning: Could not load assembly {generatedAssemblyNamespace}");
+            Console.WriteLine($"[RipperHook] Warning: Could not resolve assembly {generatedAssemblyNamespace}: {ex.Message}");
         }
 
         if (ruriAssembly != null)
@@ -227,6 +220,28 @@ public abstract class RipperHookCommon : RuriHook
                 }
             }
         }
+    }
+
+    private static Assembly? ResolveGeneratedAssembly(string generatedAssemblyNamespace)
+    {
+        Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+        // First prefer already loaded assemblies in the current process.
+        Assembly? assembly = loadedAssemblies.FirstOrDefault(a => string.Equals(a.GetName().Name, generatedAssemblyNamespace, StringComparison.Ordinal));
+        if (assembly != null)
+        {
+            return assembly;
+        }
+
+        // The common path is the default Ruri.SourceGenerated namespace. Use a direct type anchor so
+        // we do not depend on probing rules or display-name based Assembly.Load.
+        if (string.Equals(generatedAssemblyNamespace, "Ruri.SourceGenerated", StringComparison.Ordinal))
+        {
+            return typeof(SourceTpk).Assembly;
+        }
+
+        // Namespace overrides may still already be loaded under a matching assembly name.
+        return loadedAssemblies.FirstOrDefault(a => string.Equals(a.GetName().Name, generatedAssemblyNamespace, StringComparison.OrdinalIgnoreCase));
     }
     
     // SetAssetListField is AR specific

@@ -15,6 +15,8 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.DocExtraction\AssetRipper.DocExtraction.csproj" />
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
+		<ProjectReference Include="..\..\Tpk\Tpk.TypeTrees.Json\Tpk.TypeTrees.Json.csproj" />
+		<ProjectReference Include="..\..\Tpk\Tpk\Tpk.csproj" />
 		<!-- Build AR.AssemblyDumper but reference its output via Reference (below) so the
 		     IgnoresAccessChecksToGenerator publicizer kicks in for internals access. -->
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.AssemblyDumper\AssetRipper.AssemblyDumper.csproj">

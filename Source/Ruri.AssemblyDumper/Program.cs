@@ -1,3 +1,4 @@
+using AssetRipper.Primitives;
 using Ruri.AssemblyDumper.Pipeline;
 using System.Diagnostics;
 
@@ -12,32 +13,48 @@ namespace Ruri.AssemblyDumper;
 /// 改 Module/Assembly/Namespace 等价实现。
 ///
 /// 默认 build 模式：
-///   1. 把 <c>consolidated.json / native_enums.json / engine_assets.tpk / assemblies.json /
-///      type_tree.tpk</c> 从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 镜像到 cwd
-///   2. 安装 MonoMod hooks（ArHooks 复刻 AR 子模块 9 文件 diff）
-///   3. 反射调 AR 的 60+ 个 pass，顺序与 AR Program.cs 1:1
-///   4. PostProcess 重命名 AssetRipper.SourceGenerated → Ruri.SourceGenerated
-///   5. Pass998 写出 <c>Ruri.SourceGenerated.dll</c>
-///   6. AR.AssemblyDumper.Recompiler 反编译到 <c>Source/Ruri.SourceGenerated/Ruri/SourceGenerated</c>
-///   7. <c>dotnet build Ruri.SourceGenerated.csproj</c> — 它的 &lt;CopyAfterBuild&gt; 把 dll 同步到
+///   1. 从 typetree json 目录生成新的 <c>type_tree.tpk</c>
+///   2. 把 <c>consolidated.json / native_enums.json / engine_assets.tpk / assemblies.json</c>
+///      从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 刷新到 cwd
+///   3. 安装 MonoMod hooks（ArHooks 复刻 AR 子模块 9 文件 diff）
+///   4. 反射调 AR 的 60+ 个 pass，顺序与 AR Program.cs 1:1
+///   5. PostProcess 重命名 AssetRipper.SourceGenerated → Ruri.SourceGenerated
+///   6. Pass998 写出 <c>Ruri.SourceGenerated.dll</c>
+///   7. AR.AssemblyDumper.Recompiler 反编译到 <c>Source/Ruri.SourceGenerated/Ruri/SourceGenerated</c>
+///   8. <c>dotnet build Ruri.SourceGenerated.csproj</c> — 它的 &lt;CopyAfterBuild&gt; 把 dll 同步到
 ///      <c>Source/Ruri.RipperHook/Libraries/Ruri.SourceGenerated.dll</c>
 ///
 /// 旧模式：<c>hook</c>（ClassHookGenerator）/ <c>docs</c>（PDB → consolidated.json）。
 /// </summary>
 internal static class Program
 {
+    private const string DefaultTypeTreeJsonDirectory = @"D:\Ruri\Git\FractalTools\TypeTree\output";
+
     public static int Main(string[] args)
     {
         var sw = Stopwatch.StartNew();
         try
         {
-            string mode = (args.Length > 0 ? args[0] : "build").ToLowerInvariant();
-            return mode switch
+            if (args.Length == 1)
             {
-                "docs" => RunDocs(),
-                "hook" => RunHook(),
-                _ => RunBuild(),
-            };
+                string mode = args[0].ToLowerInvariant();
+                if (mode == "docs")
+                {
+                    return RunDocs();
+                }
+                if (mode == "hook")
+                {
+                    return RunHook();
+                }
+            }
+
+            if (args.Length > 1)
+            {
+                throw new ArgumentException("Expected either no arguments, a single TypeTree JSON directory path, or the legacy 'docs'/'hook' mode.");
+            }
+
+            string typeTreeJsonDirectory = args.Length == 0 ? DefaultTypeTreeJsonDirectory : args[0];
+            return RunBuild(typeTreeJsonDirectory);
         }
         catch (Exception ex)
         {
@@ -55,22 +72,20 @@ internal static class Program
     // build (default)
     // -----------------------------------------------------------------
 
-    private static int RunBuild()
+    private static int RunBuild(string typeTreeJsonDirectory)
     {
         string repoRoot = LocateRepoRoot();
         string runDir = AppContext.BaseDirectory;
         string tpkPath = Path.Combine(runDir, "type_tree.tpk");
         string emittedDllPath = Path.Combine(runDir, "Ruri.SourceGenerated.dll");
+        string resolvedTypeTreeJsonDirectory = ResolveTypeTreeJsonDirectory(typeTreeJsonDirectory);
 
         Console.WriteLine($"[Build] repo={repoRoot}");
         Console.WriteLine($"[Build] runDir={runDir}");
+        Console.WriteLine($"[Build] typeTreeJsonDir={resolvedTypeTreeJsonDirectory}");
 
         EnsureRequiredArtifacts(runDir, repoRoot);
-        if (!File.Exists(tpkPath))
-        {
-            Console.WriteLine($"[Build] type_tree.tpk missing at {tpkPath}; aborting.");
-            return 2;
-        }
+        TypeTreeTpkBuilder.WriteFromJsonDirectory(resolvedTypeTreeJsonDirectory, tpkPath);
 
         Directory.SetCurrentDirectory(runDir);
         new ArAssemblyDumperHook().Initialize();
@@ -106,11 +121,11 @@ internal static class Program
 
     /// <summary>
     /// AR 的 SharedState / Pass039 / Pass557 / Pass558 等会在 cwd 找几个外部资源文件，
-    /// 都从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 镜像过来。
+    /// 都从 0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/ 刷新过来。
     /// </summary>
     private static void EnsureRequiredArtifacts(string runDir, string repoRoot)
     {
-        foreach (string fileName in new[] { "consolidated.json", "native_enums.json", "engine_assets.tpk", "assemblies.json", "type_tree.tpk" })
+        foreach (string fileName in new[] { "consolidated.json", "native_enums.json", "engine_assets.tpk", "assemblies.json" })
         {
             CopyIntoRunDir(runDir, repoRoot, fileName);
         }
@@ -119,22 +134,70 @@ internal static class Program
     private static void CopyIntoRunDir(string runDir, string repoRoot, string fileName)
     {
         string target = Path.Combine(runDir, fileName);
-        if (File.Exists(target)) return;
         foreach (string probe in new[]
                  {
-                     Path.Combine(repoRoot, "AssetRipper", "Source", "0Bins", "AssetRipper.AssemblyDumper", "Release", fileName),
+                      Path.Combine(repoRoot, "AssetRipper", "Source", "0Bins", "AssetRipper.AssemblyDumper", "Release", fileName),
                      Path.Combine(repoRoot, "AssetRipper", "Source", "0Bins", "AssetRipper.AssemblyDumper", "Debug", fileName),
                      Path.Combine(repoRoot, "Source", "Ruri.AssemblyDumper", fileName),
                  })
         {
             if (File.Exists(probe))
             {
-                File.Copy(probe, target);
-                Console.WriteLine($"[Build] Copied {fileName} from {probe}");
+                File.Copy(probe, target, overwrite: true);
+                Console.WriteLine($"[Build] Refreshed {fileName} from {probe}");
                 return;
             }
         }
         Console.WriteLine($"[Build] WARN: {fileName} not found anywhere; downstream passes may fail.");
+    }
+
+    private static string ResolveTypeTreeJsonDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("TypeTree JSON directory path is required.", nameof(path));
+        }
+
+        string fullPath = Path.GetFullPath(path);
+        var directory = new DirectoryInfo(fullPath);
+        if (!directory.Exists)
+        {
+            throw new DirectoryNotFoundException($"TypeTree JSON directory not found: {fullPath}");
+        }
+
+        if (directory.GetDirectories().Length > 0)
+        {
+            throw new ArgumentException($"Input must be the flat TypeTree JSON output directory, not a parent folder: {fullPath}", nameof(path));
+        }
+
+        FileInfo[] files = directory.GetFiles();
+        if (files.Length == 0)
+        {
+            throw new ArgumentException($"TypeTree JSON directory is empty: {fullPath}", nameof(path));
+        }
+
+        int versionJsonCount = 0;
+        foreach (FileInfo file in files)
+        {
+            if (!file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Input directory must contain only TypeTree version JSON files. Unexpected file: {file.FullName}", nameof(path));
+            }
+
+            if (!UnityVersion.TryParse(Path.GetFileNameWithoutExtension(file.Name), out _, out _))
+            {
+                throw new ArgumentException($"Input directory must contain only Unity-versioned TypeTree JSON files. Unexpected file: {file.FullName}", nameof(path));
+            }
+
+            versionJsonCount++;
+        }
+
+        if (versionJsonCount == 0)
+        {
+            throw new ArgumentException($"No TypeTree version JSON files were found in: {fullPath}", nameof(path));
+        }
+
+        return fullPath;
     }
 
     // -----------------------------------------------------------------

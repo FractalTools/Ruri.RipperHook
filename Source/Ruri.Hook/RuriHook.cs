@@ -127,6 +127,19 @@ namespace Ruri.Hook
         public static void ApplyHooks(HookConfig config)
         {
             var enabledHooks = config.EnabledHooks;
+            if (HookManager.HasSameHookSet(enabledHooks))
+            {
+                Console.WriteLine("[RuriHook] Hook set unchanged; skipping re-apply.");
+                return;
+            }
+
+            if (HookManager.ActiveHookIds.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("[RuriHook] Disposing previously applied hooks before re-apply.");
+                HookManager.DisposeAll();
+            }
+
             var availableHooks = GetAvailableHooks();
 
             foreach (var (type, attr) in availableHooks)
@@ -149,6 +162,8 @@ namespace Ruri.Hook
                     }
                 }
             }
+
+            HookManager.MarkActiveHooks(enabledHooks);
         }
     }
 }
