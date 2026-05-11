@@ -13,6 +13,8 @@ namespace Ruri.Hook
     {
         protected readonly HookRegistry Registry = new();
         protected List<MethodInfo> methodHooks = new();
+        private static readonly object LifecycleSyncRoot = new();
+        private static readonly HashSet<string> ActiveHookIds = new(StringComparer.OrdinalIgnoreCase);
         
         public virtual void Initialize()
         {
@@ -124,46 +126,128 @@ namespace Ruri.Hook
             return hooks.OrderBy(x => x.Attribute.GameName).ThenBy(x => x.Attribute.Version).ToList();
         }
 
+        public static string BuildHookId(GameHookAttribute attribute)
+        {
+            ArgumentNullException.ThrowIfNull(attribute);
+            return $"{attribute.GameName}_{attribute.Version}";
+        }
+
         public static void ApplyHooks(HookConfig config)
         {
-            var enabledHooks = config.EnabledHooks;
-            if (HookManager.HasSameHookSet(enabledHooks))
-            {
-                Console.WriteLine("[RuriHook] Hook set unchanged; skipping re-apply.");
-                return;
-            }
+            ArgumentNullException.ThrowIfNull(config);
 
-            if (HookManager.ActiveHookIds.Count > 0)
+            lock (LifecycleSyncRoot)
             {
-                Console.WriteLine();
-                Console.WriteLine("[RuriHook] Disposing previously applied hooks before re-apply.");
-                HookManager.DisposeAll();
-            }
+                HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
+                List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
+                HashSet<string> availableHookIds = new(availableHooks.Select(static hook => BuildHookId(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
 
-            var availableHooks = GetAvailableHooks();
-
-            foreach (var (type, attr) in availableHooks)
-            {
-                var id = $"{attr.GameName}_{attr.Version}";
-                if (enabledHooks.Contains(id))
+                foreach (string hookId in ActiveHookIds.Except(desiredHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
-                    try
+                    RemoveHookCore(hookId);
+                }
+
+                foreach (var (type, attr) in availableHooks)
+                {
+                    string hookId = BuildHookId(attr);
+                    if (desiredHookIds.Contains(hookId))
                     {
-                        if (Activator.CreateInstance(type, true) is RuriHook hook)
-                        {
-                            Console.WriteLine();
-                            Console.WriteLine($"[RuriHook] Enabled hook: {id}");
-                            hook.Initialize();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[RuriHook] Failed to enable hook {id}: {ex.Message}");
+                        ApplyHookCore(hookId, type);
                     }
                 }
+
+                foreach (string missingHookId in desiredHookIds.Except(availableHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"[RuriHook] Failed to enable hook {missingHookId}: no matching hook implementation was found.");
+                }
+            }
+        }
+
+        public static bool ApplyHook(string hookId)
+        {
+            if (string.IsNullOrWhiteSpace(hookId))
+            {
+                return false;
             }
 
-            HookManager.MarkActiveHooks(enabledHooks);
+            lock (LifecycleSyncRoot)
+            {
+                foreach (var (type, attr) in GetAvailableHooks())
+                {
+                    if (string.Equals(BuildHookId(attr), hookId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ApplyHookCore(hookId, type);
+                    }
+                }
+
+                Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: no matching hook implementation was found.");
+                return false;
+            }
+        }
+
+        public static bool RemoveHook(string hookId)
+        {
+            if (string.IsNullOrWhiteSpace(hookId))
+            {
+                return false;
+            }
+
+            lock (LifecycleSyncRoot)
+            {
+                return RemoveHookCore(hookId);
+            }
+        }
+
+        public static void ClearAppliedHooks()
+        {
+            lock (LifecycleSyncRoot)
+            {
+                ActiveHookIds.Clear();
+            }
+        }
+
+        private static bool ApplyHookCore(string hookId, Type type)
+        {
+            if (ActiveHookIds.Contains(hookId))
+            {
+                return false;
+            }
+
+            try
+            {
+                HookManager.RunInScope(hookId, () =>
+                {
+                    if (Activator.CreateInstance(type, true) is not RuriHook hook)
+                    {
+                        throw new InvalidOperationException($"Type {type.FullName} is not a valid hook implementation.");
+                    }
+
+                    Console.WriteLine();
+                    Console.WriteLine($"[RuriHook] Enabled hook: {hookId}");
+                    hook.Initialize();
+                });
+
+                ActiveHookIds.Add(hookId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                HookManager.DisposeScope(hookId);
+                Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool RemoveHookCore(string hookId)
+        {
+            if (!ActiveHookIds.Remove(hookId))
+            {
+                return false;
+            }
+
+            HookManager.DisposeScope(hookId);
+            Console.WriteLine($"[RuriHook] Disabled hook: {hookId}");
+            return true;
         }
     }
 }

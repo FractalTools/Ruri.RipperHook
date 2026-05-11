@@ -1,5 +1,6 @@
 using System.Reflection;
 using MonoMod.RuntimeDetour;
+using Ruri.Hook.Core;
 using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.Core;
 namespace Ruri.RipperHook
@@ -11,11 +12,23 @@ namespace Ruri.RipperHook
         // Missing fields referenced in errors
         public static string gameVer = "";
         public static string gameName = "";
-        private static readonly HashSet<GameType> LoadedGameHooks = new();
+        private static readonly object LoadedGameHooksSyncRoot = new();
+        private static readonly Dictionary<string, HashSet<GameType>> LoadedGameHooks = new(StringComparer.OrdinalIgnoreCase);
 
         public static bool IsGameLoaded(GameType gameType)
         {
-            return LoadedGameHooks.Contains(gameType);
+            lock (LoadedGameHooksSyncRoot)
+            {
+                foreach (HashSet<GameType> gameTypes in LoadedGameHooks.Values)
+                {
+                    if (gameTypes.Contains(gameType))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         public static void RegisterLoadedGameHook(GameType gameType)
@@ -25,7 +38,23 @@ namespace Ruri.RipperHook
                 return;
             }
 
-            LoadedGameHooks.Add(gameType);
+            string scopeId = HookManager.CurrentScopeId ?? string.Empty;
+            bool added;
+            lock (LoadedGameHooksSyncRoot)
+            {
+                if (!LoadedGameHooks.TryGetValue(scopeId, out HashSet<GameType>? gameTypes))
+                {
+                    gameTypes = new HashSet<GameType>();
+                    LoadedGameHooks[scopeId] = gameTypes;
+                }
+
+                added = gameTypes.Add(gameType);
+            }
+
+            if (added)
+            {
+                HookManager.RegisterCleanup(() => RemoveLoadedGameHook(scopeId, gameType));
+            }
         }
 
         public static void Init()
@@ -86,8 +115,12 @@ namespace Ruri.RipperHook
         {
             // Dispose hooks tracked by Core
             HookManager.DisposeAll();
+            global::Ruri.Hook.RuriHook.ClearAppliedHooks();
             HookDispatcher.Clear();
-            LoadedGameHooks.Clear();
+            lock (LoadedGameHooksSyncRoot)
+            {
+                LoadedGameHooks.Clear();
+            }
             gameVer = "";
             gameName = "";
 
@@ -97,6 +130,23 @@ namespace Ruri.RipperHook
                 hook.Dispose();
             }
             ilHooks.Clear();
+        }
+
+        private static void RemoveLoadedGameHook(string scopeId, GameType gameType)
+        {
+            lock (LoadedGameHooksSyncRoot)
+            {
+                if (!LoadedGameHooks.TryGetValue(scopeId, out HashSet<GameType>? gameTypes))
+                {
+                    return;
+                }
+
+                gameTypes.Remove(gameType);
+                if (gameTypes.Count == 0)
+                {
+                    LoadedGameHooks.Remove(scopeId);
+                }
+            }
         }
     }
 }

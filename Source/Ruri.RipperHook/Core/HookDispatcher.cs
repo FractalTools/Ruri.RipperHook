@@ -6,6 +6,7 @@ using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated;
 using AssetRipper.Primitives;
+using Ruri.Hook.Core;
 
 namespace Ruri.RipperHook.Core
 {
@@ -13,6 +14,7 @@ namespace Ruri.RipperHook.Core
     {
         public delegate void ReadReleaseDelegate(object asset, ref EndianSpanReader reader);
 
+        private static readonly object _syncRoot = new();
         private static readonly Dictionary<Type, HookInfo> _genericHookCache = new();
 
         private class HookInfo
@@ -25,26 +27,49 @@ namespace Ruri.RipperHook.Core
 
         public static void Register(Type sourceType, MethodInfo? createMethod, UnityVersion targetVersion, ReadReleaseDelegate? callback)
         {
-            _genericHookCache[sourceType] = new HookInfo
+            HookInfo hookInfo = new HookInfo
             {
                 CreateMethod = createMethod,
                 TargetVersion = targetVersion,
                 Callback = callback
             };
+
+            lock (_syncRoot)
+            {
+                _genericHookCache[sourceType] = hookInfo;
+            }
+
+            HookManager.RegisterCleanup(() =>
+            {
+                lock (_syncRoot)
+                {
+                    if (_genericHookCache.TryGetValue(sourceType, out HookInfo? current) && ReferenceEquals(current, hookInfo))
+                    {
+                        _genericHookCache.Remove(sourceType);
+                    }
+                }
+            });
         }
 
         public static void Clear()
         {
-            _genericHookCache.Clear();
+            lock (_syncRoot)
+            {
+                _genericHookCache.Clear();
+            }
         }
 
         public static void Universal_ReadRelease(object asset, ref EndianSpanReader reader)
         {
             var type = asset.GetType();
 
-            if (!_genericHookCache.TryGetValue(type, out var hookInfo))
+            HookInfo hookInfo;
+            lock (_syncRoot)
             {
-                throw new InvalidOperationException($"[RipperHook] Generic hook called for unregistered type {type.FullName}");
+                if (!_genericHookCache.TryGetValue(type, out hookInfo!))
+                {
+                    throw new InvalidOperationException($"[RipperHook] Generic hook called for unregistered type {type.FullName}");
+                }
             }
 
             // 1. Priority: Custom Callback

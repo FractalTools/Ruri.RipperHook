@@ -1783,18 +1783,18 @@ public partial class MainForm : Form
 			string previousHooks = _hookConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
 			string nextHooks = newConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", newConfig.EnabledHooks.OrderBy(static x => x));
 			string[] removedHooks = _hookConfig.EnabledHooks.Except(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
+			string[] addedHooks = newConfig.EnabledHooks.Except(_hookConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
 			_adapter.Reset();
 			if (removedHooks.Length > 0)
 			{
 				Console.WriteLine();
 				Console.WriteLine($"[RuriHook] Unloading hook(s): {string.Join(", ", removedHooks)}");
 			}
-			else if (_hookConfig.EnabledHooks.Count > 0 && newConfig.EnabledHooks.Count == 0)
+			if (addedHooks.Length > 0)
 			{
 				Console.WriteLine();
-				Console.WriteLine("[RuriHook] Unloading all hooks.");
+				Console.WriteLine($"[RuriHook] Loading hook(s): {string.Join(", ", addedHooks)}");
 			}
-			RuriRuntimeHook.DisposeAll();
 			_hookConfig = new HookConfig
 			{
 				EnabledHooks = new HashSet<string>(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase)
@@ -1807,6 +1807,10 @@ public partial class MainForm : Form
 			if (removedHooks.Length > 0)
 			{
 				Console.WriteLine($"[RuriHook] Unloaded hook(s): {string.Join(", ", removedHooks)}");
+			}
+			if (addedHooks.Length > 0)
+			{
+				Console.WriteLine($"[RuriHook] Loaded hook(s): {string.Join(", ", addedHooks)}");
 			}
 
 			if (reloadCurrentPaths && _lastLoadedPaths.Length > 0)

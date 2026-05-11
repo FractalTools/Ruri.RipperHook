@@ -139,11 +139,10 @@ internal sealed class EnabledHooksDialog : AdonisWindow
 
         _config.Save(_configPath);
         // Re-apply hooks against the new EnabledHooks set, mirroring
-        // Ruri.RipperHook.GUI.MainForm.ApplyHookConfigurationAsync. This
-        // INSTALLs newly-enabled hooks at runtime; previously-installed
-        // detours stay live (MonoMod doesn't unhook safely mid-session)
-        // but the user's expectation is "change takes effect now",
-        // matching RipperHook's behaviour.
+        // Ruri.RipperHook.GUI.MainForm.ApplyHookConfigurationAsync.
+        // RuriHook.ApplyHooks now applies a delta: newly-enabled hooks are
+        // installed immediately, removed hooks are detached scope-by-scope,
+        // and untouched hooks stay in place.
         try
         {
             RuriHook.ApplyHooks(_config);
