@@ -20,6 +20,9 @@ partial class MainForm
 	private ToolStripSeparator fileToolStripSeparator2 = null!;
 	private ToolStripMenuItem optionsToolStripMenuItem = null!;
 	private ToolStripMenuItem resetToolStripMenuItem = null!;
+	private ToolStripMenuItem directExportToolStripMenuItem = null!;
+	private ToolStripMenuItem directExportFromFileToolStripMenuItem = null!;
+	private ToolStripMenuItem directExportFromFolderToolStripMenuItem = null!;
 	private ToolStripMenuItem exportToolStripMenuItem = null!;
 	private ToolStripMenuItem exportAllAssetsMenuItem = null!;
 	private ToolStripMenuItem exportAllConvertedAssetsMenuItem = null!;
@@ -103,6 +106,9 @@ partial class MainForm
 		fileToolStripSeparator2 = new ToolStripSeparator();
 		optionsToolStripMenuItem = new ToolStripMenuItem();
 		resetToolStripMenuItem = new ToolStripMenuItem();
+		directExportToolStripMenuItem = new ToolStripMenuItem();
+		directExportFromFileToolStripMenuItem = new ToolStripMenuItem();
+		directExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
 		exportToolStripMenuItem = new ToolStripMenuItem();
 		exportAllAssetsMenuItem = new ToolStripMenuItem();
 		exportAllConvertedAssetsMenuItem = new ToolStripMenuItem();
@@ -173,7 +179,7 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, optionsToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, optionsToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
@@ -199,6 +205,16 @@ partial class MainForm
 		optionsToolStripMenuItem.Text = "Options";
 		loadCabMapToolStripMenuItem.Text = "Load CABMap";
 		loadCabMapToolStripMenuItem.Click += loadCabMapToolStripMenuItem_Click;
+		// Top-level button: load an input + export directly, no asset list / scene tree.
+		// Equivalent to the headless AR_ExportDirectly hook, but UI-triggered. Splits into
+		// file-vs-folder so single-bundle spot tests share the same path-derivation logic
+		// as whole-game exports.
+		directExportToolStripMenuItem.Text = "Direct Export";
+		directExportToolStripMenuItem.DropDownItems.AddRange([directExportFromFileToolStripMenuItem, directExportFromFolderToolStripMenuItem]);
+		directExportFromFileToolStripMenuItem.Text = "From file(s)...";
+		directExportFromFileToolStripMenuItem.Click += directExportFromFileToolStripMenuItem_Click;
+		directExportFromFolderToolStripMenuItem.Text = "From folder...";
+		directExportFromFolderToolStripMenuItem.Click += directExportFromFolderToolStripMenuItem_Click;
 		exportToolStripMenuItem.DropDownItems.AddRange([exportAllAssetsMenuItem, exportSelectedAssetsMenuItem, exportFilteredAssetsMenuItem]);
 		exportToolStripMenuItem.Text = "Export";
 		exportAllAssetsMenuItem.DropDownItems.AddRange([exportAllConvertedAssetsMenuItem, exportAllJsonAssetsMenuItem, exportAllYamlAssetsMenuItem, exportAllRawAssetsMenuItem]);
