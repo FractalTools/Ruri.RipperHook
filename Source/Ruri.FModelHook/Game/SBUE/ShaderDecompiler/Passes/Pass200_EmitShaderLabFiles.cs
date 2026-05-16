@@ -397,6 +397,18 @@ internal static class Pass200_EmitShaderLabFiles
             bool anyGlsl = passPrograms.Any(p => string.Equals(p.SourceLanguage, "glsl", StringComparison.OrdinalIgnoreCase));
             sb.AppendLine(anyGlsl ? "            GLSLPROGRAM" : "            HLSLPROGRAM");
 
+            // The decompiled HLSL uses SM5.1+ syntax (register(spaceN),
+            // templated ByteAddressBuffer.Load<T>(), etc.) that Unity's
+            // default FXC path rejects. `use_dxc` routes the program through
+            // the modern compiler stack; `target 5.0` is Unity's max for DX11
+            // and together they cover the surface SPIRV-Cross emits. Skipped
+            // for GLSL passes — those go to a different downstream pipeline.
+            if (!anyGlsl)
+            {
+                sb.AppendLine("            #pragma target 5.0");
+                sb.AppendLine("            #pragma use_dxc");
+            }
+
             // ONE #pragma per stage type — Distinct() because passPrograms can
             // contain many variants of the same stage (different permutations)
             // but we only declare each stage entry point once for the shaderlab
@@ -410,26 +422,13 @@ internal static class Pass200_EmitShaderLabFiles
                 sb.AppendLine($"            {pragma} main");
             }
 
-            // multi_compile_local declares EVERY variant keyword this pass
-            // can take, including the synthetic VARIANT_<id> ones we
-            // generate when no real permutation/type info is available.
-            // Without this Unity-style declaration, downstream tooling that
-            // walks the .shader file as a Unity asset can't enumerate the
-            // pass's variant matrix.
-            List<string> variantKeywords = passPrograms
-                .Select(p => BuildVariantKeyword(p))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(static k => k, StringComparer.Ordinal)
-                .ToList();
-            if (variantKeywords.Count > 1)
-            {
-                sb.AppendLine($"            #pragma multi_compile_local {string.Join(' ', variantKeywords)}");
-            }
+            // multi_compile_local would force Unity to generate a cross-product
+            // variant matrix. With our setup each stage has its own keyword set
+            // and the combinations where neither stage's `main` is defined fail
+            // to compile. v0 of Unity output uses single-variant mode (see
+            // EmitStageBlockSingleVariant) so the multi_compile pragmas drop;
+            // variant coverage is traded for a clean compile pass.
 
-            foreach (string permutationKeyword in BuildPassPermutationKeywords(passPrograms))
-            {
-                sb.AppendLine($"            #pragma multi_compile_local __ {permutationKeyword}");
-            }
             sb.AppendLine();
 
             foreach (IGrouping<string, UeShaderLabProgramData> stageGroup in passPrograms
@@ -441,50 +440,38 @@ internal static class Pass200_EmitShaderLabFiles
                     .ThenBy(static p => p.ShaderIndex)
                     .ToList();
 
-                // Stage delimiter is a comment block, not a `#if defined(SHADER_STAGE_*)`
-                // wrapper. The per-stage HLSL bodies under this banner each have their
-                // own globals/types/entry function and won't compile concatenated, but
-                // ShaderLab readers consume this file as documentation rather than feed
-                // it to a compiler — comments make the structure obvious without
-                // implying the file is a single compilable translation unit.
                 sb.AppendLine($"            // ============================================================");
                 sb.AppendLine($"            // Stage: {stageGroup.Key}");
                 sb.AppendLine($"            // ============================================================");
 
+                // Wrap each stage's body in `#ifdef SHADER_STAGE_*` so the
+                // VS-only / PS-only declarations (entry `main`, SPIRV_Cross_Input
+                // structs, statics, cbuffers) don't collide when Unity compiles
+                // each stage as its own translation unit. SHADER_STAGE_VERTEX /
+                // _FRAGMENT / etc. are Unity macros set per stage compile, so the
+                // preprocessor naturally strips the other stage's declarations.
+                string? stageMacro = GetShaderStageMacro(stageGroup.Key);
+                if (stageMacro != null)
+                {
+                    sb.AppendLine($"            #ifdef {stageMacro}");
+                }
+
                 bool stageSplit = splittableStages.Contains(stageGroup.Key);
 
-                if (stagePrograms.Count == 1)
+                // Single-variant emit: take only the first sub-program per
+                // stage. Multi-variant emission needs a per-Pass vertex+fragment
+                // pairing (or per-stage keyword sets) and is deferred until the
+                // basic emit produces compilable output.
+                UeShaderLabProgramData primary = stagePrograms[0];
+                if (stagePrograms.Count > 1)
                 {
-                    // Single-variant stage: no `#if defined(VARIANT_*)` wrapper —
-                    // there's nothing to disambiguate, so the chain would just
-                    // be dead boilerplate. Body goes inline (or via a single
-                    // `#include` if the user explicitly opted into split mode
-                    // for this stage; with the > 1 gate in ComputeSplittableStages
-                    // the include path won't actually fire here).
-                    UeShaderLabProgramData only = stagePrograms[0];
-                    EmitProgramBlock(sb, only, variantFolderStem, splitInclude: stageSplit);
+                    sb.AppendLine($"            // Note: {stagePrograms.Count - 1} additional variant(s) elided (single-variant emit mode).");
                 }
-                else
-                {
-                    // Multi-variant stage: walk the chain. BuildVariantKeyword
-                    // always appends ShaderHash (or ShaderIndex) as a final
-                    // disambiguator so two binaries that share (ShaderType,VF,Perm)
-                    // still get distinct keywords — without that tail every branch
-                    // in the chain would carry the same condition and the chain
-                    // would be a malformed `#if/#elif/...` with no real branching.
-                    bool wroteFirst = false;
-                    foreach (UeShaderLabProgramData program in stagePrograms)
-                    {
-                        string keyword = BuildVariantKeyword(program);
-                        sb.AppendLine($"            {(wroteFirst ? "#elif" : "#if")} defined({keyword})");
-                        wroteFirst = true;
-                        EmitProgramBlock(sb, program, variantFolderStem, splitInclude: stageSplit);
-                    }
+                EmitProgramBlock(sb, primary, variantFolderStem, splitInclude: stageSplit);
 
-                    if (wroteFirst)
-                    {
-                        sb.AppendLine("            #endif");
-                    }
+                if (stageMacro != null)
+                {
+                    sb.AppendLine($"            #endif");
                 }
                 sb.AppendLine();
             }
@@ -543,7 +530,8 @@ internal static class Pass200_EmitShaderLabFiles
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            foreach (string line in SplitLines(program.SourceCode!))
+            string adapted = AdaptHlslForUnity(program.SourceCode!);
+            foreach (string line in SplitLines(adapted))
             {
                 sb.Append("            ");
                 sb.AppendLine(line);
@@ -560,6 +548,116 @@ internal static class Pass200_EmitShaderLabFiles
                 sb.AppendLine(line);
             }
         }
+    }
+
+    private static string? GetShaderStageMacro(string stage) => stage switch
+    {
+        "Vertex" => "SHADER_STAGE_VERTEX",
+        "Fragment" => "SHADER_STAGE_FRAGMENT",
+        "Geometry" => "SHADER_STAGE_GEOMETRY",
+        "Hull" => "SHADER_STAGE_HULL",
+        "Domain" => "SHADER_STAGE_DOMAIN",
+        "RayTracing" => "SHADER_STAGE_RAY_TRACING",
+        _ => null,
+    };
+
+    // Adapts spirv-cross emitted HLSL so Unity's ShaderLab pipeline accepts it
+    // without further hand-edits:
+    //   * Texture bindings `Material_<X>` → `_<X>` so the Properties
+    //     declaration (Unity uses `_X` convention) auto-binds to the HLSL var.
+    //   * Sampler bindings `Material_<X>Sampler` → `sampler_<X>` so Unity's
+    //     "must match a texture or contain inline mode names" heuristic
+    //     accepts them.
+    //   * Aliased `ByteAddressBuffer T<N>_<M>` at the SAME slot as `T<N>`
+    //     — spirv-cross emits both names when two SSA values touch the same
+    //     descriptor; collapse the alias declaration and rewrite call sites.
+    //
+    // Anchored on the texture/sampler type token so cbuffer scalar members
+    // sharing the `Material_<X>` prefix don't get rewritten.
+    private static readonly System.Text.RegularExpressions.Regex MaterialSamplerDeclRegex =
+        new(@"\bMaterial_(?<n>[A-Za-z0-9_]+)Sampler\b", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex MaterialTextureDeclRegex =
+        new(@"(?<t>Texture(?:2D|2DArray|Cube|CubeArray|3D)(?:<[^>]+>)?)\s+Material_(?<n>[A-Za-z0-9_]+)\s*:\s*register",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex AliasedByteAddressDeclRegex =
+        new(@"^\s*ByteAddressBuffer\s+T(?<n>\d+)_\d+\s*:\s*register\(t\k<n>[^\)]*\);\s*\r?\n",
+            System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.Multiline);
+    private static readonly System.Text.RegularExpressions.Regex AliasedByteAddressRefRegex =
+        new(@"\bT(\d+)_\d+\b", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex SamplerStateDeclRegex =
+        new(@"\bSamplerState\s+(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*register", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public static string AdaptHlslForUnity(string body)
+    {
+        if (string.IsNullOrEmpty(body)) return body;
+
+        // Stage 1: textures + their paired samplers under the Material_<X>
+        // convention. The sampler rename happens FIRST so the texture-paired
+        // names (`sampler_<X>`) survive the generic sampler fixup in stage 2.
+        body = MaterialSamplerDeclRegex.Replace(body, "sampler_${n}");
+
+        HashSet<string> renamedTextures = new(StringComparer.Ordinal);
+        body = MaterialTextureDeclRegex.Replace(body, m =>
+        {
+            renamedTextures.Add(m.Groups["n"].Value);
+            return $"{m.Groups["t"].Value} _{m.Groups["n"].Value} : register";
+        });
+        foreach (string name in renamedTextures)
+        {
+            string from = "Material_" + name;
+            string to = "_" + name;
+            body = System.Text.RegularExpressions.Regex.Replace(body, $@"\b{System.Text.RegularExpressions.Regex.Escape(from)}\b", to);
+        }
+
+        // Stage 2: rename any remaining SamplerState declaration that isn't
+        // already in Unity-recognized form. Unity accepts two sampler shapes:
+        //   * paired-with-texture: `sampler<TextureName>` (we handled the
+        //     Material_ case above)
+        //   * inline-mode: contains `Point|Linear|Trilinear` + `Clamp|Repeat|...`
+        // Anything else (e.g. SPIRV-Cross's `View_Sampler39`) gets rejected
+        // outright. We rewrite the leftover declarations to a name that
+        // preserves the original token for greppability AND contains the
+        // inline-mode tokens Unity wants, so the binding is accepted and
+        // gets the linear/clamp default. This loses the original sampler
+        // filtering mode in the worst case — recoverable later via
+        // metadata once UE View_*Sampler binding-state is plumbed through.
+        HashSet<string> renamedSamplers = new(StringComparer.Ordinal);
+        body = SamplerStateDeclRegex.Replace(body, m =>
+        {
+            string name = m.Groups["n"].Value;
+            if (name.StartsWith("sampler_", StringComparison.Ordinal) || ContainsInlineSamplerMode(name))
+            {
+                return m.Value;
+            }
+            renamedSamplers.Add(name);
+            return $"SamplerState sampler{name}_LinearClamp : register";
+        });
+        foreach (string name in renamedSamplers)
+        {
+            string to = $"sampler{name}_LinearClamp";
+            body = System.Text.RegularExpressions.Regex.Replace(body, $@"\b{System.Text.RegularExpressions.Regex.Escape(name)}\b(?!\s*:\s*register)", to);
+        }
+
+        body = AliasedByteAddressDeclRegex.Replace(body, string.Empty);
+        body = AliasedByteAddressRefRegex.Replace(body, "T$1");
+
+        return body;
+    }
+
+    private static bool ContainsInlineSamplerMode(string name)
+    {
+        // Unity's inline-sampler heuristic looks for filter + wrap tokens in
+        // the identifier. We keep the check conservative — only accept names
+        // that contain BOTH a filter and a wrap mode so we don't pass a name
+        // that Unity will still reject downstream.
+        bool hasFilter = name.Contains("Point", StringComparison.Ordinal)
+                         || name.Contains("Linear", StringComparison.Ordinal)
+                         || name.Contains("Trilinear", StringComparison.Ordinal);
+        bool hasWrap = name.Contains("Clamp", StringComparison.Ordinal)
+                       || name.Contains("Repeat", StringComparison.Ordinal)
+                       || name.Contains("Mirror", StringComparison.Ordinal);
+        return hasFilter && hasWrap;
     }
 
     private static List<string> BuildPassPermutationKeywords(List<UeShaderLabProgramData> programs)
