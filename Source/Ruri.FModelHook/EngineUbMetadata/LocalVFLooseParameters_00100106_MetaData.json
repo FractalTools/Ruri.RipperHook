@@ -1,0 +1,12 @@
+{
+  "name": "LocalVFLooseParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:29-31 (FLocalVertexFactoryLooseParameters)",
+  "layoutHash": "0x00100106",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    { "index": 0, "name": "GPUSkinPassThroughPreviousPositionBuffer", "type": "UBMT_SRV", "offset": 0 }
+  ]
+}

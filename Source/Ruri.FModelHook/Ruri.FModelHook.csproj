@@ -25,4 +25,17 @@
     <PackageReference Include="Serilog" Version="4.3.0" />
   </ItemGroup>
 
+  <!-- Engine UB seed metadata. One JSON per <UBName>_<LayoutHash:08x>
+       pair, loaded at startup by EngineUbMetadataLoader from
+       <exeDir>/EngineUbMetadata/. Tracked under source-controlled
+       Source/Ruri.FModelHook/EngineUbMetadata/, copied to the FModel
+       binary directory on build. See README.md for the JSON schema and
+       how to bootstrap new layouts from UE source. -->
+  <ItemGroup>
+    <Content Include="EngineUbMetadata\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,20 @@
+{
+  "name": "ForwardLightData",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:689-725",
+  "layoutHash": "0x1BB814CD",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "_comment": "FForwardLightData declared via BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT_WITH_CONSTRUCTOR. Pure leaf struct (no nested SHADER_PARAMETER_STRUCT) — 8 resources in declaration order.",
+  "members": [],
+  "resources": [
+    { "index": 0, "name": "DirectionalLightShadowmapAtlas",   "type": "UBMT_RDG_TEXTURE",    "offset": 0 },
+    { "index": 1, "name": "ShadowmapSampler",                 "type": "UBMT_SAMPLER",        "offset": 0 },
+    { "index": 2, "name": "DirectionalLightStaticShadowmap",  "type": "UBMT_TEXTURE",        "offset": 0 },
+    { "index": 3, "name": "StaticShadowmapSampler",           "type": "UBMT_SAMPLER",        "offset": 0 },
+    { "index": 4, "name": "ForwardLocalLightBuffer",          "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
+    { "index": 5, "name": "NumCulledLightsGrid",              "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
+    { "index": 6, "name": "CulledLightDataGrid",              "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
+    { "index": 7, "name": "DummyRectLightSourceTexture",      "type": "UBMT_TEXTURE",        "offset": 0 }
+  ]
+}

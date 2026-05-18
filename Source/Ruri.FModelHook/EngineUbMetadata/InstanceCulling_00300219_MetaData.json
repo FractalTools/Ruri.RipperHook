@@ -1,0 +1,13 @@
+{
+  "name": "InstanceCulling",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:19-23",
+  "layoutHash": "0x00300219",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    { "index": 0, "name": "InstanceIdsBuffer", "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
+    { "index": 1, "name": "PageInfoBuffer",    "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 }
+  ]
+}

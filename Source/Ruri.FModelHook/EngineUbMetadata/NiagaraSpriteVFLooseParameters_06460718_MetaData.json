@@ -1,0 +1,17 @@
+{
+  "name": "NiagaraSpriteVFLooseParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:94-106",
+  "layoutHash": "0x06460718",
+  "_comment": "Hash collides with LocalVF (same shape: 5 SRVs at same offsets) — registry lookup keyed by (Name, Hash) so this is safe.",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    { "index": 0, "name": "CutoutGeometry",           "type": "UBMT_SRV", "offset": 0 },
+    { "index": 1, "name": "NiagaraParticleDataFloat", "type": "UBMT_SRV", "offset": 0 },
+    { "index": 2, "name": "NiagaraParticleDataHalf",  "type": "UBMT_SRV", "offset": 0 },
+    { "index": 3, "name": "SortedIndices",            "type": "UBMT_SRV", "offset": 0 },
+    { "index": 4, "name": "IndirectArgsBuffer",       "type": "UBMT_SRV", "offset": 0 }
+  ]
+}

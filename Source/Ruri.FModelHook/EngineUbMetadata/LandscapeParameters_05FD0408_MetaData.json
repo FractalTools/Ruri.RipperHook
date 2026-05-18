@@ -1,0 +1,18 @@
+{
+  "name": "LandscapeParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:92-111",
+  "layoutHash": "0x05FD0408",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "_comment": "FLandscapeUniformShaderParameters — declared as BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FLandscapeUniformShaderParameters, LANDSCAPE_API). 6 resources in declaration order (3 Texture2D + 3 Samplers). The cook references this struct under the short name 'LandscapeParameters' (instance name).",
+  "members": [],
+  "resources": [
+    { "index": 0, "name": "HeightmapTexture",         "type": "UBMT_TEXTURE", "offset": 0 },
+    { "index": 1, "name": "HeightmapTextureSampler",  "type": "UBMT_SAMPLER", "offset": 0 },
+    { "index": 2, "name": "NormalmapTexture",         "type": "UBMT_TEXTURE", "offset": 0 },
+    { "index": 3, "name": "NormalmapTextureSampler",  "type": "UBMT_SAMPLER", "offset": 0 },
+    { "index": 4, "name": "XYOffsetmapTexture",       "type": "UBMT_TEXTURE", "offset": 0 },
+    { "index": 5, "name": "XYOffsetmapTextureSampler","type": "UBMT_SAMPLER", "offset": 0 }
+  ]
+}
