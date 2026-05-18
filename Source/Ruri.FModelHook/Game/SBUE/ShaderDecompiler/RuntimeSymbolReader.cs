@@ -10,10 +10,17 @@ internal static class RuntimeSymbolReader
 {
     private static readonly Regex GeneratedUniformBufferNamePattern = new("^CB\\d+UBO$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // Per-process dedup: log each (ubName, hash) miss only once. Tracks
+    // distinct missing layouts across the entire decompile run so the log
+    // doesn't fill with one line per shader.
+    private static readonly HashSet<(string, uint)> s_loggedMisses = new();
+    private static readonly object s_loggedMissesLock = new();
+
     public static SerializedProgramData Read(
         UnrealShaderParser.UnrealMetadata? metadata,
         MaterialUniformBufferLayout? materialLayout = null,
-        EngineUbMetadataRegistry? engineUbRegistry = null)
+        EngineUbMetadataRegistry? engineUbRegistry = null,
+        Action<string>? logMiss = null)
     {
         SerializedProgramData symbols = new();
         if (metadata?.UniformBufferNames == null)
@@ -37,7 +44,23 @@ internal static class RuntimeSymbolReader
                 if (!IsCanonicalUniformBufferName(ubName)) continue;
                 if (!alreadyAdded.Add(ubName)) continue;
                 EngineUbMetadata? meta = engineUbRegistry.Lookup(ubName, hashes[i]);
-                if (meta == null) continue;
+                if (meta == null)
+                {
+                    if (logMiss != null)
+                    {
+                        uint missHash = hashes[i];
+                        bool firstTime;
+                        lock (s_loggedMissesLock) { firstTime = s_loggedMisses.Add((ubName, missHash)); }
+                        if (firstTime)
+                        {
+                            string known = engineUbRegistry.HasAnyForName(ubName, out IReadOnlyList<uint> knownHashes)
+                                ? string.Join(",", knownHashes.Select(h => $"0x{h:X8}"))
+                                : "<empty>";
+                            logMiss($"[engineUb] shader sees {ubName} hash=0x{missHash:X8}, registry has [{known}]");
+                        }
+                    }
+                    continue;
+                }
                 symbols.ConstantBufferParameters.Add(EngineUbMetadataTranslator.ToConstantBufferParameter(meta));
             }
         }

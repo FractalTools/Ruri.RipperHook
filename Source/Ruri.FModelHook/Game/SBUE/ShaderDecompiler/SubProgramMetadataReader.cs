@@ -12,9 +12,10 @@ internal static class SubProgramMetadataReader
     public static SerializedProgramData Read(
         UnrealShaderParser.UnrealMetadata? runtimeMetadata,
         MaterialSymbolSource? materialSource,
-        EngineUbMetadataRegistry? engineUbRegistry = null)
+        EngineUbMetadataRegistry? engineUbRegistry = null,
+        Action<string>? logMiss = null)
     {
-        SerializedProgramData metadata = RuntimeSymbolReader.Read(runtimeMetadata, materialSource?.MaterialLayout, engineUbRegistry);
+        SerializedProgramData metadata = RuntimeSymbolReader.Read(runtimeMetadata, materialSource?.MaterialLayout, engineUbRegistry, logMiss);
         if (materialSource == null)
         {
             return metadata;
