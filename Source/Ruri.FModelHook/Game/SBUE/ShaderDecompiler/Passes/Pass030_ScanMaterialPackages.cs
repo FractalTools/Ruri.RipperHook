@@ -125,9 +125,9 @@ internal static class Pass030_ScanMaterialPackages
             // — that leaves every per-material reader empty and every
             // Material CB anonymous downstream (root cause documented
             // per UE_SYMBOL_SOURCES.md).
-            if (extracted == 0 && candidates > 0)
+            if (extracted == 0)
             {
-                log($"    Material scan (hash-scoped): extracted ZERO of {candidates} candidates — falling back to full provider scan.");
+                log($"    Material scan (hash-scoped): extracted ZERO materials (candidates={candidates}) — falling back to full provider scan.");
                 FullProviderScan(provider, output, cache, log);
             }
             return;
