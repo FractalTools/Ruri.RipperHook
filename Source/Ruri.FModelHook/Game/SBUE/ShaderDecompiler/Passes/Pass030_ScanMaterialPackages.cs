@@ -115,6 +115,21 @@ internal static class Pass030_ScanMaterialPackages
             }
 
             log($"    Material scan (hash-scoped): archive-hashes={archiveHashes.Count}, candidates={candidates}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+
+            // Hash-scoped scan produced zero materials despite having
+            // both archive hashes and a package-hash index — likely a
+            // hash-format/casing mismatch between the two sources, or a
+            // session timing issue where Pass020 hadn't fully populated
+            // the index yet. Fall back to the full provider walk so the
+            // unified file isn't shipped with `MaterialInterfaces: {}`
+            // — that leaves every per-material reader empty and every
+            // Material CB anonymous downstream (root cause documented
+            // per UE_SYMBOL_SOURCES.md).
+            if (extracted == 0 && candidates > 0)
+            {
+                log($"    Material scan (hash-scoped): extracted ZERO of {candidates} candidates — falling back to full provider scan.");
+                FullProviderScan(provider, output, cache, log);
+            }
             return;
         }
 

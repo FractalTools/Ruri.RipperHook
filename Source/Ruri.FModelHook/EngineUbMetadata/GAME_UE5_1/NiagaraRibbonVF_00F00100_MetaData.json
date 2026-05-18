@@ -1,0 +1,217 @@
+{
+  "name": "NiagaraRibbonVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:28-70 (FNiagaraRibbonUniformParameters)",
+  "layoutHash": "0x00F00100",
+  "_comment": "Distinct from NiagaraRibbonVFLooseParameters (different struct, different hash).",
+  "constantBufferSize": 240,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "CameraRight",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "CameraUp",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "ScreenAlignment",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "PositionDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 52,
+      "name": "PrevPositionDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 56,
+      "name": "VelocityDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 60,
+      "name": "WidthDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 64,
+      "name": "PrevWidthDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 68,
+      "name": "TwistDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 72,
+      "name": "PrevTwistDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 76,
+      "name": "ColorDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 80,
+      "name": "FacingDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 84,
+      "name": "PrevFacingDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 88,
+      "name": "LinkOrderDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 92,
+      "name": "NormalizedAgeDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 96,
+      "name": "MaterialRandomDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 100,
+      "name": "MaterialParamValidMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 104,
+      "name": "MaterialParamDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 108,
+      "name": "MaterialParam1DataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 112,
+      "name": "MaterialParam2DataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 116,
+      "name": "MaterialParam3DataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 120,
+      "name": "DistanceFromStartOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 124,
+      "name": "U0OverrideDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 128,
+      "name": "V0RangeOverrideDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 132,
+      "name": "U1OverrideDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 136,
+      "name": "V1RangeOverrideDataOffset",
+      "type": "Int"
+    },
+    {
+      "offset": 140,
+      "name": "InterpCount",
+      "type": "Int"
+    },
+    {
+      "offset": 144,
+      "name": "OneOverInterpCount",
+      "type": "Float"
+    },
+    {
+      "offset": 148,
+      "name": "ParticleIdShift",
+      "type": "Int"
+    },
+    {
+      "offset": 152,
+      "name": "ParticleIdMask",
+      "type": "Int"
+    },
+    {
+      "offset": 156,
+      "name": "InterpIdShift",
+      "type": "Int"
+    },
+    {
+      "offset": 160,
+      "name": "InterpIdMask",
+      "type": "Int"
+    },
+    {
+      "offset": 164,
+      "name": "SliceVertexIdMask",
+      "type": "Int"
+    },
+    {
+      "offset": 168,
+      "name": "ShouldFlipNormalToView",
+      "type": "Int"
+    },
+    {
+      "offset": 172,
+      "name": "ShouldUseMultiRibbon",
+      "type": "Int"
+    },
+    {
+      "offset": 176,
+      "name": "U0DistributionMode",
+      "type": "Int"
+    },
+    {
+      "offset": 180,
+      "name": "U1DistributionMode",
+      "type": "Int"
+    },
+    {
+      "offset": 192,
+      "name": "SystemLWCTile",
+      "type": "Float3"
+    },
+    {
+      "offset": 208,
+      "name": "PackedVData",
+      "type": "Float4"
+    },
+    {
+      "offset": 224,
+      "name": "bLocalSpace",
+      "type": "UInt"
+    },
+    {
+      "offset": 228,
+      "name": "DeltaSeconds",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

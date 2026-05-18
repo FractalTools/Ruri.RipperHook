@@ -1,0 +1,37 @@
+{
+  "name": "GeomCache",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCacheVertexFactory.h:17-23 (FGeometryCacheVertexFactoryUniformBufferParameters)",
+  "layoutHash": "0x00400100",
+  "_comment": "Hash collides with MeshParticleVF (different structs) - registry keys by (Name, Hash).",
+  "constantBufferSize": 64,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "MeshOrigin",
+      "type": "Float3"
+    },
+    {
+      "offset": 16,
+      "name": "MeshExtension",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "MotionBlurDataOrigin",
+      "type": "Float3"
+    },
+    {
+      "offset": 48,
+      "name": "MotionBlurDataExtension",
+      "type": "Float3"
+    },
+    {
+      "offset": 60,
+      "name": "MotionBlurPositionScale",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

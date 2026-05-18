@@ -1,0 +1,36 @@
+{
+  "name": "BeamTrailVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleBeamTrailVertexFactory.h:20-26 (FParticleBeamTrailUniformParameters)",
+  "layoutHash": "0x00500100",
+  "constantBufferSize": 80,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "CameraRight",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "CameraUp",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "ScreenAlignment",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "bUseLocalSpace",
+      "type": "UInt"
+    },
+    {
+      "offset": 64,
+      "name": "LWCTile",
+      "type": "Float3"
+    }
+  ],
+  "resources": []
+}

@@ -48,19 +48,28 @@ internal sealed class MaterialUniformBufferLayout
         }
         else if (counts.TotalResourceCount is int total)
         {
+            // VTStacks not available (older serialization / IoStore cooks
+            // where CUE4Parse doesn't surface VTStacks). Infer the slot
+            // count from `Resources.Num()` and emit anonymous placeholders
+            // that consume the SAME number of slots the engine emitted —
+            // crucial so the post-VT `VirtualTexturePhysical`,
+            // `Wrap_/Clamp_WorldGroupSettings` resolve at the correct
+            // ResourceIndex.
+            //
+            // Engine `MaterialUniformExpressions.cpp:473-486` emits 2 or
+            // 3 resources per stack (PageTable0 + optional PageTable1 if
+            // NumLayers>4 + PageTableIndirection). Without the actual
+            // NumLayers we can't disambiguate the per-stack split, so we
+            // emit one anonymous slot per remaining resource and leave
+            // the actual VirtualTexturePhysical / Wrap / Clamp lookups
+            // correctly aligned downstream.
             int textureSamplerPairsConsumed = 2 * (counts.Standard2D + counts.Cube + counts.Array2D + counts.ArrayCube + counts.Volume + counts.External);
             int virtualPhysicalConsumed = 2 * counts.Virtual;
             int fixedTrailingSamplers = 2;
-            int vtStackTextureCount = total - textureSamplerPairsConsumed - virtualPhysicalConsumed - fixedTrailingSamplers;
-            if (vtStackTextureCount > 0 && vtStackTextureCount % 2 == 0)
+            int vtSlotCount = total - textureSamplerPairsConsumed - virtualPhysicalConsumed - fixedTrailingSamplers;
+            for (int i = 0; i < vtSlotCount; i++)
             {
-                int inferredStackCount = vtStackTextureCount / 2;
-                List<int> assumedLayers = new(inferredStackCount);
-                for (int i = 0; i < inferredStackCount; i++)
-                {
-                    assumedLayers.Add(2);
-                }
-                AppendVirtualTextureStacks(result, assumedLayers);
+                result.Add($"VTStackResource_{i}");
             }
         }
 
