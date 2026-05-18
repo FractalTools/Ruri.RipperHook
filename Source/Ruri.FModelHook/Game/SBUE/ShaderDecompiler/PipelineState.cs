@@ -30,6 +30,12 @@ public sealed class LibraryDecompileOptions
     // regardless of this flag — distribution is only useful when there's
     // actually a chain to slim down.
     public bool SplitVariantsToHlslFiles { get; init; }
+    // Directory containing `<UBName>_<LayoutHash:08x>_MetaData.json` files
+    // for engine uniform-buffer member naming (View, OpaqueBasePass, etc.).
+    // See `UE_SYMBOL_SOURCES.md` §6. When null/missing, engine UB members
+    // stay anonymous as `<UBName>_1_m0[N]` arrays (current behaviour).
+    // Default resolution: <exeDir>/EngineUbMetadata
+    public string? EngineUbMetadataDirectory { get; init; }
     public Action<string>? Log { get; init; }
     public Action<string>? LogError { get; init; }
 }
@@ -83,6 +89,12 @@ internal sealed class PipelineState
     // Pass 002 outputs (cached per-material symbol sources)
     public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
     public MaterialJsonSymbolReader? MaterialJsonSymbolReader { get; set; }
+
+    // Engine uniform-buffer member-name registry. Loaded once per pipeline
+    // run from `Options.EngineUbMetadataDirectory` (or its default beneath
+    // the exe). Never null — `Empty` registry when no dir is set or no
+    // files match the convention. See EngineUbMetadataLoader for semantics.
+    public EngineUbMetadataRegistry EngineUbRegistry { get; set; } = EngineUbMetadataRegistry.Empty;
 
     // Pass 180 — per-shader-binary prep artefacts (stripped DXBC, engine
     // options, container metadata). Filled by Pass 180; consumed by

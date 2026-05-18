@@ -117,7 +117,7 @@ internal static class Pass180_PrepareShaderBinaries
             state.LogError($"Shader {shaderIndex}: usage has {usedBy!.Count} material(s) (first: {firstMat}) but symbol reader returned null - material CB will be unnamed.");
         }
 
-        SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource);
+        SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource, state.EngineUbRegistry);
 
         // Per-shader shader-model selection. The library-level option is
         // a default that callers tune to the lowest model they expect; an

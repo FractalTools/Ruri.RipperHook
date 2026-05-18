@@ -10,12 +10,36 @@ internal static class RuntimeSymbolReader
 {
     private static readonly Regex GeneratedUniformBufferNamePattern = new("^CB\\d+UBO$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static SerializedProgramData Read(UnrealShaderParser.UnrealMetadata? metadata, MaterialUniformBufferLayout? materialLayout = null)
+    public static SerializedProgramData Read(
+        UnrealShaderParser.UnrealMetadata? metadata,
+        MaterialUniformBufferLayout? materialLayout = null,
+        EngineUbMetadataRegistry? engineUbRegistry = null)
     {
         SerializedProgramData symbols = new();
         if (metadata?.UniformBufferNames == null)
         {
             return symbols;
+        }
+
+        // Engine-UB CB definitions inject named member layouts so the
+        // SPIR-V rewriter can split `<UB>_1_m0[N]` into typed scalars/
+        // vectors/matrices instead of leaving the anonymous array. Each
+        // match is keyed on (UBName, ResourceTableLayoutHashes[i]) so we
+        // never name across a layout-shape boundary (different engine
+        // version, modded UB, etc.). See `UE_SYMBOL_SOURCES.md` §6.
+        if (engineUbRegistry != null && engineUbRegistry.FileCount > 0
+            && metadata.SRT.ResourceTableLayoutHashes is { Count: > 0 } hashes)
+        {
+            HashSet<string> alreadyAdded = new(StringComparer.Ordinal);
+            for (int i = 0; i < metadata.UniformBufferNames.Count && i < hashes.Count; i++)
+            {
+                string ubName = metadata.UniformBufferNames[i];
+                if (!IsCanonicalUniformBufferName(ubName)) continue;
+                if (!alreadyAdded.Add(ubName)) continue;
+                EngineUbMetadata? meta = engineUbRegistry.Lookup(ubName, hashes[i]);
+                if (meta == null) continue;
+                symbols.ConstantBufferParameters.Add(EngineUbMetadataTranslator.ToConstantBufferParameter(meta));
+            }
         }
 
         for (int i = 0; i < metadata.UniformBufferNames.Count; i++)
@@ -35,7 +59,7 @@ internal static class RuntimeSymbolReader
             });
         }
 
-        ShaderResourceTableSymbolizer.EnrichSymbolData(symbols, metadata, materialLayout);
+        ShaderResourceTableSymbolizer.EnrichSymbolData(symbols, metadata, materialLayout, engineUbRegistry);
         return symbols;
     }
 
@@ -135,7 +159,11 @@ internal static class ShaderResourceTableDecoder
 
 internal static class ShaderResourceTableSymbolizer
 {
-    public static void EnrichSymbolData(SerializedProgramData target, UnrealShaderParser.UnrealMetadata? unrealMetadata, MaterialUniformBufferLayout? materialLayout = null)
+    public static void EnrichSymbolData(
+        SerializedProgramData target,
+        UnrealShaderParser.UnrealMetadata? unrealMetadata,
+        MaterialUniformBufferLayout? materialLayout = null,
+        EngineUbMetadataRegistry? engineUbRegistry = null)
     {
         if (unrealMetadata == null)
         {
@@ -151,10 +179,28 @@ internal static class ShaderResourceTableSymbolizer
             DumpSrt(srt, uniformBufferNames);
         }
 
+        // Pre-resolve per-UB engine-metadata once so each SRT record lookup
+        // is O(1). Index by UniformBufferIndex; null entries mean either
+        // the UB has no metadata (placeholder fallback) or it's Material
+        // (uses its own layout, not the registry).
+        EngineUbMetadata?[]? perUbEngineMeta = null;
+        if (engineUbRegistry is { FileCount: > 0 }
+            && srt.ResourceTableLayoutHashes is { Count: > 0 } hashes
+            && uniformBufferNames != null)
+        {
+            perUbEngineMeta = new EngineUbMetadata?[uniformBufferNames.Count];
+            for (int i = 0; i < perUbEngineMeta.Length && i < hashes.Count; i++)
+            {
+                string ubName = uniformBufferNames[i];
+                if (string.IsNullOrEmpty(ubName) || string.Equals(ubName, "Material", StringComparison.Ordinal)) continue;
+                perUbEngineMeta[i] = engineUbRegistry.Lookup(ubName, hashes[i]);
+            }
+        }
+
         List<SrtRecord> records = ShaderResourceTableDecoder.Decode(srt, uniformBufferNames);
         foreach (SrtRecord record in records)
         {
-            string resolvedName = ResolveResourceName(record, materialLayout);
+            string resolvedName = ResolveResourceName(record, materialLayout, perUbEngineMeta);
             switch (record.RegisterType)
             {
                 case SrtRegisterType.Texture:
@@ -179,7 +225,9 @@ internal static class ShaderResourceTableSymbolizer
             for (int i = 0; i < uniformBufferNames.Count; i++)
             {
                 bool used = (srt.ResourceTableBits & (1u << i)) != 0;
-                Console.Error.WriteLine($"[SRT] UB[{i}] = {uniformBufferNames[i]} (used={used})");
+                uint hash = (srt.ResourceTableLayoutHashes != null && i < srt.ResourceTableLayoutHashes.Count)
+                    ? srt.ResourceTableLayoutHashes[i] : 0u;
+                Console.Error.WriteLine($"[SRT] UB[{i}] = {uniformBufferNames[i]} (used={used}, layoutHash=0x{hash:X8})");
             }
         }
         DumpMap("SRV/Texture", srt.ShaderResourceViewMap);
@@ -284,12 +332,13 @@ internal static class ShaderResourceTableSymbolizer
         });
     }
 
-    private static string ResolveResourceName(SrtRecord record, MaterialUniformBufferLayout? materialLayout)
+    private static string ResolveResourceName(SrtRecord record, MaterialUniformBufferLayout? materialLayout, EngineUbMetadata?[]? perUbEngineMeta)
     {
         string ubName = string.IsNullOrWhiteSpace(record.UniformBufferName)
             ? $"UB{record.UniformBufferIndex}"
             : record.UniformBufferName!;
 
+        // Mechanism 1: Material UB via .uasset replay of CreateBufferStruct.
         if (string.Equals(ubName, "Material", StringComparison.Ordinal) && materialLayout != null)
         {
             string? typed = materialLayout.ResolveResourceName(record);
@@ -299,6 +348,22 @@ internal static class ShaderResourceTableSymbolizer
             }
         }
 
+        // Mechanism 2: Engine UB via external metadata keyed on layout hash.
+        if (perUbEngineMeta != null
+            && record.UniformBufferIndex >= 0
+            && record.UniformBufferIndex < perUbEngineMeta.Length
+            && perUbEngineMeta[record.UniformBufferIndex] is EngineUbMetadata engineMeta)
+        {
+            foreach (EngineUbResource res in engineMeta.Resources)
+            {
+                if (res.Index == record.ResourceIndex && !string.IsNullOrWhiteSpace(res.Name))
+                {
+                    return $"{ubName}_{res.Name}";
+                }
+            }
+        }
+
+        // Mechanism 3: typed placeholder (closed-world ceiling fallback).
         string suffix = record.RegisterType switch
         {
             SrtRegisterType.Sampler => $"Sampler{record.ResourceIndex}",
