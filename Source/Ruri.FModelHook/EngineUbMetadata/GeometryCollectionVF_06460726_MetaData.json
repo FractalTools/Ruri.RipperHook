@@ -3,13 +3,44 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCollectionRendering.h:13-20 (FGeometryCollectionVertexFactoryUniformShaderParameters)",
   "layoutHash": "0x06460726",
-  "constantBufferSize": 0,
+  "constantBufferSize": 20,
   "bindingFlags": "Shader",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "VertexFetch_Parameters",
+      "type": "Int4"
+    },
+    {
+      "offset": 16,
+      "name": "LODLightmapDataIndex",
+      "type": "UInt"
+    }
+  ],
   "resources": [
-    { "index": 0, "name": "VertexFetch_TexCoordBuffer",        "type": "UBMT_SRV", "offset": 0 },
-    { "index": 1, "name": "VertexFetch_PositionBuffer",        "type": "UBMT_SRV", "offset": 0 },
-    { "index": 2, "name": "VertexFetch_PackedTangentsBuffer",  "type": "UBMT_SRV", "offset": 0 },
-    { "index": 3, "name": "VertexFetch_ColorComponentsBuffer", "type": "UBMT_SRV", "offset": 0 }
+    {
+      "index": 0,
+      "name": "VertexFetch_TexCoordBuffer",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "VertexFetch_PositionBuffer",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "VertexFetch_PackedTangentsBuffer",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "VertexFetch_ColorComponentsBuffer",
+      "type": "UBMT_SRV",
+      "offset": 0
+    }
   ]
 }

@@ -3,15 +3,116 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.h:120-146",
   "layoutHash": "0x10901268",
-  "constantBufferSize": 0,
+  "constantBufferSize": 80,
   "bindingFlags": "Shader",
   "_comment": "FVirtualShadowMapUniformParameters in declaration order. Numeric members (NumFullShadowMaps etc.) are not in Resources[].",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "NumFullShadowMaps",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "NumSinglePageShadowMaps",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "MaxPhysicalPages",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "NumShadowMapSlots",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "StaticCachedArrayIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 20,
+      "name": "PhysicalPageRowMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 24,
+      "name": "PhysicalPageRowShift",
+      "type": "UInt"
+    },
+    {
+      "offset": 28,
+      "name": "PackedShadowMaskMaxLightCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "RecPhysicalPoolSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "PhysicalPoolSize",
+      "type": "Int2"
+    },
+    {
+      "offset": 56,
+      "name": "PhysicalPoolSizePages",
+      "type": "Int2"
+    },
+    {
+      "offset": 64,
+      "name": "bExcludeNonNaniteFromCoarsePages",
+      "type": "UInt"
+    },
+    {
+      "offset": 68,
+      "name": "CoarsePagePixelThresholdDynamic",
+      "type": "Float"
+    },
+    {
+      "offset": 72,
+      "name": "CoarsePagePixelThresholdStatic",
+      "type": "Float"
+    },
+    {
+      "offset": 76,
+      "name": "CoarsePagePixelThresholdDynamicNanite",
+      "type": "Float"
+    }
+  ],
   "resources": [
-    { "index": 0, "name": "ProjectionData",   "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
-    { "index": 1, "name": "PageTable",        "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
-    { "index": 2, "name": "PageFlags",        "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
-    { "index": 3, "name": "PageRectBounds",   "type": "UBMT_RDG_BUFFER_SRV", "offset": 0 },
-    { "index": 4, "name": "PhysicalPagePool", "type": "UBMT_RDG_TEXTURE",    "offset": 0 }
+    {
+      "index": 0,
+      "name": "ProjectionData",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "PageTable",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "PageFlags",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "PageRectBounds",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 4,
+      "name": "PhysicalPagePool",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    }
   ]
 }

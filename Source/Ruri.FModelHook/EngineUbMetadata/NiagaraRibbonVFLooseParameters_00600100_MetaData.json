@@ -3,17 +3,83 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:73-87",
   "layoutHash": "0x00600100",
-  "constantBufferSize": 0,
+  "constantBufferSize": 20,
   "bindingFlags": "Shader",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "NiagaraFloatDataStride",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "FacingMode",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "Shape",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "NeedsPreciseMotionVectors",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "IndirectDrawOutputOffset",
+      "type": "Int"
+    }
+  ],
   "resources": [
-    { "index": 0, "name": "SortedIndices",              "type": "UBMT_SRV", "offset": 0 },
-    { "index": 1, "name": "TangentsAndDistances",       "type": "UBMT_SRV", "offset": 0 },
-    { "index": 2, "name": "MultiRibbonIndices",         "type": "UBMT_SRV", "offset": 0 },
-    { "index": 3, "name": "PackedPerRibbonDataByIndex", "type": "UBMT_SRV", "offset": 0 },
-    { "index": 4, "name": "NiagaraParticleDataFloat",   "type": "UBMT_SRV", "offset": 0 },
-    { "index": 5, "name": "NiagaraParticleDataHalf",    "type": "UBMT_SRV", "offset": 0 },
-    { "index": 6, "name": "SliceVertexData",            "type": "UBMT_SRV", "offset": 0 },
-    { "index": 7, "name": "IndirectDrawOutput",         "type": "UBMT_SRV", "offset": 0 }
+    {
+      "index": 0,
+      "name": "SortedIndices",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "TangentsAndDistances",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "MultiRibbonIndices",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "PackedPerRibbonDataByIndex",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 4,
+      "name": "NiagaraParticleDataFloat",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 5,
+      "name": "NiagaraParticleDataHalf",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 6,
+      "name": "SliceVertexData",
+      "type": "UBMT_SRV",
+      "offset": 0
+    },
+    {
+      "index": 7,
+      "name": "IndirectDrawOutput",
+      "type": "UBMT_SRV",
+      "offset": 0
+    }
   ]
 }

@@ -3,10 +3,31 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:119-124 (FLandscapeSectionLODUniformParameters, bound as 'LandscapeContinuousLODParameters' via IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT at LandscapeRender.cpp:323)",
   "layoutHash": "0x0020011E",
-  "constantBufferSize": 0,
+  "constantBufferSize": 24,
   "bindingFlags": "Shader",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "LandscapeIndex",
+      "type": "Int"
+    },
+    {
+      "offset": 8,
+      "name": "Min",
+      "type": "Int2"
+    },
+    {
+      "offset": 16,
+      "name": "Size",
+      "type": "Int2"
+    }
+  ],
   "resources": [
-    { "index": 0, "name": "SectionLODBias", "type": "UBMT_SRV", "offset": 0 }
+    {
+      "index": 0,
+      "name": "SectionLODBias",
+      "type": "UBMT_SRV",
+      "offset": 0
+    }
   ]
 }

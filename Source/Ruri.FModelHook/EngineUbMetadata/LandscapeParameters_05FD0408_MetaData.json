@@ -3,16 +3,107 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:92-111",
   "layoutHash": "0x05FD0408",
-  "constantBufferSize": 0,
+  "constantBufferSize": 192,
   "bindingFlags": "Shader",
-  "_comment": "FLandscapeUniformShaderParameters — declared as BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FLandscapeUniformShaderParameters, LANDSCAPE_API). 6 resources in declaration order (3 Texture2D + 3 Samplers). The cook references this struct under the short name 'LandscapeParameters' (instance name).",
-  "members": [],
+  "_comment": "FLandscapeUniformShaderParameters \u2014 declared as BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FLandscapeUniformShaderParameters, LANDSCAPE_API). 6 resources in declaration order (3 Texture2D + 3 Samplers). The cook references this struct under the short name 'LandscapeParameters' (instance name).",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ComponentBaseX",
+      "type": "Int"
+    },
+    {
+      "offset": 4,
+      "name": "ComponentBaseY",
+      "type": "Int"
+    },
+    {
+      "offset": 8,
+      "name": "SubsectionSizeVerts",
+      "type": "Int"
+    },
+    {
+      "offset": 12,
+      "name": "NumSubsections",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "LastLOD",
+      "type": "Int"
+    },
+    {
+      "offset": 32,
+      "name": "HeightmapUVScaleBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "WeightmapUVScaleBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "LandscapeLightmapScaleBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "SubsectionSizeVertsLayerUVPan",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "SubsectionOffsetParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "LightmapSubsectionOffsetParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "LocalToWorldNoScaling",
+      "type": "Float4x4"
+    }
+  ],
   "resources": [
-    { "index": 0, "name": "HeightmapTexture",         "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index": 1, "name": "HeightmapTextureSampler",  "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 2, "name": "NormalmapTexture",         "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index": 3, "name": "NormalmapTextureSampler",  "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 4, "name": "XYOffsetmapTexture",       "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index": 5, "name": "XYOffsetmapTextureSampler","type": "UBMT_SAMPLER", "offset": 0 }
+    {
+      "index": 0,
+      "name": "HeightmapTexture",
+      "type": "UBMT_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "HeightmapTextureSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "NormalmapTexture",
+      "type": "UBMT_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "NormalmapTextureSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    },
+    {
+      "index": 4,
+      "name": "XYOffsetmapTexture",
+      "type": "UBMT_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 5,
+      "name": "XYOffsetmapTextureSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    }
   ]
 }

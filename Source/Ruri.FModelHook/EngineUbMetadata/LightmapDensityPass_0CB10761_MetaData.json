@@ -3,25 +3,116 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/LightMapDensityRendering.cpp:35-42",
   "layoutHash": "0x0CB10761",
-  "constantBufferSize": 0,
+  "constantBufferSize": 48,
   "bindingFlags": "Shader",
   "_comment": "FLightmapDensityPassUniformParameters. Recurses into FSceneTextureUniformParameters (SceneTextures.* prefix), then loose scalars (skipped) and 2 trailing resources.",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "LightMapDensity",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "DensitySelectedColor",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "VertexMappedColor",
+      "type": "Float4"
+    }
+  ],
   "resources": [
-    { "index":  0, "name": "SceneTextures_SceneColorTexture",       "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  1, "name": "SceneTextures_SceneDepthTexture",       "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  2, "name": "SceneTextures_GBufferATexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  3, "name": "SceneTextures_GBufferBTexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  4, "name": "SceneTextures_GBufferCTexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  5, "name": "SceneTextures_GBufferDTexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  6, "name": "SceneTextures_GBufferETexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  7, "name": "SceneTextures_GBufferFTexture",         "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  8, "name": "SceneTextures_GBufferVelocityTexture",  "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  9, "name": "SceneTextures_ScreenSpaceAOTexture",    "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index": 10, "name": "SceneTextures_CustomDepthTexture",      "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index": 11, "name": "SceneTextures_CustomStencilTexture",    "type": "UBMT_RDG_TEXTURE_SRV","offset": 0 },
-    { "index": 12, "name": "SceneTextures_PointClampSampler",       "type": "UBMT_SAMPLER",         "offset": 0 },
-    { "index": 13, "name": "GridTexture",                           "type": "UBMT_TEXTURE",         "offset": 0 },
-    { "index": 14, "name": "GridTextureSampler",                    "type": "UBMT_SAMPLER",         "offset": 0 }
+    {
+      "index": 0,
+      "name": "SceneTextures_SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "SceneTextures_SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "SceneTextures_GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "SceneTextures_GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 4,
+      "name": "SceneTextures_GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 5,
+      "name": "SceneTextures_GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 6,
+      "name": "SceneTextures_GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 7,
+      "name": "SceneTextures_GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 8,
+      "name": "SceneTextures_GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 9,
+      "name": "SceneTextures_ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 10,
+      "name": "SceneTextures_CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 11,
+      "name": "SceneTextures_CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV",
+      "offset": 0
+    },
+    {
+      "index": 12,
+      "name": "SceneTextures_PointClampSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    },
+    {
+      "index": 13,
+      "name": "GridTexture",
+      "type": "UBMT_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 14,
+      "name": "GridTextureSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    }
   ]
 }
