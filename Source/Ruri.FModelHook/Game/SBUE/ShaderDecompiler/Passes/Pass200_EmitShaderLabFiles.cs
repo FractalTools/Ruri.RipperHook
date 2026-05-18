@@ -682,22 +682,36 @@ internal static class Pass200_EmitShaderLabFiles
     // shader-type collapse onto the same keyword and the surrounding
     // `#if/#elif` chain becomes malformed (every branch with identical
     // condition).
+    // Variant filename / `#if defined(...)` keyword. Format:
+    //   <Stage>_<ShaderTypeShort?>_<VFShort?>_PERM<id>?_<ShortHash|IDXn>
+    //
+    // Always leads with the shader stage (VS/PS/HS/DS/GS/CS/...) so the
+    // filename is self-describing at a glance — `PS_TBasePassPSFNoLightMap_FLocalVF_PERM0_AB12CDEF.hlsl`
+    // rather than the previous opaque `VARIANT_IDX001634.hlsl`.
+    // ShaderType and VertexFactoryType are compressed to their leading
+    // identifier (template args stripped) so the filename stays under
+    // typical OS path-length limits even for deeply-templated UE shader
+    // types like `TBasePassPS<FNoLightMapPolicy, false, GBL_Default>`.
     private static string BuildVariantKeyword(UeShaderLabProgramData program)
     {
         StringBuilder sb = new();
-        sb.Append("VARIANT");
+        // Stage always comes first — this is the user-facing "what is
+        // this shader" anchor (VS/PS/HS/...). Falls back to "VARIANT"
+        // when stage is somehow missing (defensive — shouldn't happen
+        // in practice).
+        sb.Append(string.IsNullOrWhiteSpace(program.Stage) ? "VARIANT" : program.Stage);
 
         if (!string.IsNullOrWhiteSpace(program.ShaderTypeName))
         {
-            sb.Append('_').Append(SanitizeIdent(program.ShaderTypeName));
+            sb.Append('_').Append(CompressTemplateIdent(program.ShaderTypeName));
         }
         if (!string.IsNullOrWhiteSpace(program.VertexFactoryTypeName))
         {
-            sb.Append('_').Append(SanitizeIdent(program.VertexFactoryTypeName));
+            sb.Append('_').Append(CompressTemplateIdent(program.VertexFactoryTypeName));
         }
         if (program.PermutationId >= 0)
         {
-            sb.Append("_PERM_").Append(program.PermutationId);
+            sb.Append("_PERM").Append(program.PermutationId);
         }
 
         if (!string.IsNullOrWhiteSpace(program.ShaderHash))
@@ -711,6 +725,33 @@ internal static class Pass200_EmitShaderLabFiles
         }
 
         return sb.ToString();
+    }
+
+    // Compresses a templated C++ type identifier into a short, file-safe form.
+    //   TBasePassPS<FNoLightMapPolicy, false, GBL_Default>
+    //     -> TBasePassPSFNoLightMapPolicy
+    // Keeps the first template arg (it's the policy/permutation discriminator
+    // in 99% of UE shader types) but drops the rest so filenames stay
+    // readable on Windows (260-char path limit on default install). Falls
+    // back to plain SanitizeIdent when there are no template brackets.
+    private static string CompressTemplateIdent(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        int lt = raw.IndexOf('<');
+        if (lt < 0) return SanitizeIdent(raw);
+        string head = raw.Substring(0, lt);
+        // Take the first template arg (up to the first comma at depth 1).
+        int depth = 0;
+        int firstArgEnd = raw.Length;
+        for (int i = lt; i < raw.Length; i++)
+        {
+            char c = raw[i];
+            if (c == '<') depth++;
+            else if (c == '>') depth--;
+            else if (c == ',' && depth == 1) { firstArgEnd = i; break; }
+        }
+        string firstArg = (firstArgEnd > lt + 1) ? raw.Substring(lt + 1, firstArgEnd - lt - 1).Trim() : string.Empty;
+        return SanitizeIdent(string.IsNullOrEmpty(firstArg) ? head : (head + "_" + firstArg));
     }
 
     // Replace HLSL-illegal characters with underscores so the resulting
