@@ -5,22 +5,92 @@
   "layoutHash": "0x09850A11",
   "constantBufferSize": 0,
   "bindingFlags": "Shader",
-  "_comment": "FLumenCardPassUniformParameters. Same shape as FDecalPassUniformParameters — they share layout hash 0x09850A11. FModel must disambiguate by binding/instance name. NOTE: filename collision warning — DecalPass_09850A11_MetaData.json exists alongside. If FModel keys lookup purely by hash, one will overwrite the other on disk. Recommend lookup by (Name, Hash) tuple.",
+  "_comment": "FLumenCardPassUniformParameters. Same shape as FDecalPassUniformParameters \u2014 they share layout hash 0x09850A11. FModel must disambiguate by binding/instance name. NOTE: filename collision warning \u2014 DecalPass_09850A11_MetaData.json exists alongside. If FModel keys lookup purely by hash, one will overwrite the other on disk. Recommend lookup by (Name, Hash) tuple.",
   "members": [],
   "resources": [
-    { "index":  0, "name": "SceneTextures_SceneColorTexture",      "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  1, "name": "SceneTextures_SceneDepthTexture",      "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  2, "name": "SceneTextures_GBufferATexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  3, "name": "SceneTextures_GBufferBTexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  4, "name": "SceneTextures_GBufferCTexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  5, "name": "SceneTextures_GBufferDTexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  6, "name": "SceneTextures_GBufferETexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  7, "name": "SceneTextures_GBufferFTexture",        "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  8, "name": "SceneTextures_GBufferVelocityTexture", "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index":  9, "name": "SceneTextures_ScreenSpaceAOTexture",   "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index": 10, "name": "SceneTextures_CustomDepthTexture",     "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
-    { "index": 11, "name": "SceneTextures_CustomStencilTexture",   "type": "UBMT_RDG_TEXTURE_SRV", "offset": 0 },
-    { "index": 12, "name": "SceneTextures_PointClampSampler",      "type": "UBMT_SAMPLER",         "offset": 0 },
-    { "index": 13, "name": "EyeAdaptationTexture",                 "type": "UBMT_RDG_TEXTURE",     "offset": 0 }
+    {
+      "index": 0,
+      "name": "SceneTextures_SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "SceneTextures_SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 2,
+      "name": "SceneTextures_GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 3,
+      "name": "SceneTextures_GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 4,
+      "name": "SceneTextures_GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 5,
+      "name": "SceneTextures_GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 6,
+      "name": "SceneTextures_GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 7,
+      "name": "SceneTextures_GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 8,
+      "name": "SceneTextures_GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 9,
+      "name": "SceneTextures_ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 10,
+      "name": "SceneTextures_CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 11,
+      "name": "SceneTextures_CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV",
+      "offset": 0
+    },
+    {
+      "index": 12,
+      "name": "SceneTextures_PointClampSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 0
+    },
+    {
+      "index": 13,
+      "name": "EyeAdaptationTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    }
   ]
 }

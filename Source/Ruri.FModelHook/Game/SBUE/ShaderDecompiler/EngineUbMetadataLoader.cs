@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using CUE4Parse.UE4.Versions;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
@@ -39,15 +40,21 @@ internal sealed class EngineUbMetadataRegistry
         new Dictionary<string, List<uint>>(StringComparer.Ordinal));
 
     public static EngineUbMetadataRegistry Load(string? directory, Action<string>? log = null, Action<string>? logError = null)
-        => LoadForGame(directory, gameVersionEnum: null, log, logError);
+        => LoadForGame(directory, gameVersionEnum: null, tryBaseFallback: true, log, logError);
 
     // Game-aware loader. When `gameVersionEnum` is set (e.g. "GAME_InfinityNikki"
     // or "GAME_UE5_4" as captured from FModel's EGame enum at export time):
     //   1. Loads from `<directory>/<gameVersionEnum>/` FIRST (game-specific overrides
     //      — modded UEs, project-specific UB layouts).
-    //   2. Then loads from `<directory>/<base UE folder>/` (e.g. GAME_UE5_4 derived
-    //      from GAME_InfinityNikki = GAME_UE5_4 + 2) — base UE layouts shared by all
-    //      games on that engine version.
+    //   2. When `tryBaseFallback` is true and the game enum doesn't already start
+    //      with `GAME_UE`, loads from `<directory>/<base UE folder>/`
+    //      (e.g. GAME_UE5_4 derived from GAME_InfinityNikki = GAME_UE5_4 + 2)
+    //      — base UE layouts shared by all games on that engine version.
+    //      Toggleable from the user's `ShaderDecompilerSettings.TryMatchBaseEngineVersion`:
+    //      most games (~99%) don't customize CB layouts so this is virtually
+    //      always correct and dramatically reduces manual seeding work; the
+    //      flag exists to opt out for the rare modded engine where the base
+    //      seeds would silently mis-name a drifted layout.
     //   3. Finally scans any other files under `<directory>` (recursive) for
     //      hand-organised metadata that doesn't follow the GAME_<X> convention.
     // Earlier sources take precedence on (Name, Hash) collision — the
@@ -56,7 +63,7 @@ internal sealed class EngineUbMetadataRegistry
     // When `gameVersionEnum` is null/empty, falls back to a single recursive
     // scan of `directory` (legacy behaviour) — every JSON is loaded with
     // no priority discrimination.
-    public static EngineUbMetadataRegistry LoadForGame(string? directory, string? gameVersionEnum, Action<string>? log = null, Action<string>? logError = null)
+    public static EngineUbMetadataRegistry LoadForGame(string? directory, string? gameVersionEnum, bool tryBaseFallback = true, Action<string>? log = null, Action<string>? logError = null)
     {
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
         {
@@ -69,15 +76,20 @@ internal sealed class EngineUbMetadataRegistry
         int loaded = 0, skipped = 0;
 
         // Build a prioritised scan list: game-specific folder first, then
-        // base UE folder, then a recursive sweep of anything else under root.
+        // base UE folder (only when the toggle is on and the enum names a
+        // game-specific derivative), then a recursive sweep of anything
+        // else under root.
         List<string> scanRoots = new();
-        string baseUe = DeriveBaseUeFolder(gameVersionEnum);
         if (!string.IsNullOrEmpty(gameVersionEnum))
         {
             string specific = Path.Combine(directory, gameVersionEnum);
             if (Directory.Exists(specific)) scanRoots.Add(specific);
         }
-        if (!string.IsNullOrEmpty(baseUe) && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
+        if (tryBaseFallback
+            && !string.IsNullOrEmpty(gameVersionEnum)
+            && !gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)
+            && TryDeriveBaseUeFromEGame(gameVersionEnum, out string baseUe)
+            && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
         {
             string baseDir = Path.Combine(directory, baseUe);
             if (Directory.Exists(baseDir)) scanRoots.Add(baseDir);
@@ -100,24 +112,29 @@ internal sealed class EngineUbMetadataRegistry
         return new EngineUbMetadataRegistry(directory, byNameAndHash, hashesByName);
     }
 
-    // EGame enum value names look like "GAME_UE5_1", "GAME_InfinityNikki",
-    // "GAME_UE5_4", "GAME_BlackMythWukong" etc. Game-specific names are
-    // declared in CUE4Parse's EGame.cs as `GAME_<Name> = GAME_UE5_<X> + n`
-    // — but at the string level we have no introspection into the enum
-    // arithmetic. Heuristic: if the name starts with "GAME_UE", treat it
-    // as a base folder (no further derivation needed); otherwise we don't
-    // know which UE major.minor the game belongs to, so we just rely on
-    // (a) the game-specific folder match and (b) the catch-all recursive
-    // scan to find shared layouts.
-    private static string DeriveBaseUeFolder(string? gameVersionEnum)
+    // Derives the base UE major.minor `EGame` name (e.g. "GAME_UE5_4")
+    // for any game-specific value (e.g. "GAME_InfinityNikki") by enum
+    // arithmetic — no hand-maintained string table.
+    //
+    // EGame encoding (CUE4Parse/UE4/Versions/EGame.cs:225-229):
+    //   GameUe<F>Base = 0x<F>000000
+    //   GAME_UE<F>_<X>     = GameUe<F>Base + (X << 16)   // base versions
+    //   GAME_<GameSpecific> = GAME_UE<F>_<X> + n         // n=1..255 offset
+    // Masking with 0xFFFF0000 keeps family + major.minor bits and drops
+    // the per-game offset, yielding the parent base unchanged. Casting
+    // back to EGame and ToString() round-trips to the base member name
+    // because every game-specific value's parent is by construction a
+    // declared base — and when CUE4Parse adds new entries this stays
+    // correct automatically.
+    private static bool TryDeriveBaseUeFromEGame(string gameVersionEnum, out string baseUeName)
     {
-        if (string.IsNullOrEmpty(gameVersionEnum)) return string.Empty;
-        // Already a base UE name? Use it as the only scan root (no extra
-        // game-specific layer to add).
-        if (gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)) return gameVersionEnum;
-        // Unknown game-specific name — no way to derive its base UE here.
-        // Caller's specific folder + recursive catch-all sweep handles it.
-        return string.Empty;
+        baseUeName = string.Empty;
+        if (!Enum.TryParse<EGame>(gameVersionEnum, ignoreCase: false, out EGame game)) return false;
+        EGame baseValue = (EGame)((uint)game & 0xFFFF0000u);
+        string asName = baseValue.ToString();
+        if (!asName.StartsWith("GAME_UE", StringComparison.Ordinal)) return false;
+        baseUeName = asName;
+        return true;
     }
 
     private static bool TryLoadFile(string file, Dictionary<(string, uint), EngineUbMetadata> byNameAndHash, Dictionary<string, List<uint>> hashesByName, Action<string>? logError)
@@ -240,6 +257,14 @@ internal static class EngineUbMetadataTranslator
     // Returns false on unrecognized type. On true, scalar/rows/cols/isMatrix
     // are populated. ShaderParamType has no Unknown value, so we signal via
     // bool — matches the existing MaterialConstantBufferReader convention.
+    //
+    // Strict on HLSL-style names: `Float`, `Float2`, `Float4`, `Float4x4`,
+    // `Int4`, `UInt3`, `Bool`, `Half2`, etc. Seed JSONs must follow this
+    // convention — UE C++ type names (`FMatrix44f`, `FVector4f`,
+    // `FLinearColor`, `FIntPoint`, …) are NOT accepted; emit the HLSL
+    // form in the JSON instead. Keeping the parser strict surfaces seed
+    // mistakes as missing members rather than silently absorbing a
+    // sprawling alias table.
     private static bool ParseType(string type, out ShaderParamType scalar, out int rows, out int cols, out bool isMatrix)
     {
         scalar = ShaderParamType.Float; rows = 0; cols = 0; isMatrix = false;

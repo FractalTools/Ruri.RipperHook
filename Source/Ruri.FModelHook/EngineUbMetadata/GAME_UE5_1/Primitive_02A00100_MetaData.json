@@ -1,0 +1,212 @@
+{
+  "name": "Primitive",
+  "engineVersion": "5.1.1",
+  "engineSource": "D:\\GameStudy\\UnrealEngine-5.1.1-release\\Engine\\Source\\Runtime\\Engine\\Public\\PrimitiveUniformShaderParameters.h (FPrimitiveUniformShaderParameters)",
+  "layoutHash": "0x02A00100",
+  "constantBufferSize": 544,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Flags",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "InstanceSceneDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "NumInstanceSceneDataEntries",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "SingleCaptureIndex",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "TilePosition",
+      "type": "Float3"
+    },
+    {
+      "offset": 28,
+      "name": "PrimitiveComponentId",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "LocalToRelativeWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 96,
+      "name": "RelativeWorldToLocal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 160,
+      "name": "PreviousLocalToRelativeWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 224,
+      "name": "PreviousRelativeWorldToLocal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 288,
+      "name": "InvNonUniformScale",
+      "type": "Float3"
+    },
+    {
+      "offset": 300,
+      "name": "ObjectBoundsX",
+      "type": "Float"
+    },
+    {
+      "offset": 304,
+      "name": "ObjectRelativeWorldPositionAndRadius",
+      "type": "Float4"
+    },
+    {
+      "offset": 320,
+      "name": "ActorRelativeWorldPosition",
+      "type": "Float3"
+    },
+    {
+      "offset": 332,
+      "name": "LightmapUVIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 336,
+      "name": "ObjectOrientation",
+      "type": "Float3"
+    },
+    {
+      "offset": 348,
+      "name": "LightmapDataIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 352,
+      "name": "NonUniformScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 368,
+      "name": "PreSkinnedLocalBoundsMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 380,
+      "name": "NaniteResourceID",
+      "type": "UInt"
+    },
+    {
+      "offset": 384,
+      "name": "PreSkinnedLocalBoundsMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 396,
+      "name": "NaniteHierarchyOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 400,
+      "name": "LocalObjectBoundsMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 412,
+      "name": "ObjectBoundsY",
+      "type": "Float"
+    },
+    {
+      "offset": 416,
+      "name": "LocalObjectBoundsMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 428,
+      "name": "ObjectBoundsZ",
+      "type": "Float"
+    },
+    {
+      "offset": 432,
+      "name": "InstanceLocalBoundsCenter",
+      "type": "Float3"
+    },
+    {
+      "offset": 444,
+      "name": "InstancePayloadDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 448,
+      "name": "InstanceLocalBoundsExtent",
+      "type": "Float3"
+    },
+    {
+      "offset": 460,
+      "name": "InstancePayloadDataStride",
+      "type": "UInt"
+    },
+    {
+      "offset": 464,
+      "name": "WireframeColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 476,
+      "name": "PackedNaniteFlags",
+      "type": "UInt"
+    },
+    {
+      "offset": 480,
+      "name": "LevelColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 492,
+      "name": "PersistentPrimitiveIndex",
+      "type": "Int"
+    },
+    {
+      "offset": 496,
+      "name": "InstanceDrawDistanceMinMaxSquared",
+      "type": "Float2"
+    },
+    {
+      "offset": 504,
+      "name": "InstanceWPODisableDistanceSquared",
+      "type": "Float"
+    },
+    {
+      "offset": 508,
+      "name": "NaniteRayTracingDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 512,
+      "name": "Unused",
+      "type": "Float3"
+    },
+    {
+      "offset": 524,
+      "name": "BoundsScale",
+      "type": "Float"
+    },
+    {
+      "offset": 528,
+      "name": "CustomPrimitiveData",
+      "type": "Float4",
+      "arraySize": 1
+    }
+  ],
+  "resources": []
+}

@@ -1,12 +1,49 @@
 {
-  "name": "DecalPass",
+  "name": "ShadowDepthPass",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/CompositionLighting/PostProcessDeferredDecals.h:18-21",
-  "layoutHash": "0x09850A11",
-  "constantBufferSize": 0,
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:249-263 (FShadowDepthPassUniformParameters)",
+  "layoutHash": "0x1D591E4D",
+  "constantBufferSize": 932,
   "bindingFlags": "Shader",
-  "_comment": "FDecalPassUniformParameters. Recurses into FSceneTextureUniformParameters then tail RDG texture. NOTE: hash 0x09850A11 collides with LumenCardPass (both have an identical structure: FSceneTextureUniformParameters + EyeAdaptationTexture). Disambiguation done by binding/instance name in the cook.",
-  "members": [],
+  "members": [
+    {
+      "offset": 0,
+      "name": "ProjectionMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 64,
+      "name": "ViewMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 128,
+      "name": "ShadowParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 144,
+      "name": "bClampToNearPlane",
+      "type": "Float"
+    },
+    {
+      "offset": 160,
+      "name": "ShadowViewProjectionMatrices",
+      "type": "Float4x4",
+      "arraySize": 6
+    },
+    {
+      "offset": 544,
+      "name": "ShadowViewMatrices",
+      "type": "Float4x4",
+      "arraySize": 6
+    },
+    {
+      "offset": 928,
+      "name": "bRenderToVirtualShadowMap",
+      "type": "Int"
+    }
+  ],
   "resources": [
     {
       "index": 0,
@@ -88,8 +125,26 @@
     },
     {
       "index": 13,
-      "name": "EyeAdaptationTexture",
-      "type": "UBMT_RDG_TEXTURE",
+      "name": "VirtualSmPageTable",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 14,
+      "name": "PackedNaniteViews",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 15,
+      "name": "PageRectBounds",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 0
+    },
+    {
+      "index": 16,
+      "name": "OutDepthBufferArray",
+      "type": "UBMT_RDG_TEXTURE_UAV",
       "offset": 0
     }
   ]

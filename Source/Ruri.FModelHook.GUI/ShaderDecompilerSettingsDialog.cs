@@ -20,7 +20,7 @@ internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
     {
         Title = "Shader Decompiler Settings";
         Width = 520;
-        Height = 320;
+        Height = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
         IconVisibility = Visibility.Collapsed;
@@ -62,10 +62,28 @@ internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
             Margin = new Thickness(20, 0, 0, 12),
         };
 
+        CheckBox tryBaseEngine = new()
+        {
+            Content = "Fall back to base UE engine metadata when no game-specific folder exists",
+            IsChecked = current.TryMatchBaseEngineVersion,
+            Margin = new Thickness(0, 8, 0, 4),
+        };
+        tryBaseEngine.Checked += (_, _) => Apply(tryBaseEngine: true);
+        tryBaseEngine.Unchecked += (_, _) => Apply(tryBaseEngine: false);
+        TextBlock tryBaseEngineHint = new()
+        {
+            Text = "When on (default), if no engine-UB metadata folder matches the game's exact EGame name (e.g. GAME_InfinityNikki), the loader scans the base UE folder (e.g. GAME_UE5_4) too. About 99% of games don't customize CB layouts so this is almost always correct and removes the need to hand-seed metadata for every game. Turn off when you suspect a modded engine has drifted layouts and you'd rather see anonymous placeholders than potentially-wrong base-UE names.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            Margin = new Thickness(20, 0, 0, 12),
+        };
+
         rows.Children.Add(splitVariants);
         rows.Children.Add(splitHint);
         rows.Children.Add(warnIfNoMappings);
         rows.Children.Add(warnHint);
+        rows.Children.Add(tryBaseEngine);
+        rows.Children.Add(tryBaseEngineHint);
 
         Content = new ScrollViewer
         {
@@ -77,7 +95,7 @@ internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
     // Each named arg is the new value for that one checkbox; the others
     // are read from the live snapshot so we don't clobber them. Persists
     // through the saver registered by Program.cs.
-    private void Apply(bool? splitVariants = null, bool? warnIfNoMappings = null)
+    private void Apply(bool? splitVariants = null, bool? warnIfNoMappings = null, bool? tryBaseEngine = null)
     {
         if (_suppressUpdates) return;
         ShaderDecompilerSettings current = ShaderDecompilerSettingsAccess.Current;
@@ -85,6 +103,7 @@ internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
         {
             SplitVariantsToHlslFiles = splitVariants ?? current.SplitVariantsToHlslFiles,
             WarnIfNoMappings = warnIfNoMappings ?? current.WarnIfNoMappings,
+            TryMatchBaseEngineVersion = tryBaseEngine ?? current.TryMatchBaseEngineVersion,
         };
         ShaderDecompilerSettingsAccess.Replace(updated, persist: true);
     }

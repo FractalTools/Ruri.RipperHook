@@ -1,0 +1,46 @@
+{
+  "name": "DeferredLightUniforms",
+  "engineVersion": "5.1.1",
+  "engineSource": "D:\\GameStudy\\UnrealEngine-5.1.1-release\\Engine\\Source\\Runtime\\Renderer\\Private\\LightRendering.h (FDeferredLightUniformStruct)",
+  "layoutHash": "0x00A00100",
+  "constantBufferSize": 44,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ShadowMapChannelMask",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "DistanceFadeMAD",
+      "type": "Float2"
+    },
+    {
+      "offset": 24,
+      "name": "ContactShadowLength",
+      "type": "Float"
+    },
+    {
+      "offset": 28,
+      "name": "ContactShadowNonShadowCastingIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 32,
+      "name": "VolumetricScatteringIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 36,
+      "name": "ShadowedBits",
+      "type": "UInt"
+    },
+    {
+      "offset": 40,
+      "name": "LightingChannelMask",
+      "type": "UInt"
+    }
+  ],
+  "resources": []
+}

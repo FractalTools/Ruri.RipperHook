@@ -1,0 +1,243 @@
+{
+  "name": "Primitive",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/PrimitiveUniformShaderParameters.h:26-73 (FPrimitiveUniformShaderParameters)",
+  "layoutHash": "0x03000100",
+  "constantBufferSize": 768,
+  "bindingFlags": "Shader",
+  "_comment": "FPrimitiveUniformShaderParameters (UE5.4): restructured layout \u2014 adds PositionHigh/WorldToPreviousWorld/ObjectWorldPositionHighAndRadius/ObjectWorldPositionLow/MinMaterialDisplacement/MaxMaterialDisplacement/ActorWorldPositionHigh/ActorWorldPositionLow/InstancePayloadExtensionSize/WireframeAndPrimitiveColor/MaxWPOExtent/CustomStencilValueAndMask/VisibilityFlags; CustomPrimitiveData is now [9] (NumCustomPrimitiveDataFloat4s=9).",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Flags",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "InstanceSceneDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "NumInstanceSceneDataEntries",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "SingleCaptureIndex",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "PositionHigh",
+      "type": "Float3"
+    },
+    {
+      "offset": 28,
+      "name": "PrimitiveComponentId",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "LocalToRelativeWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 96,
+      "name": "RelativeWorldToLocal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 160,
+      "name": "PreviousLocalToRelativeWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 224,
+      "name": "PreviousRelativeWorldToLocal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 288,
+      "name": "WorldToPreviousWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 352,
+      "name": "InvNonUniformScale",
+      "type": "Float3"
+    },
+    {
+      "offset": 364,
+      "name": "ObjectBoundsX",
+      "type": "Float"
+    },
+    {
+      "offset": 368,
+      "name": "ObjectWorldPositionHighAndRadius",
+      "type": "Float4"
+    },
+    {
+      "offset": 384,
+      "name": "ObjectWorldPositionLow",
+      "type": "Float3"
+    },
+    {
+      "offset": 396,
+      "name": "MinMaterialDisplacement",
+      "type": "Float"
+    },
+    {
+      "offset": 400,
+      "name": "ActorWorldPositionHigh",
+      "type": "Float3"
+    },
+    {
+      "offset": 412,
+      "name": "MaxMaterialDisplacement",
+      "type": "Float"
+    },
+    {
+      "offset": 416,
+      "name": "ActorWorldPositionLow",
+      "type": "Float3"
+    },
+    {
+      "offset": 428,
+      "name": "LightmapUVIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 432,
+      "name": "ObjectOrientation",
+      "type": "Float3"
+    },
+    {
+      "offset": 444,
+      "name": "LightmapDataIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 448,
+      "name": "NonUniformScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 464,
+      "name": "PreSkinnedLocalBoundsMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 476,
+      "name": "NaniteResourceID",
+      "type": "UInt"
+    },
+    {
+      "offset": 480,
+      "name": "PreSkinnedLocalBoundsMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 492,
+      "name": "NaniteHierarchyOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 496,
+      "name": "LocalObjectBoundsMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 508,
+      "name": "ObjectBoundsY",
+      "type": "Float"
+    },
+    {
+      "offset": 512,
+      "name": "LocalObjectBoundsMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 524,
+      "name": "ObjectBoundsZ",
+      "type": "Float"
+    },
+    {
+      "offset": 528,
+      "name": "InstanceLocalBoundsCenter",
+      "type": "Float3"
+    },
+    {
+      "offset": 540,
+      "name": "InstancePayloadDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 544,
+      "name": "InstanceLocalBoundsExtent",
+      "type": "Float3"
+    },
+    {
+      "offset": 556,
+      "name": "InstancePayloadDataStride",
+      "type": "UInt"
+    },
+    {
+      "offset": 560,
+      "name": "InstancePayloadExtensionSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 568,
+      "name": "WireframeAndPrimitiveColor",
+      "type": "Float2"
+    },
+    {
+      "offset": 576,
+      "name": "PackedNaniteFlags",
+      "type": "UInt"
+    },
+    {
+      "offset": 580,
+      "name": "PersistentPrimitiveIndex",
+      "type": "Int"
+    },
+    {
+      "offset": 584,
+      "name": "InstanceDrawDistanceMinMaxSquared",
+      "type": "Float2"
+    },
+    {
+      "offset": 592,
+      "name": "InstanceWPODisableDistanceSquared",
+      "type": "Float"
+    },
+    {
+      "offset": 596,
+      "name": "NaniteRayTracingDataOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 600,
+      "name": "MaxWPOExtent",
+      "type": "Float"
+    },
+    {
+      "offset": 604,
+      "name": "CustomStencilValueAndMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 608,
+      "name": "VisibilityFlags",
+      "type": "UInt"
+    },
+    {
+      "offset": 624,
+      "name": "CustomPrimitiveData",
+      "type": "Float4",
+      "arraySize": 9
+    }
+  ],
+  "resources": []
+}

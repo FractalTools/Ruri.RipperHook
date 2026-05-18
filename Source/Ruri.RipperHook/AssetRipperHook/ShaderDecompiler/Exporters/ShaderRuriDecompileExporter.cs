@@ -55,6 +55,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             {
                 SplitVariantsToHlslFiles = value,
                 WarnIfNoMappings = current.WarnIfNoMappings,
+                TryMatchBaseEngineVersion = current.TryMatchBaseEngineVersion,
             });
         }
     }

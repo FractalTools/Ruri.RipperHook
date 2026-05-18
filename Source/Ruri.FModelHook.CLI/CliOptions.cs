@@ -27,6 +27,15 @@ internal sealed class CliOptions
     // without re-running the export side, which for the master 6.8 GB
     // archive takes 10-15 minutes per iteration.
     public string? DecompileOnly { get; set; }
+    // Path to an FModel UserSettings JSON snapshot to install over the
+    // live `%AppData%/FModel/AppSettings(_Debug).json` BEFORE the WPF
+    // host boots. Necessary when re-targeting a different game between
+    // CLI runs: FModel's ApplicationViewModel ctor opens a blocking
+    // modal DirectorySelector if `PerDirectory[GameDirectory]` isn't
+    // already present — invisible in headless mode and blocks forever.
+    // Supply the user's per-game snapshot (e.g. AppSettings_OniValleyDemo.json)
+    // and the CLI copies it into place before app.Run() is called.
+    public string? GameConfig { get; set; }
 
     public static CliOptions Parse(string[] args)
     {
@@ -84,6 +93,13 @@ internal sealed class CliOptions
                         i++;
                     }
                     break;
+                case "--game-config":
+                    if (i + 1 < args.Length)
+                    {
+                        opts.GameConfig = args[i + 1];
+                        i++;
+                    }
+                    break;
                 default:
                     // Pass-through: forwarded to the hook-side ParseCliArgs so
                     // any future flags it grows are auto-consumed without a
@@ -118,6 +134,12 @@ internal sealed class CliOptions
         "                        an existing <basename>.ushaderlib (sidecars must sit",
         "                        next to it). Useful for re-iterating decompile-side",
         "                        fixes without re-exporting the archive.",
+        "  --game-config PATH    Install a UserSettings JSON snapshot over the live",
+        "                        %AppData%/FModel/AppSettings(_Debug).json BEFORE booting",
+        "                        FModel. Required when re-targeting a different game",
+        "                        between CLI runs: FModel pops a blocking modal if",
+        "                        PerDirectory[GameDirectory] is missing, and that modal",
+        "                        is invisible in headless mode (hangs forever).",
         "  --list-hooks          Print discovered hook ids and exit.",
         "  -h, --help            Print this help and exit.",
         "",

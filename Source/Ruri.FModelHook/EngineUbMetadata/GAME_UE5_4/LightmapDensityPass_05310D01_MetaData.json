@@ -1,0 +1,124 @@
+{
+  "name": "LightmapDensityPass",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightMapDensityRendering.cpp:38-45 (FLightmapDensityPassUniformParameters)",
+  "layoutHash": "0x05310D01",
+  "constantBufferSize": 48,
+  "bindingFlags": "Shader",
+  "_comment": "FLightmapDensityPassUniformParameters (UE5.4): nested FSceneTextureUniformParameters now includes ScenePartialDepthTexture (15 resources vs 13 in 5.1).",
+  "members": [
+    {
+      "offset": 0,
+      "name": "LightMapDensity",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "DensitySelectedColor",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "VertexMappedColor",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "name": "SceneTextures_SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 48
+    },
+    {
+      "index": 1,
+      "name": "SceneTextures_SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 56
+    },
+    {
+      "index": 2,
+      "name": "SceneTextures_ScenePartialDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 64
+    },
+    {
+      "index": 3,
+      "name": "SceneTextures_GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 72
+    },
+    {
+      "index": 4,
+      "name": "SceneTextures_GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 80
+    },
+    {
+      "index": 5,
+      "name": "SceneTextures_GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 88
+    },
+    {
+      "index": 6,
+      "name": "SceneTextures_GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 96
+    },
+    {
+      "index": 7,
+      "name": "SceneTextures_GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 104
+    },
+    {
+      "index": 8,
+      "name": "SceneTextures_GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 112
+    },
+    {
+      "index": 9,
+      "name": "SceneTextures_GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 120
+    },
+    {
+      "index": 10,
+      "name": "SceneTextures_ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 128
+    },
+    {
+      "index": 11,
+      "name": "SceneTextures_CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 136
+    },
+    {
+      "index": 12,
+      "name": "SceneTextures_CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV",
+      "offset": 144
+    },
+    {
+      "index": 13,
+      "name": "SceneTextures_PointClampSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 152
+    },
+    {
+      "index": 14,
+      "name": "GridTexture",
+      "type": "UBMT_TEXTURE",
+      "offset": 160
+    },
+    {
+      "index": 15,
+      "name": "GridTextureSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 168
+    }
+  ]
+}

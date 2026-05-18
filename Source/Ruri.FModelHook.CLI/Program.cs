@@ -57,6 +57,17 @@ public static class Program
             return RunDecompileOnly(opts.DecompileOnly!);
         }
 
+        // FModel-side UserSettings preflight. Either install a user-provided
+        // snapshot (--game-config) or validate that the live AppSettings has
+        // a PerDirectory entry matching the current GameDirectory. Without
+        // this, FModel opens an invisible modal DirectorySelector dialog
+        // that blocks the WPF dispatcher forever — the original "exits
+        // after 10 startup lines" symptom that prompted this CLI fix.
+        if (!EnsureGameConfig(opts))
+        {
+            return 2;
+        }
+
         // Persisted config drives every other module setting (e.g. shader
         // decompiler split-variants); CLI flags can only ADD to the enabled
         // hook set, not subtract from it (matches the GUI flow).
@@ -75,8 +86,7 @@ public static class Program
 
         try
         {
-            LaunchFModel(opts);
-            return 0;
+            return LaunchFModel(opts);
         }
         catch (Exception ex)
         {
@@ -261,6 +271,7 @@ public static class Program
             {
                 SplitVariantsToHlslFiles = opts.SplitVariants ?? shader.SplitVariantsToHlslFiles,
                 WarnIfNoMappings = forceSuppress ? false : shader.WarnIfNoMappings,
+                TryMatchBaseEngineVersion = shader.TryMatchBaseEngineVersion,
             };
         }
         ShaderDecompilerSettingsAccess.Replace(shader);
@@ -342,6 +353,114 @@ public static class Program
         }
     }
 
+    // Returns true if FModel's live UserSettings is OK to launch with;
+    // returns false (with diagnostics logged) if the CLI must abort.
+    //
+    // The check we care about is the same one
+    // `FModel.ViewModels.ApplicationViewModel.AvoidEmptyGameDirectory`
+    // performs at startup:
+    //
+    //     UserSettings.PerDirectory.TryGetValue(UserSettings.GameDirectory, out _)
+    //
+    // If the live AppSettings has GameDirectory pointing somewhere but
+    // PerDirectory is missing the matching entry, FModel pops the
+    // modal DirectorySelector and hangs the headless dispatcher.
+    //
+    // When --game-config is supplied, we copy that snapshot into place
+    // (overwriting %AppData%/FModel/AppSettings(_Debug).json) before
+    // running the check; this is how the user re-targets between
+    // OniValleyDemo and InfinityNikkiGlobal.
+    private static bool EnsureGameConfig(CliOptions opts)
+    {
+        // Build the exact same path FModel.Settings.UserSettings.FilePath
+        // resolves to. We replicate it here instead of calling into FModel
+        // to keep this preflight free of WPF-host initialization.
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string fmodelDir = Path.Combine(appData, "FModel");
+#if DEBUG
+        string liveSettingsPath = Path.Combine(fmodelDir, "AppSettings_Debug.json");
+#else
+        string liveSettingsPath = Path.Combine(fmodelDir, "AppSettings.json");
+#endif
+
+        if (!string.IsNullOrWhiteSpace(opts.GameConfig))
+        {
+            if (!File.Exists(opts.GameConfig))
+            {
+                HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --game-config not found: {opts.GameConfig}");
+                return false;
+            }
+            try
+            {
+                Directory.CreateDirectory(fmodelDir);
+                // Back up the existing settings exactly once per CLI run so
+                // a user-fixed config isn't silently clobbered by an old
+                // snapshot. Keep .lastrun so the user can diff if a run
+                // misbehaves.
+                if (File.Exists(liveSettingsPath))
+                {
+                    File.Copy(liveSettingsPath, liveSettingsPath + ".lastrun.bak", overwrite: true);
+                }
+                File.Copy(opts.GameConfig, liveSettingsPath, overwrite: true);
+                HookLogger.Log($"[Ruri.FModelHook.CLI] Installed game config: {opts.GameConfig} -> {liveSettingsPath}");
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Failed to install --game-config: {ex.Message}");
+                return false;
+            }
+        }
+
+        if (!File.Exists(liveSettingsPath))
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] FModel UserSettings not found at {liveSettingsPath}. Run the GUI once, or pass --game-config <snapshot>.");
+            return false;
+        }
+
+        try
+        {
+            // Minimal JSON inspection — avoid pulling Newtonsoft into the
+            // preflight path so a malformed third-party serializer doesn't
+            // cascade into the validation failure. System.Text.Json is
+            // already in this project's transitive set.
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(liveSettingsPath));
+            var root = doc.RootElement;
+            string? gameDir = root.TryGetProperty("GameDirectory", out var gd) ? gd.GetString() : null;
+            if (string.IsNullOrWhiteSpace(gameDir))
+            {
+                HookLogger.LogFailure("[Ruri.FModelHook.CLI] UserSettings has empty GameDirectory — FModel will pop the DirectorySelector. Aborting.");
+                return false;
+            }
+            bool hasPerDir = false;
+            if (root.TryGetProperty("PerDirectory", out var perDir) && perDir.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var entry in perDir.EnumerateObject())
+                {
+                    if (string.Equals(entry.Name, gameDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasPerDir = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasPerDir)
+            {
+                HookLogger.LogFailure(
+                    $"[Ruri.FModelHook.CLI] UserSettings.GameDirectory='{gameDir}' has no matching PerDirectory entry. " +
+                    "FModel would open the modal DirectorySelector at boot (invisible in headless mode -> infinite hang). " +
+                    "Run the GUI once with this game to populate the entry, or pass --game-config <snapshot> with the correct PerDirectory key.");
+                return false;
+            }
+            HookLogger.Log($"[Ruri.FModelHook.CLI] UserSettings preflight OK. GameDirectory='{gameDir}' (PerDirectory entry present).");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Failed to parse {liveSettingsPath}: {ex.Message}");
+            return false;
+        }
+    }
+
     private static void EnsureHookAssembliesLoaded()
     {
         // Matches the GUI's belt-and-braces approach. The typeof() pin is
@@ -366,11 +485,52 @@ public static class Program
     // hook-installed MainWindow.OnLoaded detour to fire and the
     // auto-export to begin), and we shut it down after auto-export
     // unless --keep-alive was passed.
-    private static void LaunchFModel(CliOptions opts)
+    private static int LaunchFModel(CliOptions opts)
     {
         HookLogger.Log("[Ruri.FModelHook.CLI] Launching FModel (headless)...");
         var app = new FModel.App();
         app.InitializeComponent();
+
+        // Surface any WPF-pipeline failure (XAML load, dispatcher
+        // exception, premature shutdown) so the user sees the real
+        // reason instead of a clean exit with no work done. Without
+        // these, an exception during MainWindow construction is
+        // swallowed by FModel's modal "Fatal Error" MessageBox — which
+        // in headless mode is invisible and blocks forever.
+        AppDomain.CurrentDomain.UnhandledException += (_, ev) =>
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] AppDomain unhandled: {ev.ExceptionObject}");
+        };
+        app.DispatcherUnhandledException += (_, ev) =>
+        {
+            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Dispatcher unhandled: {ev.Exception}");
+            ev.Handled = true; // suppress FModel's modal "Fatal Error" MessageBox in CLI mode
+        };
+
+        // Hard kill-switch for the DirectorySelector dialog. FModel's
+        // ApplicationViewModel ctor opens this modal whenever
+        // PerDirectory[GameDirectory] is missing from UserSettings —
+        // and in headless mode the modal is invisible, blocking
+        // forever. We pre-validate the config in EnsureGameConfig() so
+        // this should never trigger; the window-class hook here is a
+        // belt-and-braces fail-fast in case the preflight misses a
+        // path (e.g. user races a config edit in the middle of launch).
+        System.Windows.EventManager.RegisterClassHandler(
+            typeof(FModel.Views.DirectorySelector),
+            FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((_, _) =>
+            {
+                HookLogger.LogFailure(
+                    "[Ruri.FModelHook.CLI] FATAL: FModel opened DirectorySelector — its UserSettings has no " +
+                    "PerDirectory entry for the active GameDirectory. The CLI cannot interact with the modal. " +
+                    "Either: (a) launch the GUI exe once with the target game so FModel stores the PerDirectory " +
+                    "entry, or (b) pass --game-config <path-to-AppSettings-snapshot.json> to install a known-good " +
+                    "config before launch. Aborting now.");
+                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { Application.Current.Shutdown(2); } catch { Environment.Exit(2); }
+                }));
+            }));
 
         // Hide the main window as soon as it materialises. We can't simply
         // suppress it — FModel's startup wires the provider/AES dialogs
@@ -389,7 +549,11 @@ public static class Program
             };
         }
 
-        app.Run();
+        // app.Run() returns the exit code passed to Application.Shutdown(int).
+        // Propagate it so the DirectorySelector kill-switch and the
+        // auto-export driver's normal completion surface as distinct
+        // exit codes to the shell caller.
+        return app.Run();
     }
 
     private static void HideAllWindows()

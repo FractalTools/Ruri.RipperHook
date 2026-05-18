@@ -1,0 +1,101 @@
+{
+  "name": "IndirectLightingCache",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightMapRendering.h:24-41 (FIndirectLightingCacheUniformParameters)",
+  "layoutHash": "0x05ED0905",
+  "constantBufferSize": 224,
+  "bindingFlags": "Shader",
+  "_comment": "FIndirectLightingCacheUniformParameters (UE5.4): unchanged from 5.1.",
+  "members": [
+    {
+      "offset": 0,
+      "name": "IndirectLightingCachePrimitiveAdd",
+      "type": "Float3"
+    },
+    {
+      "offset": 16,
+      "name": "IndirectLightingCachePrimitiveScale",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "IndirectLightingCacheMinUV",
+      "type": "Float3"
+    },
+    {
+      "offset": 48,
+      "name": "IndirectLightingCacheMaxUV",
+      "type": "Float3"
+    },
+    {
+      "offset": 64,
+      "name": "PointSkyBentNormal",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "DirectionalLightShadowing",
+      "type": "Float"
+    },
+    {
+      "offset": 96,
+      "name": "IndirectLightingSHCoefficients0",
+      "type": "Float4",
+      "arraySize": 3
+    },
+    {
+      "offset": 144,
+      "name": "IndirectLightingSHCoefficients1",
+      "type": "Float4",
+      "arraySize": 3
+    },
+    {
+      "offset": 192,
+      "name": "IndirectLightingSHCoefficients2",
+      "type": "Float4"
+    },
+    {
+      "offset": 208,
+      "name": "IndirectLightingSHSingleCoefficient",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "name": "IndirectLightingCacheTexture0",
+      "type": "UBMT_TEXTURE",
+      "offset": 224
+    },
+    {
+      "index": 1,
+      "name": "IndirectLightingCacheTexture1",
+      "type": "UBMT_TEXTURE",
+      "offset": 232
+    },
+    {
+      "index": 2,
+      "name": "IndirectLightingCacheTexture2",
+      "type": "UBMT_TEXTURE",
+      "offset": 240
+    },
+    {
+      "index": 3,
+      "name": "IndirectLightingCacheTextureSampler0",
+      "type": "UBMT_SAMPLER",
+      "offset": 248
+    },
+    {
+      "index": 4,
+      "name": "IndirectLightingCacheTextureSampler1",
+      "type": "UBMT_SAMPLER",
+      "offset": 256
+    },
+    {
+      "index": 5,
+      "name": "IndirectLightingCacheTextureSampler2",
+      "type": "UBMT_SAMPLER",
+      "offset": 264
+    }
+  ]
+}

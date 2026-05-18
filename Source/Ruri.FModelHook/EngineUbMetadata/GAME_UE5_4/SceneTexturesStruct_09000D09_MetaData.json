@@ -1,0 +1,96 @@
+{
+  "name": "SceneTexturesStruct",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:14-38 (FSceneTextureUniformParameters, bound as 'SceneTexturesStruct')",
+  "layoutHash": "0x09000D09",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "_comment": "FSceneTextureUniformParameters (UE5.4): adds ScenePartialDepthTexture versus 5.1.",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "name": "SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 8
+    },
+    {
+      "index": 2,
+      "name": "ScenePartialDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 16
+    },
+    {
+      "index": 3,
+      "name": "GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 24
+    },
+    {
+      "index": 4,
+      "name": "GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 32
+    },
+    {
+      "index": 5,
+      "name": "GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 40
+    },
+    {
+      "index": 6,
+      "name": "GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 48
+    },
+    {
+      "index": 7,
+      "name": "GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 56
+    },
+    {
+      "index": 8,
+      "name": "GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 64
+    },
+    {
+      "index": 9,
+      "name": "GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 72
+    },
+    {
+      "index": 10,
+      "name": "ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 80
+    },
+    {
+      "index": 11,
+      "name": "CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 88
+    },
+    {
+      "index": 12,
+      "name": "CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV",
+      "offset": 96
+    },
+    {
+      "index": 13,
+      "name": "PointClampSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 104
+    }
+  ]
+}

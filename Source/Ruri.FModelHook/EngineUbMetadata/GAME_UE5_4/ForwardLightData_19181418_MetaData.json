@@ -1,0 +1,60 @@
+{
+  "name": "ForwardLightData",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:725-766 (FForwardLightData)",
+  "layoutHash": "0x19181418",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "_comment": "FForwardLightData (UE5.4): now splits culled light buffers into 32Bit+16Bit and adds DirectionalLightSMRTSettings/LightFunctionAtlasLightIndex/SimpleLightsEndIndex etc. Numeric members[] omitted \u2014 populate via RURI_SRT_DEBUG=1. Resources[] reflects declaration order.",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "name": "DirectionalLightShadowmapAtlas",
+      "type": "UBMT_RDG_TEXTURE",
+      "offset": 0
+    },
+    {
+      "index": 1,
+      "name": "ShadowmapSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 8
+    },
+    {
+      "index": 2,
+      "name": "DirectionalLightStaticShadowmap",
+      "type": "UBMT_TEXTURE",
+      "offset": 16
+    },
+    {
+      "index": 3,
+      "name": "StaticShadowmapSampler",
+      "type": "UBMT_SAMPLER",
+      "offset": 24
+    },
+    {
+      "index": 4,
+      "name": "ForwardLocalLightBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 32
+    },
+    {
+      "index": 5,
+      "name": "NumCulledLightsGrid",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 40
+    },
+    {
+      "index": 6,
+      "name": "CulledLightDataGrid32Bit",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 48
+    },
+    {
+      "index": 7,
+      "name": "CulledLightDataGrid16Bit",
+      "type": "UBMT_RDG_BUFFER_SRV",
+      "offset": 56
+    }
+  ]
+}

@@ -61,6 +61,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 {
                     SplitVariantsToHlslFiles = value,
                     WarnIfNoMappings = current.WarnIfNoMappings,
+                    TryMatchBaseEngineVersion = current.TryMatchBaseEngineVersion,
                 });
             }
         }

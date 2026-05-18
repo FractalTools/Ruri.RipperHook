@@ -88,9 +88,16 @@ public static class DecompilePipeline
             using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
             using (new TimingCookie(state, "Pass 145: Load engine-UB metadata"))
             {
+                // Honour the user-facing toggle: when the game-specific folder
+                // is missing, fall back to the base UE folder (e.g. GAME_UE5_4
+                // for GAME_InfinityNikki). Default-on; only matters when the
+                // game name DOESN'T already start with GAME_UE — in that case
+                // the specific folder IS the base, no further fallback exists.
+                bool tryBaseFallback = Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.TryMatchBaseEngineVersion;
                 state.EngineUbRegistry = EngineUbMetadataRegistry.LoadForGame(
                     engineUbDir,
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
+                    tryBaseFallback,
                     state.Log, state.LogError);
             }
             using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);

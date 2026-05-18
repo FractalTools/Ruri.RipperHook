@@ -3,10 +3,18 @@
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenTranslucencyRadianceCache.cpp:69-75",
   "layoutHash": "0x0D710E48",
-  "constantBufferSize": 0,
+  "constantBufferSize": 224,
   "bindingFlags": "Shader",
-  "_comment": "FLumenTranslucencyRadianceCacheMarkPassUniformParameters. Recurses into FSceneTextureUniformParameters and LumenRadianceCache::FRadianceCacheMarkParameters (INCLUDE — appends resources at top level), then trailing RDG_TEXTURE for FurthestHZBTexture. Scalar/array members skipped.",
-  "members": [],
+  "_comment": "FLumenTranslucencyRadianceCacheMarkPassUniformParameters. Recurses into FSceneTextureUniformParameters (no scalars) and LumenRadianceCache::FRadianceCacheMarkParameters (INCLUDE, prefix 'RadianceCacheMarkParameters_'): 2x FVector4f[6] arrays + 3 scalars (uint/uint/float). Trailing scalars: ViewportUVToHZBBufferUV (FVector2f), HZBMipLevel (float). MaxClipmaps=6 (LumenRadianceCacheInterpolation.h:15).",
+  "members": [
+    { "offset":   0, "name": "RadianceCacheMarkParameters_PackedWorldPositionToRadianceProbeCoord",   "type": "Float4", "arraySize": 6 },
+    { "offset":  96, "name": "RadianceCacheMarkParameters_PackedRadianceProbeCoordToWorldPosition",   "type": "Float4", "arraySize": 6 },
+    { "offset": 192, "name": "RadianceCacheMarkParameters_RadianceProbeClipmapResolutionForMark",     "type": "UInt" },
+    { "offset": 196, "name": "RadianceCacheMarkParameters_NumRadianceProbeClipmapsForMark",           "type": "UInt" },
+    { "offset": 200, "name": "RadianceCacheMarkParameters_InvClipmapFadeSizeForMark",                 "type": "Float" },
+    { "offset": 208, "name": "ViewportUVToHZBBufferUV",                                                "type": "Float2" },
+    { "offset": 216, "name": "HZBMipLevel",                                                            "type": "Float" }
+  ],
   "resources": [
     { "index":  0, "name": "SceneTextures_SceneColorTexture",            "type": "UBMT_RDG_TEXTURE",     "offset": 0 },
     { "index":  1, "name": "SceneTextures_SceneDepthTexture",            "type": "UBMT_RDG_TEXTURE",     "offset": 0 },

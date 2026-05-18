@@ -118,6 +118,7 @@ internal sealed class ShaderDecompilerSettingsForm : Form
         {
             SplitVariantsToHlslFiles = splitVariants ?? current.SplitVariantsToHlslFiles,
             WarnIfNoMappings = current.WarnIfNoMappings,
+            TryMatchBaseEngineVersion = current.TryMatchBaseEngineVersion,
         };
         ShaderDecompilerSettingsAccess.Replace(updated, persist: true);
     }
