@@ -38,6 +38,27 @@ internal static class HeadlessRunner
             return 1;
         }
 
+        if (options.CabMapPath is { Length: > 0 } cabMapPath)
+        {
+            if (!File.Exists(cabMapPath))
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"CABMap not found: {cabMapPath}");
+                return 1;
+            }
+            try
+            {
+                (string baseFolder, var entries) = CabMap.Load(cabMapPath);
+                string[] expanded = CabMap.ResolveDeps(baseFolder, entries, paths);
+                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
+                paths = expanded;
+            }
+            catch (Exception ex)
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"Cannot load CABMap '{cabMapPath}': {ex.GetType().Name}: {ex.Message}");
+                return 1;
+            }
+        }
+
         HashSet<int> allowedClassIds = ResolveTypes(options.Types);
         if (options.Types.Length > 0 && allowedClassIds.Count == 0)
         {
