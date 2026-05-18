@@ -96,6 +96,13 @@ internal sealed class PipelineState
     // files match the convention. See EngineUbMetadataLoader for semantics.
     public EngineUbMetadataRegistry EngineUbRegistry { get; set; } = EngineUbMetadataRegistry.Empty;
 
+    // FModel EGame enum name from UnifiedShaderMetadata.GameVersionEnum
+    // (e.g. "GAME_UE5_1", "GAME_InfinityNikki"). Filled by Pass 140 and
+    // consumed by the engine-UB registry load (Pass 145) to pick the
+    // matching `EngineUbMetadata/<EGame>/` subfolder. Empty when we
+    // decompiled without a UnifiedShaderMetadata.json (legacy / standalone).
+    public string GameVersionEnum { get; set; } = string.Empty;
+
     // Pass 180 — per-shader-binary prep artefacts (stripped DXBC, engine
     // options, container metadata). Filled by Pass 180; consumed by
     // Pass 190 (decompile) and Pass 200 (emit).

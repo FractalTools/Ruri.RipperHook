@@ -27,15 +27,24 @@
 
   <!-- Engine UB seed metadata. One JSON per <UBName>_<LayoutHash:08x>
        pair, loaded at startup by EngineUbMetadataLoader from
-       <exeDir>/EngineUbMetadata/. Tracked under source-controlled
-       Source/Ruri.FModelHook/EngineUbMetadata/, copied to the FModel
-       binary directory on build. See README.md for the JSON schema and
-       how to bootstrap new layouts from UE source. -->
+       <exeDir>/EngineUbMetadata/ (recursive). Source layout groups by
+       UE version (UE5.1.1/, UE5.4.4/, ...) but the loader keys by
+       (UBName, LayoutHash) regardless of subfolder.
+
+       Copy is "first-run only": files are copied only when the
+       destination doesn't already exist. This preserves user edits and
+       hand-added JSONs at the deployed location across rebuilds — git
+       pull + dotnet build will NOT clobber local symbol overrides. To
+       force-refresh, delete the deployed file. -->
   <ItemGroup>
-    <Content Include="EngineUbMetadata\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </Content>
+    <_EngineUbMetadataSeed Include="EngineUbMetadata\**\*" />
   </ItemGroup>
+
+  <Target Name="CopyEngineUbMetadataIfMissing" AfterTargets="Build">
+    <Copy SourceFiles="@(_EngineUbMetadataSeed)"
+          DestinationFiles="@(_EngineUbMetadataSeed->'$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')"
+          Condition="!Exists('$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

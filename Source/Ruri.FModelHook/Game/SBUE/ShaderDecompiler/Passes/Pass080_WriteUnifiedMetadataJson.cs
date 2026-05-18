@@ -37,6 +37,13 @@ internal static class Pass080_WriteUnifiedMetadataJson
         var provider = state.Vm?.Provider;
         if (provider == null) return;
 
+        // Capture FModel's EGame enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
+        // so the decompile side can pick the matching `EngineUbMetadata/<EGame>/`
+        // subfolder for engine-UB symbol seeds. Game-specific overrides
+        // (forks with custom UB layouts) are auto-detected by their full
+        // EGame name; the base UE major.minor folder is the fallback.
+        output.GameVersionEnum = provider.Versions?.Game.ToString() ?? string.Empty;
+
         string projectName = provider.ProjectName ?? "UnknownProject";
         string outputPath = Path.Combine(FModel.Settings.UserSettings.Default.RawDataDirectory, projectName, "UnifiedShaderMetadata.json");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);

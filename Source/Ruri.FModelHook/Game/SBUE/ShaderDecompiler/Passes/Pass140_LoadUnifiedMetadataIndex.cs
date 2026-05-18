@@ -62,6 +62,13 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         }
         if (root == null) return;
 
+        // Capture the game-version enum so Pass 145 can drive a
+        // game-aware EngineUbMetadata folder selection.
+        if (!string.IsNullOrWhiteSpace(root.GameVersionEnum))
+        {
+            state.GameVersionEnum = root.GameVersionEnum!;
+        }
+
         string? normalizedFilter = string.IsNullOrWhiteSpace(state.Options.MaterialFilter)
             ? null
             : state.Options.MaterialFilter!.Replace('\\', '/');
@@ -175,6 +182,11 @@ internal static class Pass140_LoadUnifiedMetadataIndex
 
     private sealed class UnifiedRoot
     {
+        // FModel EGame enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
+        // captured at export. Used to pick the right
+        // EngineUbMetadata/<EGame>/ subfolder so game-specific UE forks
+        // get game-specific layouts.
+        public string? GameVersionEnum { get; set; }
         public Dictionary<string, List<string>>? PackageShaderMapHashes { get; set; }
         public Dictionary<string, UnifiedMaterialEntry>? MaterialInterfaces { get; set; }
         // Niagara-side independent bridge written by Pass 035. Keyed

@@ -16,6 +16,14 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
 internal sealed class UnifiedShaderMetadataRoot
 {
+    // FModel's `EGame` enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
+    // captured at export time. Used by EngineUbMetadataLoader on the
+    // decompile side to auto-select the matching `EngineUbMetadata/<EGame>/`
+    // folder so game-specific UE forks pick up game-specific UB layouts
+    // without manual config. Empty string when the export pipeline ran
+    // outside of a live FModel context.
+    public string GameVersionEnum { get; set; } = string.Empty;
+
     public Dictionary<string, List<string>> PackageShaderMapHashes { get; set; } = new();
     public Dictionary<string, UnifiedMaterialMetadata> MaterialInterfaces { get; set; } = new();
     public Dictionary<string, UnifiedShaderLibraryMetadata> ShaderCodeArchives { get; set; } = new();

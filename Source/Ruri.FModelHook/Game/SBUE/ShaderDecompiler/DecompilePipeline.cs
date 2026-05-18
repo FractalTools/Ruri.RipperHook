@@ -73,14 +73,12 @@ public static class DecompilePipeline
 
         PipelineState state = new(options);
 
-        // Engine-UB metadata is loaded once per pipeline run; default to
-        // <exeDir>/EngineUbMetadata when the caller didn't pin a path.
-        // The Empty registry (no files / dir missing) is harmless — the
-        // symbolizer just falls back to placeholders, matching previous
-        // behaviour.
+        // The engine-UB seed directory; loading is deferred until Pass 145
+        // (after Pass 140 has populated `state.GameVersionEnum` from
+        // UnifiedShaderMetadata.json so we can pick the right
+        // `EngineUbMetadata/<EGame>/` subfolder).
         string engineUbDir = options.EngineUbMetadataDirectory
             ?? Path.Combine(AppContext.BaseDirectory, "EngineUbMetadata");
-        state.EngineUbRegistry = EngineUbMetadataRegistry.Load(engineUbDir, state.Log, state.LogError);
 
         try
         {
@@ -88,6 +86,13 @@ public static class DecompilePipeline
             using (new TimingCookie(state, "Pass 120: Load .assetinfo.json"))       Pass120_LoadAssetInfoSidecar.DoPass(state);
             using (new TimingCookie(state, "Pass 130: Load .stableinfo.json"))      Pass130_LoadStableInfoSidecar.DoPass(state);
             using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
+            using (new TimingCookie(state, "Pass 145: Load engine-UB metadata"))
+            {
+                state.EngineUbRegistry = EngineUbMetadataRegistry.LoadForGame(
+                    engineUbDir,
+                    string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
+                    state.Log, state.LogError);
+            }
             using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
             using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
             using (new TimingCookie(state, "Pass 170: Build shaderlab Properties")) Pass170_BuildShaderLabProperties.DoPass(state);

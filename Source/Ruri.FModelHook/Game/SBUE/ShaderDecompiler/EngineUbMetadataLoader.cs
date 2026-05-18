@@ -39,6 +39,24 @@ internal sealed class EngineUbMetadataRegistry
         new Dictionary<string, List<uint>>(StringComparer.Ordinal));
 
     public static EngineUbMetadataRegistry Load(string? directory, Action<string>? log = null, Action<string>? logError = null)
+        => LoadForGame(directory, gameVersionEnum: null, log, logError);
+
+    // Game-aware loader. When `gameVersionEnum` is set (e.g. "GAME_InfinityNikki"
+    // or "GAME_UE5_4" as captured from FModel's EGame enum at export time):
+    //   1. Loads from `<directory>/<gameVersionEnum>/` FIRST (game-specific overrides
+    //      — modded UEs, project-specific UB layouts).
+    //   2. Then loads from `<directory>/<base UE folder>/` (e.g. GAME_UE5_4 derived
+    //      from GAME_InfinityNikki = GAME_UE5_4 + 2) — base UE layouts shared by all
+    //      games on that engine version.
+    //   3. Finally scans any other files under `<directory>` (recursive) for
+    //      hand-organised metadata that doesn't follow the GAME_<X> convention.
+    // Earlier sources take precedence on (Name, Hash) collision — the
+    // game-specific folder wins over the base UE folder.
+    //
+    // When `gameVersionEnum` is null/empty, falls back to a single recursive
+    // scan of `directory` (legacy behaviour) — every JSON is loaded with
+    // no priority discrimination.
+    public static EngineUbMetadataRegistry LoadForGame(string? directory, string? gameVersionEnum, Action<string>? log = null, Action<string>? logError = null)
     {
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
         {
@@ -49,44 +67,95 @@ internal sealed class EngineUbMetadataRegistry
         Dictionary<(string, uint), EngineUbMetadata> byNameAndHash = new();
         Dictionary<string, List<uint>> hashesByName = new(StringComparer.Ordinal);
         int loaded = 0, skipped = 0;
-        JsonSerializerOptions jsonOpts = new() { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true, ReadCommentHandling = JsonCommentHandling.Skip };
 
-        foreach (string file in Directory.EnumerateFiles(directory, "*_MetaData.json", SearchOption.AllDirectories))
+        // Build a prioritised scan list: game-specific folder first, then
+        // base UE folder, then a recursive sweep of anything else under root.
+        List<string> scanRoots = new();
+        string baseUe = DeriveBaseUeFolder(gameVersionEnum);
+        if (!string.IsNullOrEmpty(gameVersionEnum))
         {
-            try
+            string specific = Path.Combine(directory, gameVersionEnum);
+            if (Directory.Exists(specific)) scanRoots.Add(specific);
+        }
+        if (!string.IsNullOrEmpty(baseUe) && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
+        {
+            string baseDir = Path.Combine(directory, baseUe);
+            if (Directory.Exists(baseDir)) scanRoots.Add(baseDir);
+        }
+        scanRoots.Add(directory); // recursive sweep — catches everything else, idempotent on dupe (Name,Hash)
+
+        HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string root in scanRoots)
+        {
+            foreach (string file in Directory.EnumerateFiles(root, "*_MetaData.json", SearchOption.AllDirectories))
             {
-                string json = File.ReadAllText(file);
-                EngineUbMetadata? entry = JsonSerializer.Deserialize<EngineUbMetadata>(json, jsonOpts);
-                if (entry == null || string.IsNullOrWhiteSpace(entry.Name) || string.IsNullOrWhiteSpace(entry.LayoutHashHex))
-                {
-                    logError?.Invoke($"[EngineUbMetadata] {file}: missing 'name' or 'layoutHash' — skipped.");
-                    skipped++; continue;
-                }
-                uint hash = entry.ParsedHash();
-                var key = (entry.Name, hash);
-                if (byNameAndHash.ContainsKey(key))
-                {
-                    logError?.Invoke($"[EngineUbMetadata] {file}: duplicate (name={entry.Name}, hash=0x{hash:X8}) already loaded — skipped.");
-                    skipped++; continue;
-                }
-                byNameAndHash[key] = entry;
-                if (!hashesByName.TryGetValue(entry.Name, out List<uint>? list))
-                {
-                    list = new List<uint>();
-                    hashesByName[entry.Name] = list;
-                }
-                list.Add(hash);
-                loaded++;
-            }
-            catch (Exception ex)
-            {
-                logError?.Invoke($"[EngineUbMetadata] {file}: parse failed — {ex.GetType().Name}: {ex.Message}");
-                skipped++;
+                if (!seenFiles.Add(Path.GetFullPath(file))) continue;
+                if (TryLoadFile(file, byNameAndHash, hashesByName, logError)) loaded++;
+                else skipped++;
             }
         }
 
-        log?.Invoke($"[EngineUbMetadata] Loaded {loaded} layout(s) from '{directory}' ({skipped} skipped).");
+        string gameTag = string.IsNullOrEmpty(gameVersionEnum) ? "" : $" for game={gameVersionEnum}";
+        log?.Invoke($"[EngineUbMetadata] Loaded {loaded} layout(s){gameTag} from '{directory}' ({skipped} skipped). Scan roots: {string.Join(" -> ", scanRoots)}");
         return new EngineUbMetadataRegistry(directory, byNameAndHash, hashesByName);
+    }
+
+    // EGame enum value names look like "GAME_UE5_1", "GAME_InfinityNikki",
+    // "GAME_UE5_4", "GAME_BlackMythWukong" etc. Game-specific names are
+    // declared in CUE4Parse's EGame.cs as `GAME_<Name> = GAME_UE5_<X> + n`
+    // — but at the string level we have no introspection into the enum
+    // arithmetic. Heuristic: if the name starts with "GAME_UE", treat it
+    // as a base folder (no further derivation needed); otherwise we don't
+    // know which UE major.minor the game belongs to, so we just rely on
+    // (a) the game-specific folder match and (b) the catch-all recursive
+    // scan to find shared layouts.
+    private static string DeriveBaseUeFolder(string? gameVersionEnum)
+    {
+        if (string.IsNullOrEmpty(gameVersionEnum)) return string.Empty;
+        // Already a base UE name? Use it as the only scan root (no extra
+        // game-specific layer to add).
+        if (gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)) return gameVersionEnum;
+        // Unknown game-specific name — no way to derive its base UE here.
+        // Caller's specific folder + recursive catch-all sweep handles it.
+        return string.Empty;
+    }
+
+    private static bool TryLoadFile(string file, Dictionary<(string, uint), EngineUbMetadata> byNameAndHash, Dictionary<string, List<uint>> hashesByName, Action<string>? logError)
+    {
+        JsonSerializerOptions jsonOpts = new() { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true, ReadCommentHandling = JsonCommentHandling.Skip };
+        try
+        {
+            string json = File.ReadAllText(file);
+            EngineUbMetadata? entry = JsonSerializer.Deserialize<EngineUbMetadata>(json, jsonOpts);
+            if (entry == null || string.IsNullOrWhiteSpace(entry.Name) || string.IsNullOrWhiteSpace(entry.LayoutHashHex))
+            {
+                logError?.Invoke($"[EngineUbMetadata] {file}: missing 'name' or 'layoutHash' — skipped.");
+                return false;
+            }
+            uint hash = entry.ParsedHash();
+            var key = (entry.Name, hash);
+            if (byNameAndHash.ContainsKey(key))
+            {
+                // Silent skip — the game-specific folder already won this
+                // (Name, Hash). Hand-organised dupes elsewhere in the tree
+                // are absorbed without warning so the user can keep
+                // experimental copies next to the seeds.
+                return false;
+            }
+            byNameAndHash[key] = entry;
+            if (!hashesByName.TryGetValue(entry.Name, out List<uint>? list))
+            {
+                list = new List<uint>();
+                hashesByName[entry.Name] = list;
+            }
+            list.Add(hash);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logError?.Invoke($"[EngineUbMetadata] {file}: parse failed — {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
     }
 
     public EngineUbMetadata? Lookup(string ubName, uint layoutHash)

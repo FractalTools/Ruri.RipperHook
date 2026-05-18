@@ -8,7 +8,48 @@ recovered from cooked shipping data on UE 5.1 (all SMs) or UE 5.4 SM5.
 See [`UE_SYMBOL_SOURCES.md`](../../../../../../../Source/Ruri.ShaderDecompiler/UE_SYMBOL_SOURCES.md)
 for the full closed-world analysis and why this folder exists.
 
-## Filename convention
+## Folder + filename convention
+
+Folder names **must match FModel's `EGame` enum names** exactly so the
+loader can auto-select the right folder for the cooked game it's
+decompiling. Example layout:
+
+```
+EngineUbMetadata/
+    GAME_UE5_1/                              # base UE 5.1 layouts (default for any 5.1 game)
+        View_13BB15AA_MetaData.json
+        OpaqueBasePass_09280EDD_MetaData.json
+        ...
+    GAME_UE5_4/                              # base UE 5.4 layouts
+        View_<hash5.4>_MetaData.json
+        ...
+    GAME_InfinityNikki/                      # game-specific override (UE 5.4 fork)
+        View_<custom_hash>_MetaData.json     # overrides the 5.4 base for this game only
+    GAME_BlackMythWukong/                    # another game-specific override
+        ...
+```
+
+**Loader lookup order** when decompiling a game:
+1. The game-specific folder (e.g. `GAME_InfinityNikki/`) if present, takes precedence.
+2. The base UE folder (e.g. `GAME_UE5_4/`) for the same major.minor.
+3. Other folders (recursive scan), keyed only by `(UBName, LayoutHash)`.
+
+Using FModel's canonical EGame names (instead of free-form "UE5.1.1")
+guarantees that game-specific custom engine forks (e.g. modded UEs that
+ship with custom UB members) get matched on game ID alone — no string
+matching gymnastics. The loader scans recursively so folders outside
+the EGame convention still work; they just don't get the auto-priority
+boost.
+
+**Build copy semantics**: seed JSONs are copied to
+`<exeDir>/EngineUbMetadata/<UEVersion>/` on build **only when the
+destination doesn't already exist** (`Condition="!Exists(...)"`). Edits
+to a deployed JSON, or hand-added JSONs at the deployed location, are
+preserved across rebuilds — `git pull` + rebuild does NOT clobber your
+local symbol overrides. To force a refresh, delete the deployed file
+(or the whole deployed `EngineUbMetadata` folder).
+
+### Filename convention
 
 ```
 <UBName>_<LayoutHash:08x>_MetaData.json
@@ -16,9 +57,9 @@ for the full closed-world analysis and why this folder exists.
 
 Examples:
 ```
-View_3F8A12C5_MetaData.json
-OpaqueBasePass_A1B2C3D4_MetaData.json
-LumenCardScene_98765432_MetaData.json
+View_13BB15AA_MetaData.json
+OpaqueBasePass_09280EDD_MetaData.json
+LumenCardScene_19D918C8_MetaData.json
 ```
 
 - `<UBName>` is the uniform-buffer name UE writes into the `'u'`
