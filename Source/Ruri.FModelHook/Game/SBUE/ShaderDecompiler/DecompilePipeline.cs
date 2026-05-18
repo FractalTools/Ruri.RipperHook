@@ -73,6 +73,15 @@ public static class DecompilePipeline
 
         PipelineState state = new(options);
 
+        // Engine-UB metadata is loaded once per pipeline run; default to
+        // <exeDir>/EngineUbMetadata when the caller didn't pin a path.
+        // The Empty registry (no files / dir missing) is harmless — the
+        // symbolizer just falls back to placeholders, matching previous
+        // behaviour.
+        string engineUbDir = options.EngineUbMetadataDirectory
+            ?? Path.Combine(AppContext.BaseDirectory, "EngineUbMetadata");
+        state.EngineUbRegistry = EngineUbMetadataRegistry.Load(engineUbDir, state.Log, state.LogError);
+
         try
         {
             using (new TimingCookie(state, "Pass 110: Read .ushaderlib"))           Pass110_ReadShaderLibrary.DoPass(state);

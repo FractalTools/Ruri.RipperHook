@@ -9,9 +9,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // instead of inlining the runtime/material merge directly.
 internal static class SubProgramMetadataReader
 {
-    public static SerializedProgramData Read(UnrealShaderParser.UnrealMetadata? runtimeMetadata, MaterialSymbolSource? materialSource)
+    public static SerializedProgramData Read(
+        UnrealShaderParser.UnrealMetadata? runtimeMetadata,
+        MaterialSymbolSource? materialSource,
+        EngineUbMetadataRegistry? engineUbRegistry = null)
     {
-        SerializedProgramData metadata = RuntimeSymbolReader.Read(runtimeMetadata, materialSource?.MaterialLayout);
+        SerializedProgramData metadata = RuntimeSymbolReader.Read(runtimeMetadata, materialSource?.MaterialLayout, engineUbRegistry);
         if (materialSource == null)
         {
             return metadata;
