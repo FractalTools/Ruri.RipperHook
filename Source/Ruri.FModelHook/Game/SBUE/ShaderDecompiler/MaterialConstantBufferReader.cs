@@ -316,37 +316,143 @@ internal static class MaterialConstantBufferReader
         }
         byte tailOp = data[rest];
 
+        // Parameter; ComponentSwizzle   (size 3 + 6 = 9)  -> <param>_<xyzw>
         if (tailOp == 36 && restSize == 6 && rest + 6 <= data.Length)
         {
             string swizzle = SwizzleSuffix(data[rest + 1], data[rest + 2], data[rest + 3], data[rest + 4], data[rest + 5]);
             return !string.IsNullOrEmpty(swizzle) ? $"{baseName}_{swizzle}" : anonymous;
         }
 
+        // Parameter; ComponentSwizzle; <unary>   (size 3 + 6 + 1 = 10)  -> <param>_<xyzw>_<op>
+        if (tailOp == 36 && restSize == 7 && rest + 7 <= data.Length)
+        {
+            string swizzle = SwizzleSuffix(data[rest + 1], data[rest + 2], data[rest + 3], data[rest + 4], data[rest + 5]);
+            string? unary = MapUnaryOp(data[rest + 6]);
+            if (!string.IsNullOrEmpty(swizzle) && unary != null)
+            {
+                return $"{baseName}_{swizzle}_{unary}";
+            }
+        }
+
+        // Parameter; <unary>   (size 3 + 1 = 4)  -> <param>_<op>
         if (restSize == 1)
         {
-            string? unary = tailOp switch
-            {
-                22 => "rcp",
-                25 => "sat",
-                26 => "abs",
-                27 => "floor",
-                28 => "ceil",
-                29 => "round",
-                30 => "trunc",
-                31 => "sign",
-                32 => "frac",
-                33 => "fractional",
-                45 => "neg",
-                _ => null,
-            };
+            string? unary = MapUnaryOp(tailOp);
             if (unary != null)
             {
                 return $"{baseName}_{unary}";
             }
         }
 
+        // Parameter; Parameter; <binary>   (size 3 + 3 + 1 = 7)  -> <a>_<op>_<b>
+        // Covers Add(4), Sub(5), Mul(6), Div(7), Fmod(8), Min(9), Max(10),
+        // Atan2(18), Dot(19), Cross(20), AppendVector(37), Less(49),
+        // Greater(51), LessEqual(52), GreaterEqual(53) — every leaf-binary
+        // shape UE emits when a material expression collapses to a single
+        // (paramA op paramB) operation. Higher-arity shapes stay anonymous
+        // by design (the runtime VM stack state isn't a 1:1 name preserver).
+        if (restSize == 4 && data[rest] == 3 && rest + 4 <= data.Length)
+        {
+            ushort otherIdx = BitConverter.ToUInt16(data, rest + 1);
+            byte binaryOp = data[rest + 3];
+            string? binary = MapBinaryOp(binaryOp);
+            if (binary != null && otherIdx < parameters.GetArrayLength())
+            {
+                FMaterialParameterInfo? otherInfo = ParseMaterialParameterInfo(parameters[otherIdx]);
+                if (otherInfo != null)
+                {
+                    return $"{baseName}_{binary}_{otherInfo.Name}";
+                }
+            }
+        }
+
+        // Parameter; Swizzle(.xyz); Parameter(same); Swizzle(.w); AppendVector; Swizzle(<final>)
+        // (size 3 + 6 + 3 + 6 + 1 + 6 = 25 bytes total, restSize == 22)
+        //
+        // UE's HLSLMaterialTranslator round-trips a float4 parameter through
+        // an xyz/w decomposition + AppendVector reconstruction before the
+        // final swizzle. The whole chain is semantically `<paramName>.<final>`.
+        // This shape produces ~50% of the previously-anonymous Material_f_<N>
+        // slots in Oni_Valley_VFX (every `<Tex>_OffsetScale_xy` / `_zw`
+        // texture-coordinate transform splits this way).
+        //
+        // Strictness: require the second `Parameter` to point at the same
+        // index as the leading one (otherwise it's not a self-round-trip and
+        // the final swizzle's `_<x>` suffix would be misleading). The
+        // intermediate Swizzle(.xyz) and Swizzle(.w) just unpack/repack the
+        // float4 — only the FINAL ComponentSwizzle determines which
+        // components feed the slot.
+        if (restSize == 22 && rest + 22 <= data.Length
+            && data[rest] == 36 && data[rest + 1] == 3 && data[rest + 2] == 0 && data[rest + 3] == 1 && data[rest + 4] == 2 /* xyz */
+            && data[rest + 6] == 3
+            && BitConverter.ToUInt16(data, rest + 7) == paramIdx
+            && data[rest + 9] == 36 && data[rest + 10] == 1 && data[rest + 11] == 3 /* .w */
+            && data[rest + 15] == 37 /* AppendVector */
+            && data[rest + 16] == 36 /* final ComponentSwizzle */)
+        {
+            string swizzle = SwizzleSuffix(data[rest + 17], data[rest + 18], data[rest + 19], data[rest + 20], data[rest + 21]);
+            if (!string.IsNullOrEmpty(swizzle))
+            {
+                return $"{baseName}_{swizzle}";
+            }
+        }
+
         return anonymous;
     }
+
+    // Bytes match `EPreshaderOpcode` (`Engine/Public/Shader/Preshader.h:19-75`):
+    // Sin=12 Cos=13 Tan=14 Asin=15 Acos=16 Atan=17 Sqrt=21 Rcp=22
+    // Length=23 Normalize=24 Saturate=25 Abs=26 Floor=27 Ceil=28
+    // Round=29 Trunc=30 Sign=31 Frac=32 Fractional=33 Log2=34 Log10=35 Neg=45
+    private static string? MapUnaryOp(byte op) => op switch
+    {
+        12 => "sin",
+        13 => "cos",
+        14 => "tan",
+        15 => "asin",
+        16 => "acos",
+        17 => "atan",
+        21 => "sqrt",
+        22 => "rcp",
+        23 => "length",
+        24 => "normalize",
+        25 => "sat",
+        26 => "abs",
+        27 => "floor",
+        28 => "ceil",
+        29 => "round",
+        30 => "trunc",
+        31 => "sign",
+        32 => "frac",
+        33 => "fractional",
+        34 => "log2",
+        35 => "log10",
+        45 => "neg",
+        _ => null,
+    };
+
+    // Binary opcodes from `EPreshaderOpcode` — Add=4..GreaterEqual=53.
+    // Names match HLSL intrinsic / verbose conventions so two paramNames
+    // joined by them are unambiguous in the synthesised member name.
+    private static string? MapBinaryOp(byte op) => op switch
+    {
+        4  => "add",
+        5  => "sub",
+        6  => "mul",
+        7  => "div",
+        8  => "fmod",
+        9  => "min",
+        10 => "max",
+        18 => "atan2",
+        19 => "dot",
+        20 => "cross",
+        37 => "append",
+        49 => "lt",
+        51 => "gt",
+        52 => "le",
+        53 => "ge",
+        _ => null,
+    };
 
     private enum FieldKind { Unknown, Float, LwcDouble, Int, Bool, Numeric, Float4x4, LwcDouble4x4 }
 
