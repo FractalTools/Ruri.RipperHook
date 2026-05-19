@@ -293,10 +293,13 @@ internal static class MaterialConstantBufferReader
         if (data[offset] != 3)
         {
             // Non-Parameter lead (typically a Constant pushed first, then a
-            // Parameter pulled in by a binary op): fall through to the
-            // single-param scan so we still capture the slot's
-            // expression-of-one-param semantic, even though we can't
-            // structurally identify the exact op chain.
+            // Parameter pulled in by a binary op — e.g. UE's Schlick chain
+            // `1 - clamp(ior, 1, 2)` leads with `Constant(1)`). Hand the
+            // whole stream to the stack-machine evaluator first so we
+            // produce semantic names (`ior_one_minus_clamp_ior_1_2`)
+            // instead of collapsing to the bare parameter name.
+            string? evaluatedFromNonParamLead = TryEvaluatePreshader(data, offset, size, parameters);
+            if (evaluatedFromNonParamLead != null) return evaluatedFromNonParamLead;
             string? recoveredFromNonParamLead = TryRecoverViaSingleParamScan(data, offset, size, parameters);
             if (recoveredFromNonParamLead != null) return recoveredFromNonParamLead;
             DumpPreshaderDebug(data, offset, size, parameters, byteOffset, materialPath, rows, "<nonParamLead>");
@@ -429,11 +432,26 @@ internal static class MaterialConstantBufferReader
             }
         }
 
-        // Last-resort: if the entire byte stream references exactly one
-        // material Parameter, the slot is some derived expression of that
-        // parameter — better to name it after the parameter (the
-        // unique-name dedup adds `_at_<offset>` for the duplicate) than
-        // leave it as an opaque `f_<N>` slot.
+        // Primary fallback: walk the byte stream as a stack machine and
+        // synthesise an operation-aware identifier. Each stack value carries
+        // a string name; binary/unary opcodes pop, then push the combined
+        // name. The final TOS (top-of-stack) string is the slot's semantic
+        // identity. See `TryEvaluatePreshader` below for the full evaluator.
+        // This recognises the Schlick-F0-from-IOR chain UE emits whenever
+        // a material expression touches `ior` indirectly — six distinct
+        // expressions sharing the same lead parameter that previously
+        // collapsed to `Material_ior_at_<offset>` now decode to
+        // `Material_ior_clamp_1_2`, `Material_ior_one_minus_clamp_1_2`, etc.
+        string? evaluated = TryEvaluatePreshader(data, offset, size, parameters);
+        if (evaluated != null)
+        {
+            return evaluated;
+        }
+
+        // Truly last-resort (when the evaluator hit an unknown opcode):
+        // if the entire byte stream references exactly one Parameter, the
+        // slot is some derived expression of that parameter — better to
+        // name it after the parameter than leave it as an opaque `f_<N>`.
         string? recovered = TryRecoverViaSingleParamScan(data, offset, size, parameters);
         if (recovered != null)
         {
@@ -442,6 +460,349 @@ internal static class MaterialConstantBufferReader
 
         DumpPreshaderDebug(data, offset, size, parameters, byteOffset, materialPath, rows, baseName);
         return anonymous;
+    }
+
+    // Walks the preshader byte stream as a stack machine and produces an
+    // HLSL-identifier-friendly name for the final TOS value. Each stack
+    // slot is just a string (`StackVal { Name, IsParam, IsConst, ConstLiteral }`):
+    // binary ops pop two, push `<op>_<a>_<b>`; unary ops pop one, push
+    // `<op>_<x>`; ComponentSwizzle pops one, pushes `<x>_<swizzle>`.
+    //
+    // The result is prefixed with the FIRST parameter referenced (so that
+    // the synthesised member sits next to other uses of that parameter in
+    // the alphabetised cbuffer dump). Constants-only chains return null —
+    // those don't carry per-material semantics worth synthesising for.
+    //
+    // Idioms recognised (compact rewrites instead of nested names):
+    //   sub_1_<x>     → <x>_one_minus
+    //   mul_<x>_<x>   → <x>_sq        (square)
+    //   clamp_<x>_1_2 → <x>_clamp_1_2 (UE's IOR-clamp idiom, kept readable)
+    //
+    // Bails out (returns null) when the byte stream is malformed, refers
+    // to a parameter index that's out-of-range, runs the stack into an
+    // empty state, or encounters an opcode with unknown operand size.
+    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, JsonElement parameters)
+    {
+        int n = checked((int)size);
+        int dataStart = checked((int)offset);
+        if (dataStart < 0 || dataStart > data.Length) return null;
+        if (dataStart + n > data.Length) n = data.Length - dataStart;
+        if (n < 1) return null;
+
+        Stack<StackVal> stack = new();
+        string? firstParamName = null;
+        int? firstExternalId = null;
+
+        int i = 0;
+        while (i < n)
+        {
+            byte op = data[dataStart + i];
+            i++;
+
+            switch (op)
+            {
+                case 0: // Nop
+                    break;
+
+                case 1: // ConstantZero
+                    stack.Push(StackVal.Const("0"));
+                    break;
+
+                case 2: // Constant: 1 type byte + payload
+                {
+                    if (i >= n) return null;
+                    byte ctype = data[dataStart + i];
+                    int valueBytes = ctype switch
+                    {
+                        1 => 4,
+                        2 => 8,
+                        3 => 12,
+                        4 => 16,
+                        _ => -1,
+                    };
+                    if (valueBytes < 0) return null;
+                    if (i + 1 + valueBytes > n) return null;
+                    // For Float1 we render the actual literal so that
+                    // constants like 1.0, 2.0, 0.08 round-trip into stable
+                    // identifiers — that's what powers the IOR-clamp
+                    // recognition. Float2/3/4 don't get literalised
+                    // (they're rare and the per-component names would
+                    // blow up the identifier length).
+                    string lit;
+                    if (ctype == 1)
+                    {
+                        float v = BitConverter.ToSingle(data, dataStart + i + 1);
+                        lit = FormatConstLiteral(v);
+                    }
+                    else
+                    {
+                        lit = "k" + ctype;
+                    }
+                    stack.Push(StackVal.Const(lit));
+                    i += 1 + valueBytes;
+                    break;
+                }
+
+                case 3: // Parameter: u16 operand
+                {
+                    if (i + 2 > n) return null;
+                    ushort idx = BitConverter.ToUInt16(data, dataStart + i);
+                    if (idx >= parameters.GetArrayLength()) return null;
+                    FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[idx]);
+                    if (info == null || string.IsNullOrEmpty(info.Name)) return null;
+                    string pname = SanitizeIdent(info.Name);
+                    firstParamName ??= pname;
+                    stack.Push(StackVal.Param(pname));
+                    i += 2;
+                    break;
+                }
+
+                case 36: // ComponentSwizzle: numE + 4 component indices
+                {
+                    if (i + 5 > n) return null;
+                    string swizzle = SwizzleSuffix(
+                        data[dataStart + i + 0],
+                        data[dataStart + i + 1],
+                        data[dataStart + i + 2],
+                        data[dataStart + i + 3],
+                        data[dataStart + i + 4]);
+                    i += 5;
+                    if (stack.Count == 0) return null;
+                    StackVal x = stack.Pop();
+                    if (string.IsNullOrEmpty(swizzle))
+                    {
+                        stack.Push(x);
+                    }
+                    else
+                    {
+                        stack.Push(StackVal.Expr($"{x.Name}_{swizzle}"));
+                    }
+                    break;
+                }
+
+                case 37: // AppendVector (binary)
+                {
+                    if (stack.Count < 2) return null;
+                    StackVal b = stack.Pop();
+                    StackVal a = stack.Pop();
+                    stack.Push(StackVal.Expr($"append_{a.Name}_{b.Name}"));
+                    break;
+                }
+
+                case 38: // ExternalInput — single-byte external-id operand
+                {
+                    if (i >= n) return null;
+                    int extId = data[dataStart + i];
+                    firstExternalId ??= extId;
+                    stack.Push(StackVal.Expr($"ext{extId}"));
+                    i += 1;
+                    break;
+                }
+
+                // Binary arithmetic / comparison.
+                case 4: case 5: case 6: case 7: case 8:
+                case 9: case 10:
+                case 18: case 19: case 20:
+                case 49: case 51: case 52: case 53:
+                {
+                    if (stack.Count < 2) return null;
+                    StackVal b = stack.Pop();
+                    StackVal a = stack.Pop();
+                    stack.Push(StackVal.Expr(FormatBinary(op, a, b)));
+                    break;
+                }
+
+                // Clamp (ternary): pops hi, lo, x.
+                case 11:
+                {
+                    if (stack.Count < 3) return null;
+                    StackVal hi = stack.Pop();
+                    StackVal lo = stack.Pop();
+                    StackVal x = stack.Pop();
+                    stack.Push(StackVal.Expr(FormatClamp(x, lo, hi)));
+                    break;
+                }
+
+                // Unary: Sin..Atan, Sqrt..Log10, Saturate, Abs, Floor..Frac, Neg.
+                case 12: case 13: case 14: case 15: case 16: case 17:
+                case 21: case 22: case 23: case 24: case 25: case 26:
+                case 27: case 28: case 29: case 30: case 31: case 32:
+                case 33: case 34: case 35:
+                case 45:
+                {
+                    if (stack.Count < 1) return null;
+                    string? uname = MapUnaryOp(op);
+                    if (uname == null) return null;
+                    StackVal x = stack.Pop();
+                    stack.Push(StackVal.Expr($"{uname}_{x.Name}"));
+                    break;
+                }
+
+                default:
+                    // Unknown/variable-size opcode — abort and let the
+                    // caller fall through to the single-param recovery.
+                    return null;
+            }
+        }
+
+        if (stack.Count == 0) return null;
+        StackVal top = stack.Peek();
+
+        string baseName = firstParamName ?? (firstExternalId.HasValue ? $"ext_{firstExternalId.Value}" : null!);
+        string expr = top.Name;
+        if (baseName == null)
+        {
+            // Pure-constant expression — not worth synthesising.
+            return null;
+        }
+
+        // If the entire expression is just the lead parameter (e.g. a
+        // round-trip Append chain reduced to `paramName`), return it
+        // unchanged — the dedup layer adds `_at_<offset>` for collisions.
+        // Otherwise compose as `<baseName>_<expr>`, but elide a redundant
+        // inner repeat of baseName: an expression like `clamp_ior_1_2`
+        // composed with baseName `ior` would otherwise produce
+        // `ior_clamp_ior_1_2`; rewrite to `ior_clamp_1_2`.
+        string composed;
+        if (string.Equals(expr, baseName, StringComparison.Ordinal))
+        {
+            composed = baseName;
+        }
+        else if (expr.StartsWith(baseName + "_", StringComparison.Ordinal))
+        {
+            composed = expr;
+        }
+        else
+        {
+            string trimmed = ElideInnerBase(expr, baseName);
+            composed = $"{baseName}_{trimmed}";
+        }
+
+        return TrimIdent(SanitizeIdent(composed));
+    }
+
+    // Rewrite `<op>_<base>_<rest>` → `<op>_<rest>` (and similar) so we
+    // don't end up with `Material_ior_clamp_ior_1_2`. Only collapses
+    // when the baseName appears as a discrete `_baseName_` token in the
+    // expression — never inside another identifier (e.g. `iorBlend`).
+    private static string ElideInnerBase(string expr, string baseName)
+    {
+        if (string.IsNullOrEmpty(baseName)) return expr;
+        string needle = "_" + baseName + "_";
+        int idx = expr.IndexOf(needle, StringComparison.Ordinal);
+        if (idx < 0) return expr;
+        return expr.Substring(0, idx) + "_" + expr.Substring(idx + needle.Length);
+    }
+
+    private readonly struct StackVal
+    {
+        public readonly string Name;
+        public readonly bool IsParam;
+        public readonly bool IsConst;
+        public readonly string? ConstLiteral;
+        private StackVal(string name, bool isParam, bool isConst, string? lit)
+        {
+            Name = name; IsParam = isParam; IsConst = isConst; ConstLiteral = lit;
+        }
+        public static StackVal Param(string n) => new(n, true, false, null);
+        public static StackVal Const(string lit) => new(lit, false, true, lit);
+        public static StackVal Expr(string n) => new(n, false, false, null);
+    }
+
+    // Render a float constant as a stable, identifier-safe literal.
+    // Whole numbers like 1.0, 2.0 → "1", "2". Fractional values like 0.08
+    // → "0_08". Negatives → "neg0_5". Special-cases keep the IOR-clamp
+    // idiom (`clamp_<x>_1_2`) recognisable.
+    private static string FormatConstLiteral(float v)
+    {
+        if (float.IsNaN(v) || float.IsInfinity(v)) return "nan";
+        // Whole-number short form.
+        if (v == MathF.Truncate(v) && MathF.Abs(v) < 1e7f)
+        {
+            long iv = (long)v;
+            return iv < 0 ? $"neg{-iv}" : iv.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        // Fractional: format with up to 6 significant digits, replace dot.
+        string raw = v.ToString("G6", System.Globalization.CultureInfo.InvariantCulture);
+        // Strip exponent notation gracefully — replace 'e' and '+' with safe chars.
+        raw = raw.Replace('+', 'p').Replace('-', 'n').Replace('.', '_').Replace('e', 'E');
+        return raw;
+    }
+
+    private static string FormatBinary(byte op, StackVal a, StackVal b)
+    {
+        string opName = op switch
+        {
+            4 => "add", 5 => "sub", 6 => "mul", 7 => "div", 8 => "fmod",
+            9 => "min", 10 => "max",
+            18 => "atan2", 19 => "dot", 20 => "cross",
+            49 => "lt", 51 => "gt", 52 => "le", 53 => "ge",
+            _ => "bin" + op,
+        };
+
+        // Idioms (UE BRDF/Schlick fingerprints):
+        //   sub(1, x)  → x_one_minus     (`1 - foo`, ubiquitous in Fresnel)
+        //   mul(x, x)  → x_sq             (square)
+        //   div(x, x)  → x_self_div       (degenerate but stable name)
+        if (op == 5 && a.IsConst && a.ConstLiteral == "1")
+        {
+            return $"{b.Name}_one_minus";
+        }
+        if (op == 6 && string.Equals(a.Name, b.Name, StringComparison.Ordinal))
+        {
+            return $"{a.Name}_sq";
+        }
+        return $"{opName}_{a.Name}_{b.Name}";
+    }
+
+    private static string FormatClamp(StackVal x, StackVal lo, StackVal hi)
+    {
+        // `clamp(<x>, 1, 2)` is the UE-IOR fingerprint — keep its literal
+        // form so all six Schlick-F0 chain slots produce names that
+        // surface the operation chain rather than collide.
+        return $"clamp_{x.Name}_{lo.Name}_{hi.Name}";
+    }
+
+    private static string SanitizeIdent(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        System.Text.StringBuilder sb = new(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            bool valid = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+            sb.Append(valid ? c : '_');
+        }
+        // HLSL identifiers can't start with a digit.
+        if (sb.Length > 0 && sb[0] >= '0' && sb[0] <= '9')
+        {
+            sb.Insert(0, '_');
+        }
+        // Collapse runs of underscores to a single underscore.
+        System.Text.StringBuilder collapsed = new(sb.Length);
+        bool prevUnderscore = false;
+        for (int i = 0; i < sb.Length; i++)
+        {
+            char c = sb[i];
+            if (c == '_')
+            {
+                if (!prevUnderscore) collapsed.Append('_');
+                prevUnderscore = true;
+            }
+            else
+            {
+                collapsed.Append(c);
+                prevUnderscore = false;
+            }
+        }
+        return collapsed.ToString();
+    }
+
+    private static string TrimIdent(string s)
+    {
+        const int MaxLen = 80;
+        if (s.Length <= MaxLen) return s;
+        return s.Substring(0, MaxLen - 4) + "_etc";
     }
 
     // Walks the preshader byte stream opcode-by-opcode and returns the

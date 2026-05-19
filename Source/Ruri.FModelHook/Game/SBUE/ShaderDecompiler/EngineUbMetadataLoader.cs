@@ -109,7 +109,116 @@ internal sealed class EngineUbMetadataRegistry
 
         string gameTag = string.IsNullOrEmpty(gameVersionEnum) ? "" : $" for game={gameVersionEnum}";
         log?.Invoke($"[EngineUbMetadata] Loaded {loaded} layout(s){gameTag} from '{directory}' ({skipped} skipped). Scan roots: {string.Join(" -> ", scanRoots)}");
+
+        // Diagnostic: re-compute the hash from each loaded seed and compare to
+        // its declared layoutHash. Surfaces seed files where
+        // `constantBufferSize` is internally inconsistent (i.e. the value in
+        // the JSON would NOT reproduce the declared hash through
+        // FRHIUniformBufferLayoutInitializer::ComputeHash). This is a strict
+        // self-check on the seed authoring — never affects lookup behaviour.
+        VerifySeedHashesForDiagnostics(byNameAndHash, log);
+
         return new EngineUbMetadataRegistry(directory, byNameAndHash, hashesByName);
+    }
+
+    // Mirrors `FRHIUniformBufferLayoutInitializer::ComputeHash` byte-for-byte
+    // (UE 5.1 `RHIResources.h` / UE 5.4 `RHIUniformBufferLayoutInitializer.h`).
+    // Inputs are exactly what the engine folds in: ConstantBufferSize (uint16
+    // masked low bits), BindingFlags (uint8), `StaticSlot != INVALID` bit,
+    // then for each resource MemberOffset (uint16) plus a 4/2/1 byte XOR fold
+    // of MemberType consuming Resources from the END. Returns 0xFFFFFFFF if
+    // any resource has an unknown UBMT_* type (silent for diagnostics — the
+    // caller logs the mismatch).
+    internal static uint ComputeLayoutHash(uint constantBufferSize, byte bindingFlags, bool hasStaticSlot, IReadOnlyList<EngineUbResource> resources)
+    {
+        uint h = ((constantBufferSize & 0xFFFFu) << 16) | ((uint)bindingFlags << 8) | (uint)(hasStaticSlot ? 1 : 0);
+        for (int i = 0; i < resources.Count; i++)
+            h ^= (uint)(resources[i].Offset & 0xFFFFu);
+        int n = resources.Count;
+        // Consume from the END in groups of 4/2/1, matching the unrolled fold
+        // in UE's source.
+        while (n >= 4)
+        {
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 8;
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 16;
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 24;
+        }
+        while (n >= 2)
+        {
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 16;
+        }
+        while (n > 0)
+        {
+            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF);
+        }
+        return h;
+    }
+
+    // EUniformBufferBaseType (RHIDefinitions.h:1414). Same values in 5.1 and 5.4.
+    private static int UbmtValue(string typeName) => typeName switch
+    {
+        "UBMT_INVALID"                       => 0,
+        "UBMT_BOOL"                          => 1,
+        "UBMT_INT32"                         => 2,
+        "UBMT_UINT32"                        => 3,
+        "UBMT_FLOAT32"                       => 4,
+        "UBMT_TEXTURE"                       => 5,
+        "UBMT_SRV"                           => 6,
+        "UBMT_UAV"                           => 7,
+        "UBMT_SAMPLER"                       => 8,
+        "UBMT_RDG_TEXTURE"                   => 9,
+        "UBMT_RDG_TEXTURE_ACCESS"            => 10,
+        "UBMT_RDG_TEXTURE_ACCESS_ARRAY"      => 11,
+        "UBMT_RDG_TEXTURE_SRV"               => 12,
+        "UBMT_RDG_TEXTURE_UAV"               => 13,
+        "UBMT_RDG_BUFFER_ACCESS"             => 14,
+        "UBMT_RDG_BUFFER_ACCESS_ARRAY"       => 15,
+        "UBMT_RDG_BUFFER_SRV"                => 16,
+        "UBMT_RDG_BUFFER_UAV"                => 17,
+        "UBMT_RDG_UNIFORM_BUFFER"            => 18,
+        "UBMT_NESTED_STRUCT"                 => 19,
+        "UBMT_INCLUDED_STRUCT"               => 20,
+        "UBMT_REFERENCED_STRUCT"             => 21,
+        "UBMT_RENDER_TARGET_BINDING_SLOTS"   => 22,
+        _ => -1, // unknown — hash will diverge, surfaces as MISMATCH in log
+    };
+
+    private static byte BindingFlagsValue(string name) => name switch
+    {
+        "Shader" => 1,
+        "Static" => 2,
+        "StaticAndShader" => 3,
+        _ => 1,
+    };
+
+    private static void VerifySeedHashesForDiagnostics(Dictionary<(string, uint), EngineUbMetadata> byNameAndHash, Action<string>? log)
+    {
+        if (log == null) return;
+        int matched = 0, mismatched = 0;
+        foreach (var kvp in byNameAndHash)
+        {
+            EngineUbMetadata meta = kvp.Value;
+            uint declared = kvp.Key.Item2;
+            byte bf = BindingFlagsValue(meta.BindingFlags);
+            bool hasStaticSlot = string.Equals(meta.BindingFlags, "Static", StringComparison.Ordinal)
+                              || string.Equals(meta.BindingFlags, "StaticAndShader", StringComparison.Ordinal);
+            uint computedAsIs = ComputeLayoutHash(meta.ConstantBufferSize, bf, hasStaticSlot, meta.Resources);
+            if (computedAsIs == declared)
+            {
+                matched++;
+                continue;
+            }
+            // Probe: try common alignments (round up to 16) — if the seed
+            // recorded the unaligned numeric end but the engine folded the
+            // aligned C++ struct sizeof, this catches the off-by-padding.
+            uint aligned16 = (meta.ConstantBufferSize + 15u) & ~15u;
+            uint computedAligned = ComputeLayoutHash(aligned16, bf, hasStaticSlot, meta.Resources);
+            mismatched++;
+            log($"[EngineUbMetadata][HashVerify] MISMATCH name={meta.Name} declared=0x{declared:X8} computed(cbsize={meta.ConstantBufferSize})=0x{computedAsIs:X8}  align16(cbsize={aligned16})=0x{computedAligned:X8}{(computedAligned == declared ? "  <- align16 reproduces declared" : "")}");
+        }
+        log($"[EngineUbMetadata][HashVerify] {matched} matched, {mismatched} mismatched of {byNameAndHash.Count} loaded seeds.");
     }
 
     // Derives the base UE major.minor `EGame` name (e.g. "GAME_UE5_4")
