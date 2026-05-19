@@ -39,6 +39,82 @@ internal static class Pass180_PrepareShaderBinaries
     // loop runs in parallel.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_seedHitsByClass = new(StringComparer.Ordinal);
 
+    // Build a `$Globals` ConstantBufferParameter by pairing seed loose-param
+    // NAMES (source-declaration order, no cook offsets) with cook's
+    // `LooseParameterBuffers[0].Parameters[]` (real offsets, no names).
+    //
+    // Returns null when the counts diverge (DXC may have packed the HLSL
+    // differently from the C++ source-decl order; in that case we can't
+    // safely pair without risking mis-names). Returns null when the cook
+    // has zero loose params (shader doesn't actually use `$Globals`).
+    //
+    // The cook's Parameters[i].Size carries the byte size (4 for scalar,
+    // 8 for vec2, 12 for vec3, 16 for vec4). We use it to derive the
+    // emitted member's RowCount when the seed's placeholder differs.
+    private static ConstantBufferParameter? TryReconcileGlobalsCB(EngineUbMetadata seed, System.Text.Json.JsonElement parameterMapInfo)
+    {
+        if (!parameterMapInfo.TryGetProperty("LooseParameterBuffers", out System.Text.Json.JsonElement loose)
+            || loose.ValueKind != System.Text.Json.JsonValueKind.Array
+            || loose.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        // Take the FIRST loose-param buffer — that's typically `$Globals`.
+        // Tail entries (e.g. ViewState) are bound at different cbuffer slots
+        // and the seed wouldn't carry their names anyway.
+        System.Text.Json.JsonElement first = loose[0];
+        if (!first.TryGetProperty("Parameters", out System.Text.Json.JsonElement parameters)
+            || parameters.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        int seedCount = seed.ConstantBuffer!.VectorParameters.Length;
+        int cookCount = parameters.GetArrayLength();
+        if (seedCount != cookCount) return null;
+
+        VectorParameter[] reconciled = new VectorParameter[seedCount];
+        int i = 0;
+        foreach (System.Text.Json.JsonElement p in parameters.EnumerateArray())
+        {
+            int baseIdx = p.TryGetProperty("BaseIndex", out System.Text.Json.JsonElement b) && b.ValueKind == System.Text.Json.JsonValueKind.Number
+                ? b.GetInt32() : -1;
+            int sizeBytes = p.TryGetProperty("Size", out System.Text.Json.JsonElement sz) && sz.ValueKind == System.Text.Json.JsonValueKind.Number
+                ? sz.GetInt32() : 0;
+            if (baseIdx < 0 || sizeBytes <= 0) return null;
+
+            VectorParameter src = seed.ConstantBuffer.VectorParameters[i];
+            int rowCount = Math.Clamp(sizeBytes / 4, 1, 4);
+            reconciled[i] = new VectorParameter
+            {
+                Name = src.Name,
+                NameIndex = -1,
+                Type = src.Type,
+                Index = baseIdx,
+                ArraySize = src.ArraySize,
+                IsMatrix = false,
+                RowCount = (byte)rowCount,
+                ColumnCount = 1,
+            };
+            i++;
+        }
+
+        int totalSize = first.TryGetProperty("Size", out System.Text.Json.JsonElement totSz) && totSz.ValueKind == System.Text.Json.JsonValueKind.Number
+            ? totSz.GetInt32()
+            : seed.ConstantBuffer.Size;
+        return new ConstantBufferParameter
+        {
+            Name = "$Globals",
+            NameIndex = -1,
+            VectorParameters = reconciled,
+            MatrixParameters = Array.Empty<MatrixParameter>(),
+            StructParameters = Array.Empty<StructParameter>(),
+            Size = totalSize,
+            IsPartialCB = false,
+        };
+    }
+
     public static void DoPass(PipelineState state)
     {
         s_seedHitsByClass.Clear();
@@ -160,6 +236,24 @@ internal static class Pass180_PrepareShaderBinaries
                 int tex = (typeSeed.Textures?.Count ?? 0) + (typeSeed.Samplers?.Count ?? 0);
                 int buf = (typeSeed.Buffers?.Count ?? 0) + (typeSeed.UAVs?.Count ?? 0);
                 state.Log($"[ShaderTypeSeed-hit] cookName={container.ShaderTypeName} via={matchKind} seedClass={typeSeed.Name} loose-params={loose} resources={tex + buf}");
+            }
+
+            // Reconcile seed loose-parameter names against cook's
+            // `LooseParameterBuffers[0].Parameters[]` real byte offsets, then
+            // inject as `$Globals` ConstantBufferParameter so the rewriter
+            // names the slots. Only fires when ParameterMapInfo loaded
+            // (Pass165) AND counts/sizes match — otherwise the source-decl
+            // ↔ HLSL-decl order may have diverged and we'd risk mis-naming.
+            if (typeSeed.ConstantBuffer != null
+                && typeSeed.ConstantBuffer.VectorParameters != null
+                && typeSeed.ConstantBuffer.VectorParameters.Length > 0
+                && state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out System.Text.Json.JsonElement pmi))
+            {
+                ConstantBufferParameter? globalsCb = TryReconcileGlobalsCB(typeSeed, pmi);
+                if (globalsCb != null)
+                {
+                    metadata.ConstantBufferParameters.Add(globalsCb);
+                }
             }
         }
 
