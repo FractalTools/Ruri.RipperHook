@@ -1591,6 +1591,19 @@ def main() -> int:
             emit_hash_to_name_index(out_dir, engine_src)
         except Exception as exc:
             print(f"[gen][hash-to-name] {exc}")
+        # Sister indexes for VertexFactoryType + ShaderPipelineType. Same
+        # hash math (CityHash64WithSeed of UPPER name), separate name
+        # sources. Lets the decompile registry recover those two name
+        # slots when stableinfo left them blank (cook didn't preserve the
+        # editor-side string name).
+        try:
+            emit_vertex_factory_hash_to_name_index(out_dir, engine_src)
+        except Exception as exc:
+            print(f"[gen][vf-type] {exc}")
+        try:
+            emit_shader_pipeline_hash_to_name_index(out_dir, engine_src)
+        except Exception as exc:
+            print(f"[gen][pipeline-type] {exc}")
 
     return 0 if failures == 0 else 1
 
@@ -2544,30 +2557,154 @@ def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
           f"(incl. ##-expanded specialisations; skipped {skipped_define_block} "
           f"#define-body hits, {skipped_pseudo} param-name placeholders).")
 
-    # Hash each and write the index.
-    hash_to_name: dict[str, str] = {}
+    return _emit_named_index(
+        out_dir,
+        "_ShaderType",
+        "FShaderType::HashedName → source-recovered class name. "
+        "Populates `ShaderTypeName` at decompile time when the cooked "
+        "stableinfo.json left it empty (export-side HashedNamesResolver "
+        "had buggy CityHash constants and/or no engine source path).",
+        names,
+        "hash-to-name",
+    )
+
+
+# ---------------------------------------------------------------------------
+# VertexFactoryType + ShaderPipelineType hash-to-name indexes.
+#
+# Same hash math as FShaderType (CityHash64WithSeed(UPPER(name), seed=0)),
+# different name set. The cooked stableinfo holds VertexFactoryTypeHash /
+# PipelineTypeHash and may leave the corresponding NAME blank — these
+# indexes let the decompile-side registry recover them.
+# ---------------------------------------------------------------------------
+
+_IMPLEMENT_VF_TYPE_RE = re.compile(
+    r"\bIMPLEMENT_VERTEX_FACTORY_TYPE(?:_EX)?\s*\(\s*"
+    r"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,)]",
+    re.MULTILINE,
+)
+
+# Pipeline macros — IMPLEMENT_SHADERPIPELINE_TYPE_VS, _VSPS, _VSGS, etc.
+# First arg is the pipeline NAME (an identifier, not a class type).
+_IMPLEMENT_SHADERPIPELINE_TYPE_RE = re.compile(
+    r"\bIMPLEMENT_SHADERPIPELINE_TYPE_[A-Z]+\s*\(\s*"
+    r"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,)]",
+    re.MULTILINE,
+)
+
+
+def _emit_named_index(
+    out_dir: Path,
+    subfolder: str,
+    note: str,
+    names: set[str],
+    label: str,
+) -> int:
+    """Write `<out>/<subfolder>/_HashToName.json` mapping CityHash64-seed-0
+    of UPPER(name) to the name. Shared between ShaderType, VertexFactoryType,
+    PipelineType. Output is sorted by hash key so re-running on identical
+    input produces a byte-identical file (Python set iteration is
+    nondeterministic — without this, every regen churns the git diff
+    even when no real coverage moved)."""
+    raw: dict[str, str] = {}
     for n in names:
         h = city_hash_64_with_seed(n)
         key = f"{h:016X}"
-        # First-wins on collision (won't happen for legit FShaderType names).
-        hash_to_name.setdefault(key, n)
-
-    target = out_dir / "_ShaderType"
+        raw.setdefault(key, n)
+    hash_to_name = {k: raw[k] for k in sorted(raw)}
+    target = out_dir / subfolder
     target.mkdir(parents=True, exist_ok=True)
     path = target / "_HashToName.json"
     obj = {
-        "Note": (
-            "FShaderType::HashedName → source-recovered class name. "
-            "Populates `ShaderTypeName` at decompile time when the cooked "
-            "stableinfo.json left it empty (export-side HashedNamesResolver "
-            "had buggy CityHash constants and/or no engine source path)."
-        ),
+        "Note": note,
         "EntryCount": len(hash_to_name),
         "Entries": hash_to_name,
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"[gen][hash-to-name] wrote {len(hash_to_name)} entries to {path}")
+    print(f"[gen][{label}] wrote {len(hash_to_name)} entries to {path}")
     return len(hash_to_name)
+
+
+def emit_vertex_factory_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
+    """Emit `_VertexFactoryType/_HashToName.json` covering every
+    IMPLEMENT_VERTEX_FACTORY_TYPE invocation. Namespace-qualified names
+    (e.g. `Nanite::FVertexFactory`) are preserved verbatim because UE's
+    stringification via `TEXT(#X)` keeps the `::` separator."""
+    names: set[str] = set()
+    skipped_define = 0
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if "IMPLEMENT_VERTEX_FACTORY_TYPE" not in text:
+            continue
+        define_ranges = _define_block_ranges(text)
+        for m in _IMPLEMENT_VF_TYPE_RE.finditer(text):
+            if _pos_in_ranges(m.start(), define_ranges):
+                skipped_define += 1
+                continue
+            n = m.group(1).strip()
+            if "##" in n or not n:
+                continue
+            # Drop macro PARAMETER tokens that appear as the first arg in
+            # `#define IMPLEMENT_VERTEX_FACTORY_TYPE_EX(FactoryClass, ...)`-
+            # style wrapper definitions (the define-range filter already
+            # catches most, this is the final safety net).
+            if n in _MACRO_PARAM_TOKENS or n in ("FactoryClass", "VertexFactoryType"):
+                continue
+            n = re.sub(r"\s+", "", n)
+            names.add(n)
+    print(f"[gen][vf-type] collected {len(names)} unique VertexFactoryType names "
+          f"(skipped {skipped_define} #define-body hits).")
+    return _emit_named_index(
+        out_dir,
+        "_VertexFactoryType",
+        "FVertexFactoryType::HashedName → source-recovered class name. "
+        "Populates `VertexFactoryTypeName` at decompile time when the cooked "
+        "stableinfo.json left it empty.",
+        names,
+        "vf-type",
+    )
+
+
+def emit_shader_pipeline_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
+    """Emit `_ShaderPipelineType/_HashToName.json` covering every
+    IMPLEMENT_SHADERPIPELINE_TYPE_<freq>(PipelineName, ...) invocation.
+    The first arg is the PIPELINE NAME (an identifier UE feeds to
+    `TEXT(#PipelineName)`), not a C++ class — same hash math applies."""
+    names: set[str] = set()
+    skipped_define = 0
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if "IMPLEMENT_SHADERPIPELINE_TYPE" not in text:
+            continue
+        define_ranges = _define_block_ranges(text)
+        for m in _IMPLEMENT_SHADERPIPELINE_TYPE_RE.finditer(text):
+            if _pos_in_ranges(m.start(), define_ranges):
+                skipped_define += 1
+                continue
+            n = m.group(1).strip()
+            if "##" in n or not n:
+                continue
+            if n in _MACRO_PARAM_TOKENS or n in ("PipelineName", "PipelineType"):
+                continue
+            n = re.sub(r"\s+", "", n)
+            names.add(n)
+    print(f"[gen][pipeline-type] collected {len(names)} unique PipelineType names "
+          f"(skipped {skipped_define} #define-body hits).")
+    return _emit_named_index(
+        out_dir,
+        "_ShaderPipelineType",
+        "FShaderPipelineType::HashedName → source-recovered pipeline name. "
+        "Populates `PipelineTypeName` at decompile time when the cooked "
+        "stableinfo.json left it empty.",
+        names,
+        "pipeline-type",
+    )
 
 
 if __name__ == "__main__":
