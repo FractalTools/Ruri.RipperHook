@@ -53,6 +53,17 @@ internal static class MaterialConstantBufferReader
             Size = checked((int)constantBufferSize)
         };
 
+        // Preshader-data side tables. Opcodes 38-42 (Texture/Texel/RVT/External
+        // texture coord) carry an FHashedMaterialParameterInfo whose name is
+        // an index into UniformPreshaderData.Names, followed by an int32
+        // TextureIndex that resolves into UniformTextureParameters[type][idx]
+        // when the named parameter doesn't override. Extract both up-front so
+        // the evaluator can produce real `<TextureName>_TextureSize`-style
+        // names instead of falling back to anonymous `f_<offset>`.
+        string[] preshaderNames = ExtractPreshaderNames(uniformPreshaderData);
+        JsonElement uniformTextureParameters = default;
+        uniformExpressionSet.TryGetProperty("UniformTextureParameters", out uniformTextureParameters);
+
         (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes) = ComputeNumericLayout(uniformExpressionSet, (int)constantBufferSize);
 
         HashSet<int> seenOffsets = new();
@@ -119,7 +130,7 @@ internal static class MaterialConstantBufferReader
                 continue;
             }
 
-            string baseName = DerivePreshaderName(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows);
+            string baseName = DerivePreshaderName(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows, preshaderNames, uniformTextureParameters);
             switch (kind)
             {
                 case FieldKind.Float:
@@ -283,7 +294,7 @@ internal static class MaterialConstantBufferReader
         return new string(chars[..numE]);
     }
 
-    private static string DerivePreshaderName(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath = null, int rows = 0)
+    private static string DerivePreshaderName(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath = null, int rows = 0, string[]? preshaderNames = null, JsonElement textureParameters = default)
     {
         string anonymous = $"f_{byteOffset}";
         if (size < 3 || offset >= (uint)data.Length || offset + 3 > (uint)data.Length)
@@ -298,7 +309,7 @@ internal static class MaterialConstantBufferReader
             // whole stream to the stack-machine evaluator first so we
             // produce semantic names (`ior_one_minus_clamp_ior_1_2`)
             // instead of collapsing to the bare parameter name.
-            string? evaluatedFromNonParamLead = TryEvaluatePreshader(data, offset, size, parameters);
+            string? evaluatedFromNonParamLead = TryEvaluatePreshader(data, offset, size, parameters, preshaderNames, textureParameters);
             if (evaluatedFromNonParamLead != null) return evaluatedFromNonParamLead;
             string? recoveredFromNonParamLead = TryRecoverViaSingleParamScan(data, offset, size, parameters);
             if (recoveredFromNonParamLead != null) return recoveredFromNonParamLead;
@@ -442,7 +453,7 @@ internal static class MaterialConstantBufferReader
         // expressions sharing the same lead parameter that previously
         // collapsed to `Material_ior_at_<offset>` now decode to
         // `Material_ior_clamp_1_2`, `Material_ior_one_minus_clamp_1_2`, etc.
-        string? evaluated = TryEvaluatePreshader(data, offset, size, parameters);
+        string? evaluated = TryEvaluatePreshader(data, offset, size, parameters, preshaderNames, textureParameters);
         if (evaluated != null)
         {
             return evaluated;
@@ -481,7 +492,7 @@ internal static class MaterialConstantBufferReader
     // Bails out (returns null) when the byte stream is malformed, refers
     // to a parameter index that's out-of-range, runs the stack into an
     // empty state, or encounters an opcode with unknown operand size.
-    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, JsonElement parameters)
+    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, JsonElement parameters, string[]? preshaderNames = null, JsonElement textureParameters = default)
     {
         int n = checked((int)size);
         int dataStart = checked((int)offset);
@@ -589,13 +600,59 @@ internal static class MaterialConstantBufferReader
                     break;
                 }
 
-                case 38: // ExternalInput — single-byte external-id operand
+                // Texture-info family (UE 5.1 EPreshaderOpcode 38-42). Operand
+                // sizes per `Preshader.cpp:GetTextureParameter` etc.:
+                //   38 TextureSize / 39 TexelSize:
+                //       FHashedMaterialParameterInfo (FScriptName u16 + int32 +
+                //       u8 = 7 bytes) + int32 TextureIndex (4) = 11 bytes
+                //   40 ExternalTextureCoordinateScaleRotation /
+                //   41 ExternalTextureCoordinateOffset:
+                //       FScriptName u16 (2) + FGuid (16) + int32 TextureIndex (4)
+                //       = 22 bytes
+                //   42 RuntimeVirtualTextureUniform:
+                //       FHashedMaterialParameterInfo (7) + int32 TextureIndex (4)
+                //       + int32 VectorIndex (4) = 15 bytes
+                //
+                // Mis-parsing the operand size desync'd the stream and forced
+                // anonymity for every downstream slot. NOTE: opcode 38 was
+                // previously mis-implemented here as ExternalInput (1-byte
+                // operand) — UE 5.1 has no ExternalInput opcode at all.
+                case 38: // TextureSize
+                case 39: // TexelSize
                 {
-                    if (i >= n) return null;
-                    int extId = data[dataStart + i];
-                    firstExternalId ??= extId;
-                    stack.Push(StackVal.Expr($"ext{extId}"));
-                    i += 1;
+                    if (i + 11 > n) return null;
+                    ushort nameIdx = BitConverter.ToUInt16(data, dataStart + i);
+                    int textureIdx = BitConverter.ToInt32(data, dataStart + i + 7);
+                    i += 11;
+                    string texName = ResolveTextureName(nameIdx, textureIdx, preshaderNames, textureParameters);
+                    firstParamName ??= texName;
+                    stack.Push(StackVal.Expr($"{texName}_{(op == 38 ? "TextureSize" : "TexelSize")}"));
+                    break;
+                }
+
+                case 42: // RuntimeVirtualTextureUniform
+                {
+                    if (i + 15 > n) return null;
+                    ushort nameIdx = BitConverter.ToUInt16(data, dataStart + i);
+                    int textureIdx = BitConverter.ToInt32(data, dataStart + i + 7);
+                    int vectorIdx = BitConverter.ToInt32(data, dataStart + i + 11);
+                    i += 15;
+                    string texName = ResolveTextureName(nameIdx, textureIdx, preshaderNames, textureParameters);
+                    firstParamName ??= texName;
+                    stack.Push(StackVal.Expr($"{texName}_RVTUniform_{vectorIdx}"));
+                    break;
+                }
+
+                case 40: // ExternalTextureCoordinateScaleRotation
+                case 41: // ExternalTextureCoordinateOffset
+                {
+                    if (i + 22 > n) return null;
+                    ushort nameIdx = BitConverter.ToUInt16(data, dataStart + i);
+                    int textureIdx = BitConverter.ToInt32(data, dataStart + i + 18);
+                    i += 22;
+                    string texName = ResolveTextureName(nameIdx, textureIdx, preshaderNames, textureParameters);
+                    firstParamName ??= texName;
+                    stack.Push(StackVal.Expr($"{texName}_{(op == 40 ? "ExtTexCoordScaleRotation" : "ExtTexCoordOffset")}"));
                     break;
                 }
 
@@ -713,6 +770,86 @@ internal static class MaterialConstantBufferReader
     // Whole numbers like 1.0, 2.0 → "1", "2". Fractional values like 0.08
     // → "0_08". Negatives → "neg0_5". Special-cases keep the IOR-clamp
     // idiom (`clamp_<x>_1_2`) recognisable.
+    // Extracts the side table of FScriptNames stored alongside the preshader
+    // bytecode. The bytecode references this table by uint16 index whenever
+    // an opcode needs a parameter name (TextureSize / TexelSize / etc).
+    // Returns an empty array if the JSON dump didn't surface the names.
+    private static string[] ExtractPreshaderNames(JsonElement uniformPreshaderData)
+    {
+        if (uniformPreshaderData.ValueKind != JsonValueKind.Object) return Array.Empty<string>();
+        if (!uniformPreshaderData.TryGetProperty("Names", out JsonElement names) || names.ValueKind != JsonValueKind.Array)
+            return Array.Empty<string>();
+        List<string> result = new(names.GetArrayLength());
+        foreach (JsonElement n in names.EnumerateArray())
+        {
+            result.Add(n.ValueKind == JsonValueKind.String ? (n.GetString() ?? "") : "");
+        }
+        return result.ToArray();
+    }
+
+    // Resolves an `(nameIdx, textureIdx)` pair from a Texture/Texel preshader
+    // opcode into the most informative name available:
+    //   1. preshaderNames[nameIdx] if it's a real parameter name (not "None")
+    //   2. UniformTextureParameters[Standard2D][textureIdx].ParameterInfo.Name
+    //   3. UniformTextureParameters[*][textureIdx].ParameterInfo.Name (search
+    //      all type buckets — for TexelSize on a Cube/Volume/etc.)
+    //   4. Falls back to `Texture_<idx>` if nothing names it
+    private static string ResolveTextureName(ushort nameIdx, int textureIdx, string[]? preshaderNames, JsonElement textureParameters)
+    {
+        if (preshaderNames != null && nameIdx < preshaderNames.Length)
+        {
+            string n = preshaderNames[nameIdx];
+            if (!string.IsNullOrEmpty(n) && !string.Equals(n, "None", StringComparison.Ordinal))
+            {
+                return SanitizeIdent(n);
+            }
+        }
+
+        if (textureParameters.ValueKind == JsonValueKind.Array && textureIdx >= 0)
+        {
+            // Search each type bucket. Standard2D first (most common for TextureSize),
+            // then Cube, Array2D, ArrayCube, Volume, Virtual, External.
+            // Two known JSON shapes for the parameter name:
+            //   * Cooked runtime shape (FMaterialUniformExpressionTextureParameter
+            //     after RuntimeSerialize):
+            //       { "ParameterName": "<name>", "Association": "...", "Index": <int>, ... }
+            //   * Editor / per-material .uasset shape:
+            //       { "ParameterInfo": { "Name": "<name>", "Index": <int>, "Association": "..." }, ... }
+            // Both are present in the wild — the runtime path bakes the nested
+            // FHashedMaterialParameterInfo into top-level fields, the editor
+            // path keeps the FMaterialParameterInfo struct verbatim.
+            for (int t = 0; t < textureParameters.GetArrayLength(); t++)
+            {
+                JsonElement bucket = textureParameters[t];
+                if (bucket.ValueKind != JsonValueKind.Array) continue;
+                if (textureIdx >= bucket.GetArrayLength()) continue;
+
+                JsonElement entry = bucket[textureIdx];
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+
+                string? name = null;
+                if (entry.TryGetProperty("ParameterName", out JsonElement pn) && pn.ValueKind == JsonValueKind.String)
+                {
+                    name = pn.GetString();
+                }
+                else if (entry.TryGetProperty("ParameterInfo", out JsonElement pi)
+                         && pi.ValueKind == JsonValueKind.Object
+                         && pi.TryGetProperty("Name", out JsonElement nameEl)
+                         && nameEl.ValueKind == JsonValueKind.String)
+                {
+                    name = nameEl.GetString();
+                }
+
+                if (!string.IsNullOrEmpty(name) && !string.Equals(name, "None", StringComparison.Ordinal))
+                {
+                    return SanitizeIdent(name);
+                }
+            }
+        }
+
+        return $"Texture_{textureIdx}";
+    }
+
     private static string FormatConstLiteral(float v)
     {
         if (float.IsNaN(v) || float.IsInfinity(v)) return "nan";
