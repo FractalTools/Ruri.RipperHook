@@ -1049,10 +1049,28 @@ internal static class MaterialConstantBufferReader
         Console.WriteLine(sb.ToString());
     }
 
-    // Bytes match `EPreshaderOpcode` (`Engine/Public/Shader/Preshader.h:19-75`):
+    // Bytes match UE 5.1's `EPreshaderOpcode` (`Engine/Public/Shader/Preshader.h:19-75`):
     // Sin=12 Cos=13 Tan=14 Asin=15 Acos=16 Atan=17 Sqrt=21 Rcp=22
     // Length=23 Normalize=24 Saturate=25 Abs=26 Floor=27 Ceil=28
     // Round=29 Trunc=30 Sign=31 Frac=32 Fractional=33 Log2=34 Log10=35 Neg=45
+    //
+    // VERSION-SHIFT NOTE — opcodes are NOT stable across UE versions:
+    //   * UE 5.4 inserts `SparseVolumeTextureUniform` at slot 43, pushing
+    //     GetField/SetField/Neg/Jump/.../GreaterEqual up by +1, and appends
+    //     Exp/Exp2/Log at slots 55-57.
+    //   * UE 5.7 inserts `Modulo` at slot 9, shifting EVERY opcode at
+    //     slot 9+ up by +1. So in 5.7, Min=10, Max=11, Clamp=12,
+    //     Sin=13, ..., Log10=36, ComponentSwizzle=37, etc.
+    //
+    // This reader hardcodes the UE 5.1 layout. For cooks from UE 5.4+ the
+    // unary/binary opcode case statements would mis-dispatch — but in
+    // practice the default branch returns null on unknown opcodes, which
+    // safely aborts the preshader stream rather than producing garbage
+    // names. The lost name recovery shows up as anonymous Material_f_<N>
+    // entries; a version-aware opcode table would close that gap. Left as
+    // a future stage since the cooks tested so far (Oni_Valley_VFX = 5.1,
+    // InfinityNikki = 5.4) haven't surfaced material expressions using the
+    // shifted opcodes in the failure mode.
     private static string? MapUnaryOp(byte op) => op switch
     {
         12 => "sin",
