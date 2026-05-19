@@ -33,8 +33,15 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // prep orchestration and a tiny local stage-name helper.
 internal static class Pass180_PrepareShaderBinaries
 {
+    // First-of-each-class dedup for ShaderType seed lookup diagnostics. One
+    // line logged per matched class so the log doesn't explode in archives
+    // with thousands of shaders. ConcurrentDictionary because the shader-prep
+    // loop runs in parallel.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_seedHitsByClass = new(StringComparer.Ordinal);
+
     public static void DoPass(PipelineState state)
     {
+        s_seedHitsByClass.Clear();
         if (state.Library is null) throw new InvalidOperationException("Pass110 must run before Pass180.");
 
         string outputDir = Path.GetFullPath(state.Options.OutputDirectory);
@@ -118,6 +125,35 @@ internal static class Pass180_PrepareShaderBinaries
         }
 
         SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource, state.EngineUbRegistry, state.Log);
+
+        // ShaderType seed lookup (Stage 18). When we have a ShaderTypeHash
+        // for this shader (from .stableinfo.json via ContainerByShaderIndex
+        // = Pass130), check whether the source seed registry has source-
+        // declared loose-parameter names for the corresponding FShader
+        // subclass. The hash is `FShaderType::HashedName` =
+        // CityHash64WithSeed(UPPER(class_name), 0). When matched, the seed
+        // carries a `$Globals` ConstantBufferParameter whose member NAMES
+        // come from `LAYOUT_FIELD(FShaderParameter, ...)` declarations and
+        // textures/buffers come from `LAYOUT_FIELD(FShaderResourceParameter,
+        // ...)`. Currently DIAGNOSTIC-ONLY: counts hits per process and logs
+        // first-of-each-class lookups. Reconciliation against the cooked
+        // FShaderParameterMapInfo (real byte offsets) is the next
+        // sub-stage — without it, blindly injecting seed offsets risks
+        // mismatched names because DXC packs $Globals per HLSL source-decl
+        // order, not C++ source-decl order, and those may diverge.
+        if (container != null
+            && !string.IsNullOrWhiteSpace(container.ShaderTypeHash)
+            && state.ShaderTypeSeedRegistry.FileCount > 0
+            && state.ShaderTypeSeedRegistry.TryLookup(container.ShaderTypeHash, out EngineUbMetadata typeSeed))
+        {
+            if (s_seedHitsByClass.TryAdd(typeSeed.Name, true))
+            {
+                int loose = typeSeed.ConstantBuffer?.VectorParameters?.Length ?? 0;
+                int tex = (typeSeed.Textures?.Count ?? 0) + (typeSeed.Samplers?.Count ?? 0);
+                int buf = (typeSeed.Buffers?.Count ?? 0) + (typeSeed.UAVs?.Count ?? 0);
+                state.Log($"[ShaderTypeSeed-hit] hash={container.ShaderTypeHash} class={typeSeed.Name} loose-params={loose} resources={tex + buf}");
+            }
+        }
 
         // Per-shader shader-model selection. The library-level option is
         // a default that callers tune to the lowest model they expect; an
