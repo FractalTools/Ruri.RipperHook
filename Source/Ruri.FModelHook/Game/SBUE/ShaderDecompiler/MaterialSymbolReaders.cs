@@ -170,6 +170,61 @@ internal sealed class UnifiedMaterialReader
         return SelectUniformExpressionSet(materialEntry, shaderPlatform);
     }
 
+    // Iterates every (libraryShaderMapHash, MaterialShaderMapContent.Shaders[])
+    // tuple across every material. The on-disk LIBRARY hash (SHA1) is what
+    // `ShaderMapInfo.ShaderMapHash` carries — it's NOT the cook-internal
+    // `CookedShaderMapIdHash` (those diverge for IoStore cooks). We get the
+    // library hash from the SAME material's `PackageShaderMapHashes` list,
+    // paired by position with `LoadedShaderMaps[i]`. UE writes both arrays
+    // in the same platform order, so index i in one matches index i in the
+    // other.
+    public IEnumerable<(string LibraryShaderMapHash, JsonElement ShadersArray)> EnumerateShaderMapShaders()
+    {
+        if (_materialInterfaces == null) yield break;
+        foreach (KeyValuePair<string, JsonElement> kvp in _materialInterfaces)
+        {
+            JsonElement materialEntry = kvp.Value;
+            if (!materialEntry.TryGetProperty("LoadedShaderMaps", out JsonElement loadedMaps)
+                || loadedMaps.ValueKind != JsonValueKind.Array
+                || loadedMaps.GetArrayLength() == 0)
+            {
+                continue;
+            }
+            // PackageShaderMapHashes is OPTIONAL (older cooks don't write it
+            // per-material). Fall back to the cook-internal hash when missing
+            // — Pass165's join just won't match in that case, which we accept.
+            List<string?> packageHashes = new();
+            if (materialEntry.TryGetProperty("PackageShaderMapHashes", out JsonElement pkgHashes)
+                && pkgHashes.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement h in pkgHashes.EnumerateArray())
+                {
+                    packageHashes.Add(h.ValueKind == JsonValueKind.String ? h.GetString() : null);
+                }
+            }
+            int i = 0;
+            foreach (JsonElement shaderMap in loadedMaps.EnumerateArray())
+            {
+                if (shaderMap.ValueKind != JsonValueKind.Object) { i++; continue; }
+                string? libraryHash = i < packageHashes.Count ? packageHashes[i] : null;
+                // Fallback to internal hash so the join CAN succeed for
+                // non-IoStore cooks where the internal/on-disk hashes agree.
+                if (string.IsNullOrWhiteSpace(libraryHash))
+                {
+                    libraryHash = ReadString(shaderMap, "CookedShaderMapIdHash")
+                                  ?? ReadString(shaderMap, "ShaderContentHash");
+                }
+                i++;
+                if (string.IsNullOrWhiteSpace(libraryHash)) continue;
+                if (!shaderMap.TryGetProperty("MaterialShaderMapContent", out JsonElement content)
+                    || content.ValueKind != JsonValueKind.Object) continue;
+                if (!content.TryGetProperty("Shaders", out JsonElement shaders)
+                    || shaders.ValueKind != JsonValueKind.Array) continue;
+                yield return (libraryHash, shaders);
+            }
+        }
+    }
+
     // Returns the JsonElement for the material's `RenderState` field if it
     // was populated by Pass020. Null when the asset wasn't a UMaterialInterface
     // subclass that carries render state (functions, collections), or when

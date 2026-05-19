@@ -103,6 +103,18 @@ internal sealed class PipelineState
     // Loaded alongside the engine-UB registry in Pass145.
     public ShaderTypeSeedRegistry ShaderTypeSeedRegistry { get; set; } = ShaderTypeSeedRegistry.Empty;
 
+    // Per-archive-shader cook-side ParameterMapInfo (LooseParameterBuffers
+    // with real byte offsets, no names; TextureSamplers/SRVs with the same).
+    // Populated by Pass165 by joining UnifiedMaterialReader's
+    // `MaterialShaderMapContent.Shaders[]` against `ShaderMaps[].Members[]`.
+    // Consumed by Pass180 to reconcile ShaderType seed NAMES (loose-decl
+    // order from C++) against cook OFFSETS (DXC packing order from HLSL)
+    // before injecting `$Globals` into the rewrite metadata.
+    //
+    // Stored as JsonElement so the heavy 100MB+ unified metadata stays
+    // backed by the existing JsonDocument cache — no per-shader copy.
+    public Dictionary<int, System.Text.Json.JsonElement> ShaderParameterMapInfoByArchiveIndex { get; } = new();
+
     // FModel EGame enum name from UnifiedShaderMetadata.GameVersionEnum
     // (e.g. "GAME_UE5_1", "GAME_InfinityNikki"). Filled by Pass 140 and
     // consumed by the engine-UB registry load (Pass 145) to pick the
