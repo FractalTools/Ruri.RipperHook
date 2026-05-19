@@ -2072,6 +2072,55 @@ _IMPLEMENT_SHADER_FIRST_ARG_RE = re.compile(
     re.MULTILINE,
 )
 
+# Numbered/suffixed IMPLEMENT_SHADER_TYPE family (Shader.h:1543-1593). The
+# vanilla `_IMPLEMENT_SHADER_TYPE_RE` only matches `IMPLEMENT_SHADER_TYPE\s*\(`,
+# but UE has half a dozen sibling macros with the same role for templated
+# or differently-arg'd FShader subclasses. The class lives in different arg
+# slots per variant — we extract via a tiny parser instead of trying to bake
+# the slot index into the regex.
+#
+# Macro definitions (UE 5.1 Shader.h):
+#   IMPLEMENT_SHADER_TYPE                          (Template, Class, File, Func, Freq)
+#   IMPLEMENT_SHADER_TYPE_WITH_DEBUG_NAME          (Template, Class, File, Func, Freq)
+#   IMPLEMENT_SHADER_TYPE2                          (Class, Freq)
+#   IMPLEMENT_SHADER_TYPE3                          (Class, Freq)
+#   IMPLEMENT_SHADER_TYPE2_WITH_TEMPLATE_PREFIX    (Template, Class, Freq)
+#   IMPLEMENT_SHADER_TYPE4_WITH_TEMPLATE_PREFIX    (Template, RequiredAPI, Class, Freq)
+# Class slot (0-indexed) per name:
+_SHADER_TYPE_VARIANT_CLASS_SLOT = {
+    "IMPLEMENT_SHADER_TYPE2": 0,
+    "IMPLEMENT_SHADER_TYPE3": 0,
+    "IMPLEMENT_SHADER_TYPE_WITH_DEBUG_NAME": 1,
+    "IMPLEMENT_SHADER_TYPE2_WITH_TEMPLATE_PREFIX": 1,
+    "IMPLEMENT_SHADER_TYPE4_WITH_TEMPLATE_PREFIX": 2,
+}
+_IMPLEMENT_SHADER_TYPE_VARIANT_RE = re.compile(
+    r"\b(IMPLEMENT_SHADER_TYPE(?:2|3|_WITH_DEBUG_NAME|2_WITH_TEMPLATE_PREFIX|4_WITH_TEMPLATE_PREFIX))\s*\(",
+    re.MULTILINE,
+)
+
+# Final fallback: every direct `class FFoo : public FShader|F*Shader|TGlobalShader<>|TShader<>`
+# declaration in source. Not every declared class becomes an FShaderType
+# (some are abstract bases that subclasses IMPLEMENT_*), but missing entries
+# here is strictly worse than extra entries — false positives just add dead
+# weight to the hash-to-name index, which collide-resolves to first-wins
+# anyway. This recovers names declared with the macro-less `RegisterShaderType`
+# path AND any classes whose IMPLEMENT_* invocation uses a macro family we
+# haven't enumerated yet.
+_CLASS_FSHADER_DECL_RE = re.compile(
+    r"\bclass\s+(?:[A-Z][A-Z0-9_]+_API\s+)?([A-Z][A-Za-z0-9_]+)\b"
+    r"\s*(?::|<[^>{}]+>\s*:)\s*public\s+"
+    r"(?:F[A-Z][A-Za-z0-9_]*Shader[A-Za-z0-9_]*"
+    r"|TGlobalShader<[^>]+>"
+    r"|TShader<[^>]+>"
+    r"|TGlobalShaderPermutation<[^>]+>"
+    r"|FMeshMaterialShader"
+    r"|FMaterialShader"
+    r"|FNiagaraShader"
+    r"|FGlobalShader)\b",
+    re.MULTILINE,
+)
+
 # Macro definitions that use `##` concatenation to build shader-type names.
 # Capture: macro_name, arg_list, body.
 _MACRO_DEF_WITH_HASHHASH_RE = re.compile(
@@ -2248,31 +2297,161 @@ def _split_top_level(s: str) -> list[str]:
     return args
 
 
+_MACRO_PARAM_TOKENS = frozenset({
+    "ShaderClass", "ShaderType", "ClassName", "PSClass", "VSClass",
+    "TemplatePrefix", "RequiredAPI", "Class", "Type", "DerivedType",
+})
+
+# Param-name SUBSTRINGS that betray a pseudo-invocation: macros wrapping
+# `IMPLEMENT_*_SHADER_TYPE(...)` whose args are themselves param names of
+# an outer macro. When my expansion sees the outer wrapper unexpanded, it
+# captures the inner call literally — producing junk names like
+# `TBasePassPSLightMapPolicyNameSkyLightNameLayoutName`. Real FShader class
+# names never contain these strings as suffix tails.
+_PSEUDO_INVOCATION_TAILS = (
+    "PolicyName", "LightName", "LayoutName", "ShaderName", "TypeName",
+    "ClassName", "ParamName", "FrequencyName", "PrefixName",
+)
+
+
+def _is_pseudo_invocation_name(n: str) -> bool:
+    """True if `n` looks like a wrapper-macro param-name leakage rather
+    than a real FShader subclass name. Used to reject expansions where
+    substitution didn't reach all the way (e.g. nested macros where the
+    outer macro's params still appear unexpanded in the inner invocation)."""
+    return any(t in n for t in _PSEUDO_INVOCATION_TAILS)
+
+
+# Match a `#define MACRO(...)` followed by a body that may span multiple
+# lines via `\\` line-continuations. Used to track ranges so we can skip
+# IMPLEMENT_*_SHADER_TYPE hits that fall inside another macro's definition
+# (those are wrapper-macro bodies; their inner arg list is param-name junk).
+#
+# Matches three shapes:
+#   1. `#define FOO(x) body` — single line, no continuation; the body itself
+#      is on the same line and we include it so wrappers like
+#      `#define MY_MAC(x) IMPLEMENT_SHADER_TYPE(template<>, x, ...)` are
+#      detected.
+#   2. `#define FOO(x) \` then `<line>\` then `... <final line>` — classic
+#      multi-line block ending on a non-backslash line.
+#   3. `#define FOO body` — no args. Same shapes.
+_DEFINE_BLOCK_RE = re.compile(
+    r"^[ \t]*#define[ \t]+[A-Za-z_][A-Za-z_0-9]*(?:\([^)]*\))?"
+    r"(?:[ \t]+[^\n]*\\\r?\n(?:[^\n]*\\\r?\n)*[^\n]*"  # multi-line w/ continuation
+    r"|[ \t]+[^\n]*"                                  # single-line body
+    r")?",
+    re.MULTILINE,
+)
+
+
+def _define_block_ranges(text: str) -> list[tuple[int, int]]:
+    """Return [(start, end)] character ranges spanning every multi-line
+    `#define` block in `text`. Sorted by start. Used by the
+    hash-to-name scan to skip IMPLEMENT_* hits whose call site is inside
+    a macro's continuation body."""
+    return [(m.start(), m.end()) for m in _DEFINE_BLOCK_RE.finditer(text)]
+
+
+def _pos_in_ranges(pos: int, ranges: list[tuple[int, int]]) -> bool:
+    """Binary search whether `pos` falls in any (start, end) of ranges."""
+    if not ranges:
+        return False
+    lo, hi = 0, len(ranges) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        s, e = ranges[mid]
+        if pos < s:
+            hi = mid - 1
+        elif pos >= e:
+            lo = mid + 1
+        else:
+            return True
+    return False
+
+
+def _extract_variant_invocation_class(text: str, name_match: re.Match) -> str | None:
+    """Pull the class arg out of an IMPLEMENT_SHADER_TYPE{2,3,_WITH_DEBUG_NAME,
+    _WITH_TEMPLATE_PREFIX} invocation. `name_match` is the regex hit on the
+    macro name + opening paren; we re-parse the arg list with nesting
+    awareness so commas inside `template<A, B>` or `Foo<X, Y>` don't split
+    the slot we want."""
+    macro_name = name_match.group(1)
+    slot = _SHADER_TYPE_VARIANT_CLASS_SLOT.get(macro_name)
+    if slot is None:
+        return None
+    p = name_match.end()  # right after '('
+    depth = 1
+    args: list[str] = []
+    current: list[str] = []
+    n = len(text)
+    while p < n and depth > 0:
+        c = text[p]
+        if c == "(":
+            depth += 1
+            current.append(c)
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                args.append("".join(current))
+                break
+            current.append(c)
+        elif c in "<[":
+            depth += 1
+            current.append(c)
+        elif c in ">]":
+            depth -= 1
+            current.append(c)
+        elif c == "," and depth == 1:
+            args.append("".join(current))
+            current = []
+        else:
+            current.append(c)
+        p += 1
+    if slot >= len(args):
+        return None
+    return args[slot].strip()
+
+
 def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
     """Emit `_ShaderType/_HashToName.json` mapping FShaderType::HashedName
     (CityHash64WithSeed of UPPER class name, seed=0) to the source-recovered
     type name. Returns the count of unique names indexed."""
     # 1. Direct (un-templated) IMPLEMENT_*_SHADER_TYPE invocations.
     names: set[str] = set()
+    skipped_define_block = 0
+    skipped_pseudo = 0
     for fp in iter_cpp_files(engine_src):
         try:
             text = read_text(fp)
         except OSError:
             continue
-        if "SHADER_TYPE" not in text and "_SHADER(" not in text and "_SHADER \t" not in text:
+        if "SHADER_TYPE" not in text and "_SHADER(" not in text and "_SHADER \t" not in text and "public F" not in text:
             continue
+        # Pre-compute every `#define ...` continuation block in the file so we
+        # can drop matches whose call site is inside a wrapper macro's body
+        # (those args are still param-name placeholders, not real classes).
+        define_ranges = _define_block_ranges(text)
         for m in _IMPLEMENT_SHADER_TYPE_RE.finditer(text):
+            if _pos_in_ranges(m.start(), define_ranges):
+                skipped_define_block += 1
+                continue
             n = m.group(1).strip()
             # Skip names that still have `##` (unexpanded macros — caught in step 2)
             if "##" in n or not n:
                 continue
             # Strip any whitespace inside templated names: `T<A, B>` -> `T<A,B>`
             n = re.sub(r"\s+", "", n)
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
             names.add(n)
         # ALSO scan for IMPLEMENT_GLOBAL_SHADER / IMPLEMENT_RESOLVE_SHADER /
         # similar `IMPLEMENT_*_SHADER` macros where the first arg is the
         # class. These don't have `_TYPE` so the main regex skips them.
         for m in _IMPLEMENT_SHADER_FIRST_ARG_RE.finditer(text):
+            if _pos_in_ranges(m.start(), define_ranges):
+                skipped_define_block += 1
+                continue
             n = m.group(1).strip()
             if "##" in n or not n:
                 continue
@@ -2281,9 +2460,48 @@ def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
             # `#define IMPLEMENT_GLOBAL_SHADER(ShaderClass, ...)`).
             # Class names by UE convention start with F/T/U/C/I/A;
             # macro params are typically `ShaderClass`/`ShaderType`/etc.
-            if n in ("ShaderClass", "ShaderType", "ClassName", "PSClass", "VSClass"):
+            if n in _MACRO_PARAM_TOKENS:
                 continue
             n = re.sub(r"\s+", "", n)
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
+            names.add(n)
+
+        # IMPLEMENT_SHADER_TYPE{2,3,_WITH_DEBUG_NAME,_WITH_TEMPLATE_PREFIX}
+        # variants — class lives in different arg slots per macro, so go
+        # through the per-variant parser instead of one all-purpose regex.
+        for nm in _IMPLEMENT_SHADER_TYPE_VARIANT_RE.finditer(text):
+            if _pos_in_ranges(nm.start(), define_ranges):
+                skipped_define_block += 1
+                continue
+            n = _extract_variant_invocation_class(text, nm)
+            if not n or "##" in n or n in _MACRO_PARAM_TOKENS:
+                continue
+            n = re.sub(r"\s+", "", n)
+            # Skip macro PARAMETER tokens (e.g. when this regex hits
+            # `#define IMPLEMENT_SHADER_TYPE2(ShaderClass, Frequency) ...`
+            # the body itself). A class name starts with F/T/U/I/A/C by
+            # UE convention; reject anything else.
+            if not n or n[0] not in "FTUIAC" or "<" in n[:1]:
+                continue
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
+            names.add(n)
+
+        # Direct `class FFoo : public FShader|TGlobalShader<>|...` declarations.
+        # These pick up shader classes that don't go through any IMPLEMENT_*
+        # macro at all (or that go through a macro family we haven't catalogued).
+        # NOTE: class declarations are NOT inside a `#define` body — they're
+        # global class scope. No define-range filter needed.
+        for m in _CLASS_FSHADER_DECL_RE.finditer(text):
+            n = m.group(1).strip()
+            if not n or n in _MACRO_PARAM_TOKENS:
+                continue
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
             names.add(n)
 
     # 2. Macro-expanded `##`-concatenated invocations.
@@ -2295,9 +2513,29 @@ def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
             if "##" in n or not n:
                 continue
             n = re.sub(r"\s+", "", n)
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
+            names.add(n)
+        # Variant macros surface in expansions too (e.g. SLATE_*_TYPE expands
+        # to IMPLEMENT_MATERIAL_SHADER_TYPE which is already covered, but
+        # SHADER_TYPE2-family invocations inside an expansion would otherwise
+        # be missed). Run the variant scan over expansions for the same reason.
+        for nm in _IMPLEMENT_SHADER_TYPE_VARIANT_RE.finditer(body):
+            n = _extract_variant_invocation_class(body, nm)
+            if not n or "##" in n or n in _MACRO_PARAM_TOKENS:
+                continue
+            n = re.sub(r"\s+", "", n)
+            if not n or n[0] not in "FTUIAC":
+                continue
+            if _is_pseudo_invocation_name(n):
+                skipped_pseudo += 1
+                continue
             names.add(n)
 
-    print(f"[gen][hash-to-name] collected {len(names)} unique ShaderType names (incl. ##-expanded specialisations).")
+    print(f"[gen][hash-to-name] collected {len(names)} unique ShaderType names "
+          f"(incl. ##-expanded specialisations; skipped {skipped_define_block} "
+          f"#define-body hits, {skipped_pseudo} param-name placeholders).")
 
     # Hash each and write the index.
     hash_to_name: dict[str, str] = {}
