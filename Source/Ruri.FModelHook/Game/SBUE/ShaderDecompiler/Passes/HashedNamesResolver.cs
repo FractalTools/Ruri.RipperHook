@@ -120,10 +120,25 @@ internal static class HashedNamesResolver
     // makes EVERY ulong * ulong / ulong - ulong throw OverflowException
     // the first time a result wraps. Mark the full hash machinery
     // `unchecked` so the CityHash-spec-correct wrapping is preserved.
+    //
+    // Constants from UE's canonical CityHash 1.1.0:
+    //   D:/GameStudy/UnrealEngine-5.1.1-release/Engine/Source/Runtime/Core/Private/Hash/CityHash.cpp:122-124
+    //   k0 = 0xc3a5c85c97cb3127  k1 = 0xb492b66fbe98f273  k2 = 0x9ae16a3b2f90404f
+    // The Murmur-inspired final-mix uses a DIFFERENT constant `kMul` that
+    // only appears in the 2-arg HashLen16(u,v) form (Hash128to64::kMul).
+    // Earlier versions of this file substituted kMul for k1/k2 in places
+    // and silently produced wrong hashes — the issue was caught when the
+    // Python port at `_generator/gen_ub_metadata.py` was cross-checked
+    // against cooked TypeDependency hashes.
+    private const ulong K0 = 0xc3a5c85c97cb3127UL;
+    private const ulong K1 = 0xb492b66fbe98f273UL;
+    private const ulong K2 = 0x9ae16a3b2f90404fUL;
+    private const ulong KMulHash16 = 0x9ddfea08eb382d69UL;
 
-    // Minimal CityHash64WithSeed port for FHashedName(name, number=0).
+    // CityHash64WithSeed(s, len, seed) per CityHash.cpp:430-440:
+    //   CityHash64WithSeeds(s, len, k2, seed) = HashLen16(CityHash64(s) - k2, seed)
     private static ulong CityHash64WithSeed(byte[] s, ulong seed) => unchecked(
-        HashLen16(CityHash64(s) - seed, seed ^ 0x9ae16a3b2f90404fUL));
+        HashLen16(CityHash64(s) - K2, seed));
 
     private static ulong CityHash64(byte[] s)
     {
@@ -138,26 +153,26 @@ internal static class HashedNamesResolver
         ulong y = Fetch64(s, len - 16) + Fetch64(s, len - 56);
         ulong z = HashLen16(Fetch64(s, len - 48) + (ulong)len, Fetch64(s, len - 24));
         (ulong low, ulong high) v = WeakHashLen32WithSeeds(s, len - 64, (ulong)len, z);
-        (ulong low, ulong high) w = WeakHashLen32WithSeeds(s, len - 32, y + 0x9ddfea08eb382d69UL, x);
-        x = x * 0x9ddfea08eb382d69UL + Fetch64(s, 0);
+        (ulong low, ulong high) w = WeakHashLen32WithSeeds(s, len - 32, y + K1, x);
+        x = x * K1 + Fetch64(s, 0);
 
         int offset = 0;
         len = (len - 1) & ~63;
         do
         {
-            x = RotateRight(x + y + v.low + Fetch64(s, offset + 8), 37) * 0x9ddfea08eb382d69UL;
-            y = RotateRight(y + v.high + Fetch64(s, offset + 48), 42) * 0x9ddfea08eb382d69UL;
+            x = RotateRight(x + y + v.low + Fetch64(s, offset + 8), 37) * K1;
+            y = RotateRight(y + v.high + Fetch64(s, offset + 48), 42) * K1;
             x ^= w.high;
             y += v.low + Fetch64(s, offset + 40);
-            z = RotateRight(z + w.low, 33) * 0x9ddfea08eb382d69UL;
-            v = WeakHashLen32WithSeeds(s, offset, v.high * 0x9ddfea08eb382d69UL, x + w.low);
+            z = RotateRight(z + w.low, 33) * K1;
+            v = WeakHashLen32WithSeeds(s, offset, v.high * K1, x + w.low);
             w = WeakHashLen32WithSeeds(s, offset + 32, z + w.high, y + Fetch64(s, offset + 16));
             (x, z) = (z, x);
             offset += 64;
             len -= 64;
         } while (len != 0);
 
-        return HashLen16(HashLen16(v.low, w.low) + ShiftMix(y) * 0x9ddfea08eb382d69UL + z, HashLen16(v.high, w.high) + x);
+        return HashLen16(HashLen16(v.low, w.low) + ShiftMix(y) * K1 + z, HashLen16(v.high, w.high) + x);
         }
     }
 
@@ -168,8 +183,8 @@ internal static class HashedNamesResolver
         int len = s.Length;
         if (len >= 8)
         {
-            ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
-            ulong a = Fetch64(s, 0) + 0x9ae16a3b2f90404fUL;
+            ulong mul = K2 + (ulong)len * 2UL;
+            ulong a = Fetch64(s, 0) + K2;
             ulong b = Fetch64(s, len - 8);
             ulong c = RotateRight(b, 37) * mul + a;
             ulong d = (RotateRight(a, 25) + b) * mul;
@@ -177,7 +192,7 @@ internal static class HashedNamesResolver
         }
         if (len >= 4)
         {
-            ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
+            ulong mul = K2 + (ulong)len * 2UL;
             ulong a = Fetch32(s, 0);
             return HashLen16((ulong)len + (a << 3), Fetch32(s, len - 4), mul);
         }
@@ -188,9 +203,9 @@ internal static class HashedNamesResolver
             uint c = s[len - 1];
             uint y = a + (b << 8);
             uint z = (uint)len + (c << 2);
-            return ShiftMix(y * 0x9ddfea08eb382d69UL ^ z * 0xc3a5c85c97cb3127UL) * 0x9ddfea08eb382d69UL;
+            return ShiftMix(y * K2 ^ z * K0) * K2;
         }
-        return 0x9ae16a3b2f90404fUL;
+        return K2;
         }
     }
 
@@ -199,12 +214,12 @@ internal static class HashedNamesResolver
         unchecked
         {
         int len = s.Length;
-        ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
-        ulong a = Fetch64(s, 0) * 0xc3a5c85c97cb3127UL;
+        ulong mul = K2 + (ulong)len * 2UL;
+        ulong a = Fetch64(s, 0) * K1;
         ulong b = Fetch64(s, 8);
         ulong c = Fetch64(s, len - 8) * mul;
-        ulong d = Fetch64(s, len - 16) * 0x9ddfea08eb382d69UL;
-        return HashLen16(RotateRight(a + b, 43) + RotateRight(c, 30) + d, a + RotateRight(b + 0x9ae16a3b2f90404fUL, 18) + c, mul);
+        ulong d = Fetch64(s, len - 16) * K2;
+        return HashLen16(RotateRight(a + b, 43) + RotateRight(c, 30) + d, a + RotateRight(b + K2, 18) + c, mul);
         }
     }
 
@@ -213,12 +228,12 @@ internal static class HashedNamesResolver
         unchecked
         {
         int len = s.Length;
-        ulong mul = 0x9ddfea08eb382d69UL + (ulong)len * 2UL;
-        ulong a = Fetch64(s, 0) * 0x9ddfea08eb382d69UL;
+        ulong mul = K2 + (ulong)len * 2UL;
+        ulong a = Fetch64(s, 0) * K2;
         ulong b = Fetch64(s, 8);
         ulong c = Fetch64(s, len - 24);
         ulong d = Fetch64(s, len - 32);
-        ulong e = Fetch64(s, 16) * 0x9ddfea08eb382d69UL;
+        ulong e = Fetch64(s, 16) * K2;
         ulong f = Fetch64(s, 24) * 9UL;
         ulong g = Fetch64(s, len - 8);
         ulong h = Fetch64(s, len - 16) * mul;
@@ -251,7 +266,7 @@ internal static class HashedNamesResolver
         }
     }
 
-    private static ulong HashLen16(ulong u, ulong v) => HashLen16(u, v, 0x9ddfea08eb382d69UL);
+    private static ulong HashLen16(ulong u, ulong v) => HashLen16(u, v, KMulHash16);
 
     private static ulong HashLen16(ulong u, ulong v, ulong mul)
     {
