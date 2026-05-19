@@ -1,0 +1,157 @@
+{
+  "Name": "TBasePassComputeShaderPolicyParamType",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h:317 (TBasePassComputeShaderPolicyParamType)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ViewRectParam",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PassDataParam",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "Target0",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target1",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target2",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target3",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target4",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target5",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target6",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Target7",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Targets",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Target0",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "Target1",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 0,
+      "Name": "Target2",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 0,
+      "Name": "Target3",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 0,
+      "Name": "Target4",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 0,
+      "Name": "Target5",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 0,
+      "Name": "Target6",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 0,
+      "Name": "Target7",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 8,
+      "Offset": 0,
+      "Name": "Targets",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "TBasePassComputeShaderPolicyParamType",
+    "ParentClass": "FMeshMaterialShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

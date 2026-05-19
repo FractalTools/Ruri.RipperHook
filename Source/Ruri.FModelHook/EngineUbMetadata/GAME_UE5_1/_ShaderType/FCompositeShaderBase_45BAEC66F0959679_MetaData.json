@@ -1,0 +1,159 @@
+{
+  "Name": "FCompositeShaderBase",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/SlateRHIRenderer/Private/SlateRHIRenderer.cpp:676 (FCompositeShaderBase)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "UILevel",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UILuminance",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OutputDevice",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ColorVisionDeficiencyType",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ColorVisionDeficiencySeverity",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bCorrectDeficiency",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bSimulateCorrectionWithDeficiency",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 112,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "UITexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "UIWriteMaskTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "UISampler",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ColorSpaceLUT",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ColorSpaceLUTSampler",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "UITexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "UIWriteMaskTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 0,
+      "Name": "UISampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 0,
+      "Name": "ColorSpaceLUT",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 0,
+      "Name": "ColorSpaceLUTSampler",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FCompositeShaderBase",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

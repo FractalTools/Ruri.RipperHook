@@ -1683,21 +1683,189 @@ def collect_shader_type_layouts(engine_src: Path) -> list[tuple[str, str, str, i
     return out
 
 
-# CityHash64 port for FHashedName — mirrors the C# implementation at
-# HashedNamesResolver.ComputeHashedName / CityHash64WithSeed.
-# Outputs the 16-char uppercase hex string used as the filename suffix.
-def city_hash_64_with_seed(name: str, seed: int = 0) -> int:
-    upper = name.upper().encode("utf-8")
-    # Use Python's built-in hashlib? No — UE uses CityHash64 specifically.
-    # Implement minimal CityHash64 mirroring the C# port. For brevity here
-    # we delegate to a small embedded implementation; if this skeleton
-    # is ever shipped, port the full CityHash64 from the C# resolver
-    # (Source/Ruri.FModelHook/Game/SBUE/ShaderDecompiler/Passes/HashedNamesResolver.cs).
-    raise NotImplementedError(
-        "ShaderType seed emission requires CityHash64 port; "
-        "see HashedNamesResolver.cs for the reference implementation. "
-        "Skipping for this skeleton — populate when full hash port lands."
+# CityHash64 port for FHashedName — mirrors UE 5.x canonical CityHash 1.1.0
+# byte-for-byte. Reference source (Google + UE identical impl):
+#   D:/GameStudy/UnrealEngine-5.1.1-release/Engine/Source/Runtime/Core/Private/Hash/CityHash.cpp
+# (Both UE and Google's reference 1.1.0 use the SAME constants. Some other
+# C#/JS ports floating around — including the in-tree `HashedNamesResolver.cs`
+# — substitute kMul for k1/k2 in places and produce wrong hashes; do not
+# copy from those. The values below match `CityHash_Internal::k0/k1/k2`
+# from CityHash.cpp:122-124 exactly.)
+#
+# Python's ints are unbounded so every arithmetic step masks to 64 bits.
+
+_K0 = 0xc3a5c85c97cb3127  # CityHash_Internal::k0
+_K1 = 0xb492b66fbe98f273  # CityHash_Internal::k1  (used in the >64-byte loop)
+_K2 = 0x9ae16a3b2f90404f  # CityHash_Internal::k2  (used in HashLen0to16/17to32/33to64)
+_K_MUL_HASH16 = 0x9ddfea08eb382d69  # Murmur kMul used ONLY inside HashLen16(u,v) 2-arg form
+_MASK64 = 0xFFFFFFFFFFFFFFFF
+
+
+def _u64(x: int) -> int:
+    return x & _MASK64
+
+
+def _rotr(val: int, shift: int) -> int:
+    val &= _MASK64
+    return ((val >> shift) | (val << (64 - shift))) & _MASK64
+
+
+def _reverse_bytes(value: int) -> int:
+    return int.from_bytes(_u64(value).to_bytes(8, "little"), "big")
+
+
+def _shift_mix(val: int) -> int:
+    val &= _MASK64
+    return val ^ (val >> 47)
+
+
+def _fetch32(s: bytes, pos: int) -> int:
+    return int.from_bytes(s[pos:pos + 4], "little")
+
+
+def _fetch64(s: bytes, pos: int) -> int:
+    return int.from_bytes(s[pos:pos + 8], "little")
+
+
+# Two-arg HashLen16(u,v) — the Murmur-inspired final-mix. Uses a DEDICATED
+# constant 0x9ddfea08eb382d69 (Hash128to64::kMul), not k1/k2.
+def _hash_len16_2(u: int, v: int) -> int:
+    return _hash_len16_3(u, v, _K_MUL_HASH16)
+
+
+# Three-arg HashLen16(u,v,mul) — caller picks the multiplier. CityHash64
+# internal uses this with mul=k2+2*len for the medium-length paths and
+# mul=k1 inside the >64 main loop's final mix is via the 2-arg form, NOT
+# this 3-arg one. So this only feeds the small-string paths.
+def _hash_len16_3(u: int, v: int, mul: int) -> int:
+    a = _u64((u ^ v) * mul)
+    a ^= a >> 47
+    b = _u64((v ^ a) * mul)
+    b ^= b >> 47
+    return _u64(b * mul)
+
+
+def _hash_len_0_to_16(s: bytes) -> int:
+    length = len(s)
+    if length >= 8:
+        mul = _u64(_K2 + length * 2)
+        a = _u64(_fetch64(s, 0) + _K2)
+        b = _fetch64(s, length - 8)
+        c = _u64(_rotr(b, 37) * mul + a)
+        d = _u64((_rotr(a, 25) + b) * mul)
+        return _hash_len16_3(c, d, mul)
+    if length >= 4:
+        mul = _u64(_K2 + length * 2)
+        a = _fetch32(s, 0)
+        return _hash_len16_3(length + (a << 3), _fetch32(s, length - 4), mul)
+    if length > 0:
+        a = s[0]
+        b = s[length >> 1]
+        c = s[length - 1]
+        y = a + (b << 8)
+        z = length + (c << 2)
+        return _u64(_shift_mix(_u64(y * _K2) ^ _u64(z * _K0)) * _K2)
+    return _K2
+
+
+def _hash_len_17_to_32(s: bytes) -> int:
+    length = len(s)
+    mul = _u64(_K2 + length * 2)
+    a = _u64(_fetch64(s, 0) * _K1)
+    b = _fetch64(s, 8)
+    c = _u64(_fetch64(s, length - 8) * mul)
+    d = _u64(_fetch64(s, length - 16) * _K2)
+    return _hash_len16_3(
+        _u64(_rotr(_u64(a + b), 43) + _rotr(c, 30) + d),
+        _u64(a + _rotr(_u64(b + _K2), 18) + c),
+        mul,
     )
+
+
+def _hash_len_33_to_64(s: bytes) -> int:
+    length = len(s)
+    mul = _u64(_K2 + length * 2)
+    a = _u64(_fetch64(s, 0) * _K2)
+    b = _fetch64(s, 8)
+    c = _fetch64(s, length - 24)
+    d = _fetch64(s, length - 32)
+    e = _u64(_fetch64(s, 16) * _K2)
+    f = _u64(_fetch64(s, 24) * 9)
+    g = _fetch64(s, length - 8)
+    h = _u64(_fetch64(s, length - 16) * mul)
+    u = _u64(_rotr(_u64(a + g), 43) + _u64((_rotr(b, 30) + c) * 9))
+    v = _u64(((a + g) ^ d) + f + 1)
+    w = _u64(_reverse_bytes(_u64((u + v) * mul)) + h)
+    x = _u64(_rotr(_u64(e + f), 42) + c)
+    y = _u64((_reverse_bytes(_u64((v + w) * mul)) + g) * mul)
+    z = _u64(e + f + c)
+    a = _u64(_reverse_bytes(_u64((x + z) * mul + y)) + b)
+    b = _u64(_shift_mix(_u64((z + a) * mul + d + h)) * mul)
+    return _u64(b + x)
+
+
+def _weak_hash_len32_with_seeds(s: bytes, offset: int, a: int, b: int) -> tuple[int, int]:
+    w = _fetch64(s, offset)
+    x = _fetch64(s, offset + 8)
+    y = _fetch64(s, offset + 16)
+    z = _fetch64(s, offset + 24)
+    a = _u64(a + w)
+    b = _rotr(_u64(b + a + z), 21)
+    c = a
+    a = _u64(a + x + y)
+    b = _u64(b + _rotr(a, 44))
+    return _u64(a + z), _u64(b + c)
+
+
+def _city_hash_64(s: bytes) -> int:
+    length = len(s)
+    if length <= 16:
+        return _hash_len_0_to_16(s)
+    if length <= 32:
+        return _hash_len_17_to_32(s)
+    if length <= 64:
+        return _hash_len_33_to_64(s)
+
+    # Long-string path: 56 bytes of running state, k1-driven main loop.
+    x = _fetch64(s, length - 40)
+    y = _u64(_fetch64(s, length - 16) + _fetch64(s, length - 56))
+    z = _hash_len16_2(_u64(_fetch64(s, length - 48) + length), _fetch64(s, length - 24))
+    v = _weak_hash_len32_with_seeds(s, length - 64, length, z)
+    w = _weak_hash_len32_with_seeds(s, length - 32, _u64(y + _K1), x)
+    x = _u64(x * _K1 + _fetch64(s, 0))
+
+    offset = 0
+    length_iter = (length - 1) & ~63
+    while length_iter != 0:
+        x = _u64(_rotr(_u64(x + y + v[0] + _fetch64(s, offset + 8)), 37) * _K1)
+        y = _u64(_rotr(_u64(y + v[1] + _fetch64(s, offset + 48)), 42) * _K1)
+        x ^= w[1]
+        y = _u64(y + v[0] + _fetch64(s, offset + 40))
+        z = _u64(_rotr(_u64(z + w[0]), 33) * _K1)
+        v = _weak_hash_len32_with_seeds(s, offset, _u64(v[1] * _K1), _u64(x + w[0]))
+        w = _weak_hash_len32_with_seeds(s, offset + 32, _u64(z + w[1]), _u64(y + _fetch64(s, offset + 16)))
+        x, z = z, x
+        offset += 64
+        length_iter -= 64
+
+    # Final mix uses 2-arg HashLen16 (kMul) and `* k1` for the y term.
+    return _hash_len16_2(
+        _u64(_hash_len16_2(v[0], w[0]) + _u64(_shift_mix(y) * _K1) + z),
+        _u64(_hash_len16_2(v[1], w[1]) + x),
+    )
+
+
+def city_hash_64_with_seed(name: str, seed: int = 0) -> int:
+    """FHashedName-equivalent hash. UE's `FHashedName(FName)` UPPER-cases the
+    name and runs `CityHash64WithSeed(upper, len, internalNumber)`. For
+    shader/struct type FNames the number is 0. The canonical UE impl
+    (CityHash.cpp:430-440) is:
+        CityHash64WithSeed(s, len, seed) =
+            CityHash64WithSeeds(s, len, k2, seed) =
+            HashLen16(CityHash64(s) - k2, seed)
+    Returns the 64-bit hash as an int."""
+    upper = name.upper().encode("utf-8")
+    return _hash_len16_2(_u64(_city_hash_64(upper) - _K2), seed)
 
 
 def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path) -> int:
@@ -1721,13 +1889,11 @@ def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path)
 
     written = 0
     for cname, parent, src_file, src_line, fields in classes:
-        # NOTE: hashed-name suffix omitted from filename in this skeleton
-        # because the CityHash64 port isn't included. Filename becomes
-        # `<ClassName>_NOHASH_MetaData.json` so the file is recognisable
-        # but won't accidentally collide with a hash-validated file.
-        # Replace `NOHASH` with `f"{city_hash_64_with_seed(cname):016X}"`
-        # once the hash port lands.
-        hash_token = "NOHASH"
+        # Hashed-name suffix matches FShaderType::HashedName — UPPER-cased
+        # UTF-8 bytes through CityHash64WithSeed(0). The same hash appears
+        # in cooked FShaderMapPointerTable.Types[i].Hash, so this filename
+        # is directly addressable from cook data.
+        hash_token = f"{city_hash_64_with_seed(cname):016X}"
 
         vectors: list[dict] = []
         textures: list[dict] = []
