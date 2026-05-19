@@ -8,177 +8,177 @@
   "members": [
     {
       "offset": 24,
-      "name": "Common.NiagaraFloatDataStride",
+      "name": "NiagaraFloatDataStride",
       "type": "UInt"
     },
     {
       "offset": 28,
-      "name": "Common.NiagaraIntDataStride",
+      "name": "NiagaraIntDataStride",
       "type": "UInt"
     },
     {
       "offset": 40,
-      "name": "Common.SortedIndicesOffset",
+      "name": "SortedIndicesOffset",
       "type": "Int"
     },
     {
       "offset": 48,
-      "name": "Common.SystemLWCTile",
+      "name": "SystemLWCTile",
       "type": "Float3"
     },
     {
       "offset": 60,
-      "name": "Common.bLocalSpace",
+      "name": "bLocalSpace",
       "type": "Int"
     },
     {
       "offset": 64,
-      "name": "Common.AccurateMotionVectors",
+      "name": "AccurateMotionVectors",
       "type": "Int"
     },
     {
       "offset": 68,
-      "name": "Common.DeltaSeconds",
+      "name": "DeltaSeconds",
       "type": "Float"
     },
     {
       "offset": 72,
-      "name": "Common.FacingMode",
+      "name": "FacingMode",
       "type": "UInt"
     },
     {
       "offset": 80,
-      "name": "Common.MeshScale",
+      "name": "MeshScale",
       "type": "Float3"
     },
     {
       "offset": 96,
-      "name": "Common.MeshOffset",
+      "name": "MeshOffset",
       "type": "Float3"
     },
     {
       "offset": 112,
-      "name": "Common.MeshRotation",
+      "name": "MeshRotation",
       "type": "Float4"
     },
     {
       "offset": 128,
-      "name": "Common.bMeshOffsetIsWorldSpace",
+      "name": "bMeshOffsetIsWorldSpace",
       "type": "Int"
     },
     {
       "offset": 132,
-      "name": "Common.bLockedAxisEnable",
+      "name": "bLockedAxisEnable",
       "type": "UInt"
     },
     {
       "offset": 144,
-      "name": "Common.LockedAxis",
+      "name": "LockedAxis",
       "type": "Float3"
     },
     {
       "offset": 156,
-      "name": "Common.LockedAxisSpace",
+      "name": "LockedAxisSpace",
       "type": "UInt"
     },
     {
       "offset": 160,
-      "name": "Common.ScaleDataOffset",
+      "name": "ScaleDataOffset",
       "type": "Int"
     },
     {
       "offset": 164,
-      "name": "Common.RotationDataOffset",
+      "name": "RotationDataOffset",
       "type": "Int"
     },
     {
       "offset": 168,
-      "name": "Common.PositionDataOffset",
+      "name": "PositionDataOffset",
       "type": "Int"
     },
     {
       "offset": 172,
-      "name": "Common.VelocityDataOffset",
+      "name": "VelocityDataOffset",
       "type": "Int"
     },
     {
       "offset": 176,
-      "name": "Common.CameraOffsetDataOffset",
+      "name": "CameraOffsetDataOffset",
       "type": "Int"
     },
     {
       "offset": 180,
-      "name": "Common.PrevScaleDataOffset",
+      "name": "PrevScaleDataOffset",
       "type": "Int"
     },
     {
       "offset": 184,
-      "name": "Common.PrevRotationDataOffset",
+      "name": "PrevRotationDataOffset",
       "type": "Int"
     },
     {
       "offset": 188,
-      "name": "Common.PrevPositionDataOffset",
+      "name": "PrevPositionDataOffset",
       "type": "Int"
     },
     {
       "offset": 192,
-      "name": "Common.PrevVelocityDataOffset",
+      "name": "PrevVelocityDataOffset",
       "type": "Int"
     },
     {
       "offset": 196,
-      "name": "Common.PrevCameraOffsetDataOffset",
+      "name": "PrevCameraOffsetDataOffset",
       "type": "Int"
     },
     {
       "offset": 208,
-      "name": "Common.DefaultScale",
+      "name": "DefaultScale",
       "type": "Float3"
     },
     {
       "offset": 224,
-      "name": "Common.DefaultRotation",
+      "name": "DefaultRotation",
       "type": "Float4"
     },
     {
       "offset": 240,
-      "name": "Common.DefaultPosition",
+      "name": "DefaultPosition",
       "type": "Float3"
     },
     {
       "offset": 256,
-      "name": "Common.DefaultVelocity",
+      "name": "DefaultVelocity",
       "type": "Float3"
     },
     {
       "offset": 268,
-      "name": "Common.DefaultCameraOffset",
+      "name": "DefaultCameraOffset",
       "type": "Float"
     },
     {
       "offset": 272,
-      "name": "Common.DefaultPrevScale",
+      "name": "DefaultPrevScale",
       "type": "Float3"
     },
     {
       "offset": 288,
-      "name": "Common.DefaultPrevRotation",
+      "name": "DefaultPrevRotation",
       "type": "Float4"
     },
     {
       "offset": 304,
-      "name": "Common.DefaultPrevPosition",
+      "name": "DefaultPrevPosition",
       "type": "Float3"
     },
     {
       "offset": 320,
-      "name": "Common.DefaultPrevVelocity",
+      "name": "DefaultPrevVelocity",
       "type": "Float3"
     },
     {
       "offset": 332,
-      "name": "Common.DefaultPrevCameraOffset",
+      "name": "DefaultPrevCameraOffset",
       "type": "Float"
     },
     {
@@ -296,25 +296,25 @@
     {
       "index": 0,
       "offset": 0,
-      "name": "Common.NiagaraParticleDataFloat",
+      "name": "NiagaraParticleDataFloat",
       "type": "UBMT_SRV"
     },
     {
       "index": 1,
       "offset": 8,
-      "name": "Common.NiagaraParticleDataHalf",
+      "name": "NiagaraParticleDataHalf",
       "type": "UBMT_SRV"
     },
     {
       "index": 2,
       "offset": 16,
-      "name": "Common.NiagaraParticleDataInt",
+      "name": "NiagaraParticleDataInt",
       "type": "UBMT_SRV"
     },
     {
       "index": 3,
       "offset": 32,
-      "name": "Common.SortedIndices",
+      "name": "SortedIndices",
       "type": "UBMT_SRV"
     },
     {

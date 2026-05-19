@@ -8,13 +8,13 @@
   "members": [
     {
       "offset": 112,
-      "name": "DebugViewMode.AccuracyColors",
+      "name": "DebugViewMode_AccuracyColors",
       "type": "Float4",
       "arraySize": 5
     },
     {
       "offset": 192,
-      "name": "DebugViewMode.LODColors",
+      "name": "DebugViewMode_LODColors",
       "type": "Float4",
       "arraySize": 8
     }
@@ -23,79 +23,79 @@
     {
       "index": 0,
       "offset": 0,
-      "name": "SceneTextures.SceneColorTexture",
+      "name": "SceneTextures_SceneColorTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
       "offset": 8,
-      "name": "SceneTextures.SceneDepthTexture",
+      "name": "SceneTextures_SceneDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 2,
       "offset": 16,
-      "name": "SceneTextures.GBufferATexture",
+      "name": "SceneTextures_GBufferATexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 3,
       "offset": 24,
-      "name": "SceneTextures.GBufferBTexture",
+      "name": "SceneTextures_GBufferBTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 4,
       "offset": 32,
-      "name": "SceneTextures.GBufferCTexture",
+      "name": "SceneTextures_GBufferCTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 5,
       "offset": 40,
-      "name": "SceneTextures.GBufferDTexture",
+      "name": "SceneTextures_GBufferDTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 6,
       "offset": 48,
-      "name": "SceneTextures.GBufferETexture",
+      "name": "SceneTextures_GBufferETexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 7,
       "offset": 56,
-      "name": "SceneTextures.GBufferFTexture",
+      "name": "SceneTextures_GBufferFTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 8,
       "offset": 64,
-      "name": "SceneTextures.GBufferVelocityTexture",
+      "name": "SceneTextures_GBufferVelocityTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 9,
       "offset": 72,
-      "name": "SceneTextures.ScreenSpaceAOTexture",
+      "name": "SceneTextures_ScreenSpaceAOTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 10,
       "offset": 80,
-      "name": "SceneTextures.CustomDepthTexture",
+      "name": "SceneTextures_CustomDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 11,
       "offset": 88,
-      "name": "SceneTextures.CustomStencilTexture",
+      "name": "SceneTextures_CustomStencilTexture",
       "type": "UBMT_RDG_TEXTURE_SRV"
     },
     {
       "index": 12,
       "offset": 96,
-      "name": "SceneTextures.PointClampSampler",
+      "name": "SceneTextures_PointClampSampler",
       "type": "UBMT_SAMPLER"
     },
     {

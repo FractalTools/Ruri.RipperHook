@@ -18,54 +18,54 @@
     },
     {
       "offset": 16,
-      "name": "VolumeShadowingShaderParameters.TranslatedWorldToShadowMatrix",
+      "name": "TranslatedWorldToShadowMatrix",
       "type": "Float4x4"
     },
     {
       "offset": 80,
-      "name": "VolumeShadowingShaderParameters.ShadowmapMinMax",
+      "name": "ShadowmapMinMax",
       "type": "Float4"
     },
     {
       "offset": 96,
-      "name": "VolumeShadowingShaderParameters.DepthBiasParameters",
+      "name": "DepthBiasParameters",
       "type": "Float4"
     },
     {
       "offset": 112,
-      "name": "VolumeShadowingShaderParameters.ShadowInjectParams",
+      "name": "ShadowInjectParams",
       "type": "Float4"
     },
     {
       "offset": 128,
-      "name": "VolumeShadowingShaderParameters.ClippingPlanes",
+      "name": "ClippingPlanes",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 208,
-      "name": "VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowViewProjectionMatrices",
+      "name": "ShadowViewProjectionMatrices",
       "type": "Float4x4",
       "arraySize": 6
     },
     {
       "offset": 592,
-      "name": "VolumeShadowingShaderParameters.OnePassPointShadowProjection.InvShadowmapResolution",
+      "name": "InvShadowmapResolution",
       "type": "Float"
     },
     {
       "offset": 608,
-      "name": "VolumeShadowingShaderParameters.bStaticallyShadowed",
+      "name": "bStaticallyShadowed",
       "type": "UInt"
     },
     {
       "offset": 640,
-      "name": "VolumeShadowingShaderParameters.TranslatedWorldToStaticShadowMatrix",
+      "name": "TranslatedWorldToStaticShadowMatrix",
       "type": "Float4x4"
     },
     {
       "offset": 704,
-      "name": "VolumeShadowingShaderParameters.StaticShadowBufferSize",
+      "name": "StaticShadowBufferSize",
       "type": "Float4"
     }
   ],
@@ -73,43 +73,43 @@
     {
       "index": 0,
       "offset": 160,
-      "name": "VolumeShadowingShaderParameters.ShadowDepthTexture",
+      "name": "ShadowDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
       "offset": 168,
-      "name": "VolumeShadowingShaderParameters.ShadowDepthTextureSampler",
+      "name": "ShadowDepthTextureSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 2,
       "offset": 176,
-      "name": "VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTexture",
+      "name": "ShadowDepthCubeTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 3,
       "offset": 184,
-      "name": "VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTexture2",
+      "name": "ShadowDepthCubeTexture2",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 4,
       "offset": 192,
-      "name": "VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTextureSampler",
+      "name": "ShadowDepthCubeTextureSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 5,
       "offset": 616,
-      "name": "VolumeShadowingShaderParameters.StaticShadowDepthTexture",
+      "name": "StaticShadowDepthTexture",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 6,
       "offset": 624,
-      "name": "VolumeShadowingShaderParameters.StaticShadowDepthTextureSampler",
+      "name": "StaticShadowDepthTextureSampler",
       "type": "UBMT_SAMPLER"
     }
   ]

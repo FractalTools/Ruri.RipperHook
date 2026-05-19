@@ -23,52 +23,52 @@
     },
     {
       "offset": 208,
-      "name": "VolumetricFog.ViewGridSizeInt",
+      "name": "VolumetricFog_ViewGridSizeInt",
       "type": "Int3"
     },
     {
       "offset": 224,
-      "name": "VolumetricFog.ViewGridSize",
+      "name": "VolumetricFog_ViewGridSize",
       "type": "Float3"
     },
     {
       "offset": 240,
-      "name": "VolumetricFog.ResourceGridSizeInt",
+      "name": "VolumetricFog_ResourceGridSizeInt",
       "type": "Int3"
     },
     {
       "offset": 256,
-      "name": "VolumetricFog.ResourceGridSize",
+      "name": "VolumetricFog_ResourceGridSize",
       "type": "Float3"
     },
     {
       "offset": 272,
-      "name": "VolumetricFog.GridZParams",
+      "name": "VolumetricFog_GridZParams",
       "type": "Float3"
     },
     {
       "offset": 288,
-      "name": "VolumetricFog.SVPosToVolumeUV",
+      "name": "VolumetricFog_SVPosToVolumeUV",
       "type": "Float2"
     },
     {
       "offset": 296,
-      "name": "VolumetricFog.MaxDistance",
+      "name": "VolumetricFog_MaxDistance",
       "type": "Float"
     },
     {
       "offset": 304,
-      "name": "VolumetricFog.HeightFogInscatteringColor",
+      "name": "VolumetricFog_HeightFogInscatteringColor",
       "type": "Float3"
     },
     {
       "offset": 320,
-      "name": "VolumetricFog.HeightFogDirectionalLightInscatteringColor",
+      "name": "VolumetricFog_HeightFogDirectionalLightInscatteringColor",
       "type": "Float3"
     },
     {
       "offset": 336,
-      "name": "VolumetricFog.FogGridToPixelXY",
+      "name": "VolumetricFog_FogGridToPixelXY",
       "type": "Int2"
     },
     {
@@ -96,85 +96,85 @@
     {
       "index": 0,
       "offset": 0,
-      "name": "SceneTextures.SceneColorTexture",
+      "name": "SceneTextures_SceneColorTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
       "offset": 8,
-      "name": "SceneTextures.SceneDepthTexture",
+      "name": "SceneTextures_SceneDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 2,
       "offset": 16,
-      "name": "SceneTextures.ScenePartialDepthTexture",
+      "name": "SceneTextures_ScenePartialDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 3,
       "offset": 24,
-      "name": "SceneTextures.GBufferATexture",
+      "name": "SceneTextures_GBufferATexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 4,
       "offset": 32,
-      "name": "SceneTextures.GBufferBTexture",
+      "name": "SceneTextures_GBufferBTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 5,
       "offset": 40,
-      "name": "SceneTextures.GBufferCTexture",
+      "name": "SceneTextures_GBufferCTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 6,
       "offset": 48,
-      "name": "SceneTextures.GBufferDTexture",
+      "name": "SceneTextures_GBufferDTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 7,
       "offset": 56,
-      "name": "SceneTextures.GBufferETexture",
+      "name": "SceneTextures_GBufferETexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 8,
       "offset": 64,
-      "name": "SceneTextures.GBufferFTexture",
+      "name": "SceneTextures_GBufferFTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 9,
       "offset": 72,
-      "name": "SceneTextures.GBufferVelocityTexture",
+      "name": "SceneTextures_GBufferVelocityTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 10,
       "offset": 80,
-      "name": "SceneTextures.ScreenSpaceAOTexture",
+      "name": "SceneTextures_ScreenSpaceAOTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 11,
       "offset": 88,
-      "name": "SceneTextures.CustomDepthTexture",
+      "name": "SceneTextures_CustomDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 12,
       "offset": 96,
-      "name": "SceneTextures.CustomStencilTexture",
+      "name": "SceneTextures_CustomStencilTexture",
       "type": "UBMT_RDG_TEXTURE_SRV"
     },
     {
       "index": 13,
       "offset": 104,
-      "name": "SceneTextures.PointClampSampler",
+      "name": "SceneTextures_PointClampSampler",
       "type": "UBMT_SAMPLER"
     }
   ]

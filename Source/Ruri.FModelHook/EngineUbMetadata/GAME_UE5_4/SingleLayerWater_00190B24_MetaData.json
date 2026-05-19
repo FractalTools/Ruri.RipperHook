@@ -38,27 +38,27 @@
     },
     {
       "offset": 128,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapTranslatedWorldToLightClipMatrix",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapTranslatedWorldToLightClipMatrix",
       "type": "Float4x4"
     },
     {
       "offset": 192,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapFarDepthKm",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapFarDepthKm",
       "type": "Float"
     },
     {
       "offset": 216,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapStrength",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapStrength",
       "type": "Float"
     },
     {
       "offset": 224,
-      "name": "BlueNoise.Dimensions",
+      "name": "BlueNoise_Dimensions",
       "type": "Int3"
     },
     {
       "offset": 240,
-      "name": "BlueNoise.ModuloMasks",
+      "name": "BlueNoise_ModuloMasks",
       "type": "Int3"
     }
   ],
@@ -108,25 +108,25 @@
     {
       "index": 7,
       "offset": 200,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapTexture",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 8,
       "offset": 208,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapSampler",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 9,
       "offset": 256,
-      "name": "BlueNoise.ScalarTexture",
+      "name": "BlueNoise_ScalarTexture",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 10,
       "offset": 264,
-      "name": "BlueNoise.Vec2Texture",
+      "name": "BlueNoise_Vec2Texture",
       "type": "UBMT_TEXTURE"
     }
   ]

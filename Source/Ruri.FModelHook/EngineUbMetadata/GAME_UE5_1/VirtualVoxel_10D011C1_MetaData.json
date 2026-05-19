@@ -8,142 +8,142 @@
   "members": [
     {
       "offset": 0,
-      "name": "Common.PageCountResolution",
+      "name": "PageCountResolution",
       "type": "Int3"
     },
     {
       "offset": 12,
-      "name": "Common.CPUMinVoxelWorldSize",
+      "name": "CPUMinVoxelWorldSize",
       "type": "Float"
     },
     {
       "offset": 16,
-      "name": "Common.PageTextureResolution",
+      "name": "PageTextureResolution",
       "type": "Int3"
     },
     {
       "offset": 28,
-      "name": "Common.PageCount",
+      "name": "PageCount",
       "type": "UInt"
     },
     {
       "offset": 32,
-      "name": "Common.PageResolution",
+      "name": "PageResolution",
       "type": "UInt"
     },
     {
       "offset": 36,
-      "name": "Common.PageResolutionLog2",
+      "name": "PageResolutionLog2",
       "type": "UInt"
     },
     {
       "offset": 40,
-      "name": "Common.PageIndexCount",
+      "name": "PageIndexCount",
       "type": "UInt"
     },
     {
       "offset": 44,
-      "name": "Common.IndirectDispatchGroupSize",
+      "name": "IndirectDispatchGroupSize",
       "type": "UInt"
     },
     {
       "offset": 48,
-      "name": "Common.NodeDescCount",
+      "name": "NodeDescCount",
       "type": "UInt"
     },
     {
       "offset": 52,
-      "name": "Common.JitterMode",
+      "name": "JitterMode",
       "type": "UInt"
     },
     {
       "offset": 56,
-      "name": "Common.DensityScale",
+      "name": "DensityScale",
       "type": "Float"
     },
     {
       "offset": 60,
-      "name": "Common.DensityScale_AO",
+      "name": "DensityScale_AO",
       "type": "Float"
     },
     {
       "offset": 64,
-      "name": "Common.DensityScale_Shadow",
+      "name": "DensityScale_Shadow",
       "type": "Float"
     },
     {
       "offset": 68,
-      "name": "Common.DensityScale_Transmittance",
+      "name": "DensityScale_Transmittance",
       "type": "Float"
     },
     {
       "offset": 72,
-      "name": "Common.DensityScale_Environment",
+      "name": "DensityScale_Environment",
       "type": "Float"
     },
     {
       "offset": 76,
-      "name": "Common.DensityScale_Raytracing",
+      "name": "DensityScale_Raytracing",
       "type": "Float"
     },
     {
       "offset": 80,
-      "name": "Common.DepthBiasScale_Shadow",
+      "name": "DepthBiasScale_Shadow",
       "type": "Float"
     },
     {
       "offset": 84,
-      "name": "Common.DepthBiasScale_Transmittance",
+      "name": "DepthBiasScale_Transmittance",
       "type": "Float"
     },
     {
       "offset": 88,
-      "name": "Common.DepthBiasScale_Environment",
+      "name": "DepthBiasScale_Environment",
       "type": "Float"
     },
     {
       "offset": 92,
-      "name": "Common.SteppingScale_Shadow",
+      "name": "SteppingScale_Shadow",
       "type": "Float"
     },
     {
       "offset": 96,
-      "name": "Common.SteppingScale_Transmittance",
+      "name": "SteppingScale_Transmittance",
       "type": "Float"
     },
     {
       "offset": 100,
-      "name": "Common.SteppingScale_Environment",
+      "name": "SteppingScale_Environment",
       "type": "Float"
     },
     {
       "offset": 104,
-      "name": "Common.SteppingScale_Raytracing",
+      "name": "SteppingScale_Raytracing",
       "type": "Float"
     },
     {
       "offset": 108,
-      "name": "Common.HairCoveragePixelRadiusAtDepth1",
+      "name": "HairCoveragePixelRadiusAtDepth1",
       "type": "Float"
     },
     {
       "offset": 112,
-      "name": "Common.Raytracing_ShadowOcclusionThreshold",
+      "name": "Raytracing_ShadowOcclusionThreshold",
       "type": "Float"
     },
     {
       "offset": 116,
-      "name": "Common.Raytracing_SkyOcclusionThreshold",
+      "name": "Raytracing_SkyOcclusionThreshold",
       "type": "Float"
     },
     {
       "offset": 128,
-      "name": "Common.TranslatedWorldOffset",
+      "name": "TranslatedWorldOffset",
       "type": "Float3"
     },
     {
       "offset": 140,
-      "name": "Common.AllocationFeedbackEnable",
+      "name": "AllocationFeedbackEnable",
       "type": "UInt"
     }
   ],
@@ -151,37 +151,37 @@
     {
       "index": 0,
       "offset": 144,
-      "name": "Common.PageIndexBuffer",
+      "name": "PageIndexBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 1,
       "offset": 152,
-      "name": "Common.PageIndexOccupancyBuffer",
+      "name": "PageIndexOccupancyBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 2,
       "offset": 160,
-      "name": "Common.PageIndexCoordBuffer",
+      "name": "PageIndexCoordBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 3,
       "offset": 168,
-      "name": "Common.NodeDescBuffer",
+      "name": "NodeDescBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 4,
       "offset": 176,
-      "name": "Common.CurrGPUMinVoxelSize",
+      "name": "CurrGPUMinVoxelSize",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 5,
       "offset": 184,
-      "name": "Common.NextGPUMinVoxelSize",
+      "name": "NextGPUMinVoxelSize",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {

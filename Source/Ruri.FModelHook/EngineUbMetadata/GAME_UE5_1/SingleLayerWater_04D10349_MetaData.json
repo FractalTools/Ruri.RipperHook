@@ -28,17 +28,17 @@
     },
     {
       "offset": 112,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapTranslatedWorldToLightClipMatrix",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapTranslatedWorldToLightClipMatrix",
       "type": "Float4x4"
     },
     {
       "offset": 176,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapFarDepthKm",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapFarDepthKm",
       "type": "Float"
     },
     {
       "offset": 200,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapStrength",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapStrength",
       "type": "Float"
     }
   ],
@@ -88,13 +88,13 @@
     {
       "index": 7,
       "offset": 184,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapTexture",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 8,
       "offset": 192,
-      "name": "ForwardDirLightCloudShadow.CloudShadowmapSampler",
+      "name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
       "type": "UBMT_SAMPLER"
     }
   ]

@@ -43,82 +43,82 @@
     },
     {
       "offset": 48,
-      "name": "LightParameters.TranslatedWorldPosition",
+      "name": "TranslatedWorldPosition",
       "type": "Float3"
     },
     {
       "offset": 60,
-      "name": "LightParameters.InvRadius",
+      "name": "InvRadius",
       "type": "Float"
     },
     {
       "offset": 64,
-      "name": "LightParameters.Color",
+      "name": "Color",
       "type": "Float3"
     },
     {
       "offset": 76,
-      "name": "LightParameters.FalloffExponent",
+      "name": "FalloffExponent",
       "type": "Float"
     },
     {
       "offset": 80,
-      "name": "LightParameters.Direction",
+      "name": "Direction",
       "type": "Float3"
     },
     {
       "offset": 92,
-      "name": "LightParameters.SpecularScale",
+      "name": "SpecularScale",
       "type": "Float"
     },
     {
       "offset": 96,
-      "name": "LightParameters.Tangent",
+      "name": "Tangent",
       "type": "Float3"
     },
     {
       "offset": 108,
-      "name": "LightParameters.SourceRadius",
+      "name": "SourceRadius",
       "type": "Float"
     },
     {
       "offset": 112,
-      "name": "LightParameters.SpotAngles",
+      "name": "SpotAngles",
       "type": "Float2"
     },
     {
       "offset": 120,
-      "name": "LightParameters.SoftSourceRadius",
+      "name": "SoftSourceRadius",
       "type": "Float"
     },
     {
       "offset": 124,
-      "name": "LightParameters.SourceLength",
+      "name": "SourceLength",
       "type": "Float"
     },
     {
       "offset": 128,
-      "name": "LightParameters.RectLightBarnCosAngle",
+      "name": "RectLightBarnCosAngle",
       "type": "Float"
     },
     {
       "offset": 132,
-      "name": "LightParameters.RectLightBarnLength",
+      "name": "RectLightBarnLength",
       "type": "Float"
     },
     {
       "offset": 136,
-      "name": "LightParameters.RectLightAtlasUVOffset",
+      "name": "RectLightAtlasUVOffset",
       "type": "Float2"
     },
     {
       "offset": 144,
-      "name": "LightParameters.RectLightAtlasUVScale",
+      "name": "RectLightAtlasUVScale",
       "type": "Float2"
     },
     {
       "offset": 152,
-      "name": "LightParameters.RectLightAtlasMaxLevel",
+      "name": "RectLightAtlasMaxLevel",
       "type": "Float"
     }
   ],

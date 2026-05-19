@@ -960,8 +960,26 @@ def compute_layout(
                     ln = align_up(ln, STRUCT_ALIGN)
                     array_n = evaluate_dim(m.array_decl, constants) if m.array_decl else 0
                     count = max(array_n, 1)
+                    # HLSL-flattening rules from FShaderParametersMetadata::AddResourceTableEntriesRecursive
+                    # (ShaderParameterMetadata.cpp:805-844 in UE 5.1.1, byte-identical in 5.4):
+                    #   - INCLUDED struct (SHADER_PARAMETER_STRUCT_INCLUDE): prefix passes
+                    #     through unchanged. The included struct's members are flattened
+                    #     directly into the parent's namespace.
+                    #   - NESTED non-array struct (SHADER_PARAMETER_STRUCT): MemberPrefix =
+                    #     "<Prefix><MemberName>_".
+                    #   - NESTED array struct (SHADER_PARAMETER_STRUCT_ARRAY): MemberPrefix
+                    #     per element = "<Prefix><MemberName>_<index>_".
+                    # The C# decompiler at RuntimeSymbolReader.cs:384 concatenates
+                    # "<UBName>_<res.Name>", so res.Name in the JSON must be the
+                    # underscore-flattened path WITHOUT the leading "<UBName>_".
+                    if m.is_struct_include:
+                        child_pfx_fn = lambda i: pfx
+                    elif m.array_decl:
+                        child_pfx_fn = lambda i: f"{pfx}{m.name}_{i}_"
+                    else:
+                        child_pfx_fn = lambda i: f"{pfx}{m.name}_"
                     for i in range(count):
-                        walk_inner(grand, off + ln + i * g_size, f"{pfx}{m.name}.")
+                        walk_inner(grand, off + ln + i * g_size, child_pfx_fn(i))
                     ln += g_size * count
                 elif m.is_resource:
                     align = STRUCT_ALIGN if m.macro == "SHADER_PARAMETER_STRUCT_REF" else POINTER_ALIGN

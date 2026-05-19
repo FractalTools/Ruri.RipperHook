@@ -165,47 +165,47 @@
     },
     {
       "offset": 624,
-      "name": "DirectionalLightSMRTSettings.ScreenRayLength",
+      "name": "DirectionalLightSMRTSettings_ScreenRayLength",
       "type": "Float"
     },
     {
       "offset": 628,
-      "name": "DirectionalLightSMRTSettings.SMRTRayCount",
+      "name": "DirectionalLightSMRTSettings_SMRTRayCount",
       "type": "Int"
     },
     {
       "offset": 632,
-      "name": "DirectionalLightSMRTSettings.SMRTSamplesPerRay",
+      "name": "DirectionalLightSMRTSettings_SMRTSamplesPerRay",
       "type": "Int"
     },
     {
       "offset": 636,
-      "name": "DirectionalLightSMRTSettings.SMRTRayLengthScale",
+      "name": "DirectionalLightSMRTSettings_SMRTRayLengthScale",
       "type": "Float"
     },
     {
       "offset": 640,
-      "name": "DirectionalLightSMRTSettings.SMRTCotMaxRayAngleFromLight",
+      "name": "DirectionalLightSMRTSettings_SMRTCotMaxRayAngleFromLight",
       "type": "Float"
     },
     {
       "offset": 644,
-      "name": "DirectionalLightSMRTSettings.SMRTTexelDitherScale",
+      "name": "DirectionalLightSMRTSettings_SMRTTexelDitherScale",
       "type": "Float"
     },
     {
       "offset": 648,
-      "name": "DirectionalLightSMRTSettings.SMRTExtrapolateSlope",
+      "name": "DirectionalLightSMRTSettings_SMRTExtrapolateSlope",
       "type": "Float"
     },
     {
       "offset": 652,
-      "name": "DirectionalLightSMRTSettings.SMRTMaxSlopeBias",
+      "name": "DirectionalLightSMRTSettings_SMRTMaxSlopeBias",
       "type": "Float"
     },
     {
       "offset": 656,
-      "name": "DirectionalLightSMRTSettings.SMRTAdaptiveRayCount",
+      "name": "DirectionalLightSMRTSettings_SMRTAdaptiveRayCount",
       "type": "UInt"
     }
   ],
