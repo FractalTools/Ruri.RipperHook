@@ -36,8 +36,8 @@
         "Index": 0,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -46,8 +46,8 @@
         "Index": 144,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {

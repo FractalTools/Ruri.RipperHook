@@ -55,8 +55,8 @@
         "Index": 24,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       }
     ],

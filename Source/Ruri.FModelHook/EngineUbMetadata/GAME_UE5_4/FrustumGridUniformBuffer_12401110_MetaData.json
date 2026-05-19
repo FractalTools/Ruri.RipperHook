@@ -76,8 +76,8 @@
         "Index": 384,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -86,8 +86,8 @@
         "Index": 400,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -96,8 +96,8 @@
         "Index": 416,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -106,8 +106,8 @@
         "Index": 432,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -156,8 +156,8 @@
         "Index": 464,
         "ArraySize": 6,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 4,
+        "RowCount": 4,
+        "ColumnCount": 1,
         "IsMatrix": false
       }
     ],

@@ -55,8 +55,8 @@
         "Index": 16,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -165,8 +165,8 @@
         "Index": 112,
         "ArraySize": 6,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 4,
+        "RowCount": 4,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -175,8 +175,8 @@
         "Index": 208,
         "ArraySize": 6,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 4,
+        "RowCount": 4,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -185,8 +185,8 @@
         "Index": 304,
         "ArraySize": 6,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 4,
+        "RowCount": 4,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -195,8 +195,8 @@
         "Index": 400,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -205,8 +205,8 @@
         "Index": 408,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -215,8 +215,8 @@
         "Index": 416,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -305,8 +305,8 @@
         "Index": 544,
         "ArraySize": 0,
         "Type": "Float",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -325,8 +325,8 @@
         "Index": 560,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 3,
+        "RowCount": 3,
+        "ColumnCount": 1,
         "IsMatrix": false
       }
     ],

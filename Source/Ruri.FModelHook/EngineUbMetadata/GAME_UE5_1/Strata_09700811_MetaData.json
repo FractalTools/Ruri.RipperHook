@@ -85,8 +85,8 @@
         "Index": 32,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -95,8 +95,8 @@
         "Index": 40,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -105,8 +105,8 @@
         "Index": 48,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       },
       {
@@ -115,8 +115,8 @@
         "Index": 56,
         "ArraySize": 0,
         "Type": "Int",
-        "RowCount": 1,
-        "ColumnCount": 2,
+        "RowCount": 2,
+        "ColumnCount": 1,
         "IsMatrix": false
       }
     ],

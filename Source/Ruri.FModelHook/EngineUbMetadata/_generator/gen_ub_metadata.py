@@ -74,13 +74,24 @@ POINTER_ALIGN = 8        # SHADER_PARAMETER_POINTER_ALIGNMENT
 ARRAY_ELEM_ALIGN = 16    # SHADER_PARAMETER_ARRAY_ELEMENT_ALIGNMENT
 STRUCT_ALIGN = 16        # SHADER_PARAMETER_STRUCT_ALIGNMENT
 
-# Numeric type table: cpp_name -> (natural_size, alignment, UBMT, hlsl_name, num_rows, num_columns).
+# Numeric type table: cpp_name -> (natural_size, alignment, UBMT, hlsl_name, RowCount, ColumnCount).
 # ``natural_size`` is ``sizeof(T)`` — NOT padded to alignment. MS_ALIGN /
 # GCC_ALIGN modifiers (used by ``TAlignedTypedef<T, A>::Type``) raise alignof
 # but do NOT inflate sizeof; e.g. an alignas(16) FVector3f still has sizeof=12.
 # The next member is aligned to its own type's alignment, so size and alignment
 # matter independently — this matches what compilers actually do for cooked
 # shipping UE structs (and what the layout hash discriminator XOR-folds).
+#
+# RowCount/ColumnCount convention follows the PROJECT'S `NumericShaderParameter`
+# convention (see `MaterialConstantBufferReader.AddVectorMember` for the
+# canonical pattern, and `LayoutBuilder.cs::TryCreateLogicalTypeFromMetadata`
+# downstream which reads `RowCount==1` as "scalar" / `RowCount>1` as "vector
+# with N components"):
+#   * Scalar:   RowCount=1,  ColumnCount=1
+#   * Vector N: RowCount=N,  ColumnCount=1   (N=2/3/4 — RowCount is the component count)
+#   * Matrix:   RowCount=R,  ColumnCount=C   (paired with IsMatrix=True elsewhere)
+# Using the HLSL row/col semantic instead (RowCount=1, ColumnCount=N for vec-N)
+# silently collapses every vector field to a scalar in the rewriter.
 TYPE_TABLE: dict[str, tuple[int, int, str, str, int, int]] = {
     "bool":          ( 4,  4, "BOOL",    "Bool",    1, 1),
     "uint32":        ( 4,  4, "UINT32",  "UInt",    1, 1),
@@ -88,24 +99,24 @@ TYPE_TABLE: dict[str, tuple[int, int, str, str, int, int]] = {
     "int":           ( 4,  4, "INT32",   "Int",     1, 1),
     "uint":          ( 4,  4, "UINT32",  "UInt",    1, 1),
     "float":         ( 4,  4, "FLOAT32", "Float",   1, 1),
-    "FVector2f":     ( 8,  8, "FLOAT32", "Float2",  1, 2),
-    "FVector3f":     (12, 16, "FLOAT32", "Float3",  1, 3),
-    "FVector4f":     (16, 16, "FLOAT32", "Float4",  1, 4),
-    "FLinearColor":  (16, 16, "FLOAT32", "Float4",  1, 4),
-    "FIntPoint":     ( 8,  8, "INT32",   "Int2",    1, 2),
-    "FUintVector2":  ( 8,  8, "UINT32",  "UInt2",   1, 2),
-    "FIntVector":    (12, 16, "INT32",   "Int3",    1, 3),
-    "FUintVector3":  (12, 16, "UINT32",  "UInt3",   1, 3),
-    "FIntVector4":   (16, 16, "INT32",   "Int4",    1, 4),
-    "FUintVector4":  (16, 16, "UINT32",  "UInt4",   1, 4),
-    "FIntRect":      (16, 16, "INT32",   "Int4",    1, 4),
-    "FQuat4f":       (16, 16, "FLOAT32", "Float4",  1, 4),
+    "FVector2f":     ( 8,  8, "FLOAT32", "Float2",  2, 1),
+    "FVector3f":     (12, 16, "FLOAT32", "Float3",  3, 1),
+    "FVector4f":     (16, 16, "FLOAT32", "Float4",  4, 1),
+    "FLinearColor":  (16, 16, "FLOAT32", "Float4",  4, 1),
+    "FIntPoint":     ( 8,  8, "INT32",   "Int2",    2, 1),
+    "FUintVector2":  ( 8,  8, "UINT32",  "UInt2",   2, 1),
+    "FIntVector":    (12, 16, "INT32",   "Int3",    3, 1),
+    "FUintVector3":  (12, 16, "UINT32",  "UInt3",   3, 1),
+    "FIntVector4":   (16, 16, "INT32",   "Int4",    4, 1),
+    "FUintVector4":  (16, 16, "UINT32",  "UInt4",   4, 1),
+    "FIntRect":      (16, 16, "INT32",   "Int4",    4, 1),
+    "FQuat4f":       (16, 16, "FLOAT32", "Float4",  4, 1),
     "FMatrix44f":    (64, 16, "FLOAT32", "Float4x4", 4, 4),
     "FMatrix3x4f":   (48, 16, "FLOAT32", "Float3x4", 3, 4),
     "FMatrix44d":    (64, 16, "FLOAT32", "Float4x4", 4, 4),  # treated like 44f for layout
     # LWC types -- same shape as their float counterparts post-cooking.
-    "FVector":       (12, 16, "FLOAT32", "Float3",  1, 3),
-    "FVector4":      (16, 16, "FLOAT32", "Float4",  1, 4),
+    "FVector":       (12, 16, "FLOAT32", "Float3",  3, 1),
+    "FVector4":      (16, 16, "FLOAT32", "Float4",  4, 1),
     "FMatrix":       (64, 16, "FLOAT32", "Float4x4", 4, 4),
     "FMatrix3x4":    (48, 16, "FLOAT32", "Float3x4", 3, 4),  # LWC alias of FMatrix3x4f
     "FMatrix44":     (64, 16, "FLOAT32", "Float4x4", 4, 4),  # LWC alias of FMatrix44f (rarely used)
@@ -1193,27 +1204,38 @@ def compute_hash(constant_buffer_size: int, binding_flags: int, has_static_slot:
 # Mirrors Ruri.ShaderTools.ShaderParamType + the loader's HLSL parser at
 # EngineUbMetadataLoader.ParseType. Keeping the table here keeps the
 # generator self-contained (no shared file).
+#
+# Convention (matches `MaterialConstantBufferReader.AddVectorMember` and the
+# downstream consumer at `Ruri.ShaderDecompiler/Spirv/Rewriter/Helpers/
+# LayoutBuilder.cs::TryCreateLogicalTypeFromMetadata`):
+#   * Scalar (Float, Int, ...):   RowCount=1, ColumnCount=1
+#   * Vector (FloatN, IntN, ...): RowCount=N, ColumnCount=1
+#     ^ RowCount is the COMPONENT COUNT, NOT an HLSL row/col semantic.
+#       The consumer reads RowCount==1 as "scalar" and RowCount>1 as
+#       "vector with N components" — emitting `1 x N` for Float4 etc.
+#       silently collapses every vector field to a scalar in the rewriter.
+#   * Matrix (Float4x4, ...):     RowCount=rows, ColumnCount=cols, IsMatrix=True
 _HLSL_TO_TYPE: dict[str, tuple[str, int, int, bool]] = {
     "Float":     ("Float", 1, 1, False),
-    "Float2":    ("Float", 1, 2, False),
-    "Float3":    ("Float", 1, 3, False),
-    "Float4":    ("Float", 1, 4, False),
+    "Float2":    ("Float", 2, 1, False),
+    "Float3":    ("Float", 3, 1, False),
+    "Float4":    ("Float", 4, 1, False),
     "Int":       ("Int",   1, 1, False),
-    "Int2":      ("Int",   1, 2, False),
-    "Int3":      ("Int",   1, 3, False),
-    "Int4":      ("Int",   1, 4, False),
+    "Int2":      ("Int",   2, 1, False),
+    "Int3":      ("Int",   3, 1, False),
+    "Int4":      ("Int",   4, 1, False),
     "UInt":      ("UInt",  1, 1, False),
-    "UInt2":     ("UInt",  1, 2, False),
-    "UInt3":     ("UInt",  1, 3, False),
-    "UInt4":     ("UInt",  1, 4, False),
+    "UInt2":     ("UInt",  2, 1, False),
+    "UInt3":     ("UInt",  3, 1, False),
+    "UInt4":     ("UInt",  4, 1, False),
     "Bool":      ("Bool",  1, 1, False),
-    "Bool2":     ("Bool",  1, 2, False),
-    "Bool3":     ("Bool",  1, 3, False),
-    "Bool4":     ("Bool",  1, 4, False),
+    "Bool2":     ("Bool",  2, 1, False),
+    "Bool3":     ("Bool",  3, 1, False),
+    "Bool4":     ("Bool",  4, 1, False),
     "Half":      ("Half",  1, 1, False),
-    "Half2":     ("Half",  1, 2, False),
-    "Half3":     ("Half",  1, 3, False),
-    "Half4":     ("Half",  1, 4, False),
+    "Half2":     ("Half",  2, 1, False),
+    "Half3":     ("Half",  3, 1, False),
+    "Half4":     ("Half",  4, 1, False),
     "Float4x4":  ("Float", 4, 4, True),
     "Float3x4":  ("Float", 3, 4, True),
     "Float4x3":  ("Float", 4, 3, True),
@@ -1914,8 +1936,8 @@ def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path)
                     "Index": next_cb_offset,
                     "ArraySize": 0,
                     "Type": "Float",     # unknown — Float as the most common case
-                    "RowCount": 1,
-                    "ColumnCount": 4,    # placeholder vec4 slot
+                    "RowCount": 4,       # placeholder vec4 (component count, per project convention)
+                    "ColumnCount": 1,
                     "IsMatrix": False,
                 })
                 next_cb_offset += 16
