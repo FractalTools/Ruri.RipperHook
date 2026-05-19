@@ -1,9 +1,9 @@
 {
   "name": "TranslucentBasePass",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h:94 (FTranslucentBasePassUniformParameters)",
-  "layoutHash": "0x018C06A4",
-  "constantBufferSize": 2124,
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h:107 (FTranslucentBasePassUniformParameters)",
+  "layoutHash": "0x09E910DC",
+  "constantBufferSize": 3544,
   "bindingFlags": "Static",
   "members": [
     {
@@ -52,1012 +52,1309 @@
       "type": "Float3"
     },
     {
-      "offset": 80,
-      "name": "Shared_Forward_DirectionalLightColor",
-      "type": "Float3"
+      "offset": 76,
+      "name": "Shared_Forward_DirectionalLightSourceRadius",
+      "type": "Float"
     },
     {
-      "offset": 92,
-      "name": "Shared_Forward_DirectionalLightVolumetricScatteringIntensity",
+      "offset": 80,
+      "name": "Shared_Forward_DirectionalLightSoftSourceRadius",
       "type": "Float"
     },
     {
       "offset": 96,
+      "name": "Shared_Forward_DirectionalLightColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 108,
+      "name": "Shared_Forward_DirectionalLightVolumetricScatteringIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 112,
+      "name": "Shared_Forward_DirectionalLightSpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 116,
       "name": "Shared_Forward_DirectionalLightShadowMapChannelMask",
       "type": "UInt"
     },
     {
-      "offset": 104,
+      "offset": 120,
       "name": "Shared_Forward_DirectionalLightDistanceFadeMAD",
       "type": "Float2"
     },
     {
-      "offset": 112,
+      "offset": 128,
       "name": "Shared_Forward_NumDirectionalLightCascades",
       "type": "UInt"
     },
     {
-      "offset": 116,
+      "offset": 132,
       "name": "Shared_Forward_DirectionalLightVSM",
       "type": "Int"
     },
     {
-      "offset": 128,
+      "offset": 144,
       "name": "Shared_Forward_CascadeEndDepths",
       "type": "Float4"
     },
     {
-      "offset": 144,
+      "offset": 160,
       "name": "Shared_Forward_DirectionalLightTranslatedWorldToShadowMatrix",
       "type": "Float4x4",
       "arraySize": 4
     },
     {
-      "offset": 400,
+      "offset": 416,
       "name": "Shared_Forward_DirectionalLightShadowmapMinMax",
       "type": "Float4",
       "arraySize": 4
     },
     {
-      "offset": 464,
+      "offset": 480,
       "name": "Shared_Forward_DirectionalLightShadowmapAtlasBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 480,
+      "offset": 496,
       "name": "Shared_Forward_DirectionalLightDepthBias",
       "type": "Float"
     },
     {
-      "offset": 484,
+      "offset": 500,
       "name": "Shared_Forward_DirectionalLightUseStaticShadowing",
       "type": "UInt"
     },
     {
-      "offset": 488,
+      "offset": 504,
       "name": "Shared_Forward_SimpleLightsEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 492,
+      "offset": 508,
       "name": "Shared_Forward_ClusteredDeferredSupportedEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 496,
-      "name": "Shared_Forward_LumenSupportedStartIndex",
+      "offset": 512,
+      "name": "Shared_Forward_ManyLightsSupportedStartIndex",
       "type": "UInt"
     },
     {
-      "offset": 512,
+      "offset": 528,
       "name": "Shared_Forward_DirectionalLightStaticShadowBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 528,
+      "offset": 544,
       "name": "Shared_Forward_DirectionalLightTranslatedWorldToStaticShadow",
       "type": "Float4x4"
     },
     {
-      "offset": 592,
+      "offset": 608,
       "name": "Shared_Forward_DirectLightingShowFlag",
       "type": "UInt"
     },
     {
-      "offset": 432,
+      "offset": 612,
+      "name": "Shared_Forward_LightFunctionAtlasLightIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 624,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_ScreenRayLength",
+      "type": "Float"
+    },
+    {
+      "offset": 628,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTRayCount",
+      "type": "Int"
+    },
+    {
+      "offset": 632,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTSamplesPerRay",
+      "type": "Int"
+    },
+    {
+      "offset": 636,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTRayLengthScale",
+      "type": "Float"
+    },
+    {
+      "offset": 640,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTCotMaxRayAngleFromLight",
+      "type": "Float"
+    },
+    {
+      "offset": 644,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTTexelDitherScale",
+      "type": "Float"
+    },
+    {
+      "offset": 648,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTExtrapolateSlope",
+      "type": "Float"
+    },
+    {
+      "offset": 652,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTMaxSlopeBias",
+      "type": "Float"
+    },
+    {
+      "offset": 656,
+      "name": "Shared_Forward_DirectionalLightSMRTSettings_SMRTAdaptiveRayCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 736,
       "name": "Shared_ForwardISR_NumLocalLights",
       "type": "UInt"
     },
     {
-      "offset": 436,
+      "offset": 740,
       "name": "Shared_ForwardISR_NumReflectionCaptures",
       "type": "UInt"
     },
     {
-      "offset": 440,
+      "offset": 744,
       "name": "Shared_ForwardISR_HasDirectionalLight",
       "type": "UInt"
     },
     {
-      "offset": 444,
+      "offset": 748,
       "name": "Shared_ForwardISR_NumGridCells",
       "type": "UInt"
     },
     {
-      "offset": 448,
+      "offset": 752,
       "name": "Shared_ForwardISR_CulledGridSize",
       "type": "Int3"
     },
     {
-      "offset": 460,
+      "offset": 764,
       "name": "Shared_ForwardISR_MaxCulledLightsPerCell",
       "type": "UInt"
     },
     {
-      "offset": 464,
+      "offset": 768,
       "name": "Shared_ForwardISR_LightGridPixelSizeShift",
       "type": "UInt"
     },
     {
-      "offset": 480,
+      "offset": 784,
       "name": "Shared_ForwardISR_LightGridZParams",
       "type": "Float3"
     },
     {
-      "offset": 496,
+      "offset": 800,
       "name": "Shared_ForwardISR_DirectionalLightDirection",
       "type": "Float3"
     },
     {
-      "offset": 512,
+      "offset": 812,
+      "name": "Shared_ForwardISR_DirectionalLightSourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 816,
+      "name": "Shared_ForwardISR_DirectionalLightSoftSourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 832,
       "name": "Shared_ForwardISR_DirectionalLightColor",
       "type": "Float3"
     },
     {
-      "offset": 524,
+      "offset": 844,
       "name": "Shared_ForwardISR_DirectionalLightVolumetricScatteringIntensity",
       "type": "Float"
     },
     {
-      "offset": 528,
+      "offset": 848,
+      "name": "Shared_ForwardISR_DirectionalLightSpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 852,
       "name": "Shared_ForwardISR_DirectionalLightShadowMapChannelMask",
       "type": "UInt"
     },
     {
-      "offset": 536,
+      "offset": 856,
       "name": "Shared_ForwardISR_DirectionalLightDistanceFadeMAD",
       "type": "Float2"
     },
     {
-      "offset": 544,
+      "offset": 864,
       "name": "Shared_ForwardISR_NumDirectionalLightCascades",
       "type": "UInt"
     },
     {
-      "offset": 548,
+      "offset": 868,
       "name": "Shared_ForwardISR_DirectionalLightVSM",
       "type": "Int"
     },
     {
-      "offset": 560,
+      "offset": 880,
       "name": "Shared_ForwardISR_CascadeEndDepths",
       "type": "Float4"
     },
     {
-      "offset": 576,
+      "offset": 896,
       "name": "Shared_ForwardISR_DirectionalLightTranslatedWorldToShadowMatrix",
       "type": "Float4x4",
       "arraySize": 4
     },
     {
-      "offset": 832,
+      "offset": 1152,
       "name": "Shared_ForwardISR_DirectionalLightShadowmapMinMax",
       "type": "Float4",
       "arraySize": 4
     },
     {
-      "offset": 896,
+      "offset": 1216,
       "name": "Shared_ForwardISR_DirectionalLightShadowmapAtlasBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 912,
+      "offset": 1232,
       "name": "Shared_ForwardISR_DirectionalLightDepthBias",
       "type": "Float"
     },
     {
-      "offset": 916,
+      "offset": 1236,
       "name": "Shared_ForwardISR_DirectionalLightUseStaticShadowing",
       "type": "UInt"
     },
     {
-      "offset": 920,
+      "offset": 1240,
       "name": "Shared_ForwardISR_SimpleLightsEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 924,
+      "offset": 1244,
       "name": "Shared_ForwardISR_ClusteredDeferredSupportedEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 928,
-      "name": "Shared_ForwardISR_LumenSupportedStartIndex",
+      "offset": 1248,
+      "name": "Shared_ForwardISR_ManyLightsSupportedStartIndex",
       "type": "UInt"
     },
     {
-      "offset": 944,
+      "offset": 1264,
       "name": "Shared_ForwardISR_DirectionalLightStaticShadowBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 960,
+      "offset": 1280,
       "name": "Shared_ForwardISR_DirectionalLightTranslatedWorldToStaticShadow",
       "type": "Float4x4"
     },
     {
-      "offset": 1024,
+      "offset": 1344,
       "name": "Shared_ForwardISR_DirectLightingShowFlag",
       "type": "UInt"
     },
     {
-      "offset": 864,
+      "offset": 1348,
+      "name": "Shared_ForwardISR_LightFunctionAtlasLightIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 1360,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_ScreenRayLength",
+      "type": "Float"
+    },
+    {
+      "offset": 1364,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTRayCount",
+      "type": "Int"
+    },
+    {
+      "offset": 1368,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTSamplesPerRay",
+      "type": "Int"
+    },
+    {
+      "offset": 1372,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTRayLengthScale",
+      "type": "Float"
+    },
+    {
+      "offset": 1376,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTCotMaxRayAngleFromLight",
+      "type": "Float"
+    },
+    {
+      "offset": 1380,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTTexelDitherScale",
+      "type": "Float"
+    },
+    {
+      "offset": 1384,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTExtrapolateSlope",
+      "type": "Float"
+    },
+    {
+      "offset": 1388,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTMaxSlopeBias",
+      "type": "Float"
+    },
+    {
+      "offset": 1392,
+      "name": "Shared_ForwardISR_DirectionalLightSMRTSettings_SMRTAdaptiveRayCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 1472,
       "name": "Shared_Reflection_SkyLightParameters",
       "type": "Float4"
     },
     {
-      "offset": 944,
+      "offset": 1552,
       "name": "Shared_PlanarReflection_ReflectionPlane",
       "type": "Float4"
     },
     {
-      "offset": 960,
+      "offset": 1568,
       "name": "Shared_PlanarReflection_PlanarReflectionOrigin",
       "type": "Float4"
     },
     {
-      "offset": 976,
+      "offset": 1584,
       "name": "Shared_PlanarReflection_PlanarReflectionXAxis",
       "type": "Float4"
     },
     {
-      "offset": 992,
+      "offset": 1600,
       "name": "Shared_PlanarReflection_PlanarReflectionYAxis",
       "type": "Float4"
     },
     {
-      "offset": 1008,
+      "offset": 1616,
+      "name": "Shared_PlanarReflection_InverseTransposeMirrorMatrix",
+      "type": "Float3x4"
+    },
+    {
+      "offset": 1664,
       "name": "Shared_PlanarReflection_PlanarReflectionParameters",
       "type": "Float3"
     },
     {
-      "offset": 1024,
+      "offset": 1680,
       "name": "Shared_PlanarReflection_PlanarReflectionParameters2",
       "type": "Float2"
     },
     {
-      "offset": 1040,
+      "offset": 1696,
       "name": "Shared_PlanarReflection_ProjectionWithExtraFOV",
       "type": "Float4x4",
       "arraySize": 2
     },
     {
-      "offset": 1168,
+      "offset": 1824,
       "name": "Shared_PlanarReflection_PlanarReflectionScreenScaleBias",
       "type": "Float4",
       "arraySize": 2
     },
     {
-      "offset": 1200,
+      "offset": 1856,
       "name": "Shared_PlanarReflection_PlanarReflectionScreenBound",
       "type": "Float2"
     },
     {
-      "offset": 1208,
+      "offset": 1864,
       "name": "Shared_PlanarReflection_bIsStereo",
       "type": "UInt"
     },
     {
-      "offset": 1152,
+      "offset": 1888,
       "name": "Shared_Fog_ExponentialFogParameters",
       "type": "Float4"
     },
     {
-      "offset": 1168,
+      "offset": 1904,
       "name": "Shared_Fog_ExponentialFogParameters2",
       "type": "Float4"
     },
     {
-      "offset": 1184,
+      "offset": 1920,
       "name": "Shared_Fog_ExponentialFogColorParameter",
       "type": "Float4"
     },
     {
-      "offset": 1200,
+      "offset": 1936,
       "name": "Shared_Fog_ExponentialFogParameters3",
       "type": "Float4"
     },
     {
-      "offset": 1216,
+      "offset": 1952,
       "name": "Shared_Fog_SkyAtmosphereAmbientContributionColorScale",
       "type": "Float4"
     },
     {
-      "offset": 1232,
+      "offset": 1968,
       "name": "Shared_Fog_InscatteringLightDirection",
       "type": "Float4"
     },
     {
-      "offset": 1248,
+      "offset": 1984,
       "name": "Shared_Fog_DirectionalInscatteringColor",
       "type": "Float4"
     },
     {
-      "offset": 1264,
+      "offset": 2000,
       "name": "Shared_Fog_SinCosInscatteringColorCubemapRotation",
       "type": "Float2"
     },
     {
-      "offset": 1280,
+      "offset": 2016,
       "name": "Shared_Fog_FogInscatteringTextureParameters",
       "type": "Float3"
     },
     {
-      "offset": 1292,
+      "offset": 2028,
       "name": "Shared_Fog_ApplyVolumetricFog",
       "type": "Float"
     },
     {
-      "offset": 1296,
+      "offset": 2032,
       "name": "Shared_Fog_VolumetricFogStartDistance",
       "type": "Float"
     },
     {
-      "offset": 1300,
+      "offset": 2036,
       "name": "Shared_Fog_VolumetricFogNearFadeInDistanceInv",
       "type": "Float"
     },
     {
-      "offset": 1344,
+      "offset": 2080,
       "name": "Shared_FogISR_ExponentialFogParameters",
       "type": "Float4"
     },
     {
-      "offset": 1360,
+      "offset": 2096,
       "name": "Shared_FogISR_ExponentialFogParameters2",
       "type": "Float4"
     },
     {
-      "offset": 1376,
+      "offset": 2112,
       "name": "Shared_FogISR_ExponentialFogColorParameter",
       "type": "Float4"
     },
     {
-      "offset": 1392,
+      "offset": 2128,
       "name": "Shared_FogISR_ExponentialFogParameters3",
       "type": "Float4"
     },
     {
-      "offset": 1408,
+      "offset": 2144,
       "name": "Shared_FogISR_SkyAtmosphereAmbientContributionColorScale",
       "type": "Float4"
     },
     {
-      "offset": 1424,
+      "offset": 2160,
       "name": "Shared_FogISR_InscatteringLightDirection",
       "type": "Float4"
     },
     {
-      "offset": 1440,
+      "offset": 2176,
       "name": "Shared_FogISR_DirectionalInscatteringColor",
       "type": "Float4"
     },
     {
-      "offset": 1456,
+      "offset": 2192,
       "name": "Shared_FogISR_SinCosInscatteringColorCubemapRotation",
       "type": "Float2"
     },
     {
-      "offset": 1472,
+      "offset": 2208,
       "name": "Shared_FogISR_FogInscatteringTextureParameters",
       "type": "Float3"
     },
     {
-      "offset": 1484,
+      "offset": 2220,
       "name": "Shared_FogISR_ApplyVolumetricFog",
       "type": "Float"
     },
     {
-      "offset": 1488,
+      "offset": 2224,
       "name": "Shared_FogISR_VolumetricFogStartDistance",
       "type": "Float"
     },
     {
-      "offset": 1492,
+      "offset": 2228,
       "name": "Shared_FogISR_VolumetricFogNearFadeInDistanceInv",
       "type": "Float"
     },
     {
-      "offset": 1536,
+      "offset": 2280,
+      "name": "Shared_LFV_LocalFogVolumeTileDataTextureResolution",
+      "type": "UInt2"
+    },
+    {
+      "offset": 2288,
+      "name": "Shared_LFV_LocalFogVolumeInstanceCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 2292,
+      "name": "Shared_LFV_LocalFogVolumeTilePixelSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 2296,
+      "name": "Shared_LFV_LocalFogVolumeMaxDensityIntoVolumetricFog",
+      "type": "Float"
+    },
+    {
+      "offset": 2300,
+      "name": "Shared_LFV_ShouldRenderLocalFogVolumeInVolumetricFog",
+      "type": "UInt"
+    },
+    {
+      "offset": 2304,
+      "name": "Shared_LFV_GlobalStartDistance",
+      "type": "Float"
+    },
+    {
+      "offset": 2320,
+      "name": "Shared_LFV_HalfResTextureSizeAndInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 2336,
+      "name": "Shared_LFV_DirectionalLightColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 2352,
+      "name": "Shared_LFV_DirectionalLightDirection",
+      "type": "Float3"
+    },
+    {
+      "offset": 2384,
       "name": "Shared_UseBasePassSkylight",
       "type": "UInt"
     },
     {
-      "offset": 1664,
-      "name": "Strata_MaxBytesPerPixel",
+      "offset": 2512,
+      "name": "Substrate_MaxBytesPerPixel",
       "type": "UInt"
     },
     {
-      "offset": 1668,
-      "name": "Strata_bRoughDiffuse",
+      "offset": 2516,
+      "name": "Substrate_MaxClosurePerPixel",
       "type": "UInt"
     },
     {
-      "offset": 1672,
-      "name": "Strata_PeelLayersAboveDepth",
+      "offset": 2520,
+      "name": "Substrate_bRoughDiffuse",
       "type": "UInt"
     },
     {
-      "offset": 1696,
+      "offset": 2524,
+      "name": "Substrate_PeelLayersAboveDepth",
+      "type": "UInt"
+    },
+    {
+      "offset": 2528,
+      "name": "Substrate_bRoughnessTracking",
+      "type": "UInt"
+    },
+    {
+      "offset": 2544,
+      "name": "Substrate_FirstSliceStoringSubstrateSSSData",
+      "type": "Int"
+    },
+    {
+      "offset": 2576,
       "name": "ForwardDirLightCloudShadow_CloudShadowmapTranslatedWorldToLightClipMatrix",
       "type": "Float4x4"
     },
     {
-      "offset": 1760,
+      "offset": 2640,
       "name": "ForwardDirLightCloudShadow_CloudShadowmapFarDepthKm",
       "type": "Float"
     },
     {
-      "offset": 1784,
+      "offset": 2664,
       "name": "ForwardDirLightCloudShadow_CloudShadowmapStrength",
       "type": "Float"
     },
     {
-      "offset": 1792,
+      "offset": 2672,
       "name": "OIT_bOITEnable",
       "type": "UInt"
     },
     {
-      "offset": 1796,
+      "offset": 2676,
       "name": "OIT_OITMethod",
       "type": "UInt"
     },
     {
-      "offset": 1800,
+      "offset": 2680,
       "name": "OIT_MaxSideSamplePerPixel",
       "type": "UInt"
     },
     {
-      "offset": 1804,
+      "offset": 2684,
       "name": "OIT_MaxSamplePerPixel",
       "type": "UInt"
     },
     {
-      "offset": 1808,
+      "offset": 2688,
       "name": "OIT_TransmittanceThreshold",
-      "type": "UInt"
+      "type": "Float"
     },
     {
-      "offset": 1856,
+      "offset": 2720,
       "name": "HZBUvFactorAndInvFactor",
       "type": "Float4"
     },
     {
-      "offset": 1872,
+      "offset": 2736,
       "name": "PrevScreenPositionScaleBias",
       "type": "Float4"
     },
     {
-      "offset": 1888,
+      "offset": 2752,
       "name": "PrevSceneColorBilinearUVMin",
       "type": "Float2"
     },
     {
-      "offset": 1896,
+      "offset": 2760,
       "name": "PrevSceneColorBilinearUVMax",
       "type": "Float2"
     },
     {
-      "offset": 1904,
+      "offset": 2768,
       "name": "PrevSceneColorPreExposureInv",
       "type": "Float"
     },
     {
-      "offset": 1908,
+      "offset": 2772,
       "name": "SSRQuality",
       "type": "Int"
     },
     {
-      "offset": 1976,
+      "offset": 2840,
       "name": "ApplyVolumetricCloudOnTransparent",
       "type": "Float"
     },
     {
-      "offset": 2040,
+      "offset": 2844,
+      "name": "SoftBlendingDistanceKm",
+      "type": "Float"
+    },
+    {
+      "offset": 2904,
       "name": "Enabled",
       "type": "UInt"
     },
     {
-      "offset": 2044,
+      "offset": 2908,
       "name": "RelativeDepthThreshold",
       "type": "Float"
     },
     {
-      "offset": 2096,
+      "offset": 2912,
+      "name": "SpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 2916,
+      "name": "Contrast",
+      "type": "Float"
+    },
+    {
+      "offset": 2976,
       "name": "TranslucencyGIGridZParams",
       "type": "Float3"
     },
     {
-      "offset": 2108,
+      "offset": 2988,
       "name": "TranslucencyGIGridPixelSizeShift",
       "type": "UInt"
     },
     {
-      "offset": 2112,
+      "offset": 2992,
       "name": "TranslucencyGIGridSize",
       "type": "Int3"
+    },
+    {
+      "offset": 3056,
+      "name": "BlueNoise_Dimensions",
+      "type": "Int3"
+    },
+    {
+      "offset": 3072,
+      "name": "BlueNoise_ModuloMasks",
+      "type": "Int3"
+    },
+    {
+      "offset": 3104,
+      "name": "AVSM_TranslatedWorldToShadow",
+      "type": "Float4x4",
+      "arraySize": 6
+    },
+    {
+      "offset": 3488,
+      "name": "AVSM_TranslatedWorldOrigin",
+      "type": "Float3"
+    },
+    {
+      "offset": 3504,
+      "name": "AVSM_TranslatedWorldPlane",
+      "type": "Float4"
+    },
+    {
+      "offset": 3520,
+      "name": "AVSM_Resolution",
+      "type": "Int2"
+    },
+    {
+      "offset": 3528,
+      "name": "AVSM_NumShadowMatrices",
+      "type": "Int"
+    },
+    {
+      "offset": 3532,
+      "name": "AVSM_MaxSampleCount",
+      "type": "Int"
+    },
+    {
+      "offset": 3536,
+      "name": "AVSM_bIsEmpty",
+      "type": "Int"
+    },
+    {
+      "offset": 3540,
+      "name": "AVSM_bIsDirectionalLight",
+      "type": "Int"
     }
   ],
   "resources": [
     {
       "index": 0,
-      "offset": 600,
+      "offset": 672,
       "name": "Shared_Forward_DirectionalLightShadowmapAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
-      "offset": 608,
+      "offset": 680,
       "name": "Shared_Forward_ShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 2,
-      "offset": 616,
+      "offset": 688,
       "name": "Shared_Forward_DirectionalLightStaticShadowmap",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 3,
-      "offset": 624,
+      "offset": 696,
       "name": "Shared_Forward_StaticShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 4,
-      "offset": 632,
+      "offset": 704,
       "name": "Shared_Forward_ForwardLocalLightBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 5,
-      "offset": 640,
+      "offset": 712,
       "name": "Shared_Forward_NumCulledLightsGrid",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 6,
-      "offset": 648,
-      "name": "Shared_Forward_CulledLightDataGrid",
+      "offset": 720,
+      "name": "Shared_Forward_CulledLightDataGrid32Bit",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 7,
-      "offset": 656,
-      "name": "Shared_Forward_DummyRectLightSourceTexture",
-      "type": "UBMT_TEXTURE"
+      "offset": 728,
+      "name": "Shared_Forward_CulledLightDataGrid16Bit",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 8,
-      "offset": 880,
-      "name": "Shared_Reflection_SkyLightCubemap",
-      "type": "UBMT_TEXTURE"
-    },
-    {
-      "index": 9,
-      "offset": 888,
-      "name": "Shared_Reflection_SkyLightCubemapSampler",
-      "type": "UBMT_SAMPLER"
-    },
-    {
-      "index": 10,
-      "offset": 896,
-      "name": "Shared_Reflection_SkyLightBlendDestinationCubemap",
-      "type": "UBMT_TEXTURE"
-    },
-    {
-      "index": 11,
-      "offset": 904,
-      "name": "Shared_Reflection_SkyLightBlendDestinationCubemapSampler",
-      "type": "UBMT_SAMPLER"
-    },
-    {
-      "index": 12,
-      "offset": 912,
-      "name": "Shared_Reflection_ReflectionCubemap",
-      "type": "UBMT_TEXTURE"
-    },
-    {
-      "index": 13,
-      "offset": 920,
-      "name": "Shared_Reflection_ReflectionCubemapSampler",
-      "type": "UBMT_SAMPLER"
-    },
-    {
-      "index": 14,
-      "offset": 928,
-      "name": "Shared_Reflection_PreIntegratedGF",
-      "type": "UBMT_TEXTURE"
-    },
-    {
-      "index": 15,
-      "offset": 936,
-      "name": "Shared_Reflection_PreIntegratedGFSampler",
-      "type": "UBMT_SAMPLER"
-    },
-    {
-      "index": 16,
-      "offset": 1032,
+      "offset": 1408,
       "name": "Shared_ForwardISR_DirectionalLightShadowmapAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 17,
-      "offset": 1040,
+      "index": 9,
+      "offset": 1416,
       "name": "Shared_ForwardISR_ShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 18,
-      "offset": 1048,
+      "index": 10,
+      "offset": 1424,
       "name": "Shared_ForwardISR_DirectionalLightStaticShadowmap",
       "type": "UBMT_TEXTURE"
     },
     {
-      "index": 19,
-      "offset": 1056,
+      "index": 11,
+      "offset": 1432,
       "name": "Shared_ForwardISR_StaticShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 20,
-      "offset": 1064,
+      "index": 12,
+      "offset": 1440,
       "name": "Shared_ForwardISR_ForwardLocalLightBuffer",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 21,
-      "offset": 1072,
+      "index": 13,
+      "offset": 1448,
       "name": "Shared_ForwardISR_NumCulledLightsGrid",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 22,
-      "offset": 1080,
-      "name": "Shared_ForwardISR_CulledLightDataGrid",
+      "index": 14,
+      "offset": 1456,
+      "name": "Shared_ForwardISR_CulledLightDataGrid32Bit",
       "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 23,
-      "offset": 1088,
-      "name": "Shared_ForwardISR_DummyRectLightSourceTexture",
+      "index": 15,
+      "offset": 1464,
+      "name": "Shared_ForwardISR_CulledLightDataGrid16Bit",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 16,
+      "offset": 1488,
+      "name": "Shared_Reflection_SkyLightCubemap",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 17,
+      "offset": 1496,
+      "name": "Shared_Reflection_SkyLightCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 18,
+      "offset": 1504,
+      "name": "Shared_Reflection_SkyLightBlendDestinationCubemap",
       "type": "UBMT_TEXTURE"
     },
     {
+      "index": 19,
+      "offset": 1512,
+      "name": "Shared_Reflection_SkyLightBlendDestinationCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 20,
+      "offset": 1520,
+      "name": "Shared_Reflection_ReflectionCubemap",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 21,
+      "offset": 1528,
+      "name": "Shared_Reflection_ReflectionCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 22,
+      "offset": 1536,
+      "name": "Shared_Reflection_PreIntegratedGF",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 23,
+      "offset": 1544,
+      "name": "Shared_Reflection_PreIntegratedGFSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
       "index": 24,
-      "offset": 1216,
+      "offset": 1872,
       "name": "Shared_PlanarReflection_PlanarReflectionTexture",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 25,
-      "offset": 1224,
+      "offset": 1880,
       "name": "Shared_PlanarReflection_PlanarReflectionSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 26,
-      "offset": 1304,
+      "offset": 2040,
       "name": "Shared_Fog_FogInscatteringColorCubemap",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 27,
-      "offset": 1312,
+      "offset": 2048,
       "name": "Shared_Fog_FogInscatteringColorSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 28,
-      "offset": 1320,
+      "offset": 2056,
       "name": "Shared_Fog_IntegratedLightScattering",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 29,
-      "offset": 1328,
+      "offset": 2064,
       "name": "Shared_Fog_IntegratedLightScatteringSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 30,
-      "offset": 1496,
+      "offset": 2232,
       "name": "Shared_FogISR_FogInscatteringColorCubemap",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 31,
-      "offset": 1504,
+      "offset": 2240,
       "name": "Shared_FogISR_FogInscatteringColorSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 32,
-      "offset": 1512,
+      "offset": 2248,
       "name": "Shared_FogISR_IntegratedLightScattering",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 33,
-      "offset": 1520,
+      "offset": 2256,
       "name": "Shared_FogISR_IntegratedLightScatteringSampler",
       "type": "UBMT_SAMPLER"
     },
     {
       "index": 34,
-      "offset": 1552,
+      "offset": 2272,
+      "name": "Shared_LFV_LocalFogVolumeInstances",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 35,
+      "offset": 2368,
+      "name": "Shared_LFV_LocalFogVolumeTileDataTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 36,
+      "offset": 2400,
       "name": "SceneTextures_SceneColorTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 35,
-      "offset": 1560,
+      "index": 37,
+      "offset": 2408,
       "name": "SceneTextures_SceneDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 36,
-      "offset": 1568,
-      "name": "SceneTextures_GBufferATexture",
-      "type": "UBMT_RDG_TEXTURE"
-    },
-    {
-      "index": 37,
-      "offset": 1576,
-      "name": "SceneTextures_GBufferBTexture",
-      "type": "UBMT_RDG_TEXTURE"
-    },
-    {
       "index": 38,
-      "offset": 1584,
-      "name": "SceneTextures_GBufferCTexture",
+      "offset": 2416,
+      "name": "SceneTextures_ScenePartialDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 39,
-      "offset": 1592,
-      "name": "SceneTextures_GBufferDTexture",
+      "offset": 2424,
+      "name": "SceneTextures_GBufferATexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 40,
-      "offset": 1600,
-      "name": "SceneTextures_GBufferETexture",
+      "offset": 2432,
+      "name": "SceneTextures_GBufferBTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 41,
-      "offset": 1608,
-      "name": "SceneTextures_GBufferFTexture",
+      "offset": 2440,
+      "name": "SceneTextures_GBufferCTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 42,
-      "offset": 1616,
-      "name": "SceneTextures_GBufferVelocityTexture",
+      "offset": 2448,
+      "name": "SceneTextures_GBufferDTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 43,
-      "offset": 1624,
-      "name": "SceneTextures_ScreenSpaceAOTexture",
+      "offset": 2456,
+      "name": "SceneTextures_GBufferETexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 44,
-      "offset": 1632,
-      "name": "SceneTextures_CustomDepthTexture",
+      "offset": 2464,
+      "name": "SceneTextures_GBufferFTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 45,
-      "offset": 1640,
-      "name": "SceneTextures_CustomStencilTexture",
-      "type": "UBMT_RDG_TEXTURE_SRV"
+      "offset": 2472,
+      "name": "SceneTextures_GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 46,
-      "offset": 1648,
-      "name": "SceneTextures_PointClampSampler",
-      "type": "UBMT_SAMPLER"
+      "offset": 2480,
+      "name": "SceneTextures_ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 47,
-      "offset": 1680,
-      "name": "Strata_MaterialTextureArray",
+      "offset": 2488,
+      "name": "SceneTextures_CustomDepthTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 48,
-      "offset": 1688,
-      "name": "Strata_TopLayerTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "offset": 2496,
+      "name": "SceneTextures_CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
     },
     {
       "index": 49,
-      "offset": 1768,
+      "offset": 2504,
+      "name": "SceneTextures_PointClampSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 50,
+      "offset": 2552,
+      "name": "Substrate_MaterialTextureArray",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 51,
+      "offset": 2560,
+      "name": "Substrate_TopLayerTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 52,
+      "offset": 2648,
       "name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 50,
-      "offset": 1776,
+      "index": 53,
+      "offset": 2656,
       "name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 51,
-      "offset": 1816,
+      "index": 54,
+      "offset": 2696,
       "name": "OIT_OutOITSampleCount",
       "type": "UBMT_RDG_TEXTURE_UAV"
     },
     {
-      "index": 52,
-      "offset": 1824,
-      "name": "OIT_OutOITSampleColor",
-      "type": "UBMT_RDG_TEXTURE_UAV"
-    },
-    {
-      "index": 53,
-      "offset": 1832,
-      "name": "OIT_OutOITSampleTrans",
-      "type": "UBMT_RDG_TEXTURE_UAV"
-    },
-    {
-      "index": 54,
-      "offset": 1840,
-      "name": "OIT_OutOITSampleDepth",
-      "type": "UBMT_RDG_TEXTURE_UAV"
-    },
-    {
       "index": 55,
-      "offset": 1912,
+      "offset": 2704,
+      "name": "OIT_OutOITSampleData",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "index": 56,
+      "offset": 2776,
       "name": "HZBTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 56,
-      "offset": 1920,
+      "index": 57,
+      "offset": 2784,
       "name": "HZBSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 57,
-      "offset": 1928,
+      "index": 58,
+      "offset": 2792,
       "name": "PrevSceneColor",
-      "type": "UBMT_RDG_TEXTURE"
+      "type": "UBMT_RDG_TEXTURE_SRV"
     },
     {
-      "index": 58,
-      "offset": 1936,
+      "index": 59,
+      "offset": 2800,
       "name": "PrevSceneColorSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 59,
-      "offset": 1944,
+      "index": 60,
+      "offset": 2808,
       "name": "VolumetricCloudColor",
-      "type": "UBMT_TEXTURE"
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 60,
-      "offset": 1952,
+      "index": 61,
+      "offset": 2816,
       "name": "VolumetricCloudColorSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 61,
-      "offset": 1960,
+      "index": 62,
+      "offset": 2824,
       "name": "VolumetricCloudDepth",
-      "type": "UBMT_TEXTURE"
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 62,
-      "offset": 1968,
+      "index": 63,
+      "offset": 2832,
       "name": "VolumetricCloudDepthSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 63,
-      "offset": 1984,
+      "index": 64,
+      "offset": 2848,
       "name": "TranslucencyLightingVolumeAmbientInner",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 64,
-      "offset": 1992,
+      "index": 65,
+      "offset": 2856,
       "name": "TranslucencyLightingVolumeAmbientOuter",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 65,
-      "offset": 2000,
+      "index": 66,
+      "offset": 2864,
       "name": "TranslucencyLightingVolumeDirectionalInner",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 66,
-      "offset": 2008,
+      "index": 67,
+      "offset": 2872,
       "name": "TranslucencyLightingVolumeDirectionalOuter",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 67,
-      "offset": 2016,
+      "index": 68,
+      "offset": 2880,
       "name": "Radiance",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 68,
-      "offset": 2024,
+      "index": 69,
+      "offset": 2888,
       "name": "Normal",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 69,
-      "offset": 2032,
+      "index": 70,
+      "offset": 2896,
       "name": "SceneDepth",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 70,
-      "offset": 2048,
+      "index": 71,
+      "offset": 2928,
       "name": "TranslucencyGIVolume0",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 71,
-      "offset": 2056,
+      "index": 72,
+      "offset": 2936,
       "name": "TranslucencyGIVolume1",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 72,
-      "offset": 2064,
+      "index": 73,
+      "offset": 2944,
       "name": "TranslucencyGIVolumeHistory0",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 73,
-      "offset": 2072,
+      "index": 74,
+      "offset": 2952,
       "name": "TranslucencyGIVolumeHistory1",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 74,
-      "offset": 2080,
+      "index": 75,
+      "offset": 2960,
       "name": "TranslucencyGIVolumeSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 75,
-      "offset": 2128,
+      "index": 76,
+      "offset": 3008,
       "name": "PreIntegratedGFTexture",
       "type": "UBMT_TEXTURE"
     },
     {
-      "index": 76,
-      "offset": 2136,
+      "index": 77,
+      "offset": 3016,
       "name": "PreIntegratedGFSampler",
       "type": "UBMT_SAMPLER"
     },
     {
-      "index": 77,
-      "offset": 2144,
-      "name": "EyeAdaptationTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "index": 78,
+      "offset": 3024,
+      "name": "EyeAdaptationBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 78,
-      "offset": 2152,
+      "index": 79,
+      "offset": 3032,
       "name": "SceneColorCopyTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 79,
-      "offset": 2160,
+      "index": 80,
+      "offset": 3040,
       "name": "SceneColorCopySampler",
       "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 81,
+      "offset": 3088,
+      "name": "BlueNoise_ScalarTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 82,
+      "offset": 3096,
+      "name": "BlueNoise_Vec2Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 83,
+      "offset": 3544,
+      "name": "AVSM_LinkedListBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 84,
+      "offset": 3552,
+      "name": "AVSM_IndirectionBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 85,
+      "offset": 3560,
+      "name": "AVSM_SampleBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

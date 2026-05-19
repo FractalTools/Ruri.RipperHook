@@ -2,8 +2,8 @@
   "name": "PlanarReflectionStruct",
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/PlanarReflectionRendering.h:21 (FPlanarReflectionUniformParameters)",
-  "layoutHash": "0x01250100",
-  "constantBufferSize": 268,
+  "layoutHash": "0x01550100",
+  "constantBufferSize": 316,
   "bindingFlags": "Shader",
   "members": [
     {
@@ -28,33 +28,38 @@
     },
     {
       "offset": 64,
+      "name": "InverseTransposeMirrorMatrix",
+      "type": "Float3x4"
+    },
+    {
+      "offset": 112,
       "name": "PlanarReflectionParameters",
       "type": "Float3"
     },
     {
-      "offset": 80,
+      "offset": 128,
       "name": "PlanarReflectionParameters2",
       "type": "Float2"
     },
     {
-      "offset": 96,
+      "offset": 144,
       "name": "ProjectionWithExtraFOV",
       "type": "Float4x4",
       "arraySize": 2
     },
     {
-      "offset": 224,
+      "offset": 272,
       "name": "PlanarReflectionScreenScaleBias",
       "type": "Float4",
       "arraySize": 2
     },
     {
-      "offset": 256,
+      "offset": 304,
       "name": "PlanarReflectionScreenBound",
       "type": "Float2"
     },
     {
-      "offset": 264,
+      "offset": 312,
       "name": "bIsStereo",
       "type": "UInt"
     }
@@ -62,13 +67,13 @@
   "resources": [
     {
       "index": 0,
-      "offset": 272,
+      "offset": 320,
       "name": "PlanarReflectionTexture",
       "type": "UBMT_TEXTURE"
     },
     {
       "index": 1,
-      "offset": 280,
+      "offset": 328,
       "name": "PlanarReflectionSampler",
       "type": "UBMT_SAMPLER"
     }
