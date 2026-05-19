@@ -59,6 +59,12 @@ internal sealed class MaterialJsonSymbolReader
             return null;
         }
 
+        // Resolve `MaterialCollection<i>` cbuffers from the material's
+        // referenced UMaterialParameterCollection assets — these aren't in the
+        // Material UB itself, they're separate bindings that previously
+        // collapsed to anonymous `_m0[N]` flat arrays.
+        MaterialParameterCollectionReader.ResolveAndInject(root[0], inputs, _exportRoot, _exportRootName);
+
         MaterialSymbolSource source = BuildSource(normalizedPath, inputs);
         _cache[cacheKey] = source;
         return source;

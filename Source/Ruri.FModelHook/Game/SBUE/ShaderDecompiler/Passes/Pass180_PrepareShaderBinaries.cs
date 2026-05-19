@@ -195,6 +195,27 @@ internal static class Pass180_PrepareShaderBinaries
         {
             MaterialSymbolSource? candidate = state.UnifiedMaterialReader?.GetSource(material, shaderPlatform)
                                             ?? state.MaterialJsonSymbolReader?.GetSource(material, shaderPlatform);
+            // UnifiedMaterialReader's source doesn't carry MaterialCollection<i>
+            // cbuffers (unified metadata strips ParameterCollectionInfos to keep
+            // the JSON small). If the per-material JSON IS available, pull just
+            // the MaterialCollection<i> entries from there and union them into
+            // the unified source's metadata. This makes the MPC recovery work
+            // identically across both reader paths.
+            if (candidate != null && state.MaterialJsonSymbolReader != null)
+            {
+                MaterialSymbolSource? jsonCandidate = state.MaterialJsonSymbolReader.GetSource(material, shaderPlatform);
+                if (jsonCandidate != null && !ReferenceEquals(jsonCandidate, candidate))
+                {
+                    foreach (ConstantBufferParameter cb in jsonCandidate.Metadata.ConstantBufferParameters)
+                    {
+                        if (cb.Name.StartsWith("MaterialCollection", StringComparison.Ordinal)
+                            && !candidate.Metadata.ConstantBufferParameters.Any(existing => string.Equals(existing.Name, cb.Name, StringComparison.Ordinal)))
+                        {
+                            candidate.Metadata.ConstantBufferParameters.Add(cb);
+                        }
+                    }
+                }
+            }
             if (candidate != null)
             {
                 // Defensive copy — caches share metadata across every shader

@@ -29,4 +29,9 @@ internal sealed class SymbolInputs
     public ConstantBufferParameter? MaterialConstantBuffer { get; set; }
     public List<FMaterialParameterInfo> NumericParameterInfos { get; } = new();
     public MaterialUniformBufferLayout.MaterialResourceCounts? MaterialResourceCounts { get; set; }
+    // Extra cbuffers the material binds beyond `Material` itself — currently
+    // `MaterialCollection<N>` per the material's `ParameterCollectionInfos[N]`.
+    // Resolved at metadata-read time from each referenced `UMaterialParameterCollection`
+    // asset (`ScalarParameters[]` packed 4-per-vec4 then `VectorParameters[]`).
+    public List<ConstantBufferParameter> ExtraConstantBuffers { get; } = new();
 }
