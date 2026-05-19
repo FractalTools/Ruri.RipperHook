@@ -1,0 +1,52 @@
+{
+  "Name": "FHdrCustomResolveFMask8xPS",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Public/HdrCustomResolveShaders.h:254 (FHdrCustomResolveFMask8xPS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "Tex",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "FMaskTex",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Tex",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "FMaskTex",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FHdrCustomResolveFMask8xPS",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

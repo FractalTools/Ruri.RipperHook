@@ -1,0 +1,51 @@
+{
+  "Name": "FResolveSingleSamplePS",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Public/ResolveShader.h:125 (FResolveSingleSamplePS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SingleSampleIndex",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "UnresolvedSurface",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "UnresolvedSurface",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FResolveSingleSamplePS",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

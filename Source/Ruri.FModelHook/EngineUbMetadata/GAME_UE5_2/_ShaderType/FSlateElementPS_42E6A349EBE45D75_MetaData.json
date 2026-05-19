@@ -1,0 +1,125 @@
+{
+  "Name": "FSlateElementPS",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/SlateRHIRenderer/Private/SlateShaders.h:105 (FSlateElementPS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "VTPackedPageTableUniform",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VTPackedUniform",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShaderParams",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShaderParams2",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VTShaderParams",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GammaAndAlphaValues",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 96,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "TextureParameter",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "TextureParameterSampler",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "InPageTableTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "TextureParameter",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "TextureParameterSampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 0,
+      "Name": "InPageTableTexture",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FSlateElementPS",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

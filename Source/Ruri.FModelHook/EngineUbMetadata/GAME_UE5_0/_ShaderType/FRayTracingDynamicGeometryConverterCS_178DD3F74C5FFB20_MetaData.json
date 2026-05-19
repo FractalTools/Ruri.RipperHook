@@ -1,0 +1,121 @@
+{
+  "Name": "FRayTracingDynamicGeometryConverterCS",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDynamicGeometry.cpp:31 (FRayTracingDynamicGeometryConverterCS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "UsingIndirectDraw",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumVertices",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MinVertexIndex",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrimitiveId",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bApplyWorldPositionOffset",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OutputVertexBaseIndex",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstanceId",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "WorldToInstance",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 128,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "RWVertexPositions",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "RWVertexPositions",
+      "UbmtType": "UBMT_UAV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FRayTracingDynamicGeometryConverterCS",
+    "ParentClass": "FMeshMaterialShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}
