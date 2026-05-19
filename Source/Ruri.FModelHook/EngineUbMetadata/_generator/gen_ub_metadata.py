@@ -107,6 +107,8 @@ TYPE_TABLE: dict[str, tuple[int, int, str, str, int, int]] = {
     "FVector":       (12, 16, "FLOAT32", "Float3",  1, 3),
     "FVector4":      (16, 16, "FLOAT32", "Float4",  1, 4),
     "FMatrix":       (64, 16, "FLOAT32", "Float4x4", 4, 4),
+    "FMatrix3x4":    (48, 16, "FLOAT32", "Float3x4", 3, 4),  # LWC alias of FMatrix3x4f
+    "FMatrix44":     (64, 16, "FLOAT32", "Float4x4", 4, 4),  # LWC alias of FMatrix44f (rarely used)
 }
 
 # Scalar packed-array helper. SHADER_PARAMETER_SCALAR_ARRAY(T, name, [N])
@@ -841,7 +843,7 @@ def compute_layout(
                     warn(f"  ! {s.cpp_name}.{m.name}: nested/included struct '{m.cpp_type}' not found -- skipping")
                     continue
                 child = structs_by_name[m.cpp_type]
-                csize, _ = sizeof_struct(child, structs_by_name)
+                csize, _ = sizeof_struct(child, structs_by_name, constants)
                 # Align this struct member to struct alignment (16) for nested,
                 # or to the included struct's natural alignment (16) for included.
                 local_next = align_up(local_next, STRUCT_ALIGN)
@@ -956,7 +958,7 @@ def compute_layout(
                         warn(f"  ! {s.cpp_name}.{m.name}: nested/included struct '{m.cpp_type}' not found -- skipping")
                         continue
                     grand = structs_by_name[m.cpp_type]
-                    g_size, _ = sizeof_struct(grand, structs_by_name)
+                    g_size, _ = sizeof_struct(grand, structs_by_name, constants)
                     ln = align_up(ln, STRUCT_ALIGN)
                     array_n = evaluate_dim(m.array_decl, constants) if m.array_decl else 0
                     count = max(array_n, 1)
@@ -1089,10 +1091,22 @@ def compute_layout(
     )
 
 
-def sizeof_struct(s: StructDef, structs_by_name: dict[str, StructDef]) -> tuple[int, int]:
+def sizeof_struct(s: StructDef, structs_by_name: dict[str, StructDef], constants: dict[str, int] | None = None) -> tuple[int, int]:
     """Returns ``(size, alignment)`` of a child struct (used for nested/included
     expansions). Walks members the same way as compute_layout but without
-    recording into the outer cursor. ``alignment`` is always STRUCT_ALIGN."""
+    recording into the outer cursor. ``alignment`` is always STRUCT_ALIGN.
+
+    ``constants`` MUST be passed so array dims like ``[GMaxForwardShadowCascades]``
+    resolve to their real value (4). Without it the old ``int(array_decl.strip)``
+    fallback returned 1 for any identifier-keyed dim, undersizing every nested
+    struct that contained an array — which then made the OUTER walker place
+    the next nested struct too early and OVERLAP the previous one's tail.
+    Optional only so legacy call-sites compile; pass-through is required for
+    layout correctness."""
+    cn = constants or {}
+    def dim(decl: str) -> int:
+        n = evaluate_dim(decl, cn) if decl else 0
+        return n if n > 0 else 1
     ln = 0
     for m in s.members:
         if m.macro == "RENDER_TARGET_BINDING_SLOTS":
@@ -1101,26 +1115,14 @@ def sizeof_struct(s: StructDef, structs_by_name: dict[str, StructDef]) -> tuple[
             child = structs_by_name.get(m.cpp_type)
             if child is None:
                 continue
-            csize, _ = sizeof_struct(child, structs_by_name)
+            csize, _ = sizeof_struct(child, structs_by_name, cn)
             ln = align_up(ln, STRUCT_ALIGN)
-            n = 1
-            if m.array_decl:
-                # evaluate_dim takes constants; we don't have them here. Best-effort
-                # parse a bare integer.
-                try:
-                    n = int(m.array_decl.strip("[]").strip())
-                except ValueError:
-                    n = 1
+            n = dim(m.array_decl) if m.array_decl else 1
             ln += csize * n
         elif m.is_resource:
             align = STRUCT_ALIGN if m.macro == "SHADER_PARAMETER_STRUCT_REF" else POINTER_ALIGN
             elem_size = align
-            n = 1
-            if m.array_decl:
-                try:
-                    n = int(m.array_decl.strip("[]").strip())
-                except ValueError:
-                    n = 1
+            n = dim(m.array_decl) if m.array_decl else 1
             ln = align_up(ln, align)
             ln += elem_size * n
         else:
@@ -1130,10 +1132,7 @@ def sizeof_struct(s: StructDef, structs_by_name: dict[str, StructDef]) -> tuple[
                 packed = SCALAR_ARRAY_PACK.get(cpp)
                 if not packed:
                     continue
-                try:
-                    scalar_n = int(array_decl.strip("[]").strip())
-                except ValueError:
-                    scalar_n = 4
+                scalar_n = dim(array_decl)
                 array_decl = f"[{(scalar_n + 3) // 4}]"
                 cpp = packed
             info = TYPE_TABLE.get(cpp)
@@ -1142,10 +1141,7 @@ def sizeof_struct(s: StructDef, structs_by_name: dict[str, StructDef]) -> tuple[
             elem_size, elem_align, _, _, _, _ = info
             if array_decl:
                 per_elem = max(elem_size, ARRAY_ELEM_ALIGN)
-                try:
-                    n = int(array_decl.strip("[]").strip())
-                except ValueError:
-                    n = 1
+                n = dim(array_decl)
                 ln = align_up(ln, ARRAY_ELEM_ALIGN)
                 ln += per_elem * n
             else:
