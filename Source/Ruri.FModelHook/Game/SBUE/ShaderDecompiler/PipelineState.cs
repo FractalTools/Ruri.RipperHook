@@ -103,6 +103,16 @@ internal sealed class PipelineState
     // Loaded alongside the engine-UB registry in Pass145.
     public ShaderTypeSeedRegistry ShaderTypeSeedRegistry { get; set; } = ShaderTypeSeedRegistry.Empty;
 
+    // Sister hash-to-name indexes for VertexFactoryType and ShaderPipelineType.
+    // Generator: `gen_ub_metadata.py::emit_vertex_factory_hash_to_name_index`
+    // and `::emit_shader_pipeline_hash_to_name_index`. Same hash math as
+    // FShaderType (CityHash64WithSeed(UPPER name)), different name sources.
+    // Used by Pass146 to backfill `VertexFactoryTypeName` and
+    // `PipelineTypeName` in `ContainerByShaderIndex` records whose cooked
+    // stableinfo left them blank.
+    public HashNameIndex VertexFactoryTypeNameIndex { get; set; } = HashNameIndex.Empty;
+    public HashNameIndex PipelineTypeNameIndex { get; set; } = HashNameIndex.Empty;
+
     // Per-archive-shader cook-side ParameterMapInfo (LooseParameterBuffers
     // with real byte offsets, no names; TextureSamplers/SRVs with the same).
     // Populated by Pass165 by joining UnifiedMaterialReader's
@@ -154,9 +164,14 @@ internal sealed class ShaderContainerInfo
     public string ShaderTypeHash { get; init; } = string.Empty;
     public string ShaderTypeName { get; init; } = string.Empty;
     public string VertexFactoryTypeHash { get; init; } = string.Empty;
-    public string VertexFactoryTypeName { get; init; } = string.Empty;
+    // Pass146 backfills this from `VertexFactoryTypeNameIndex` when the
+    // cook left it blank. Mutable for that one-shot fix-up only —
+    // everywhere else treats it as immutable.
+    public string VertexFactoryTypeName { get; set; } = string.Empty;
     public string PipelineTypeHash { get; init; } = string.Empty;
-    public string PipelineTypeName { get; init; } = string.Empty;
+    // Same pattern as VertexFactoryTypeName: Pass146 backfills from
+    // `PipelineTypeNameIndex` when blank.
+    public string PipelineTypeName { get; set; } = string.Empty;
     public int PermutationId { get; init; }
     public int ResourceIndex { get; init; }
     public byte Frequency { get; init; }

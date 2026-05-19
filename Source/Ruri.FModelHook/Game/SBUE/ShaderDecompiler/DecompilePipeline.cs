@@ -110,7 +110,25 @@ public static class DecompilePipeline
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
                     tryBaseFallback,
                     state.Log, state.LogError);
+
+                // Sister indexes — `_VertexFactoryType/_HashToName.json` and
+                // `_ShaderPipelineType/_HashToName.json`. Same generator pack,
+                // same fallback path. Used by Pass146 (backfill) to fill the
+                // blank `VertexFactoryTypeName` / `PipelineTypeName` slots
+                // that some cooks leave empty (e.g. when the cook stripped
+                // the editor-side string registry).
+                state.VertexFactoryTypeNameIndex = HashNameIndex.LoadForGame(
+                    engineUbDir, "_VertexFactoryType",
+                    string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
+                    tryBaseFallback,
+                    state.Log, state.LogError);
+                state.PipelineTypeNameIndex = HashNameIndex.LoadForGame(
+                    engineUbDir, "_ShaderPipelineType",
+                    string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
+                    tryBaseFallback,
+                    state.Log, state.LogError);
             }
+            using (new TimingCookie(state, "Pass 146: Backfill VF/Pipeline names"))    Pass146_BackfillContainerNames.DoPass(state);
             using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
             using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);
             using (new TimingCookie(state, "Pass 165: Load shader ParameterMapInfo")) Pass165_LoadShaderParameterMapInfo.DoPass(state);
