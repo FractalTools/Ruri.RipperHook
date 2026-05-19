@@ -1,16 +1,32 @@
 {
-  "name": "GlobalViewParameters",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1695 (FGlobalViewParameters)",
-  "layoutHash": "0x00100100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "ViewSizeAndInvSize",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "GlobalViewParameters",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1695 (FGlobalViewParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "GlobalViewParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ViewSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

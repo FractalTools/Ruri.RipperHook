@@ -1,39 +1,78 @@
 {
-  "name": "VLMVoxelizationParams",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/VolumetricLightmapVoxelization.h:18 (FVLMVoxelizationParams)",
-  "layoutHash": "0x004D0214",
-  "constantBufferSize": 36,
-  "bindingFlags": "Static",
-  "members": [
+  "Name": "VLMVoxelizationParams",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/VolumetricLightmapVoxelization.h:18 (FVLMVoxelizationParams)",
+  "LayoutHash": "0x004D0214",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "VLMVoxelizationParams",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "VolumeCenter",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VolumeExtent",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VolumeMaxDim",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 36,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
     {
-      "offset": 0,
-      "name": "VolumeCenter",
-      "type": "Float4"
+      "Name": "VoxelizeVolume",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
     },
     {
-      "offset": 16,
-      "name": "VolumeExtent",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "VolumeMaxDim",
-      "type": "Int"
+      "Name": "IndirectionTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
     }
   ],
-  "resources": [
+  "Resources": [
     {
-      "index": 0,
-      "offset": 40,
-      "name": "VoxelizeVolume",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Index": 0,
+      "Offset": 40,
+      "Name": "VoxelizeVolume",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
     },
     {
-      "index": 1,
-      "offset": 48,
-      "name": "IndirectionTexture",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Index": 1,
+      "Offset": 48,
+      "Name": "IndirectionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
     }
   ]
 }

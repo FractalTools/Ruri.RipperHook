@@ -1,133 +1,277 @@
 {
-  "name": "SingleLayerWater",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SingleLayerWaterRendering.cpp:1198 (FSingleLayerWaterPassUniformParameters)",
-  "layoutHash": "0x00190B24",
-  "constantBufferSize": 252,
-  "bindingFlags": "Static",
-  "members": [
+  "Name": "SingleLayerWater",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SingleLayerWaterRendering.cpp:1198 (FSingleLayerWaterPassUniformParameters)",
+  "LayoutHash": "0x00190B24",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "SingleLayerWater",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ForwardDirLightCloudShadow_CloudShadowmapTranslatedWorldToLightClipMatrix",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "SceneWithoutSingleLayerWaterMinMaxUV",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DistortionParams",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SceneWithoutSingleLayerWaterTextureSize",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SceneWithoutSingleLayerWaterInvTextureSize",
+        "NameIndex": -1,
+        "Index": 104,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bMainDirectionalLightVSMFiltering",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bSeparateMainDirLightLuminance",
+        "NameIndex": -1,
+        "Index": 116,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ForwardDirLightCloudShadow_CloudShadowmapFarDepthKm",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ForwardDirLightCloudShadow_CloudShadowmapStrength",
+        "NameIndex": -1,
+        "Index": 216,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BlueNoise_Dimensions",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BlueNoise_ModuloMasks",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 252,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 64,
-      "name": "SceneWithoutSingleLayerWaterMinMaxUV",
-      "type": "Float4"
+      "Name": "SceneColorWithoutSingleLayerWaterTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 80,
-      "name": "DistortionParams",
-      "type": "Float4"
+      "Name": "SceneDepthWithoutSingleLayerWaterTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 96,
-      "name": "SceneWithoutSingleLayerWaterTextureSize",
-      "type": "Float2"
+      "Name": "CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 104,
-      "name": "SceneWithoutSingleLayerWaterInvTextureSize",
-      "type": "Float2"
+      "Name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 112,
-      "name": "bMainDirectionalLightVSMFiltering",
-      "type": "UInt"
+      "Name": "BlueNoise_ScalarTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 116,
-      "name": "bSeparateMainDirLightLuminance",
-      "type": "UInt"
-    },
-    {
-      "offset": 128,
-      "name": "ForwardDirLightCloudShadow_CloudShadowmapTranslatedWorldToLightClipMatrix",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 192,
-      "name": "ForwardDirLightCloudShadow_CloudShadowmapFarDepthKm",
-      "type": "Float"
-    },
-    {
-      "offset": 216,
-      "name": "ForwardDirLightCloudShadow_CloudShadowmapStrength",
-      "type": "Float"
-    },
-    {
-      "offset": 224,
-      "name": "BlueNoise_Dimensions",
-      "type": "Int3"
-    },
-    {
-      "offset": 240,
-      "name": "BlueNoise_ModuloMasks",
-      "type": "Int3"
+      "Name": "BlueNoise_Vec2Texture",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "SceneColorWithoutSingleLayerWaterTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneColorWithoutSingleLayerWaterSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "SceneColorWithoutSingleLayerWaterSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "SceneDepthWithoutSingleLayerWaterSampler",
+      "Sampler": 3,
+      "BindPoint": 3
     },
     {
-      "index": 2,
-      "offset": 16,
-      "name": "SceneDepthWithoutSingleLayerWaterTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "CustomDepthSampler",
+      "Sampler": 6,
+      "BindPoint": 6
     },
     {
-      "index": 3,
-      "offset": 24,
-      "name": "SceneDepthWithoutSingleLayerWaterSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
+      "Sampler": 8,
+      "BindPoint": 8
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneColorWithoutSingleLayerWaterTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 4,
-      "offset": 32,
-      "name": "CustomDepthTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneColorWithoutSingleLayerWaterSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 5,
-      "offset": 40,
-      "name": "CustomStencilTexture",
-      "type": "UBMT_RDG_TEXTURE_SRV"
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneDepthWithoutSingleLayerWaterTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 6,
-      "offset": 48,
-      "name": "CustomDepthSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneDepthWithoutSingleLayerWaterSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 7,
-      "offset": 200,
-      "name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 4,
+      "Offset": 32,
+      "Name": "CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 8,
-      "offset": 208,
-      "name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 5,
+      "Offset": 40,
+      "Name": "CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
     },
     {
-      "index": 9,
-      "offset": 256,
-      "name": "BlueNoise_ScalarTexture",
-      "type": "UBMT_TEXTURE"
+      "Index": 6,
+      "Offset": 48,
+      "Name": "CustomDepthSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 10,
-      "offset": 264,
-      "name": "BlueNoise_Vec2Texture",
-      "type": "UBMT_TEXTURE"
+      "Index": 7,
+      "Offset": 200,
+      "Name": "ForwardDirLightCloudShadow_CloudShadowmapTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 208,
+      "Name": "ForwardDirLightCloudShadow_CloudShadowmapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 9,
+      "Offset": 256,
+      "Name": "BlueNoise_ScalarTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 264,
+      "Name": "BlueNoise_Vec2Texture",
+      "UbmtType": "UBMT_TEXTURE"
     }
   ]
 }

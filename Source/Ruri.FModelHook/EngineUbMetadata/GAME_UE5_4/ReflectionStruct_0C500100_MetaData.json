@@ -1,65 +1,135 @@
 {
-  "name": "ReflectionStruct",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/ReflectionEnvironment.h:25 (FReflectionUniformParameters)",
-  "layoutHash": "0x0C500100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "ReflectionStruct",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/ReflectionEnvironment.h:25 (FReflectionUniformParameters)",
+  "LayoutHash": "0x0C500100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "ReflectionStruct",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SkyLightParameters",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "SkyLightParameters",
-      "type": "Float4"
+      "Name": "SkyLightCubemap",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SkyLightBlendDestinationCubemap",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ReflectionCubemap",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "PreIntegratedGF",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 16,
-      "name": "SkyLightCubemap",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SkyLightCubemapSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 24,
-      "name": "SkyLightCubemapSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "SkyLightBlendDestinationCubemapSampler",
+      "Sampler": 3,
+      "BindPoint": 3
     },
     {
-      "index": 2,
-      "offset": 32,
-      "name": "SkyLightBlendDestinationCubemap",
-      "type": "UBMT_TEXTURE"
+      "Name": "ReflectionCubemapSampler",
+      "Sampler": 5,
+      "BindPoint": 5
     },
     {
-      "index": 3,
-      "offset": 40,
-      "name": "SkyLightBlendDestinationCubemapSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "PreIntegratedGFSampler",
+      "Sampler": 7,
+      "BindPoint": 7
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "SkyLightCubemap",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 4,
-      "offset": 48,
-      "name": "ReflectionCubemap",
-      "type": "UBMT_TEXTURE"
+      "Index": 1,
+      "Offset": 24,
+      "Name": "SkyLightCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 5,
-      "offset": 56,
-      "name": "ReflectionCubemapSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 32,
+      "Name": "SkyLightBlendDestinationCubemap",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 6,
-      "offset": 64,
-      "name": "PreIntegratedGF",
-      "type": "UBMT_TEXTURE"
+      "Index": 3,
+      "Offset": 40,
+      "Name": "SkyLightBlendDestinationCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 7,
-      "offset": 72,
-      "name": "PreIntegratedGFSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 4,
+      "Offset": 48,
+      "Name": "ReflectionCubemap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 56,
+      "Name": "ReflectionCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 6,
+      "Offset": 64,
+      "Name": "PreIntegratedGF",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 72,
+      "Name": "PreIntegratedGFSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

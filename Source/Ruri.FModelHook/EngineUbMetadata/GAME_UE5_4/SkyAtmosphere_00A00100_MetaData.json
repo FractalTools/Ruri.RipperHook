@@ -1,111 +1,222 @@
 {
-  "name": "SkyAtmosphere",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp:232 (FSkyAtmosphereInternalCommonParameters)",
-  "layoutHash": "0x00A00100",
-  "constantBufferSize": 156,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "SampleCountMin",
-      "type": "Float"
-    },
-    {
-      "offset": 4,
-      "name": "SampleCountMax",
-      "type": "Float"
-    },
-    {
-      "offset": 8,
-      "name": "DistanceToSampleCountMaxInv",
-      "type": "Float"
-    },
-    {
-      "offset": 12,
-      "name": "FastSkySampleCountMin",
-      "type": "Float"
-    },
-    {
-      "offset": 16,
-      "name": "FastSkySampleCountMax",
-      "type": "Float"
-    },
-    {
-      "offset": 20,
-      "name": "FastSkyDistanceToSampleCountMaxInv",
-      "type": "Float"
-    },
-    {
-      "offset": 32,
-      "name": "CameraAerialPerspectiveVolumeSizeAndInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "CameraAerialPerspectiveVolumeDepthResolution",
-      "type": "Float"
-    },
-    {
-      "offset": 52,
-      "name": "CameraAerialPerspectiveVolumeDepthResolutionInv",
-      "type": "Float"
-    },
-    {
-      "offset": 56,
-      "name": "CameraAerialPerspectiveVolumeDepthSliceLengthKm",
-      "type": "Float"
-    },
-    {
-      "offset": 60,
-      "name": "CameraAerialPerspectiveVolumeDepthSliceLengthKmInv",
-      "type": "Float"
-    },
-    {
-      "offset": 64,
-      "name": "CameraAerialPerspectiveSampleCountPerSlice",
-      "type": "Float"
-    },
-    {
-      "offset": 80,
-      "name": "TransmittanceLutSizeAndInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 96,
-      "name": "MultiScatteredLuminanceLutSizeAndInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 112,
-      "name": "SkyViewLutSizeAndInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 128,
-      "name": "TransmittanceSampleCount",
-      "type": "Float"
-    },
-    {
-      "offset": 132,
-      "name": "MultiScatteringSampleCount",
-      "type": "Float"
-    },
-    {
-      "offset": 136,
-      "name": "AerialPespectiveViewDistanceScale",
-      "type": "Float"
-    },
-    {
-      "offset": 140,
-      "name": "FogShowFlagFactor",
-      "type": "Float"
-    },
-    {
-      "offset": 144,
-      "name": "SkyLuminanceFactor",
-      "type": "Float3"
-    }
-  ],
-  "resources": []
+  "Name": "SkyAtmosphere",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp:232 (FSkyAtmosphereInternalCommonParameters)",
+  "LayoutHash": "0x00A00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SkyAtmosphere",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SampleCountMin",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SampleCountMax",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DistanceToSampleCountMaxInv",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FastSkySampleCountMin",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FastSkySampleCountMax",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FastSkyDistanceToSampleCountMaxInv",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveVolumeSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveVolumeDepthResolution",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveVolumeDepthResolutionInv",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveVolumeDepthSliceLengthKm",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveVolumeDepthSliceLengthKmInv",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAerialPerspectiveSampleCountPerSlice",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TransmittanceLutSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MultiScatteredLuminanceLutSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SkyViewLutSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TransmittanceSampleCount",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MultiScatteringSampleCount",
+        "NameIndex": -1,
+        "Index": 132,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AerialPespectiveViewDistanceScale",
+        "NameIndex": -1,
+        "Index": 136,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogShowFlagFactor",
+        "NameIndex": -1,
+        "Index": 140,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SkyLuminanceFactor",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 156,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

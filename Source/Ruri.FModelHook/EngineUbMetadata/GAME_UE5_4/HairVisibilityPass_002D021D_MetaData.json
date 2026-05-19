@@ -1,35 +1,70 @@
 {
-  "name": "HairVisibilityPass",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp:1336 (FVisibilityPassUniformParameters)",
-  "layoutHash": "0x002D021D",
-  "constantBufferSize": 4,
-  "bindingFlags": "Static",
-  "members": [
+  "Name": "HairVisibilityPass",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp:1336 (FVisibilityPassUniformParameters)",
+  "LayoutHash": "0x002D021D",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "HairVisibilityPass",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxPPLLNodeCount",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 4,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
     {
-      "offset": 0,
-      "name": "MaxPPLLNodeCount",
-      "type": "UInt"
+      "Name": "PPLLCounter",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "PPLLNodeIndex",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "PPLLNodeData",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
     }
   ],
-  "resources": [
+  "Resources": [
     {
-      "index": 0,
-      "offset": 8,
-      "name": "PPLLCounter",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Index": 0,
+      "Offset": 8,
+      "Name": "PPLLCounter",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
     },
     {
-      "index": 1,
-      "offset": 16,
-      "name": "PPLLNodeIndex",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Index": 1,
+      "Offset": 16,
+      "Name": "PPLLNodeIndex",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
     },
     {
-      "index": 2,
-      "offset": 24,
-      "name": "PPLLNodeData",
-      "type": "UBMT_RDG_BUFFER_UAV"
+      "Index": 2,
+      "Offset": 24,
+      "Name": "PPLLNodeData",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
     }
   ]
 }

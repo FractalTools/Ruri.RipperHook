@@ -1,17 +1,35 @@
 {
-  "name": "BatchedPrimitive",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:28 (FBatchedPrimitiveParameters)",
-  "layoutHash": "0x00100311",
-  "constantBufferSize": 16,
-  "bindingFlags": "StaticAndShader",
-  "members": [],
-  "resources": [
+  "Name": "BatchedPrimitive",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:28 (FBatchedPrimitiveParameters)",
+  "LayoutHash": "0x00100311",
+  "BindingFlags": "StaticAndShader",
+  "ConstantBuffer": {
+    "Name": "BatchedPrimitive",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "Data",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "Data",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Data",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

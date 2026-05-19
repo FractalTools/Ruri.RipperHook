@@ -1,47 +1,83 @@
 {
-  "name": "ReflectionCaptureES31",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:902 (FMobileReflectionCaptureShaderData)",
-  "layoutHash": "0x38400301",
-  "constantBufferSize": 14400,
-  "bindingFlags": "StaticAndShader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "PositionHighAndRadius",
-      "type": "Float4",
-      "arraySize": 100
-    },
-    {
-      "offset": 1600,
-      "name": "PositionLow",
-      "type": "Float4",
-      "arraySize": 100
-    },
-    {
-      "offset": 3200,
-      "name": "CaptureProperties",
-      "type": "Float4",
-      "arraySize": 100
-    },
-    {
-      "offset": 4800,
-      "name": "CaptureOffsetAndAverageBrightness",
-      "type": "Float4",
-      "arraySize": 100
-    },
-    {
-      "offset": 6400,
-      "name": "BoxTransform",
-      "type": "Float4x4",
-      "arraySize": 100
-    },
-    {
-      "offset": 12800,
-      "name": "BoxScales",
-      "type": "Float4",
-      "arraySize": 100
-    }
-  ],
-  "resources": []
+  "Name": "ReflectionCaptureES31",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:902 (FMobileReflectionCaptureShaderData)",
+  "LayoutHash": "0x38400301",
+  "BindingFlags": "StaticAndShader",
+  "ConstantBuffer": {
+    "Name": "ReflectionCaptureES31",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "BoxTransform",
+        "NameIndex": -1,
+        "Index": 6400,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "PositionHighAndRadius",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PositionLow",
+        "NameIndex": -1,
+        "Index": 1600,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureProperties",
+        "NameIndex": -1,
+        "Index": 3200,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureOffsetAndAverageBrightness",
+        "NameIndex": -1,
+        "Index": 4800,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BoxScales",
+        "NameIndex": -1,
+        "Index": 12800,
+        "ArraySize": 100,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 14400,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

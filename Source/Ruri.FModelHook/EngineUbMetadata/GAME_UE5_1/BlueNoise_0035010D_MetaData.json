@@ -1,34 +1,72 @@
 {
-  "name": "BlueNoise",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/BlueNoise.h:14 (FBlueNoise)",
-  "layoutHash": "0x0035010D",
-  "constantBufferSize": 28,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "BlueNoise",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/BlueNoise.h:14 (FBlueNoise)",
+  "LayoutHash": "0x0035010D",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "BlueNoise",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Dimensions",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ModuloMasks",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 28,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "Dimensions",
-      "type": "Int3"
+      "Name": "ScalarTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 16,
-      "name": "ModuloMasks",
-      "type": "Int3"
+      "Name": "Vec2Texture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 32,
-      "name": "ScalarTexture",
-      "type": "UBMT_TEXTURE"
+      "Index": 0,
+      "Offset": 32,
+      "Name": "ScalarTexture",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 40,
-      "name": "Vec2Texture",
-      "type": "UBMT_TEXTURE"
+      "Index": 1,
+      "Offset": 40,
+      "Name": "Vec2Texture",
+      "UbmtType": "UBMT_TEXTURE"
     }
   ]
 }

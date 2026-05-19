@@ -1,161 +1,343 @@
 {
-  "name": "MobileSceneTextures",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:40 (FMobileSceneTextureUniformParameters)",
-  "layoutHash": "0x05D002C8",
-  "constantBufferSize": 208,
-  "bindingFlags": "Static",
-  "members": [],
-  "resources": [
+  "Name": "MobileSceneTextures",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:40 (FMobileSceneTextureUniformParameters)",
+  "LayoutHash": "0x05D002C8",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "MobileSceneTextures",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 208,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "SceneColorTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "SceneColorTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 2,
-      "offset": 16,
-      "name": "SceneDepthTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 3,
-      "offset": 24,
-      "name": "SceneDepthTextureArray",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 4,
-      "offset": 32,
-      "name": "SceneDepthTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 5,
-      "offset": 40,
-      "name": "ScenePartialDepthTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneVelocityTexture",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 6,
-      "offset": 48,
-      "name": "ScenePartialDepthTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "GBufferATexture",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 7,
-      "offset": 56,
-      "name": "CustomDepthTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 13,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 8,
-      "offset": 64,
-      "name": "CustomDepthTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 9,
-      "offset": 72,
-      "name": "CustomStencilTexture",
-      "type": "UBMT_RDG_TEXTURE_SRV"
+      "Name": "GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 15,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 10,
-      "offset": 80,
-      "name": "SceneVelocityTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneDepthAuxTexture",
+      "NameIndex": -1,
+      "Index": 16,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 11,
-      "offset": 88,
-      "name": "SceneVelocityTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "SceneDepthAuxTextureArray",
+      "NameIndex": -1,
+      "Index": 17,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 12,
-      "offset": 96,
-      "name": "GBufferATexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "LocalLightTextureA",
+      "NameIndex": -1,
+      "Index": 18,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "index": 13,
-      "offset": 104,
-      "name": "GBufferBTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "LocalLightTextureB",
+      "NameIndex": -1,
+      "Index": 19,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SceneColorTextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 14,
-      "offset": 112,
-      "name": "GBufferCTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneDepthTextureSampler",
+      "Sampler": 4,
+      "BindPoint": 4
     },
     {
-      "index": 15,
-      "offset": 120,
-      "name": "GBufferDTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ScenePartialDepthTextureSampler",
+      "Sampler": 6,
+      "BindPoint": 6
     },
     {
-      "index": 16,
-      "offset": 128,
-      "name": "SceneDepthAuxTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "CustomDepthTextureSampler",
+      "Sampler": 8,
+      "BindPoint": 8
     },
     {
-      "index": 17,
-      "offset": 136,
-      "name": "SceneDepthAuxTextureArray",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "SceneVelocityTextureSampler",
+      "Sampler": 11,
+      "BindPoint": 11
     },
     {
-      "index": 18,
-      "offset": 144,
-      "name": "LocalLightTextureA",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "GBufferATextureSampler",
+      "Sampler": 20,
+      "BindPoint": 20
     },
     {
-      "index": 19,
-      "offset": 152,
-      "name": "LocalLightTextureB",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "GBufferBTextureSampler",
+      "Sampler": 21,
+      "BindPoint": 21
     },
     {
-      "index": 20,
-      "offset": 160,
-      "name": "GBufferATextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "GBufferCTextureSampler",
+      "Sampler": 22,
+      "BindPoint": 22
     },
     {
-      "index": 21,
-      "offset": 168,
-      "name": "GBufferBTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "GBufferDTextureSampler",
+      "Sampler": 23,
+      "BindPoint": 23
     },
     {
-      "index": 22,
-      "offset": 176,
-      "name": "GBufferCTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "SceneDepthAuxTextureSampler",
+      "Sampler": 24,
+      "BindPoint": 24
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 23,
-      "offset": 184,
-      "name": "GBufferDTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneColorTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 24,
-      "offset": 192,
-      "name": "SceneDepthAuxTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "SceneDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "ScenePartialDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "CustomDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "SceneVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "SceneVelocityTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 13,
+      "Offset": 104,
+      "Name": "GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 14,
+      "Offset": 112,
+      "Name": "GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 15,
+      "Offset": 120,
+      "Name": "GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 16,
+      "Offset": 128,
+      "Name": "SceneDepthAuxTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 17,
+      "Offset": 136,
+      "Name": "SceneDepthAuxTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 18,
+      "Offset": 144,
+      "Name": "LocalLightTextureA",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 19,
+      "Offset": 152,
+      "Name": "LocalLightTextureB",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 20,
+      "Offset": 160,
+      "Name": "GBufferATextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 21,
+      "Offset": 168,
+      "Name": "GBufferBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 22,
+      "Offset": 176,
+      "Name": "GBufferCTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 23,
+      "Offset": 184,
+      "Name": "GBufferDTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 24,
+      "Offset": 192,
+      "Name": "SceneDepthAuxTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

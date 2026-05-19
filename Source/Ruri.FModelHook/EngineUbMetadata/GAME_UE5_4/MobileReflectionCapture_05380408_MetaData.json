@@ -1,41 +1,85 @@
 {
-  "name": "MobileReflectionCapture",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:1096 (FMobileReflectionCaptureShaderParameters)",
-  "layoutHash": "0x05380408",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "MobileReflectionCapture",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:1096 (FMobileReflectionCaptureShaderParameters)",
+  "LayoutHash": "0x05380408",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "MobileReflectionCapture",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Params",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "Params",
-      "type": "Float4"
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TextureBlend",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 16,
-      "name": "Texture",
-      "type": "UBMT_TEXTURE"
+      "Name": "TextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 24,
-      "name": "TextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "TextureBlendSampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 2,
-      "offset": 32,
-      "name": "TextureBlend",
-      "type": "UBMT_TEXTURE"
+      "Index": 1,
+      "Offset": 24,
+      "Name": "TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 3,
-      "offset": 40,
-      "name": "TextureBlendSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 32,
+      "Name": "TextureBlend",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 40,
+      "Name": "TextureBlendSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

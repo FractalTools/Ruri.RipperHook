@@ -1,28 +1,56 @@
 {
-  "name": "WaterRaytracingVF",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:29 (FWaterVertexFactoryRaytracingParameters)",
-  "layoutHash": "0x00300106",
-  "constantBufferSize": 48,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "WaterRaytracingVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:29 (FWaterVertexFactoryRaytracingParameters)",
+  "LayoutHash": "0x00300106",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "WaterRaytracingVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "InstanceData0",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstanceData1",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 16,
-      "name": "InstanceData0",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "InstanceData1",
-      "type": "Float4"
+      "Name": "VertexBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "VertexBuffer",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 0,
+      "Name": "VertexBuffer",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

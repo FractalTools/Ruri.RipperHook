@@ -1,50 +1,102 @@
 {
-  "name": "NV21ConvertUB",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:237 (FNV21ConvertUB)",
-  "layoutHash": "0x00780165",
-  "constantBufferSize": 80,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "NV21ConvertUB",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:237 (FNV21ConvertUB)",
+  "LayoutHash": "0x00780165",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "NV21ConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ColorTransform",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "OutputWidth",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SrgbToLinear",
+        "NameIndex": -1,
+        "Index": 68,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScale",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 80,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "ColorTransform",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 64,
-      "name": "OutputWidth",
-      "type": "UInt"
-    },
-    {
-      "offset": 68,
-      "name": "SrgbToLinear",
-      "type": "UInt"
-    },
-    {
-      "offset": 72,
-      "name": "UVScale",
-      "type": "Float2"
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 80,
-      "name": "Texture",
-      "type": "UBMT_TEXTURE"
+      "Name": "SamplerB",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 88,
-      "name": "SamplerB",
-      "type": "UBMT_SAMPLER"
+      "Name": "SamplerP",
+      "Sampler": 2,
+      "BindPoint": 2
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 80,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 2,
-      "offset": 96,
-      "name": "SamplerP",
-      "type": "UBMT_SAMPLER"
+      "Index": 1,
+      "Offset": 88,
+      "Name": "SamplerB",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 2,
+      "Offset": 96,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

@@ -1,54 +1,111 @@
 {
-  "name": "RayTracingDecals",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDecals.h:13 (FRayTracingDecals)",
-  "layoutHash": "0x00490118",
-  "constantBufferSize": 60,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "RayTracingDecals",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDecals.h:13 (FRayTracingDecals)",
+  "LayoutHash": "0x00490118",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "RayTracingDecals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "TranslatedBoundMin",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslatedBoundMax",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GridResolution",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GridMaxCount",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GridAxis",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Count",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 60,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 16,
-      "name": "TranslatedBoundMin",
-      "type": "Float3"
-    },
-    {
-      "offset": 32,
-      "name": "TranslatedBoundMax",
-      "type": "Float3"
-    },
-    {
-      "offset": 44,
-      "name": "GridResolution",
-      "type": "UInt"
-    },
-    {
-      "offset": 48,
-      "name": "GridMaxCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 52,
-      "name": "GridAxis",
-      "type": "UInt"
-    },
-    {
-      "offset": 56,
-      "name": "Count",
-      "type": "UInt"
+      "Name": "Grid",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "Grid",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "GridData",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Grid",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "GridData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 1,
+      "Offset": 8,
+      "Name": "GridData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

@@ -1,199 +1,373 @@
 {
-  "name": "VolumetricCloudCommonParameters",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/VolumetricCloudRendering.h:65 (FVolumetricCloudCommonGlobalShaderParameters)",
-  "layoutHash": "0x03600100",
-  "constantBufferSize": 860,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "GroundAlbedo",
-      "type": "Float4"
-    },
-    {
-      "offset": 16,
-      "name": "CloudLayerCenterKm",
-      "type": "Float3"
-    },
-    {
-      "offset": 28,
-      "name": "PlanetRadiusKm",
-      "type": "Float"
-    },
-    {
-      "offset": 32,
-      "name": "BottomRadiusKm",
-      "type": "Float"
-    },
-    {
-      "offset": 36,
-      "name": "TopRadiusKm",
-      "type": "Float"
-    },
-    {
-      "offset": 40,
-      "name": "TracingStartMaxDistance",
-      "type": "Float"
-    },
-    {
-      "offset": 44,
-      "name": "TracingMaxDistanceMode",
-      "type": "Int"
-    },
-    {
-      "offset": 48,
-      "name": "TracingMaxDistance",
-      "type": "Float"
-    },
-    {
-      "offset": 52,
-      "name": "SampleCountMin",
-      "type": "Int"
-    },
-    {
-      "offset": 56,
-      "name": "SampleCountMax",
-      "type": "Int"
-    },
-    {
-      "offset": 60,
-      "name": "InvDistanceToSampleCountMax",
-      "type": "Float"
-    },
-    {
-      "offset": 64,
-      "name": "ShadowSampleCountMax",
-      "type": "Int"
-    },
-    {
-      "offset": 68,
-      "name": "ShadowTracingMaxDistance",
-      "type": "Float"
-    },
-    {
-      "offset": 72,
-      "name": "StopTracingTransmittanceThreshold",
-      "type": "Float"
-    },
-    {
-      "offset": 76,
-      "name": "SkyLightCloudBottomVisibility",
-      "type": "Float"
-    },
-    {
-      "offset": 80,
-      "name": "AtmosphericLightCloudScatteredLuminanceScale",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 112,
-      "name": "CloudShadowmapFarDepthKm",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 144,
-      "name": "CloudShadowmapStrength",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 176,
-      "name": "CloudShadowmapDepthBias",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 208,
-      "name": "CloudShadowmapSampleCount",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 240,
-      "name": "CloudShadowmapSizeInvSize",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 272,
-      "name": "CloudShadowmapTracingSizeInvSize",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 304,
-      "name": "CloudShadowmapTranslatedWorldToLightClipMatrix",
-      "type": "Float4x4",
-      "arraySize": 2
-    },
-    {
-      "offset": 432,
-      "name": "CloudShadowmapTranslatedWorldToLightClipMatrixInv",
-      "type": "Float4x4",
-      "arraySize": 2
-    },
-    {
-      "offset": 560,
-      "name": "CloudShadowmapTracingPixelScaleOffset",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 592,
-      "name": "CloudShadowmapLightDir",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 624,
-      "name": "CloudShadowmapLightPos",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 656,
-      "name": "CloudShadowmapLightAnchorPos",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 688,
-      "name": "CloudSkyAOFarDepthKm",
-      "type": "Float"
-    },
-    {
-      "offset": 692,
-      "name": "CloudSkyAOStrength",
-      "type": "Float"
-    },
-    {
-      "offset": 696,
-      "name": "CloudSkyAOSampleCount",
-      "type": "Float"
-    },
-    {
-      "offset": 704,
-      "name": "CloudSkyAOSizeInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 720,
-      "name": "CloudSkyAOTranslatedWorldToLightClipMatrix",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 784,
-      "name": "CloudSkyAOTranslatedWorldToLightClipMatrixInv",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 848,
-      "name": "CloudSkyAOTraceDir",
-      "type": "Float3"
-    }
-  ],
-  "resources": []
+  "Name": "VolumetricCloudCommonParameters",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VolumetricCloudRendering.h:65 (FVolumetricCloudCommonGlobalShaderParameters)",
+  "LayoutHash": "0x03600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "VolumetricCloudCommonParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "CloudShadowmapTranslatedWorldToLightClipMatrix",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "CloudShadowmapTranslatedWorldToLightClipMatrixInv",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "CloudSkyAOTranslatedWorldToLightClipMatrix",
+        "NameIndex": -1,
+        "Index": 720,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "CloudSkyAOTranslatedWorldToLightClipMatrixInv",
+        "NameIndex": -1,
+        "Index": 784,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "GroundAlbedo",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudLayerCenterKm",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanetRadiusKm",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BottomRadiusKm",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TopRadiusKm",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TracingStartMaxDistance",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TracingMaxDistanceMode",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TracingMaxDistance",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SampleCountMin",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SampleCountMax",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvDistanceToSampleCountMax",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowSampleCountMax",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowTracingMaxDistance",
+        "NameIndex": -1,
+        "Index": 68,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "StopTracingTransmittanceThreshold",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SkyLightCloudBottomVisibility",
+        "NameIndex": -1,
+        "Index": 76,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AtmosphericLightCloudScatteredLuminanceScale",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapFarDepthKm",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapStrength",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapDepthBias",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapSampleCount",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapSizeInvSize",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapTracingSizeInvSize",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapTracingPixelScaleOffset",
+        "NameIndex": -1,
+        "Index": 560,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapLightDir",
+        "NameIndex": -1,
+        "Index": 592,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapLightPos",
+        "NameIndex": -1,
+        "Index": 624,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudShadowmapLightAnchorPos",
+        "NameIndex": -1,
+        "Index": 656,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudSkyAOFarDepthKm",
+        "NameIndex": -1,
+        "Index": 688,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudSkyAOStrength",
+        "NameIndex": -1,
+        "Index": 692,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudSkyAOSampleCount",
+        "NameIndex": -1,
+        "Index": 696,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudSkyAOSizeInvSize",
+        "NameIndex": -1,
+        "Index": 704,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CloudSkyAOTraceDir",
+        "NameIndex": -1,
+        "Index": 848,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 860,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

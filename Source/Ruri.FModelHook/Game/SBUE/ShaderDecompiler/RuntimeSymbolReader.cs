@@ -372,12 +372,15 @@ internal static class ShaderResourceTableSymbolizer
         }
 
         // Mechanism 2: Engine UB via external metadata keyed on layout hash.
+        // The slot's `Index` is the engine-side resource-table position
+        // (== record.ResourceIndex), populated from the canonical
+        // FRHIUniformBufferLayoutInitializer.Resources[] order.
         if (perUbEngineMeta != null
             && record.UniformBufferIndex >= 0
             && record.UniformBufferIndex < perUbEngineMeta.Length
             && perUbEngineMeta[record.UniformBufferIndex] is EngineUbMetadata engineMeta)
         {
-            foreach (EngineUbResource res in engineMeta.Resources)
+            foreach (EngineUbResourceSlot res in engineMeta.Resources)
             {
                 if (res.Index == record.ResourceIndex && !string.IsNullOrWhiteSpace(res.Name))
                 {

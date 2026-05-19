@@ -1,98 +1,205 @@
 {
-  "name": "Substrate",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/Substrate/Substrate.h:60 (FSubstrateGlobalUniformParameters)",
-  "layoutHash": "0x09701141",
-  "constantBufferSize": 56,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "Substrate",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Substrate/Substrate.h:60 (FSubstrateGlobalUniformParameters)",
+  "LayoutHash": "0x09701141",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "Substrate",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxBytesPerPixel",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxClosurePerPixel",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRoughDiffuse",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PeelLayersAboveDepth",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRoughnessTracking",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SliceStoringDebugSubstrateTreeData",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FirstSliceStoringSubstrateSSSData",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileSize",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileSizeLog2",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileCount",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 56,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "MaxBytesPerPixel",
-      "type": "UInt"
+      "Name": "MaterialTextureArray",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 4,
-      "name": "MaxClosurePerPixel",
-      "type": "UInt"
+      "Name": "TopLayerTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 8,
-      "name": "bRoughDiffuse",
-      "type": "UInt"
+      "Name": "OpaqueRoughRefractionTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 12,
-      "name": "PeelLayersAboveDepth",
-      "type": "UInt"
-    },
-    {
-      "offset": 16,
-      "name": "bRoughnessTracking",
-      "type": "UInt"
-    },
-    {
-      "offset": 32,
-      "name": "SliceStoringDebugSubstrateTreeData",
-      "type": "Int"
-    },
-    {
-      "offset": 36,
-      "name": "FirstSliceStoringSubstrateSSSData",
-      "type": "Int"
-    },
-    {
-      "offset": 40,
-      "name": "TileSize",
-      "type": "UInt"
-    },
-    {
-      "offset": 44,
-      "name": "TileSizeLog2",
-      "type": "UInt"
-    },
-    {
-      "offset": 48,
-      "name": "TileCount",
-      "type": "Int2"
+      "Name": "ClosureOffsetTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 56,
-      "name": "MaterialTextureArray",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ClosureTileBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     },
     {
-      "index": 1,
-      "offset": 64,
-      "name": "TopLayerTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ClosureTileCountBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 56,
+      "Name": "MaterialTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 2,
-      "offset": 72,
-      "name": "OpaqueRoughRefractionTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 64,
+      "Name": "TopLayerTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 3,
-      "offset": 80,
-      "name": "ClosureOffsetTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 2,
+      "Offset": 72,
+      "Name": "OpaqueRoughRefractionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 4,
-      "offset": 88,
-      "name": "ClosureTileBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 3,
+      "Offset": 80,
+      "Name": "ClosureOffsetTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 5,
-      "offset": 96,
-      "name": "ClosureTileCountBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 4,
+      "Offset": 88,
+      "Name": "ClosureTileBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 96,
+      "Name": "ClosureTileCountBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

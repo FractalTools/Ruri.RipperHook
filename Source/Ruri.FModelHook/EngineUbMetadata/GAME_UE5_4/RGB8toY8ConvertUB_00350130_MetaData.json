@@ -1,34 +1,70 @@
 {
-  "name": "RGB8toY8ConvertUB",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:825 (FRGB8toY8ConvertUB)",
-  "layoutHash": "0x00350130",
-  "constantBufferSize": 20,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "RGB8toY8ConvertUB",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:825 (FRGB8toY8ConvertUB)",
+  "LayoutHash": "0x00350130",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "RGB8toY8ConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ColorTransform",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LinearToSrgb",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 20,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "ColorTransform",
-      "type": "Float4"
-    },
-    {
-      "offset": 16,
-      "name": "LinearToSrgb",
-      "type": "UInt"
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 24,
-      "name": "Texture",
-      "type": "UBMT_TEXTURE"
+      "Name": "SamplerP",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 24,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 32,
-      "name": "SamplerP",
-      "type": "UBMT_SAMPLER"
+      "Index": 1,
+      "Offset": 32,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

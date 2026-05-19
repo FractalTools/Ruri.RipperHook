@@ -1,103 +1,217 @@
 {
-  "name": "Strata",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/Strata/Strata.h:46 (FStrataGlobalUniformParameters)",
-  "layoutHash": "0x09700811",
-  "constantBufferSize": 64,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "Strata",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Strata/Strata.h:46 (FStrataGlobalUniformParameters)",
+  "LayoutHash": "0x09700811",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "Strata",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxBytesPerPixel",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRoughDiffuse",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PeelLayersAboveDepth",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SliceStoringDebugStrataTree",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FirstSliceStoringStrataSSSData",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileSize",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileSizeLog2",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileCount",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TileOffset",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OverflowTileCount",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OverflowTileOffset",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "MaxBytesPerPixel",
-      "type": "UInt"
+      "Name": "MaterialTextureArray",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 4,
-      "name": "bRoughDiffuse",
-      "type": "UInt"
+      "Name": "TopLayerTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 8,
-      "name": "PeelLayersAboveDepth",
-      "type": "UInt"
+      "Name": "OpaqueRoughRefractionTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 12,
-      "name": "SliceStoringDebugStrataTree",
-      "type": "Int"
+      "Name": "BSDFOffsetTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 16,
-      "name": "FirstSliceStoringStrataSSSData",
-      "type": "Int"
-    },
-    {
-      "offset": 20,
-      "name": "TileSize",
-      "type": "UInt"
-    },
-    {
-      "offset": 24,
-      "name": "TileSizeLog2",
-      "type": "UInt"
-    },
-    {
-      "offset": 32,
-      "name": "TileCount",
-      "type": "Int2"
-    },
-    {
-      "offset": 40,
-      "name": "TileOffset",
-      "type": "Int2"
-    },
-    {
-      "offset": 48,
-      "name": "OverflowTileCount",
-      "type": "Int2"
-    },
-    {
-      "offset": 56,
-      "name": "OverflowTileOffset",
-      "type": "Int2"
+      "Name": "BSDFTileTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 64,
-      "name": "MaterialTextureArray",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "BSDFTileCountBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 64,
+      "Name": "MaterialTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 72,
-      "name": "TopLayerTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 72,
+      "Name": "TopLayerTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 2,
-      "offset": 80,
-      "name": "OpaqueRoughRefractionTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 2,
+      "Offset": 80,
+      "Name": "OpaqueRoughRefractionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 3,
-      "offset": 88,
-      "name": "BSDFOffsetTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 3,
+      "Offset": 88,
+      "Name": "BSDFOffsetTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 4,
-      "offset": 96,
-      "name": "BSDFTileTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 4,
+      "Offset": 96,
+      "Name": "BSDFTileTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 5,
-      "offset": 104,
-      "name": "BSDFTileCountBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 5,
+      "Offset": 104,
+      "Name": "BSDFTileCountBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

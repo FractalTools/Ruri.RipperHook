@@ -1,96 +1,192 @@
 {
-  "name": "Atmosphere",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.h:36 (FAtmosphereUniformShaderParameters)",
-  "layoutHash": "0x00B00100",
-  "constantBufferSize": 176,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "MultiScatteringFactor",
-      "type": "Float"
-    },
-    {
-      "offset": 4,
-      "name": "BottomRadiusKm",
-      "type": "Float"
-    },
-    {
-      "offset": 8,
-      "name": "TopRadiusKm",
-      "type": "Float"
-    },
-    {
-      "offset": 12,
-      "name": "RayleighDensityExpScale",
-      "type": "Float"
-    },
-    {
-      "offset": 16,
-      "name": "RayleighScattering",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "MieScattering",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "MieDensityExpScale",
-      "type": "Float"
-    },
-    {
-      "offset": 64,
-      "name": "MieExtinction",
-      "type": "Float4"
-    },
-    {
-      "offset": 80,
-      "name": "MiePhaseG",
-      "type": "Float"
-    },
-    {
-      "offset": 96,
-      "name": "MieAbsorption",
-      "type": "Float4"
-    },
-    {
-      "offset": 112,
-      "name": "AbsorptionDensity0LayerWidth",
-      "type": "Float"
-    },
-    {
-      "offset": 116,
-      "name": "AbsorptionDensity0ConstantTerm",
-      "type": "Float"
-    },
-    {
-      "offset": 120,
-      "name": "AbsorptionDensity0LinearTerm",
-      "type": "Float"
-    },
-    {
-      "offset": 124,
-      "name": "AbsorptionDensity1ConstantTerm",
-      "type": "Float"
-    },
-    {
-      "offset": 128,
-      "name": "AbsorptionDensity1LinearTerm",
-      "type": "Float"
-    },
-    {
-      "offset": 144,
-      "name": "AbsorptionExtinction",
-      "type": "Float4"
-    },
-    {
-      "offset": 160,
-      "name": "GroundAlbedo",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "Atmosphere",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.h:36 (FAtmosphereUniformShaderParameters)",
+  "LayoutHash": "0x00B00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "Atmosphere",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MultiScatteringFactor",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BottomRadiusKm",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TopRadiusKm",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RayleighDensityExpScale",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RayleighScattering",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MieScattering",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MieDensityExpScale",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MieExtinction",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MiePhaseG",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MieAbsorption",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionDensity0LayerWidth",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionDensity0ConstantTerm",
+        "NameIndex": -1,
+        "Index": 116,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionDensity0LinearTerm",
+        "NameIndex": -1,
+        "Index": 120,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionDensity1ConstantTerm",
+        "NameIndex": -1,
+        "Index": 124,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionDensity1LinearTerm",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AbsorptionExtinction",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GroundAlbedo",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 176,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

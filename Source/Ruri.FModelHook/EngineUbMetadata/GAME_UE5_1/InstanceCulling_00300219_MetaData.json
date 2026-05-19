@@ -1,29 +1,58 @@
 {
-  "name": "InstanceCulling",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:19 (FInstanceCullingGlobalUniforms)",
-  "layoutHash": "0x00300219",
-  "constantBufferSize": 20,
-  "bindingFlags": "Static",
-  "members": [
+  "Name": "InstanceCulling",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:19 (FInstanceCullingGlobalUniforms)",
+  "LayoutHash": "0x00300219",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "InstanceCulling",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "BufferCapacity",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 20,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 16,
-      "name": "BufferCapacity",
-      "type": "UInt"
-    }
-  ],
-  "resources": [
-    {
-      "index": 0,
-      "offset": 0,
-      "name": "InstanceIdsBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "InstanceIdsBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "PageInfoBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PageInfoBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "InstanceIdsBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "PageInfoBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

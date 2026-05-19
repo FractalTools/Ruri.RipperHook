@@ -1,55 +1,102 @@
 {
-  "name": "PrecomputedLightingBuffer",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/LightmapUniformShaderParameters.h:17 (FPrecomputedLightingUniformParameters)",
-  "layoutHash": "0x00F00100",
-  "constantBufferSize": 240,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "StaticShadowMapMasks",
-      "type": "Float4"
-    },
-    {
-      "offset": 16,
-      "name": "InvUniformPenumbraSizes",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "LightMapCoordinateScaleBias",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "ShadowMapCoordinateScaleBias",
-      "type": "Float4"
-    },
-    {
-      "offset": 64,
-      "name": "LightMapScale",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 96,
-      "name": "LightMapAdd",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 128,
-      "name": "LightmapVTPackedPageTableUniform",
-      "type": "UInt4",
-      "arraySize": 2
-    },
-    {
-      "offset": 160,
-      "name": "LightmapVTPackedUniform",
-      "type": "UInt4",
-      "arraySize": 5
-    }
-  ],
-  "resources": []
+  "Name": "PrecomputedLightingBuffer",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/LightmapUniformShaderParameters.h:17 (FPrecomputedLightingUniformParameters)",
+  "LayoutHash": "0x00F00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "PrecomputedLightingBuffer",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "StaticShadowMapMasks",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvUniformPenumbraSizes",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightMapCoordinateScaleBias",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowMapCoordinateScaleBias",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightMapScale",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightMapAdd",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightmapVTPackedPageTableUniform",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 2,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightmapVTPackedUniform",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 5,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 240,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

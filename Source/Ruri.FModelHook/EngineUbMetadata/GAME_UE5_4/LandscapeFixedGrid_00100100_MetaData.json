@@ -1,16 +1,32 @@
 {
-  "name": "LandscapeFixedGrid",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:142 (FLandscapeFixedGridUniformShaderParameters)",
-  "layoutHash": "0x00100100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "LodValues",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "LandscapeFixedGrid",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:142 (FLandscapeFixedGridUniformShaderParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LandscapeFixedGrid",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LodValues",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

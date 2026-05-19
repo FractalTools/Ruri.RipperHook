@@ -1,23 +1,42 @@
 {
-  "name": "DebugViewModeStruct",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/DebugViewModeRendering.h:30 (FDebugViewModeUniformParameters)",
-  "layoutHash": "0x00D00100",
-  "constantBufferSize": 208,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "AccuracyColors",
-      "type": "Float4",
-      "arraySize": 5
-    },
-    {
-      "offset": 80,
-      "name": "LODColors",
-      "type": "Float4",
-      "arraySize": 8
-    }
-  ],
-  "resources": []
+  "Name": "DebugViewModeStruct",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/DebugViewModeRendering.h:30 (FDebugViewModeUniformParameters)",
+  "LayoutHash": "0x00D00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "DebugViewModeStruct",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "AccuracyColors",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 5,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LODColors",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 8,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 208,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

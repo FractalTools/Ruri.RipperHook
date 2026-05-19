@@ -1,57 +1,114 @@
 {
-  "name": "LocalVF",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:19 (FLocalVertexFactoryUniformShaderParameters)",
-  "layoutHash": "0x06460718",
-  "constantBufferSize": 24,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "LocalVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:19 (FLocalVertexFactoryUniformShaderParameters)",
+  "LayoutHash": "0x06460718",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LocalVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "VertexFetch_Parameters",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PreSkinBaseVertexIndex",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LODLightmapDataIndex",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 24,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 0,
-      "name": "VertexFetch_Parameters",
-      "type": "Int4"
+      "Name": "VertexFetch_TexCoordBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "offset": 16,
-      "name": "PreSkinBaseVertexIndex",
-      "type": "Int"
+      "Name": "VertexFetch_PositionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
     },
     {
-      "offset": 20,
-      "name": "LODLightmapDataIndex",
-      "type": "UInt"
+      "Name": "VertexFetch_PreSkinPositionBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VertexFetch_PackedTangentsBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VertexFetch_ColorComponentsBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 24,
-      "name": "VertexFetch_TexCoordBuffer",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 24,
+      "Name": "VertexFetch_TexCoordBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 1,
-      "offset": 32,
-      "name": "VertexFetch_PositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 1,
+      "Offset": 32,
+      "Name": "VertexFetch_PositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 2,
-      "offset": 40,
-      "name": "VertexFetch_PreSkinPositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 2,
+      "Offset": 40,
+      "Name": "VertexFetch_PreSkinPositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 3,
-      "offset": 48,
-      "name": "VertexFetch_PackedTangentsBuffer",
-      "type": "UBMT_SRV"
+      "Index": 3,
+      "Offset": 48,
+      "Name": "VertexFetch_PackedTangentsBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 4,
-      "offset": 56,
-      "name": "VertexFetch_ColorComponentsBuffer",
-      "type": "UBMT_SRV"
+      "Index": 4,
+      "Offset": 56,
+      "Name": "VertexFetch_ColorComponentsBuffer",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

@@ -1,56 +1,116 @@
 {
-  "name": "TranslucentSelfShadow",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:1351 (FTranslucentSelfShadowUniformParameters)",
-  "layoutHash": "0x05950908",
-  "constantBufferSize": 112,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "TranslucentSelfShadow",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:1351 (FTranslucentSelfShadowUniformParameters)",
+  "LayoutHash": "0x05950908",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "TranslucentSelfShadow",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "WorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "ShadowUVMinMax",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 112,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "WorldToShadowMatrix",
-      "type": "Float4x4"
+      "Name": "Transmission0",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 64,
-      "name": "ShadowUVMinMax",
-      "type": "Float4"
-    },
-    {
-      "offset": 80,
-      "name": "DirectionalLightDirection",
-      "type": "Float4"
-    },
-    {
-      "offset": 96,
-      "name": "DirectionalLightColor",
-      "type": "Float4"
+      "Name": "Transmission1",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 112,
-      "name": "Transmission0",
-      "type": "UBMT_TEXTURE"
+      "Name": "Transmission0Sampler",
+      "Sampler": 2,
+      "BindPoint": 2
     },
     {
-      "index": 1,
-      "offset": 120,
-      "name": "Transmission1",
-      "type": "UBMT_TEXTURE"
+      "Name": "Transmission1Sampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 112,
+      "Name": "Transmission0",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 2,
-      "offset": 128,
-      "name": "Transmission0Sampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 1,
+      "Offset": 120,
+      "Name": "Transmission1",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 3,
-      "offset": 136,
-      "name": "Transmission1Sampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 128,
+      "Name": "Transmission0Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 3,
+      "Offset": 136,
+      "Name": "Transmission1Sampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }
