@@ -1,0 +1,224 @@
+{
+  "Name": "LightmapResourceCluster",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:747 (FLightmapResourceClusterShaderParameters)",
+  "LayoutHash": "0x0D830F0E",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LightmapResourceCluster",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 128,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "LightMapTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SkyOcclusionTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "AOMaterialMaskTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "StaticShadowTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "LightmapVirtualTexturePageTable0",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "LightmapVirtualTexturePageTable1",
+      "NameIndex": -1,
+      "Index": 15,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "LightMapSampler",
+      "Sampler": 9,
+      "BindPoint": 9
+    },
+    {
+      "Name": "LightMapSampler_1",
+      "Sampler": 10,
+      "BindPoint": 10
+    },
+    {
+      "Name": "SkyOcclusionSampler",
+      "Sampler": 11,
+      "BindPoint": 11
+    },
+    {
+      "Name": "AOMaterialMaskSampler",
+      "Sampler": 12,
+      "BindPoint": 12
+    },
+    {
+      "Name": "StaticShadowTextureSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "VTLightMapTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VTLightMapTexture_1",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VTSkyOcclusionTexture",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VTAOMaterialMaskTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VTStaticShadowTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "LightMapTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SkyOcclusionTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "AOMaterialMaskTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "StaticShadowTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "VTLightMapTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "VTLightMapTexture_1",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "VTSkyOcclusionTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "VTAOMaterialMaskTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "VTStaticShadowTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "LightMapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "LightMapSampler_1",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "SkyOcclusionSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "AOMaterialMaskSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 13,
+      "Offset": 104,
+      "Name": "StaticShadowTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 14,
+      "Offset": 112,
+      "Name": "LightmapVirtualTexturePageTable0",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 15,
+      "Offset": 120,
+      "Name": "LightmapVirtualTexturePageTable1",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ]
+}

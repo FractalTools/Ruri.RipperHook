@@ -1,0 +1,73 @@
+{
+  "Name": "VectorFieldVis",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Private/VectorFieldVisualization.h:39 (FVectorFieldVisualizationParameters)",
+  "LayoutHash": "0x00A00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "VectorFieldVis",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "RelativeVolumeToWorld",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "VolumeToWorldNoScale",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "VolumeToWorldHigh",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VoxelSize",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Scale",
+        "NameIndex": -1,
+        "Index": 156,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 160,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

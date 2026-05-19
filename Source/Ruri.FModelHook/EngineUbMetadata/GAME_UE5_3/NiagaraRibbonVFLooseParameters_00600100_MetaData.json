@@ -1,0 +1,170 @@
+{
+  "Name": "NiagaraRibbonVFLooseParameters",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:72 (FNiagaraRibbonVFLooseParameters)",
+  "LayoutHash": "0x00600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "NiagaraRibbonVFLooseParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "NiagaraFloatDataStride",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FacingMode",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Shape",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NeedsPreciseMotionVectors",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "IndirectDrawOutputOffset",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 84,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "SortedIndices",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "TangentsAndDistances",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MultiRibbonIndices",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "PackedPerRibbonDataByIndex",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "NiagaraParticleDataFloat",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "NiagaraParticleDataHalf",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "SliceVertexData",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    },
+    {
+      "Name": "IndirectDrawOutput",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "SortedIndices",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 24,
+      "Name": "TangentsAndDistances",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 32,
+      "Name": "MultiRibbonIndices",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 40,
+      "Name": "PackedPerRibbonDataByIndex",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 48,
+      "Name": "NiagaraParticleDataFloat",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 56,
+      "Name": "NiagaraParticleDataHalf",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 64,
+      "Name": "SliceVertexData",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 72,
+      "Name": "IndirectDrawOutput",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

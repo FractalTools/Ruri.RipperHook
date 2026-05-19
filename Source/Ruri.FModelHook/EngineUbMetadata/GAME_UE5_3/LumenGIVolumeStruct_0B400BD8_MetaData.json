@@ -1,0 +1,537 @@
+{
+  "Name": "LumenGIVolumeStruct",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenTranslucencyVolumeLighting.h:43 (FLumenTranslucencyLightingUniforms)",
+  "LayoutHash": "0x0B400BD8",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LumenGIVolumeStruct",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ReprojectionRadiusScale",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ClipmapWorldExtent",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ClipmapDistributionBase",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvClipmapFadeSize",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ProbeAtlasResolutionInProbes",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RadianceProbeClipmapResolution",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumRadianceProbeClipmaps",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RadianceProbeResolution",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FinalProbeResolution",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FinalRadianceAtlasMaxMip",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CalculateIrradiance",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "IrradianceProbeResolution",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OcclusionProbeResolution",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumProbesToTraceBudget",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RadianceCacheStats",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RadianceProbeSettings",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PaddedWorldPositionToRadianceProbeCoordBias",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PaddedRadianceProbeCoordToWorldPositionBias",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvProbeFinalRadianceAtlasResolution",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvProbeFinalIrradianceAtlasResolution",
+        "NameIndex": -1,
+        "Index": 408,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvProbeDepthAtlasResolution",
+        "NameIndex": -1,
+        "Index": 416,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OverrideCacheOcclusionLighting",
+        "NameIndex": -1,
+        "Index": 424,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShowBlackRadianceCacheLighting",
+        "NameIndex": -1,
+        "Index": 428,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ProbeAtlasResolutionModuloMask",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ProbeAtlasResolutionDivideShift",
+        "NameIndex": -1,
+        "Index": 436,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Enabled",
+        "NameIndex": -1,
+        "Index": 472,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RelativeDepthThreshold",
+        "NameIndex": -1,
+        "Index": 476,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SpecularScale",
+        "NameIndex": -1,
+        "Index": 480,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Contrast",
+        "NameIndex": -1,
+        "Index": 484,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucencyGIGridZParams",
+        "NameIndex": -1,
+        "Index": 544,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucencyGIGridPixelSizeShift",
+        "NameIndex": -1,
+        "Index": 556,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucencyGIGridSize",
+        "NameIndex": -1,
+        "Index": 560,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 572,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "RadianceProbeIndirectionTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "RadianceCacheFinalRadianceAtlas",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "RadianceCacheFinalIrradianceAtlas",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "RadianceCacheProbeOcclusionAtlas",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "RadianceCacheDepthAtlas",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Radiance",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Normal",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneDepth",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucencyGIVolume0",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucencyGIVolume1",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucencyGIVolumeHistory0",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucencyGIVolumeHistory1",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "TranslucencyGIVolumeSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "ProbeWorldOffset",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 64,
+      "Name": "RadianceProbeIndirectionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 72,
+      "Name": "RadianceCacheFinalRadianceAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 80,
+      "Name": "RadianceCacheFinalIrradianceAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 88,
+      "Name": "RadianceCacheProbeOcclusionAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 96,
+      "Name": "RadianceCacheDepthAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 104,
+      "Name": "ProbeWorldOffset",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 448,
+      "Name": "Radiance",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 456,
+      "Name": "Normal",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 464,
+      "Name": "SceneDepth",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 496,
+      "Name": "TranslucencyGIVolume0",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 504,
+      "Name": "TranslucencyGIVolume1",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 512,
+      "Name": "TranslucencyGIVolumeHistory0",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 12,
+      "Offset": 520,
+      "Name": "TranslucencyGIVolumeHistory1",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 13,
+      "Offset": 528,
+      "Name": "TranslucencyGIVolumeSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1583,6 +1583,14 @@ def main() -> int:
             emit_shader_type_seeds(out_dir, args.engine_version, engine_src)
         except NotImplementedError as exc:
             print(f"[gen][shader-type] {exc}")
+        # Also emit the hash→name index that maps every IMPLEMENT_*_SHADER_
+        # TYPE invocation (including ##-expanded specialisations) to its
+        # source-recovered FName. The decompile-side registry merges this
+        # to fill in cookedTypeName when stableinfo.json left it empty.
+        try:
+            emit_hash_to_name_index(out_dir, engine_src)
+        except Exception as exc:
+            print(f"[gen][hash-to-name] {exc}")
 
     return 0 if failures == 0 else 1
 
@@ -2011,6 +2019,274 @@ def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path)
         written += 1
     print(f"[gen][shader-type] wrote {written} seed file(s) under {target}")
     return written
+
+
+# ---------------------------------------------------------------------------
+# IMPLEMENT_*_SHADER_TYPE scan — hash→ShaderTypeName index.
+#
+# Cooked shader binaries store `FShaderType::HashedName` per shader, but the
+# corresponding string NAME is dropped at cook (only kept in the editor's
+# FShaderType static registry). To recover names at decompile time we hash
+# every shader-type FName the engine source declares via `IMPLEMENT_*_SHADER_
+# TYPE` macros and emit a single `_ShaderType/_HashToName.json` index. The
+# decompile-side ShaderTypeSeedRegistry merges this in so cooked binaries
+# can fill in their empty `ShaderTypeName` fields.
+#
+# Template specialisations: UE uses `##`-concatenation to manufacture one
+# FShaderType per policy specialisation. The macro definition has a `##` in
+# its body; the invocations supply the per-policy suffix. We expand by:
+#   1. Find every `#define IMPLEMENT_<X>(args) { ... ##suffix_arg ... }`
+#   2. Find every invocation of that macro
+#   3. Substitute each invocation's args into the body, capture the
+#      `IMPLEMENT_*_SHADER_TYPE(template<>, <FinalName>, ...)` after expansion
+# This is a one-level expansion (most UE shader-type macros are flat).
+# Nested macros (e.g. `IMPLEMENT_<X>(...) → IMPLEMENT_<Y>(...) → IMPLEMENT_
+# SHADER_TYPE(...)`) are handled by iterating the expansion until no more
+# `##` patterns remain (max 4 iterations to avoid infinite loops).
+# ---------------------------------------------------------------------------
+
+_IMPLEMENT_SHADER_TYPE_RE = re.compile(
+    r"\bIMPLEMENT_(?:MESH_|MATERIAL_|GLOBAL_|COMPUTE_|RAYTRACING_|NIAGARA_)?SHADER_TYPE\s*\("
+    r"[^,]*,\s*"  # template<> or template<TYPE>
+    r"([A-Za-z_][A-Za-z_0-9<>:,\s##]*?)\s*,",
+    re.MULTILINE,
+)
+
+# Macro definitions that use `##` concatenation to build shader-type names.
+# Capture: macro_name, arg_list, body.
+_MACRO_DEF_WITH_HASHHASH_RE = re.compile(
+    r"#define\s+(IMPLEMENT_[A-Z0-9_]*?)\s*\(([^)]+)\)\s*\\?\s*\n((?:[^\n]*\\\s*\n)*[^\n]*)",
+    re.MULTILINE,
+)
+
+
+def _collect_implement_macro_definitions(engine_src: Path) -> dict[str, tuple[list[str], str]]:
+    """Returns macro_name -> (param_names, body) for ALL IMPLEMENT_* macros
+    that either contain `##` directly OR invoke another IMPLEMENT_* macro
+    (transitive closure). Body has line-continuations stripped."""
+    raw: dict[str, tuple[list[str], str]] = {}
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if "IMPLEMENT_" not in text:
+            continue
+        for m in _MACRO_DEF_WITH_HASHHASH_RE.finditer(text):
+            name = m.group(1)
+            params_raw = m.group(2)
+            body = m.group(3).replace("\\\n", " ").replace("\\\r\n", " ")
+            params = [p.strip() for p in params_raw.split(",")]
+            raw[name] = (params, body)
+
+    # Keep only macros that EVENTUALLY produce a `##`-concatenated FShaderType
+    # name. A macro qualifies if its body contains `##` OR invokes another
+    # macro that qualifies. Iteratively close the set.
+    qualified: set[str] = set()
+    for name, (_, body) in raw.items():
+        if "##" in body:
+            qualified.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, (_, body) in raw.items():
+            if name in qualified:
+                continue
+            # Does this body invoke any already-qualified macro?
+            if any(re.search(rf"\b{re.escape(q)}\s*\(", body) for q in qualified):
+                qualified.add(name)
+                changed = True
+
+    return {name: raw[name] for name in qualified if name in raw}
+
+
+def _substitute_args(body: str, params: list[str], args: list[str]) -> str:
+    """Replace each `<param>` in `body` with the corresponding `<arg>`,
+    handling the `##<param>` and `<param>##` concatenation patterns. Uses
+    a lambda for the replacement so any backslashes in args (rare but
+    possible) don't get interpreted as regex backreferences."""
+    out = body
+    for p, a in zip(params, args):
+        sub = a.strip()
+        out = re.sub(rf"##\s*{re.escape(p)}\b", lambda _m, _s=sub: _s, out)
+        out = re.sub(rf"\b{re.escape(p)}\s*##", lambda _m, _s=sub: _s, out)
+        out = re.sub(rf"\b{re.escape(p)}\b", lambda _m, _s=sub: _s, out)
+    return out
+
+
+def _expand_one_level(text: str, macro_defs: dict[str, tuple[list[str], str]]) -> tuple[str, bool]:
+    """Expand every invocation of a qualified macro in `text` once. Returns
+    (expanded_text, any_substitution_happened). The 2nd return is the loop
+    termination signal."""
+    changed = False
+    for macro_name, (params, body) in macro_defs.items():
+        # `(?<![A-Za-z0-9_])` is the regex equivalent of `\b` but excludes
+        # `_` from word boundaries — we need that because invocations
+        # often appear in identifier context like `\bMACRO\(...\)`.
+        pattern = rf"(?<![A-Za-z0-9_]){re.escape(macro_name)}\s*\("
+        def replacer(m, _name=macro_name, _params=params, _body=body):
+            nonlocal changed
+            # Find the matching closing paren accounting for nested parens.
+            start = m.end()
+            depth = 1
+            i = start
+            while i < len(text) and depth > 0:
+                c = text[i]
+                if c == '(': depth += 1
+                elif c == ')': depth -= 1
+                i += 1
+            if depth != 0:
+                return m.group(0)
+            args_raw = text[start:i - 1]
+            args = _split_top_level(args_raw)
+            if len(args) != len(_params):
+                return m.group(0)
+            changed = True
+            return _substitute_args(_body, _params, args)
+
+        # Custom expand using re.finditer + manual splice to handle the
+        # variable-length closing-paren matching.
+        new_text = []
+        last = 0
+        for m in re.finditer(pattern, text):
+            start = m.end()
+            depth = 1
+            i = start
+            while i < len(text) and depth > 0:
+                c = text[i]
+                if c == '(': depth += 1
+                elif c == ')': depth -= 1
+                i += 1
+            if depth != 0:
+                continue
+            args_raw = text[start:i - 1]
+            args = _split_top_level(args_raw)
+            if len(args) != len(params):
+                continue
+            new_text.append(text[last:m.start()])
+            new_text.append(_substitute_args(body, params, args))
+            # Skip the trailing `;` if present (line-terminator on the invocation).
+            j = i
+            if j < len(text) and text[j] == ';':
+                j += 1
+            last = j
+            changed = True
+        if changed:
+            new_text.append(text[last:])
+            text = "".join(new_text)
+    return text, changed
+
+
+def _expand_invocations(
+    macro_defs: dict[str, tuple[list[str], str]],
+    engine_src: Path,
+) -> set[str]:
+    """For every top-level invocation of a qualified IMPLEMENT_* macro,
+    recursively expand until no more macro calls remain (capped at 5
+    iterations for safety). Returns a SET of fully-expanded `IMPLEMENT_*_
+    SHADER_TYPE(template<>, <FinalName>, ...)` strings — caller pulls the
+    NAME with `_IMPLEMENT_SHADER_TYPE_RE`."""
+    expansions: set[str] = set()
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if not any(macro_name in text for macro_name in macro_defs):
+            continue
+        # Expand iteratively. After each pass new invocations may surface
+        # because outer macros invoked inner ones.
+        for _ in range(5):
+            text, changed = _expand_one_level(text, macro_defs)
+            if not changed:
+                break
+        # Pull every IMPLEMENT_*_SHADER_TYPE seen in the expanded text.
+        for m in _IMPLEMENT_SHADER_TYPE_RE.finditer(text):
+            n = m.group(1).strip()
+            if "##" in n or not n:
+                continue
+            expansions.add(m.group(0))
+    return expansions
+
+
+def _split_top_level(s: str) -> list[str]:
+    """Split a macro arg list at top-level commas (skipping commas inside
+    nested `<...>` template brackets and `(...)` calls)."""
+    args: list[str] = []
+    depth = 0
+    current = []
+    for c in s:
+        if c == ',' and depth == 0:
+            args.append("".join(current))
+            current = []
+        else:
+            if c in "<([": depth += 1
+            elif c in ">)]": depth -= 1
+            current.append(c)
+    if current:
+        args.append("".join(current))
+    return args
+
+
+def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
+    """Emit `_ShaderType/_HashToName.json` mapping FShaderType::HashedName
+    (CityHash64WithSeed of UPPER class name, seed=0) to the source-recovered
+    type name. Returns the count of unique names indexed."""
+    # 1. Direct (un-templated) IMPLEMENT_*_SHADER_TYPE invocations.
+    names: set[str] = set()
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if "SHADER_TYPE" not in text:
+            continue
+        for m in _IMPLEMENT_SHADER_TYPE_RE.finditer(text):
+            n = m.group(1).strip()
+            # Skip names that still have `##` (unexpanded macros — caught in step 2)
+            if "##" in n or not n:
+                continue
+            # Strip any whitespace inside templated names: `T<A, B>` -> `T<A,B>`
+            n = re.sub(r"\s+", "", n)
+            names.add(n)
+
+    # 2. Macro-expanded `##`-concatenated invocations.
+    macro_defs = _collect_implement_macro_definitions(engine_src)
+    expansions = _expand_invocations(macro_defs, engine_src)
+    for body in expansions:
+        for m in _IMPLEMENT_SHADER_TYPE_RE.finditer(body):
+            n = m.group(1).strip()
+            if "##" in n or not n:
+                continue
+            n = re.sub(r"\s+", "", n)
+            names.add(n)
+
+    print(f"[gen][hash-to-name] collected {len(names)} unique ShaderType names (incl. ##-expanded specialisations).")
+
+    # Hash each and write the index.
+    hash_to_name: dict[str, str] = {}
+    for n in names:
+        h = city_hash_64_with_seed(n)
+        key = f"{h:016X}"
+        # First-wins on collision (won't happen for legit FShaderType names).
+        hash_to_name.setdefault(key, n)
+
+    target = out_dir / "_ShaderType"
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / "_HashToName.json"
+    obj = {
+        "Note": (
+            "FShaderType::HashedName → source-recovered class name. "
+            "Populates `ShaderTypeName` at decompile time when the cooked "
+            "stableinfo.json left it empty (export-side HashedNamesResolver "
+            "had buggy CityHash constants and/or no engine source path)."
+        ),
+        "EntryCount": len(hash_to_name),
+        "Entries": hash_to_name,
+    }
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"[gen][hash-to-name] wrote {len(hash_to_name)} entries to {path}")
+    return len(hash_to_name)
 
 
 if __name__ == "__main__":

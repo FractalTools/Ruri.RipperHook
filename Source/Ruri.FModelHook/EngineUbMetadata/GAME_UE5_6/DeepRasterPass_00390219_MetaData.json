@@ -1,0 +1,71 @@
+{
+  "Name": "DeepRasterPass",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsRasterCommon.h:27 (FHairDeepShadowRasterUniformParameters)",
+  "LayoutHash": "0x00390219",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "DeepRasterPass",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "AtlasSlotIndex",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LayerDepths",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "FrontDepthTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "DeepShadowViewInfoBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 32,
+      "Name": "FrontDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 40,
+      "Name": "DeepShadowViewInfoBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

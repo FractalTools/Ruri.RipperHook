@@ -1,0 +1,21 @@
+{
+  "Name": "StructTypeName",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1511 (StructTypeName)",
+  "LayoutHash": "0x00000100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "StructTypeName",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

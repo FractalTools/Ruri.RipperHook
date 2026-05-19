@@ -1,0 +1,55 @@
+{
+  "Name": "ReadTextureExternalUB",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:880 (FReadTextureExternalUB)",
+  "LayoutHash": "0x00300108",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "ReadTextureExternalUB",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ScaleRotation",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Offset",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 40,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [
+    {
+      "Name": "SamplerP",
+      "Sampler": 0,
+      "BindPoint": 0
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

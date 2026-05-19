@@ -1,0 +1,293 @@
+{
+  "Name": "Nanite",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Nanite/NaniteShared.h:271 (FNaniteUniformParameters)",
+  "LayoutHash": "0x09CF0BA8",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "Nanite",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "PageConstants",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialConfig",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxNodes",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxVisibleClusters",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RenderFlags",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RayTracingCutError",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RectScaleOffset",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MultiViewEnabled",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 164,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "ShadingMask",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "VisBuffer64",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DbgBuffer64",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DbgBuffer32",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "ClusterPageData",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VisibleClustersSWHW",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "HierarchyBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MaterialTileRemap",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MaterialDepthTable",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "RayTracingDataBuffer",
+      "NameIndex": -1,
+      "Index": 9,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ShadingBinMeta",
+      "NameIndex": -1,
+      "Index": 10,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ShadingBinData",
+      "NameIndex": -1,
+      "Index": 11,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MultiViewIndices",
+      "NameIndex": -1,
+      "Index": 12,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MultiViewRectScaleOffsets",
+      "NameIndex": -1,
+      "Index": 13,
+      "ArraySize": 0
+    },
+    {
+      "Name": "InViews",
+      "NameIndex": -1,
+      "Index": 14,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 64,
+      "Name": "ClusterPageData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 72,
+      "Name": "VisibleClustersSWHW",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 80,
+      "Name": "HierarchyBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 88,
+      "Name": "MaterialTileRemap",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 96,
+      "Name": "MaterialDepthTable",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 104,
+      "Name": "ShadingMask",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 112,
+      "Name": "VisBuffer64",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 120,
+      "Name": "DbgBuffer64",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 128,
+      "Name": "DbgBuffer32",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 136,
+      "Name": "RayTracingDataBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 10,
+      "Offset": 144,
+      "Name": "ShadingBinMeta",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 11,
+      "Offset": 152,
+      "Name": "ShadingBinData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 12,
+      "Offset": 168,
+      "Name": "MultiViewIndices",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 13,
+      "Offset": 176,
+      "Name": "MultiViewRectScaleOffsets",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 14,
+      "Offset": 184,
+      "Name": "InViews",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

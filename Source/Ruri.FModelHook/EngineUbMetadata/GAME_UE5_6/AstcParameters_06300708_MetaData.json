@@ -1,0 +1,95 @@
+{
+  "Name": "AstcParameters",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VT/RuntimeVirtualTextureRender.cpp:396 (FAstcParameters)",
+  "LayoutHash": "0x06300708",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "AstcParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "TritsToInteger",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "QuintsToInteger",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ScrambleTable",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ColorScrambleTable48",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ColorScrambleTable80",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ColorScrambleTable192",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "TritsToInteger",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "QuintsToInteger",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "ScrambleTable",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "ColorScrambleTable48",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "ColorScrambleTable80",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "ColorScrambleTable192",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

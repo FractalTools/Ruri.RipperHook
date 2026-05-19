@@ -1,0 +1,93 @@
+{
+  "Name": "VectorFields",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:1126 (FVectorFieldUniformParameters)",
+  "LayoutHash": "0x00D00100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "VectorFields",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "WorldToVolume",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "VolumeToWorld",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "Count",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "WorldToVolumeTile",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "IntensityAndTightness",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VolumeSize",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TilingAxes",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 208,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

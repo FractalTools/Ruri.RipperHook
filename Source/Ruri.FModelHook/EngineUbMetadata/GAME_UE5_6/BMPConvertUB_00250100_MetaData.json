@@ -1,0 +1,70 @@
+{
+  "Name": "BMPConvertUB",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:173 (FBMPConvertUB)",
+  "LayoutHash": "0x00250100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "BMPConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SrgbToLinear",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScale",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Sampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 24,
+      "Name": "Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

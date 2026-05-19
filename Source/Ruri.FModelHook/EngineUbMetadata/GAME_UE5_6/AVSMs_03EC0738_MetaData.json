@@ -1,0 +1,324 @@
+{
+  "Name": "AVSMs",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:504 (FAdaptiveVolumetricShadowMaps)",
+  "LayoutHash": "0x03EC0738",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "AVSMs",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "AVSM_TranslatedWorldToShadow",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "CameraAVSM_TranslatedWorldToShadow",
+        "NameIndex": -1,
+        "Index": 496,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "AVSM_TranslatedWorldOrigin",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_TranslatedWorldPlane",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_Resolution",
+        "NameIndex": -1,
+        "Index": 416,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_NumShadowMatrices",
+        "NameIndex": -1,
+        "Index": 424,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_MaxSampleCount",
+        "NameIndex": -1,
+        "Index": 428,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_bIsEmpty",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_bIsDirectionalLight",
+        "NameIndex": -1,
+        "Index": 436,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AVSM_DownsampleFactor",
+        "NameIndex": -1,
+        "Index": 440,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_TranslatedWorldOrigin",
+        "NameIndex": -1,
+        "Index": 880,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_TranslatedWorldPlane",
+        "NameIndex": -1,
+        "Index": 896,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_Resolution",
+        "NameIndex": -1,
+        "Index": 912,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_NumShadowMatrices",
+        "NameIndex": -1,
+        "Index": 920,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_MaxSampleCount",
+        "NameIndex": -1,
+        "Index": 924,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_bIsEmpty",
+        "NameIndex": -1,
+        "Index": 928,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_bIsDirectionalLight",
+        "NameIndex": -1,
+        "Index": 932,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraAVSM_DownsampleFactor",
+        "NameIndex": -1,
+        "Index": 936,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 940,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [
+    {
+      "Name": "AVSM_TextureSampler",
+      "Sampler": 4,
+      "BindPoint": 4
+    },
+    {
+      "Name": "CameraAVSM_TextureSampler",
+      "Sampler": 9,
+      "BindPoint": 9
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "AVSM_LinkedListBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AVSM_IndirectionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AVSM_SampleBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AVSM_RadianceTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CameraAVSM_LinkedListBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CameraAVSM_IndirectionBuffer",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CameraAVSM_SampleBuffer",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CameraAVSM_RadianceTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 448,
+      "Name": "AVSM_LinkedListBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 456,
+      "Name": "AVSM_IndirectionBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 464,
+      "Name": "AVSM_SampleBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 472,
+      "Name": "AVSM_RadianceTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 480,
+      "Name": "AVSM_TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 5,
+      "Offset": 944,
+      "Name": "CameraAVSM_LinkedListBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 952,
+      "Name": "CameraAVSM_IndirectionBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 960,
+      "Name": "CameraAVSM_SampleBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 8,
+      "Offset": 968,
+      "Name": "CameraAVSM_RadianceTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 9,
+      "Offset": 976,
+      "Name": "CameraAVSM_TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

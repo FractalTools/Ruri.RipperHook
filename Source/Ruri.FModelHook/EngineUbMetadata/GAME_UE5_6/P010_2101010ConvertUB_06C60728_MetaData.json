@@ -1,0 +1,153 @@
+{
+  "Name": "P010_2101010ConvertUB",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:413 (FP010_2101010ConvertUB)",
+  "LayoutHash": "0x06C60728",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "P010_2101010ConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ColorTransform",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "CSTransform",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "EOTF",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ToneMapMethod",
+        "NameIndex": -1,
+        "Index": 132,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScaleY",
+        "NameIndex": -1,
+        "Index": 136,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScaleUV",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OutputWidthY",
+        "NameIndex": -1,
+        "Index": 184,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OutputWidthUV",
+        "NameIndex": -1,
+        "Index": 188,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 192,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [
+    {
+      "Name": "SamplerP",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "SRV_Y",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "SRV_U",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "SRV_V",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 152,
+      "Name": "SRV_Y",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 160,
+      "Name": "SRV_U",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 168,
+      "Name": "SRV_V",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 176,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,338 @@
+{
+  "Name": "TranslucentDepthPass",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/TranslucentLighting.cpp:315 (FTranslucencyDepthPassUniformParameters)",
+  "LayoutHash": "0x0D550600",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "TranslucentDepthPass",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ProjectionMatrix",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "TranslucentSelfShadow_WorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "bClampToNearPlane",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvMaxSubjectDepth",
+        "NameIndex": -1,
+        "Index": 180,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucentSelfShadow_ShadowUVMinMax",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucentSelfShadow_DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslucentSelfShadow_DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 304,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SceneTextures_SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferATexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferETexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferFTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucentSelfShadow_Transmission0",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "TranslucentSelfShadow_Transmission1",
+      "NameIndex": -1,
+      "Index": 15,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SceneTextures_PointClampSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    },
+    {
+      "Name": "TranslucentSelfShadow_Transmission0Sampler",
+      "Sampler": 16,
+      "BindPoint": 16
+    },
+    {
+      "Name": "TranslucentSelfShadow_Transmission1Sampler",
+      "Sampler": 17,
+      "BindPoint": 17
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "SceneTextures_CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 12,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneTextures_SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneTextures_SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneTextures_GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "SceneTextures_GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "SceneTextures_GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "SceneTextures_GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "SceneTextures_GBufferETexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "SceneTextures_GBufferFTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "SceneTextures_CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "SceneTextures_CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 13,
+      "Offset": 104,
+      "Name": "SceneTextures_PointClampSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 14,
+      "Offset": 304,
+      "Name": "TranslucentSelfShadow_Transmission0",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 15,
+      "Offset": 312,
+      "Name": "TranslucentSelfShadow_Transmission1",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 16,
+      "Offset": 320,
+      "Name": "TranslucentSelfShadow_Transmission0Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 17,
+      "Offset": 328,
+      "Name": "TranslucentSelfShadow_Transmission1Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,369 @@
+{
+  "Name": "MobileSceneTextures",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:40 (FMobileSceneTextureUniformParameters)",
+  "LayoutHash": "0x04E803DD",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "MobileSceneTextures",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 224,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "CustomDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneVelocityTexture",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "GBufferATexture",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 15,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 16,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 17,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneDepthAuxTexture",
+      "NameIndex": -1,
+      "Index": 18,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneDepthAuxTextureArray",
+      "NameIndex": -1,
+      "Index": 19,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "LocalLightTextureA",
+      "NameIndex": -1,
+      "Index": 20,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "LocalLightTextureB",
+      "NameIndex": -1,
+      "Index": 21,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SceneColorTextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    },
+    {
+      "Name": "SceneDepthTextureSampler",
+      "Sampler": 4,
+      "BindPoint": 4
+    },
+    {
+      "Name": "ScenePartialDepthTextureSampler",
+      "Sampler": 6,
+      "BindPoint": 6
+    },
+    {
+      "Name": "CustomDepthTextureSampler",
+      "Sampler": 9,
+      "BindPoint": 9
+    },
+    {
+      "Name": "SceneVelocityTextureSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    },
+    {
+      "Name": "GBufferATextureSampler",
+      "Sampler": 22,
+      "BindPoint": 22
+    },
+    {
+      "Name": "GBufferBTextureSampler",
+      "Sampler": 23,
+      "BindPoint": 23
+    },
+    {
+      "Name": "GBufferCTextureSampler",
+      "Sampler": 24,
+      "BindPoint": 24
+    },
+    {
+      "Name": "GBufferDTextureSampler",
+      "Sampler": 25,
+      "BindPoint": 25
+    },
+    {
+      "Name": "SceneDepthAuxTextureSampler",
+      "Sampler": 26,
+      "BindPoint": 26
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 10,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CustomStencilTextureArray",
+      "NameIndex": -1,
+      "Index": 11,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneColorTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "SceneDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "ScenePartialDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "CustomDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "CustomDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "CustomStencilTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "SceneVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 13,
+      "Offset": 104,
+      "Name": "SceneVelocityTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 14,
+      "Offset": 112,
+      "Name": "GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 15,
+      "Offset": 120,
+      "Name": "GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 16,
+      "Offset": 128,
+      "Name": "GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 17,
+      "Offset": 136,
+      "Name": "GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 18,
+      "Offset": 144,
+      "Name": "SceneDepthAuxTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 19,
+      "Offset": 152,
+      "Name": "SceneDepthAuxTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 20,
+      "Offset": 160,
+      "Name": "LocalLightTextureA",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 21,
+      "Offset": 168,
+      "Name": "LocalLightTextureB",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 22,
+      "Offset": 176,
+      "Name": "GBufferATextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 23,
+      "Offset": 184,
+      "Name": "GBufferBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 24,
+      "Offset": 192,
+      "Name": "GBufferCTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 25,
+      "Offset": 200,
+      "Name": "GBufferDTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 26,
+      "Offset": 208,
+      "Name": "SceneDepthAuxTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

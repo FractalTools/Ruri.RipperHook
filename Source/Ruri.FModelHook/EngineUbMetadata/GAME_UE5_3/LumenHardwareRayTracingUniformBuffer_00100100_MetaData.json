@@ -1,0 +1,42 @@
+{
+  "Name": "LumenHardwareRayTracingUniformBuffer",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenHardwareRayTracingCommon.h:236 (FLumenHardwareRayTracingUniformBufferParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LumenHardwareRayTracingUniformBuffer",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SkipBackFaceHitDistance",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SkipTwoSidedHitDistance",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 8,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

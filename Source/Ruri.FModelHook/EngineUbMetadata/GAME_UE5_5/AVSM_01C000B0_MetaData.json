@@ -1,0 +1,141 @@
+{
+  "Name": "AVSM",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:423 (FAdaptiveVolumetricShadowMapUniformBufferParameters)",
+  "LayoutHash": "0x01C000B0",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "AVSM",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "TranslatedWorldToShadow",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "TranslatedWorldOrigin",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslatedWorldPlane",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Resolution",
+        "NameIndex": -1,
+        "Index": 416,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumShadowMatrices",
+        "NameIndex": -1,
+        "Index": 424,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxSampleCount",
+        "NameIndex": -1,
+        "Index": 428,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bIsEmpty",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bIsDirectionalLight",
+        "NameIndex": -1,
+        "Index": 436,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 440,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "LinkedListBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "IndirectionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "SampleBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 440,
+      "Name": "LinkedListBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 448,
+      "Name": "IndirectionBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 456,
+      "Name": "SampleBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

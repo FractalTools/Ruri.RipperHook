@@ -1,0 +1,58 @@
+{
+  "Name": "LocalVFLooseParameters",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:30 (FLocalVertexFactoryLooseParameters)",
+  "LayoutHash": "0x0026011E",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LocalVFLooseParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "FrameNumber",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 4,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "GPUSkinPassThroughPositionBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "GPUSkinPassThroughPreviousPositionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 8,
+      "Name": "GPUSkinPassThroughPositionBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 16,
+      "Name": "GPUSkinPassThroughPreviousPositionBuffer",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

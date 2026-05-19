@@ -39,20 +39,28 @@ internal sealed class ShaderTypeSeedRegistry
     // templated cook names like `TLightMapDensityPSFNoLightMapPolicy` can
     // fall back to the bare-template seed `TLightMapDensityPS`. UE's
     // `IMPLEMENT_*_SHADER_TYPE` uses `##`-concatenation to produce names
-    // like `<Base>##<PolicyName>` for each policy specialisation; the
-    // generator only captures `<Base>` because the `##` expansion isn't
-    // a regex-tractable operation. Prefix-match gets the loose-parameter
-    // names right for every specialisation as long as the base is
-    // captured.
+    // like `<Base>##<PolicyName>` for each policy specialisation. The
+    // generator captures full ##-expanded names in `_HashToName.json` but
+    // only emits per-CLASS seeds for the bare base (since the LAYOUT_FIELD
+    // declarations live on the base, specialisations inherit them).
     private readonly List<(string Prefix, EngineUbMetadata Meta)> _byNamePrefixDesc;
+    // Generator-side hash -> ShaderTypeName resolution. Populates the
+    // cooked binary's empty `ShaderTypeName` field (export-side
+    // `HashedNamesResolver` failed to resolve hashes due to a
+    // path-not-found + buggy CityHash; both fixed but stableinfo.json
+    // was written before the fixes). Pass180 uses this to enable the
+    // prefix-fallback path for templated specialisations.
+    private readonly Dictionary<ulong, string> _hashToName;
 
     public string SourceDirectory { get; }
     public int FileCount => _byHash.Count;
+    public int HashToNameCount => _hashToName.Count;
 
-    private ShaderTypeSeedRegistry(string sourceDir, Dictionary<ulong, EngineUbMetadata> byHash)
+    private ShaderTypeSeedRegistry(string sourceDir, Dictionary<ulong, EngineUbMetadata> byHash, Dictionary<ulong, string> hashToName)
     {
         SourceDirectory = sourceDir;
         _byHash = byHash;
+        _hashToName = hashToName;
         // Sort by descending prefix length so longer matches win (avoids
         // `TBasePassPSF...` getting eaten by a shorter `TBase...` seed).
         _byNamePrefixDesc = byHash.Values
@@ -63,7 +71,8 @@ internal sealed class ShaderTypeSeedRegistry
     }
 
     public static ShaderTypeSeedRegistry Empty { get; } = new(string.Empty,
-        new Dictionary<ulong, EngineUbMetadata>());
+        new Dictionary<ulong, EngineUbMetadata>(),
+        new Dictionary<ulong, string>());
 
     // Loads seeds from a directory tree, optionally narrowed by game folder.
     // Same priority pattern as `EngineUbMetadataRegistry.LoadForGame`:
@@ -103,6 +112,7 @@ internal sealed class ShaderTypeSeedRegistry
         if (Directory.Exists(directory)) scanRoots.Add(directory);
 
         HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<ulong, string> hashToName = new();
         int loaded = 0, skipped = 0;
         // Match the engine-UB loader's deserialiser options exactly so JSON
         // shape compat is guaranteed. ShaderParamType is decorated with
@@ -153,9 +163,58 @@ internal sealed class ShaderTypeSeedRegistry
             }
         }
 
+        // Load `_HashToName.json` from each scan root. Multiple roots may
+        // contribute (game-specific overrides + base UE fallback); first-wins
+        // on hash collision matches the per-class seed precedence.
+        foreach (string root in scanRoots)
+        {
+            string indexPath = Path.Combine(root, root.EndsWith("_ShaderType", StringComparison.OrdinalIgnoreCase) ? "_HashToName.json" : Path.Combine("_ShaderType", "_HashToName.json"));
+            // Also try a recursive sweep under the root for `_HashToName.json`
+            // (so the top-level `<directory>` root catches both
+            // `GAME_UE5_1/_ShaderType/_HashToName.json` and a hand-organised
+            // copy at any other depth).
+            List<string> indexCandidates = new();
+            if (File.Exists(indexPath)) indexCandidates.Add(indexPath);
+            try
+            {
+                foreach (string f in Directory.EnumerateFiles(root, "_HashToName.json", SearchOption.AllDirectories))
+                {
+                    if (!indexCandidates.Contains(f, StringComparer.OrdinalIgnoreCase)) indexCandidates.Add(f);
+                }
+            }
+            catch { /* ignore missing dirs */ }
+
+            foreach (string idx in indexCandidates)
+            {
+                try
+                {
+                    using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(idx));
+                    if (doc.RootElement.TryGetProperty("Entries", out JsonElement entries)
+                        && entries.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (JsonProperty p in entries.EnumerateObject())
+                        {
+                            if (!ulong.TryParse(p.Name, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ulong h))
+                            {
+                                continue;
+                            }
+                            if (p.Value.ValueKind == JsonValueKind.String)
+                            {
+                                hashToName.TryAdd(h, p.Value.GetString() ?? string.Empty);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logError?.Invoke($"[ShaderTypeSeed] {idx}: hash-to-name parse failed — {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
         string gameTag = string.IsNullOrEmpty(gameVersionEnum) ? "" : $" for game={gameVersionEnum}";
-        log?.Invoke($"[ShaderTypeSeed] Loaded {loaded} ShaderType seed(s){gameTag} from '{directory}' ({skipped} skipped). Scan roots: {string.Join(" -> ", scanRoots)}");
-        return new ShaderTypeSeedRegistry(directory, byHash);
+        log?.Invoke($"[ShaderTypeSeed] Loaded {loaded} ShaderType seed(s){gameTag} from '{directory}' ({skipped} skipped); hash-to-name={hashToName.Count}. Scan roots: {string.Join(" -> ", scanRoots)}");
+        return new ShaderTypeSeedRegistry(directory, byHash, hashToName);
     }
 
     public EngineUbMetadata? Lookup(ulong typeHash)
@@ -181,16 +240,32 @@ internal sealed class ShaderTypeSeedRegistry
         return false;
     }
 
-    // Two-tier lookup. First tries the exact `FShaderType::HashedName` match
-    // (which only hits for non-templated bases). Falls back to longest-prefix
-    // string match on `cookedTypeName` so templated specialisations like
-    // `TLightMapDensityPSFNoLightMapPolicy` (cooked) recover names from the
-    // bare base seed `TLightMapDensityPS`. The base class's
+    // Resolve cook's `ShaderTypeHash` to its source-declared class name
+    // via `_HashToName.json`. Returns null when the hash isn't indexed
+    // (class not declared via IMPLEMENT_*_SHADER_TYPE in the engine root
+    // we scanned).
+    public string? ResolveTypeName(string hashHex)
+    {
+        if (string.IsNullOrWhiteSpace(hashHex)) return null;
+        string s = hashHex;
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+        if (!ulong.TryParse(s, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ulong h)) return null;
+        return _hashToName.TryGetValue(h, out string? name) ? name : null;
+    }
+
+    // Three-tier lookup. First tries the exact `FShaderType::HashedName`
+    // match (only hits for non-templated bases). Then resolves the cook's
+    // hash to a source name via `_HashToName.json` (covers templated
+    // specialisations even when the cook's `ShaderTypeName` is empty).
+    // Finally falls back to longest-prefix string match on whichever name
+    // we have so templated specialisations like
+    // `TLightMapDensityPSFNoLightMapPolicy` (cooked) recover names from
+    // the bare base seed `TLightMapDensityPS`. The base class's
     // `LAYOUT_FIELD(FShaderParameter, ...)` declarations are inherited by
-    // every macro-instantiated specialisation, so the loose-parameter names
-    // are the same across all policies.
+    // every macro-instantiated specialisation, so the loose-parameter
+    // names are the same across all policies.
     //
-    // Returns true if EITHER lookup succeeded; `matchedBy` describes which.
+    // Returns true if ANY lookup succeeded; `matchedBy` describes which.
     public bool TryLookupWithFallback(string hashHex, string? cookedTypeName, out EngineUbMetadata meta, out string matchedBy)
     {
         meta = null!;
@@ -200,13 +275,20 @@ internal sealed class ShaderTypeSeedRegistry
             matchedBy = "exact-hash";
             return true;
         }
-        if (string.IsNullOrWhiteSpace(cookedTypeName)) return false;
+        // Fill in cookedTypeName from the index when the export-side
+        // ShaderTypeName is empty (Stage 19 root cause).
+        string? effectiveName = !string.IsNullOrWhiteSpace(cookedTypeName)
+            ? cookedTypeName
+            : ResolveTypeName(hashHex);
+        if (string.IsNullOrWhiteSpace(effectiveName)) return false;
         foreach (var (prefix, m) in _byNamePrefixDesc)
         {
-            if (cookedTypeName.StartsWith(prefix, StringComparison.Ordinal))
+            if (effectiveName.StartsWith(prefix, StringComparison.Ordinal))
             {
                 meta = m;
-                matchedBy = $"prefix-of:{prefix}";
+                matchedBy = string.IsNullOrWhiteSpace(cookedTypeName)
+                    ? $"hash-to-name+prefix-of:{prefix}"
+                    : $"prefix-of:{prefix}";
                 return true;
             }
         }
