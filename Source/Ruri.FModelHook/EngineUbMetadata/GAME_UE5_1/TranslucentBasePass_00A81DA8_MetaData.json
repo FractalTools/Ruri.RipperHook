@@ -2,8 +2,8 @@
   "name": "TranslucentBasePass",
   "engineVersion": "5.1.1",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h:94 (FTranslucentBasePassUniformParameters)",
-  "layoutHash": "0x03EC0764",
-  "constantBufferSize": 2732,
+  "layoutHash": "0x00A81DA8",
+  "constantBufferSize": 3180,
   "bindingFlags": "Static",
   "members": [
     {
@@ -558,27 +558,155 @@
       "type": "Float"
     },
     {
+      "offset": 2624,
+      "name": "ReprojectionRadiusScale",
+      "type": "Float"
+    },
+    {
+      "offset": 2628,
+      "name": "ClipmapWorldExtent",
+      "type": "Float"
+    },
+    {
+      "offset": 2632,
+      "name": "ClipmapDistributionBase",
+      "type": "Float"
+    },
+    {
+      "offset": 2636,
+      "name": "InvClipmapFadeSize",
+      "type": "Float"
+    },
+    {
+      "offset": 2640,
+      "name": "ProbeAtlasResolutionInProbes",
+      "type": "Int2"
+    },
+    {
       "offset": 2648,
-      "name": "Enabled",
+      "name": "RadianceProbeClipmapResolution",
       "type": "UInt"
     },
     {
       "offset": 2652,
+      "name": "NumRadianceProbeClipmaps",
+      "type": "UInt"
+    },
+    {
+      "offset": 2656,
+      "name": "RadianceProbeResolution",
+      "type": "UInt"
+    },
+    {
+      "offset": 2660,
+      "name": "FinalProbeResolution",
+      "type": "UInt"
+    },
+    {
+      "offset": 2664,
+      "name": "FinalRadianceAtlasMaxMip",
+      "type": "UInt"
+    },
+    {
+      "offset": 2668,
+      "name": "CalculateIrradiance",
+      "type": "UInt"
+    },
+    {
+      "offset": 2672,
+      "name": "IrradianceProbeResolution",
+      "type": "UInt"
+    },
+    {
+      "offset": 2676,
+      "name": "OcclusionProbeResolution",
+      "type": "UInt"
+    },
+    {
+      "offset": 2680,
+      "name": "NumProbesToTraceBudget",
+      "type": "UInt"
+    },
+    {
+      "offset": 2684,
+      "name": "RadianceCacheStats",
+      "type": "UInt"
+    },
+    {
+      "offset": 2736,
+      "name": "RadianceProbeSettings",
+      "type": "Float4",
+      "arraySize": 6
+    },
+    {
+      "offset": 2832,
+      "name": "PaddedWorldPositionToRadianceProbeCoordBias",
+      "type": "Float4",
+      "arraySize": 6
+    },
+    {
+      "offset": 2928,
+      "name": "PaddedRadianceProbeCoordToWorldPositionBias",
+      "type": "Float4",
+      "arraySize": 6
+    },
+    {
+      "offset": 3024,
+      "name": "InvProbeFinalRadianceAtlasResolution",
+      "type": "Float2"
+    },
+    {
+      "offset": 3032,
+      "name": "InvProbeFinalIrradianceAtlasResolution",
+      "type": "Float2"
+    },
+    {
+      "offset": 3040,
+      "name": "InvProbeDepthAtlasResolution",
+      "type": "Float2"
+    },
+    {
+      "offset": 3048,
+      "name": "OverrideCacheOcclusionLighting",
+      "type": "UInt"
+    },
+    {
+      "offset": 3052,
+      "name": "ShowBlackRadianceCacheLighting",
+      "type": "UInt"
+    },
+    {
+      "offset": 3056,
+      "name": "ProbeAtlasResolutionModuloMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 3060,
+      "name": "ProbeAtlasResolutionDivideShift",
+      "type": "UInt"
+    },
+    {
+      "offset": 3096,
+      "name": "Enabled",
+      "type": "UInt"
+    },
+    {
+      "offset": 3100,
       "name": "RelativeDepthThreshold",
       "type": "Float"
     },
     {
-      "offset": 2704,
+      "offset": 3152,
       "name": "TranslucencyGIGridZParams",
       "type": "Float3"
     },
     {
-      "offset": 2716,
+      "offset": 3164,
       "name": "TranslucencyGIGridPixelSizeShift",
       "type": "UInt"
     },
     {
-      "offset": 2720,
+      "offset": 3168,
       "name": "TranslucencyGIGridSize",
       "type": "Int3"
     }
@@ -988,79 +1116,115 @@
     },
     {
       "index": 67,
-      "offset": 2624,
-      "name": "Radiance",
+      "offset": 2688,
+      "name": "RadianceProbeIndirectionTexture",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 68,
-      "offset": 2632,
-      "name": "Normal",
+      "offset": 2696,
+      "name": "RadianceCacheFinalRadianceAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 69,
-      "offset": 2640,
-      "name": "SceneDepth",
+      "offset": 2704,
+      "name": "RadianceCacheFinalIrradianceAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 70,
-      "offset": 2656,
-      "name": "TranslucencyGIVolume0",
+      "offset": 2712,
+      "name": "RadianceCacheProbeOcclusionAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 71,
-      "offset": 2664,
-      "name": "TranslucencyGIVolume1",
+      "offset": 2720,
+      "name": "RadianceCacheDepthAtlas",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 72,
-      "offset": 2672,
-      "name": "TranslucencyGIVolumeHistory0",
-      "type": "UBMT_RDG_TEXTURE"
+      "offset": 2728,
+      "name": "ProbeWorldOffset",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 73,
-      "offset": 2680,
-      "name": "TranslucencyGIVolumeHistory1",
+      "offset": 3072,
+      "name": "Radiance",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 74,
-      "offset": 2688,
-      "name": "TranslucencyGIVolumeSampler",
-      "type": "UBMT_SAMPLER"
+      "offset": 3080,
+      "name": "Normal",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 75,
-      "offset": 2736,
-      "name": "PreIntegratedGFTexture",
-      "type": "UBMT_TEXTURE"
+      "offset": 3088,
+      "name": "SceneDepth",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 76,
-      "offset": 2744,
-      "name": "PreIntegratedGFSampler",
-      "type": "UBMT_SAMPLER"
+      "offset": 3104,
+      "name": "TranslucencyGIVolume0",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 77,
-      "offset": 2752,
-      "name": "EyeAdaptationTexture",
+      "offset": 3112,
+      "name": "TranslucencyGIVolume1",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 78,
-      "offset": 2760,
-      "name": "SceneColorCopyTexture",
+      "offset": 3120,
+      "name": "TranslucencyGIVolumeHistory0",
       "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 79,
-      "offset": 2768,
+      "offset": 3128,
+      "name": "TranslucencyGIVolumeHistory1",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 80,
+      "offset": 3136,
+      "name": "TranslucencyGIVolumeSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 81,
+      "offset": 3184,
+      "name": "PreIntegratedGFTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 82,
+      "offset": 3192,
+      "name": "PreIntegratedGFSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 83,
+      "offset": 3200,
+      "name": "EyeAdaptationTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 84,
+      "offset": 3208,
+      "name": "SceneColorCopyTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 85,
+      "offset": 3216,
       "name": "SceneColorCopySampler",
       "type": "UBMT_SAMPLER"
     }
