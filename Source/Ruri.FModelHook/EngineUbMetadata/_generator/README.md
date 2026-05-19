@@ -38,6 +38,9 @@ python gen_ub_metadata.py --engine-src ... --engine-version ... --list-only
 # Single UB by name regex
 python gen_ub_metadata.py --engine-src ... --engine-version ... --list-only `
     --ub-filter "^(View|LocalVF|LumenCardScene)$"
+
+# Re-emit all 8 versions (UE 5.0-5.7) in one shot
+python regen_all.py
 ```
 
 The loader keys on `(UBName, LayoutHash)` so re-running on top of
