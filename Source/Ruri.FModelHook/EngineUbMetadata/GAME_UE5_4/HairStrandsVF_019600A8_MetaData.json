@@ -1,225 +1,447 @@
 {
-  "name": "HairStrandsVF",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h:54 (FHairStrandsVertexFactoryUniformShaderParameters)",
-  "layoutHash": "0x019600A8",
-  "constantBufferSize": 372,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "HairStrandsVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h:54 (FHairStrandsVertexFactoryUniformShaderParameters)",
+  "LayoutHash": "0x019600A8",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "HairStrandsVF",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "LocalToWorldPrimitiveTransform",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "LocalToTranslatedWorldPrimitiveTransform",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "Density",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Radius",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RootScale",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TipScale",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Length",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LengthScale",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RaytracingRadiusScale",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RegisteredIndex",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GroupIndex",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GroupCount",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PointCount",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveCount",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RaytracingProceduralSplits",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Flags",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bSimulation",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bSingleGuide",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PositionOffset",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevPositionOffset",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveAttributeIndexToChunkDivAsShift",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveAttributeChunkElementCount",
+        "NameIndex": -1,
+        "Index": 228,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveAttributeChunkStrideInBytes",
+        "NameIndex": -1,
+        "Index": 232,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PointAttributeIndexToChunkDivAsShift",
+        "NameIndex": -1,
+        "Index": 236,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PointAttributeChunkElementCount",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PointAttributeChunkStrideInBytes",
+        "NameIndex": -1,
+        "Index": 244,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveAttributeOffsets",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 1,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PointAttributeOffsets",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 1,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bCullingEnable",
+        "NameIndex": -1,
+        "Index": 368,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 372,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 0,
-      "name": "Density",
-      "type": "Float"
+      "Name": "PositionBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "offset": 4,
-      "name": "Radius",
-      "type": "Float"
+      "Name": "PositionOffsetBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
     },
     {
-      "offset": 8,
-      "name": "RootScale",
-      "type": "Float"
+      "Name": "CurveBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
     },
     {
-      "offset": 12,
-      "name": "TipScale",
-      "type": "Float"
+      "Name": "PointToCurveBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
     },
     {
-      "offset": 16,
-      "name": "Length",
-      "type": "Float"
+      "Name": "TangentBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     },
     {
-      "offset": 20,
-      "name": "LengthScale",
-      "type": "Float"
+      "Name": "CurveAttributeBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
     },
     {
-      "offset": 24,
-      "name": "RaytracingRadiusScale",
-      "type": "Float"
+      "Name": "PointAttributeBuffer",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
     },
     {
-      "offset": 28,
-      "name": "RegisteredIndex",
-      "type": "UInt"
+      "Name": "PreviousPositionBuffer",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
     },
     {
-      "offset": 32,
-      "name": "GroupIndex",
-      "type": "UInt"
+      "Name": "PreviousPositionOffsetBuffer",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
     },
     {
-      "offset": 36,
-      "name": "GroupCount",
-      "type": "UInt"
+      "Name": "CullingIndirectBuffer",
+      "NameIndex": -1,
+      "Index": 9,
+      "ArraySize": 0
     },
     {
-      "offset": 40,
-      "name": "PointCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 44,
-      "name": "CurveCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 48,
-      "name": "RaytracingProceduralSplits",
-      "type": "UInt"
-    },
-    {
-      "offset": 52,
-      "name": "Flags",
-      "type": "UInt"
-    },
-    {
-      "offset": 56,
-      "name": "bSimulation",
-      "type": "UInt"
-    },
-    {
-      "offset": 60,
-      "name": "bSingleGuide",
-      "type": "UInt"
-    },
-    {
-      "offset": 64,
-      "name": "PositionOffset",
-      "type": "Float3"
-    },
-    {
-      "offset": 80,
-      "name": "PrevPositionOffset",
-      "type": "Float3"
-    },
-    {
-      "offset": 96,
-      "name": "LocalToWorldPrimitiveTransform",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 160,
-      "name": "LocalToTranslatedWorldPrimitiveTransform",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 224,
-      "name": "CurveAttributeIndexToChunkDivAsShift",
-      "type": "UInt"
-    },
-    {
-      "offset": 228,
-      "name": "CurveAttributeChunkElementCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 232,
-      "name": "CurveAttributeChunkStrideInBytes",
-      "type": "UInt"
-    },
-    {
-      "offset": 236,
-      "name": "PointAttributeIndexToChunkDivAsShift",
-      "type": "UInt"
-    },
-    {
-      "offset": 240,
-      "name": "PointAttributeChunkElementCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 244,
-      "name": "PointAttributeChunkStrideInBytes",
-      "type": "UInt"
-    },
-    {
-      "offset": 256,
-      "name": "CurveAttributeOffsets",
-      "type": "UInt4",
-      "arraySize": 1
-    },
-    {
-      "offset": 272,
-      "name": "PointAttributeOffsets",
-      "type": "UInt4",
-      "arraySize": 1
-    },
-    {
-      "offset": 368,
-      "name": "bCullingEnable",
-      "type": "UInt"
+      "Name": "CullingIndexBuffer",
+      "NameIndex": -1,
+      "Index": 10,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 288,
-      "name": "PositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 288,
+      "Name": "PositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 1,
-      "offset": 296,
-      "name": "PositionOffsetBuffer",
-      "type": "UBMT_SRV"
+      "Index": 1,
+      "Offset": 296,
+      "Name": "PositionOffsetBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 2,
-      "offset": 304,
-      "name": "CurveBuffer",
-      "type": "UBMT_SRV"
+      "Index": 2,
+      "Offset": 304,
+      "Name": "CurveBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 3,
-      "offset": 312,
-      "name": "PointToCurveBuffer",
-      "type": "UBMT_SRV"
+      "Index": 3,
+      "Offset": 312,
+      "Name": "PointToCurveBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 4,
-      "offset": 320,
-      "name": "TangentBuffer",
-      "type": "UBMT_SRV"
+      "Index": 4,
+      "Offset": 320,
+      "Name": "TangentBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 5,
-      "offset": 328,
-      "name": "CurveAttributeBuffer",
-      "type": "UBMT_SRV"
+      "Index": 5,
+      "Offset": 328,
+      "Name": "CurveAttributeBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 6,
-      "offset": 336,
-      "name": "PointAttributeBuffer",
-      "type": "UBMT_SRV"
+      "Index": 6,
+      "Offset": 336,
+      "Name": "PointAttributeBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 7,
-      "offset": 352,
-      "name": "PreviousPositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 7,
+      "Offset": 352,
+      "Name": "PreviousPositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 8,
-      "offset": 360,
-      "name": "PreviousPositionOffsetBuffer",
-      "type": "UBMT_SRV"
+      "Index": 8,
+      "Offset": 360,
+      "Name": "PreviousPositionOffsetBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 9,
-      "offset": 376,
-      "name": "CullingIndirectBuffer",
-      "type": "UBMT_SRV"
+      "Index": 9,
+      "Offset": 376,
+      "Name": "CullingIndirectBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 10,
-      "offset": 384,
-      "name": "CullingIndexBuffer",
-      "type": "UBMT_SRV"
+      "Index": 10,
+      "Offset": 384,
+      "Name": "CullingIndexBuffer",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

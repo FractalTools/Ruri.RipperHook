@@ -1,351 +1,702 @@
 {
-  "name": "NiagaraSpriteVF",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:21 (FNiagaraSpriteUniformParameters)",
-  "layoutHash": "0x02600100",
-  "constantBufferSize": 596,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "bLocalSpace",
-      "type": "UInt"
-    },
-    {
-      "offset": 16,
-      "name": "TangentSelector",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "NormalsSphereCenter",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "NormalsCylinderUnitDirection",
-      "type": "Float4"
-    },
-    {
-      "offset": 64,
-      "name": "SubImageSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 80,
-      "name": "CameraFacingBlend",
-      "type": "Float3"
-    },
-    {
-      "offset": 92,
-      "name": "RemoveHMDRoll",
-      "type": "Float"
-    },
-    {
-      "offset": 96,
-      "name": "MacroUVParameters",
-      "type": "Float4"
-    },
-    {
-      "offset": 112,
-      "name": "RotationScale",
-      "type": "Float"
-    },
-    {
-      "offset": 116,
-      "name": "RotationBias",
-      "type": "Float"
-    },
-    {
-      "offset": 120,
-      "name": "NormalsType",
-      "type": "Float"
-    },
-    {
-      "offset": 124,
-      "name": "DeltaSeconds",
-      "type": "Float"
-    },
-    {
-      "offset": 128,
-      "name": "DefaultPivotOffset",
-      "type": "Float2"
-    },
-    {
-      "offset": 136,
-      "name": "DefaultPrevPivotOffset",
-      "type": "Float2"
-    },
-    {
-      "offset": 144,
-      "name": "PositionDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 148,
-      "name": "PrevPositionDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 152,
-      "name": "VelocityDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 156,
-      "name": "PrevVelocityDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 160,
-      "name": "RotationDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 164,
-      "name": "PrevRotationDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 168,
-      "name": "SizeDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 172,
-      "name": "PrevSizeDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 176,
-      "name": "SubimageDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 180,
-      "name": "ColorDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 184,
-      "name": "MaterialParamValidMask",
-      "type": "UInt"
-    },
-    {
-      "offset": 188,
-      "name": "MaterialParamDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 192,
-      "name": "MaterialParam1DataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 196,
-      "name": "MaterialParam2DataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 200,
-      "name": "MaterialParam3DataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 204,
-      "name": "FacingDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 208,
-      "name": "PrevFacingDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 212,
-      "name": "AlignmentDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 216,
-      "name": "PrevAlignmentDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 220,
-      "name": "SubImageBlendMode",
-      "type": "Int"
-    },
-    {
-      "offset": 224,
-      "name": "CameraOffsetDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 228,
-      "name": "PrevCameraOffsetDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 232,
-      "name": "UVScaleDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 236,
-      "name": "PivotOffsetDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 240,
-      "name": "PrevPivotOffsetDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 244,
-      "name": "NormalizedAgeDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 248,
-      "name": "MaterialRandomDataOffset",
-      "type": "Int"
-    },
-    {
-      "offset": 256,
-      "name": "DefaultPos",
-      "type": "Float4"
-    },
-    {
-      "offset": 272,
-      "name": "DefaultPrevPos",
-      "type": "Float4"
-    },
-    {
-      "offset": 288,
-      "name": "DefaultSize",
-      "type": "Float2"
-    },
-    {
-      "offset": 296,
-      "name": "DefaultPrevSize",
-      "type": "Float2"
-    },
-    {
-      "offset": 304,
-      "name": "DefaultUVScale",
-      "type": "Float2"
-    },
-    {
-      "offset": 320,
-      "name": "DefaultVelocity",
-      "type": "Float3"
-    },
-    {
-      "offset": 336,
-      "name": "DefaultPrevVelocity",
-      "type": "Float3"
-    },
-    {
-      "offset": 352,
-      "name": "SystemLWCTile",
-      "type": "Float3"
-    },
-    {
-      "offset": 364,
-      "name": "DefaultRotation",
-      "type": "Float"
-    },
-    {
-      "offset": 368,
-      "name": "DefaultPrevRotation",
-      "type": "Float"
-    },
-    {
-      "offset": 384,
-      "name": "DefaultColor",
-      "type": "Float4"
-    },
-    {
-      "offset": 400,
-      "name": "DefaultMatRandom",
-      "type": "Float"
-    },
-    {
-      "offset": 404,
-      "name": "DefaultCamOffset",
-      "type": "Float"
-    },
-    {
-      "offset": 408,
-      "name": "DefaultPrevCamOffset",
-      "type": "Float"
-    },
-    {
-      "offset": 412,
-      "name": "DefaultNormAge",
-      "type": "Float"
-    },
-    {
-      "offset": 416,
-      "name": "DefaultSubImage",
-      "type": "Float"
-    },
-    {
-      "offset": 432,
-      "name": "DefaultFacing",
-      "type": "Float4"
-    },
-    {
-      "offset": 448,
-      "name": "DefaultPrevFacing",
-      "type": "Float4"
-    },
-    {
-      "offset": 464,
-      "name": "DefaultAlignment",
-      "type": "Float4"
-    },
-    {
-      "offset": 480,
-      "name": "DefaultPrevAlignment",
-      "type": "Float4"
-    },
-    {
-      "offset": 496,
-      "name": "DefaultDynamicMaterialParameter0",
-      "type": "Float4"
-    },
-    {
-      "offset": 512,
-      "name": "DefaultDynamicMaterialParameter1",
-      "type": "Float4"
-    },
-    {
-      "offset": 528,
-      "name": "DefaultDynamicMaterialParameter2",
-      "type": "Float4"
-    },
-    {
-      "offset": 544,
-      "name": "DefaultDynamicMaterialParameter3",
-      "type": "Float4"
-    },
-    {
-      "offset": 560,
-      "name": "PixelCoverageEnabled",
-      "type": "Int"
-    },
-    {
-      "offset": 576,
-      "name": "PixelCoverageColorBlend",
-      "type": "Float4"
-    },
-    {
-      "offset": 592,
-      "name": "AccurateMotionVectors",
-      "type": "Int"
-    }
-  ],
-  "resources": []
+  "Name": "NiagaraSpriteVF",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:21 (FNiagaraSpriteUniformParameters)",
+  "LayoutHash": "0x02600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "NiagaraSpriteVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "bLocalSpace",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TangentSelector",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NormalsSphereCenter",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NormalsCylinderUnitDirection",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SubImageSize",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraFacingBlend",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RemoveHMDRoll",
+        "NameIndex": -1,
+        "Index": 92,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MacroUVParameters",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RotationScale",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RotationBias",
+        "NameIndex": -1,
+        "Index": 116,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NormalsType",
+        "NameIndex": -1,
+        "Index": 120,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DeltaSeconds",
+        "NameIndex": -1,
+        "Index": 124,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPivotOffset",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevPivotOffset",
+        "NameIndex": -1,
+        "Index": 136,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PositionDataOffset",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevPositionDataOffset",
+        "NameIndex": -1,
+        "Index": 148,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VelocityDataOffset",
+        "NameIndex": -1,
+        "Index": 152,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevVelocityDataOffset",
+        "NameIndex": -1,
+        "Index": 156,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RotationDataOffset",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevRotationDataOffset",
+        "NameIndex": -1,
+        "Index": 164,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SizeDataOffset",
+        "NameIndex": -1,
+        "Index": 168,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevSizeDataOffset",
+        "NameIndex": -1,
+        "Index": 172,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SubimageDataOffset",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ColorDataOffset",
+        "NameIndex": -1,
+        "Index": 180,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialParamValidMask",
+        "NameIndex": -1,
+        "Index": 184,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialParamDataOffset",
+        "NameIndex": -1,
+        "Index": 188,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialParam1DataOffset",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialParam2DataOffset",
+        "NameIndex": -1,
+        "Index": 196,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialParam3DataOffset",
+        "NameIndex": -1,
+        "Index": 200,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FacingDataOffset",
+        "NameIndex": -1,
+        "Index": 204,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevFacingDataOffset",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AlignmentDataOffset",
+        "NameIndex": -1,
+        "Index": 212,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevAlignmentDataOffset",
+        "NameIndex": -1,
+        "Index": 216,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SubImageBlendMode",
+        "NameIndex": -1,
+        "Index": 220,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CameraOffsetDataOffset",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevCameraOffsetDataOffset",
+        "NameIndex": -1,
+        "Index": 228,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScaleDataOffset",
+        "NameIndex": -1,
+        "Index": 232,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PivotOffsetDataOffset",
+        "NameIndex": -1,
+        "Index": 236,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevPivotOffsetDataOffset",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NormalizedAgeDataOffset",
+        "NameIndex": -1,
+        "Index": 244,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaterialRandomDataOffset",
+        "NameIndex": -1,
+        "Index": 248,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPos",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevPos",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultSize",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevSize",
+        "NameIndex": -1,
+        "Index": 296,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultUVScale",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultVelocity",
+        "NameIndex": -1,
+        "Index": 320,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevVelocity",
+        "NameIndex": -1,
+        "Index": 336,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SystemLWCTile",
+        "NameIndex": -1,
+        "Index": 352,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultRotation",
+        "NameIndex": -1,
+        "Index": 364,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevRotation",
+        "NameIndex": -1,
+        "Index": 368,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultColor",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultMatRandom",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultCamOffset",
+        "NameIndex": -1,
+        "Index": 404,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevCamOffset",
+        "NameIndex": -1,
+        "Index": 408,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultNormAge",
+        "NameIndex": -1,
+        "Index": 412,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultSubImage",
+        "NameIndex": -1,
+        "Index": 416,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultFacing",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevFacing",
+        "NameIndex": -1,
+        "Index": 448,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultAlignment",
+        "NameIndex": -1,
+        "Index": 464,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultPrevAlignment",
+        "NameIndex": -1,
+        "Index": 480,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultDynamicMaterialParameter0",
+        "NameIndex": -1,
+        "Index": 496,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultDynamicMaterialParameter1",
+        "NameIndex": -1,
+        "Index": 512,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultDynamicMaterialParameter2",
+        "NameIndex": -1,
+        "Index": 528,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DefaultDynamicMaterialParameter3",
+        "NameIndex": -1,
+        "Index": 544,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PixelCoverageEnabled",
+        "NameIndex": -1,
+        "Index": 560,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PixelCoverageColorBlend",
+        "NameIndex": -1,
+        "Index": 576,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AccurateMotionVectors",
+        "NameIndex": -1,
+        "Index": 592,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 596,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

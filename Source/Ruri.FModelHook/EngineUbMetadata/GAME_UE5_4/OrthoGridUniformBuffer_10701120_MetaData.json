@@ -1,84 +1,168 @@
 {
-  "name": "OrthoGridUniformBuffer",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:203 (FOrthoVoxelGridUniformBufferParameters)",
-  "layoutHash": "0x10701120",
-  "constantBufferSize": 56,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "OrthoGridUniformBuffer",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:203 (FOrthoVoxelGridUniformBufferParameters)",
+  "LayoutHash": "0x10701120",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "OrthoGridUniformBuffer",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "TopLevelGridWorldBoundsMin",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TopLevelGridWorldBoundsMax",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TopLevelGridResolution",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bUseOrthoGrid",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bUseMajorantGrid",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bEnableIndirectionGrid",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 56,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 0,
-      "name": "TopLevelGridWorldBoundsMin",
-      "type": "Float3"
+      "Name": "TopLevelGridBitmaskBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "offset": 16,
-      "name": "TopLevelGridWorldBoundsMax",
-      "type": "Float3"
+      "Name": "TopLevelGridBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
     },
     {
-      "offset": 32,
-      "name": "TopLevelGridResolution",
-      "type": "Int3"
+      "Name": "IndirectionGridBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
     },
     {
-      "offset": 44,
-      "name": "bUseOrthoGrid",
-      "type": "Int"
+      "Name": "ExtinctionGridBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
     },
     {
-      "offset": 48,
-      "name": "bUseMajorantGrid",
-      "type": "Int"
+      "Name": "EmissionGridBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     },
     {
-      "offset": 52,
-      "name": "bEnableIndirectionGrid",
-      "type": "Int"
+      "Name": "ScatteringGridBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MajorantGridBuffer",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 56,
-      "name": "TopLevelGridBitmaskBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 0,
+      "Offset": 56,
+      "Name": "TopLevelGridBitmaskBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 1,
-      "offset": 64,
-      "name": "TopLevelGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 1,
+      "Offset": 64,
+      "Name": "TopLevelGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 2,
-      "offset": 72,
-      "name": "IndirectionGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 2,
+      "Offset": 72,
+      "Name": "IndirectionGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 3,
-      "offset": 80,
-      "name": "ExtinctionGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 3,
+      "Offset": 80,
+      "Name": "ExtinctionGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 4,
-      "offset": 88,
-      "name": "EmissionGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 4,
+      "Offset": 88,
+      "Name": "EmissionGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 5,
-      "offset": 96,
-      "name": "ScatteringGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 5,
+      "Offset": 96,
+      "Name": "ScatteringGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 6,
-      "offset": 104,
-      "name": "MajorantGridBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 6,
+      "Offset": 104,
+      "Name": "MajorantGridBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     }
   ]
 }

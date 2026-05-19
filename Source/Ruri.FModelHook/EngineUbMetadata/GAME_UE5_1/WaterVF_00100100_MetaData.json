@@ -1,31 +1,62 @@
 {
-  "name": "WaterVF",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:16 (FWaterVertexFactoryParameters)",
-  "layoutHash": "0x00100100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "LODScale",
-      "type": "Float"
-    },
-    {
-      "offset": 4,
-      "name": "NumQuadsPerTileSide",
-      "type": "Int"
-    },
-    {
-      "offset": 8,
-      "name": "bRenderSelected",
-      "type": "Int"
-    },
-    {
-      "offset": 12,
-      "name": "bRenderUnselected",
-      "type": "Int"
-    }
-  ],
-  "resources": []
+  "Name": "WaterVF",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:16 (FWaterVertexFactoryParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "WaterVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LODScale",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumQuadsPerTileSide",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRenderSelected",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRenderUnselected",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

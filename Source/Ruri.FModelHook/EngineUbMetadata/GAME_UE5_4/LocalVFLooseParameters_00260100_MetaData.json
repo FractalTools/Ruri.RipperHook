@@ -1,35 +1,70 @@
 {
-  "name": "LocalVFLooseParameters",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:30 (FLocalVertexFactoryLooseParameters)",
-  "layoutHash": "0x00260100",
-  "constantBufferSize": 4,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "LocalVFLooseParameters",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h:30 (FLocalVertexFactoryLooseParameters)",
+  "LayoutHash": "0x00260100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LocalVFLooseParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "FrameNumber",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 4,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 0,
-      "name": "FrameNumber",
-      "type": "UInt"
+      "Name": "GPUSkinPassThroughPositionBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "GPUSkinPassThroughPreviousPositionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "GPUSkinPassThroughPreSkinnedTangentBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 8,
-      "name": "GPUSkinPassThroughPositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 8,
+      "Name": "GPUSkinPassThroughPositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 1,
-      "offset": 16,
-      "name": "GPUSkinPassThroughPreviousPositionBuffer",
-      "type": "UBMT_SRV"
+      "Index": 1,
+      "Offset": 16,
+      "Name": "GPUSkinPassThroughPreviousPositionBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 2,
-      "offset": 24,
-      "name": "GPUSkinPassThroughPreSkinnedTangentBuffer",
-      "type": "UBMT_SRV"
+      "Index": 2,
+      "Offset": 24,
+      "Name": "GPUSkinPassThroughPreSkinnedTangentBuffer",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

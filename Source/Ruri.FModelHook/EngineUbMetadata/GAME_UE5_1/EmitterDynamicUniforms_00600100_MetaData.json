@@ -1,46 +1,92 @@
 {
-  "name": "EmitterDynamicUniforms",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:517 (FGPUSpriteEmitterDynamicUniformParameters)",
-  "layoutHash": "0x00600100",
-  "constantBufferSize": 96,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "LWCTile",
-      "type": "Float3"
-    },
-    {
-      "offset": 16,
-      "name": "LocalToWorldScale",
-      "type": "Float2"
-    },
-    {
-      "offset": 24,
-      "name": "EmitterInstRandom",
-      "type": "Float"
-    },
-    {
-      "offset": 32,
-      "name": "AxisLockRight",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "AxisLockUp",
-      "type": "Float4"
-    },
-    {
-      "offset": 64,
-      "name": "DynamicColor",
-      "type": "Float4"
-    },
-    {
-      "offset": 80,
-      "name": "MacroUVParameters",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "EmitterDynamicUniforms",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:517 (FGPUSpriteEmitterDynamicUniformParameters)",
+  "LayoutHash": "0x00600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "EmitterDynamicUniforms",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LWCTile",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LocalToWorldScale",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "EmitterInstRandom",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AxisLockRight",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AxisLockUp",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DynamicColor",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MacroUVParameters",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 96,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

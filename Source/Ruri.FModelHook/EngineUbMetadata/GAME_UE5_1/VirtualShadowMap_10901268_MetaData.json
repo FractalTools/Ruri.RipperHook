@@ -1,117 +1,237 @@
 {
-  "name": "VirtualShadowMap",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.h:120 (FVirtualShadowMapUniformParameters)",
-  "layoutHash": "0x10901268",
-  "constantBufferSize": 80,
-  "bindingFlags": "Static",
-  "members": [
+  "Name": "VirtualShadowMap",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.h:120 (FVirtualShadowMapUniformParameters)",
+  "LayoutHash": "0x10901268",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "VirtualShadowMap",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "NumFullShadowMaps",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumSinglePageShadowMaps",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxPhysicalPages",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumShadowMapSlots",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "StaticCachedArrayIndex",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PhysicalPageRowMask",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PhysicalPageRowShift",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PackedShadowMaskMaxLightCount",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RecPhysicalPoolSize",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PhysicalPoolSize",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PhysicalPoolSizePages",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bExcludeNonNaniteFromCoarsePages",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CoarsePagePixelThresholdDynamic",
+        "NameIndex": -1,
+        "Index": 68,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CoarsePagePixelThresholdStatic",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CoarsePagePixelThresholdDynamicNanite",
+        "NameIndex": -1,
+        "Index": 76,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 80,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "NumFullShadowMaps",
-      "type": "UInt"
-    },
-    {
-      "offset": 4,
-      "name": "NumSinglePageShadowMaps",
-      "type": "UInt"
-    },
-    {
-      "offset": 8,
-      "name": "MaxPhysicalPages",
-      "type": "UInt"
-    },
-    {
-      "offset": 12,
-      "name": "NumShadowMapSlots",
-      "type": "UInt"
-    },
-    {
-      "offset": 16,
-      "name": "StaticCachedArrayIndex",
-      "type": "UInt"
-    },
-    {
-      "offset": 20,
-      "name": "PhysicalPageRowMask",
-      "type": "UInt"
-    },
-    {
-      "offset": 24,
-      "name": "PhysicalPageRowShift",
-      "type": "UInt"
-    },
-    {
-      "offset": 28,
-      "name": "PackedShadowMaskMaxLightCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 32,
-      "name": "RecPhysicalPoolSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "PhysicalPoolSize",
-      "type": "Int2"
-    },
-    {
-      "offset": 56,
-      "name": "PhysicalPoolSizePages",
-      "type": "Int2"
-    },
-    {
-      "offset": 64,
-      "name": "bExcludeNonNaniteFromCoarsePages",
-      "type": "UInt"
-    },
-    {
-      "offset": 68,
-      "name": "CoarsePagePixelThresholdDynamic",
-      "type": "Float"
-    },
-    {
-      "offset": 72,
-      "name": "CoarsePagePixelThresholdStatic",
-      "type": "Float"
-    },
-    {
-      "offset": 76,
-      "name": "CoarsePagePixelThresholdDynamicNanite",
-      "type": "Float"
+      "Name": "PhysicalPagePool",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 80,
-      "name": "ProjectionData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "ProjectionData",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "index": 1,
-      "offset": 88,
-      "name": "PageTable",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PageTable",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
     },
     {
-      "index": 2,
-      "offset": 96,
-      "name": "PageFlags",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PageFlags",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
     },
     {
-      "index": 3,
-      "offset": 104,
-      "name": "PageRectBounds",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PageRectBounds",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 80,
+      "Name": "ProjectionData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 4,
-      "offset": 112,
-      "name": "PhysicalPagePool",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 88,
+      "Name": "PageTable",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 96,
+      "Name": "PageFlags",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 104,
+      "Name": "PageRectBounds",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 112,
+      "Name": "PhysicalPagePool",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     }
   ]
 }

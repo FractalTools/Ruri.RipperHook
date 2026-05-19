@@ -1,33 +1,66 @@
 {
-  "name": "LandscapeContinuousLODParameters",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:119 (FLandscapeSectionLODUniformParameters)",
-  "layoutHash": "0x0020011E",
-  "constantBufferSize": 24,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "LandscapeContinuousLODParameters",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:119 (FLandscapeSectionLODUniformParameters)",
+  "LayoutHash": "0x0020011E",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LandscapeContinuousLODParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LandscapeIndex",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Min",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Size",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 24,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 0,
-      "name": "LandscapeIndex",
-      "type": "Int"
-    },
-    {
-      "offset": 8,
-      "name": "Min",
-      "type": "Int2"
-    },
-    {
-      "offset": 16,
-      "name": "Size",
-      "type": "Int2"
+      "Name": "SectionLODBias",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 24,
-      "name": "SectionLODBias",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 24,
+      "Name": "SectionLODBias",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

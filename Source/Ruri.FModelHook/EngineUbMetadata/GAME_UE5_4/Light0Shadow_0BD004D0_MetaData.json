@@ -1,116 +1,235 @@
 {
-  "name": "Light0Shadow",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/VolumeLighting.h:50 (FVolumeShadowingShaderParametersGlobal0)",
-  "layoutHash": "0x0BD004D0",
-  "constantBufferSize": 720,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "Light0Shadow",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VolumeLighting.h:50 (FVolumeShadowingShaderParametersGlobal0)",
+  "LayoutHash": "0x0BD004D0",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "Light0Shadow",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "TranslatedWorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "ShadowViewProjectionMatrices",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "TranslatedWorldToStaticShadowMatrix",
+        "NameIndex": -1,
+        "Index": 640,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "TranslatedWorldPosition",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvRadius",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowmapMinMax",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DepthBiasParameters",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowInjectParams",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ClippingPlanes",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 2,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvShadowmapResolution",
+        "NameIndex": -1,
+        "Index": 592,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bStaticallyShadowed",
+        "NameIndex": -1,
+        "Index": 608,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "StaticShadowBufferSize",
+        "NameIndex": -1,
+        "Index": 704,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 720,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "TranslatedWorldPosition",
-      "type": "Float3"
+      "Name": "ShadowDepthTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 12,
-      "name": "InvRadius",
-      "type": "Float"
+      "Name": "ShadowDepthCubeTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 16,
-      "name": "TranslatedWorldToShadowMatrix",
-      "type": "Float4x4"
+      "Name": "ShadowDepthCubeTexture2",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 80,
-      "name": "ShadowmapMinMax",
-      "type": "Float4"
-    },
-    {
-      "offset": 96,
-      "name": "DepthBiasParameters",
-      "type": "Float4"
-    },
-    {
-      "offset": 112,
-      "name": "ShadowInjectParams",
-      "type": "Float4"
-    },
-    {
-      "offset": 128,
-      "name": "ClippingPlanes",
-      "type": "Float4",
-      "arraySize": 2
-    },
-    {
-      "offset": 208,
-      "name": "ShadowViewProjectionMatrices",
-      "type": "Float4x4",
-      "arraySize": 6
-    },
-    {
-      "offset": 592,
-      "name": "InvShadowmapResolution",
-      "type": "Float"
-    },
-    {
-      "offset": 608,
-      "name": "bStaticallyShadowed",
-      "type": "UInt"
-    },
-    {
-      "offset": 640,
-      "name": "TranslatedWorldToStaticShadowMatrix",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 704,
-      "name": "StaticShadowBufferSize",
-      "type": "Float4"
+      "Name": "StaticShadowDepthTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 160,
-      "name": "ShadowDepthTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ShadowDepthTextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 168,
-      "name": "ShadowDepthTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "ShadowDepthCubeTextureSampler",
+      "Sampler": 4,
+      "BindPoint": 4
     },
     {
-      "index": 2,
-      "offset": 176,
-      "name": "ShadowDepthCubeTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "StaticShadowDepthTextureSampler",
+      "Sampler": 6,
+      "BindPoint": 6
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 160,
+      "Name": "ShadowDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 3,
-      "offset": 184,
-      "name": "ShadowDepthCubeTexture2",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 168,
+      "Name": "ShadowDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 4,
-      "offset": 192,
-      "name": "ShadowDepthCubeTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 176,
+      "Name": "ShadowDepthCubeTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 5,
-      "offset": 616,
-      "name": "StaticShadowDepthTexture",
-      "type": "UBMT_TEXTURE"
+      "Index": 3,
+      "Offset": 184,
+      "Name": "ShadowDepthCubeTexture2",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 6,
-      "offset": 624,
-      "name": "StaticShadowDepthTextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 4,
+      "Offset": 192,
+      "Name": "ShadowDepthCubeTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 5,
+      "Offset": 616,
+      "Name": "StaticShadowDepthTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 624,
+      "Name": "StaticShadowDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

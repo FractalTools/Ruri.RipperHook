@@ -111,9 +111,9 @@ internal sealed class EngineUbMetadataRegistry
         log?.Invoke($"[EngineUbMetadata] Loaded {loaded} layout(s){gameTag} from '{directory}' ({skipped} skipped). Scan roots: {string.Join(" -> ", scanRoots)}");
 
         // Diagnostic: re-compute the hash from each loaded seed and compare to
-        // its declared layoutHash. Surfaces seed files where
-        // `constantBufferSize` is internally inconsistent (i.e. the value in
-        // the JSON would NOT reproduce the declared hash through
+        // its declared layoutHash. Surfaces seed files where the recorded
+        // resource list / cbuffer size is internally inconsistent (i.e. the
+        // values in the JSON would NOT reproduce the declared hash through
         // FRHIUniformBufferLayoutInitializer::ComputeHash). This is a strict
         // self-check on the seed authoring — never affects lookup behaviour.
         VerifySeedHashesForDiagnostics(byNameAndHash, log);
@@ -129,7 +129,7 @@ internal sealed class EngineUbMetadataRegistry
     // of MemberType consuming Resources from the END. Returns 0xFFFFFFFF if
     // any resource has an unknown UBMT_* type (silent for diagnostics — the
     // caller logs the mismatch).
-    internal static uint ComputeLayoutHash(uint constantBufferSize, byte bindingFlags, bool hasStaticSlot, IReadOnlyList<EngineUbResource> resources)
+    internal static uint ComputeLayoutHash(uint constantBufferSize, byte bindingFlags, bool hasStaticSlot, IReadOnlyList<EngineUbResourceSlot> resources)
     {
         uint h = ((constantBufferSize & 0xFFFFu) << 16) | ((uint)bindingFlags << 8) | (uint)(hasStaticSlot ? 1 : 0);
         for (int i = 0; i < resources.Count; i++)
@@ -139,19 +139,19 @@ internal sealed class EngineUbMetadataRegistry
         // in UE's source.
         while (n >= 4)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 0;
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 8;
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 16;
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 24;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 8;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 16;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 24;
         }
         while (n >= 2)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 0;
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF) << 16;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 16;
         }
         while (n > 0)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].Type) & 0xFF);
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF);
         }
         return h;
     }
@@ -204,7 +204,8 @@ internal sealed class EngineUbMetadataRegistry
             byte bf = BindingFlagsValue(meta.BindingFlags);
             bool hasStaticSlot = string.Equals(meta.BindingFlags, "Static", StringComparison.Ordinal)
                               || string.Equals(meta.BindingFlags, "StaticAndShader", StringComparison.Ordinal);
-            uint computedAsIs = ComputeLayoutHash(meta.ConstantBufferSize, bf, hasStaticSlot, meta.Resources);
+            uint cbSize = (uint)meta.ConstantBufferSize;
+            uint computedAsIs = ComputeLayoutHash(cbSize, bf, hasStaticSlot, meta.Resources);
             if (computedAsIs == declared)
             {
                 matched++;
@@ -213,10 +214,10 @@ internal sealed class EngineUbMetadataRegistry
             // Probe: try common alignments (round up to 16) — if the seed
             // recorded the unaligned numeric end but the engine folded the
             // aligned C++ struct sizeof, this catches the off-by-padding.
-            uint aligned16 = (meta.ConstantBufferSize + 15u) & ~15u;
+            uint aligned16 = (cbSize + 15u) & ~15u;
             uint computedAligned = ComputeLayoutHash(aligned16, bf, hasStaticSlot, meta.Resources);
             mismatched++;
-            log($"[EngineUbMetadata][HashVerify] MISMATCH name={meta.Name} declared=0x{declared:X8} computed(cbsize={meta.ConstantBufferSize})=0x{computedAsIs:X8}  align16(cbsize={aligned16})=0x{computedAligned:X8}{(computedAligned == declared ? "  <- align16 reproduces declared" : "")}");
+            log($"[EngineUbMetadata][HashVerify] MISMATCH name={meta.Name} declared=0x{declared:X8} computed(cbsize={cbSize})=0x{computedAsIs:X8}  align16(cbsize={aligned16})=0x{computedAligned:X8}{(computedAligned == declared ? "  <- align16 reproduces declared" : "")}");
         }
         log($"[EngineUbMetadata][HashVerify] {matched} matched, {mismatched} mismatched of {byNameAndHash.Count} loaded seeds.");
     }
@@ -246,9 +247,21 @@ internal sealed class EngineUbMetadataRegistry
         return true;
     }
 
+    // Cache the serializer options. JsonStringEnumConverter accepts "Float",
+    // "Int", etc. — matches the generator's PascalCase enum names and the
+    // way the standard parameter types are annotated for Newtonsoft. Both
+    // converters must agree on the wire format or seeds round-trip-fail.
+    private static readonly JsonSerializerOptions s_jsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
     private static bool TryLoadFile(string file, Dictionary<(string, uint), EngineUbMetadata> byNameAndHash, Dictionary<string, List<uint>> hashesByName, Action<string>? logError)
     {
-        JsonSerializerOptions jsonOpts = new() { PropertyNameCaseInsensitive = true, AllowTrailingCommas = true, ReadCommentHandling = JsonCommentHandling.Skip };
+        JsonSerializerOptions jsonOpts = s_jsonOpts;
         try
         {
             string json = File.ReadAllText(file);
@@ -258,6 +271,11 @@ internal sealed class EngineUbMetadataRegistry
                 logError?.Invoke($"[EngineUbMetadata] {file}: missing 'name' or 'layoutHash' — skipped.");
                 return false;
             }
+            // Idempotent: re-derive typed Textures/Samplers/Buffers/UAVs from
+            // the canonical Resources list when the seed omits them, so a
+            // minimal hand-authored seed (Resources only) still produces
+            // typed buckets for the consumers downstream.
+            EnsureTypedBucketsPopulated(entry);
             uint hash = entry.ParsedHash();
             var key = (entry.Name, hash);
             if (byNameAndHash.ContainsKey(key))
@@ -284,6 +302,66 @@ internal sealed class EngineUbMetadataRegistry
         }
     }
 
+    // Materialise the typed-bucket views (Textures / Samplers / Buffers /
+    // UAVs) from the canonical flat `Resources` list whenever the seed
+    // didn't already include them. Lets the generator emit a minimal seed
+    // (Resources only) and have the runtime still see typed buckets.
+    private static void EnsureTypedBucketsPopulated(EngineUbMetadata meta)
+    {
+        if (meta.Resources.Count == 0) return;
+        bool anyBucket = meta.Textures.Count > 0 || meta.Samplers.Count > 0
+                       || meta.Buffers.Count > 0  || meta.UAVs.Count > 0;
+        if (anyBucket) return;
+        foreach (EngineUbResourceSlot slot in meta.Resources)
+        {
+            switch (slot.UbmtType)
+            {
+                case "UBMT_TEXTURE":
+                case "UBMT_RDG_TEXTURE":
+                case "UBMT_RDG_TEXTURE_ACCESS":
+                case "UBMT_RDG_TEXTURE_ACCESS_ARRAY":
+                    meta.Textures.Add(new TextureParameter
+                    {
+                        Name = slot.Name,
+                        NameIndex = -1,
+                        Index = slot.Index,
+                        SamplerIndex = -1,
+                        MultiSampled = false,
+                        Dim = 2,
+                    });
+                    break;
+                case "UBMT_SAMPLER":
+                    meta.Samplers.Add(new SamplerParameter
+                    {
+                        Name = slot.Name,
+                        Sampler = (uint)slot.Index,
+                        BindPoint = slot.Index,
+                    });
+                    break;
+                case "UBMT_UAV":
+                case "UBMT_RDG_TEXTURE_UAV":
+                case "UBMT_RDG_BUFFER_UAV":
+                    meta.UAVs.Add(new UAVParameter
+                    {
+                        Name = slot.Name,
+                        NameIndex = -1,
+                        Index = slot.Index,
+                        OriginalIndex = slot.Index,
+                    });
+                    break;
+                default: // UBMT_SRV, UBMT_RDG_*_SRV, UBMT_RDG_BUFFER_*, UBMT_RDG_UNIFORM_BUFFER, etc.
+                    meta.Buffers.Add(new BufferBindingParameter
+                    {
+                        Name = slot.Name,
+                        NameIndex = -1,
+                        Index = slot.Index,
+                        ArraySize = 0,
+                    });
+                    break;
+            }
+        }
+    }
+
     public EngineUbMetadata? Lookup(string ubName, uint layoutHash)
     {
         if (string.IsNullOrEmpty(ubName)) return null;
@@ -307,115 +385,34 @@ internal sealed class EngineUbMetadataRegistry
 }
 
 // Translates an EngineUbMetadata into the SerializedProgramData shape the
-// patcher / rewriter consume — same flat list of VectorParameter /
-// MatrixParameter the MaterialConstantBufferReader produces for Material.
+// patcher / rewriter consume. Trivial now that the metadata already stores
+// the cbuffer directly as a ConstantBufferParameter — same plumbing as
+// MaterialConstantBufferReader produces for the Material UB.
 internal static class EngineUbMetadataTranslator
 {
     public static ConstantBufferParameter ToConstantBufferParameter(EngineUbMetadata meta)
     {
-        List<VectorParameter> vectorParams = new();
-        List<MatrixParameter> matrixParams = new();
-
-        foreach (EngineUbNumericMember m in meta.Members)
+        if (meta.ConstantBuffer != null)
         {
-            if (string.IsNullOrWhiteSpace(m.Name)) continue;
-            if (!ParseType(m.Type, out ShaderParamType scalar, out int rows, out int cols, out bool isMatrix)) continue;
-
-            if (isMatrix)
-            {
-                matrixParams.Add(new MatrixParameter
-                {
-                    Name = m.Name,
-                    NameIndex = -1,
-                    Type = scalar,
-                    Index = checked((int)m.Offset),
-                    ArraySize = m.ArraySize,
-                    RowCount = unchecked((byte)rows),
-                    ColumnCount = unchecked((byte)cols),
-                    IsMatrix = true,
-                });
-            }
-            else
-            {
-                vectorParams.Add(new VectorParameter
-                {
-                    Name = m.Name,
-                    NameIndex = -1,
-                    Type = scalar,
-                    Index = checked((int)m.Offset),
-                    ArraySize = m.ArraySize,
-                    IsMatrix = false,
-                    RowCount = unchecked((byte)rows),
-                    ColumnCount = unchecked((byte)cols),
-                });
-            }
+            // Defensive: if a hand-authored seed left the cbuffer name blank,
+            // fill it with the UB name so downstream pretty-printers see
+            // something useful.
+            if (string.IsNullOrWhiteSpace(meta.ConstantBuffer.Name))
+                meta.ConstantBuffer.Name = meta.Name;
+            return meta.ConstantBuffer;
         }
-
+        // Empty placeholder — UBs that are pure resource holders (no numeric
+        // members) still need a cbuffer entry so the rewriter has a name to
+        // anchor against.
         return new ConstantBufferParameter
         {
             Name = meta.Name,
             NameIndex = -1,
-            VectorParameters = vectorParams.OrderBy(static p => p.Index).ToArray(),
-            MatrixParameters = matrixParams.OrderBy(static p => p.Index).ToArray(),
+            VectorParameters = Array.Empty<VectorParameter>(),
+            MatrixParameters = Array.Empty<MatrixParameter>(),
             StructParameters = Array.Empty<StructParameter>(),
-            Size = checked((int)meta.ConstantBufferSize),
+            Size = 0,
             IsPartialCB = false,
         };
-    }
-
-    // Returns false on unrecognized type. On true, scalar/rows/cols/isMatrix
-    // are populated. ShaderParamType has no Unknown value, so we signal via
-    // bool — matches the existing MaterialConstantBufferReader convention.
-    //
-    // Strict on HLSL-style names: `Float`, `Float2`, `Float4`, `Float4x4`,
-    // `Int4`, `UInt3`, `Bool`, `Half2`, etc. Seed JSONs must follow this
-    // convention — UE C++ type names (`FMatrix44f`, `FVector4f`,
-    // `FLinearColor`, `FIntPoint`, …) are NOT accepted; emit the HLSL
-    // form in the JSON instead. Keeping the parser strict surfaces seed
-    // mistakes as missing members rather than silently absorbing a
-    // sprawling alias table.
-    private static bool ParseType(string type, out ShaderParamType scalar, out int rows, out int cols, out bool isMatrix)
-    {
-        scalar = ShaderParamType.Float; rows = 0; cols = 0; isMatrix = false;
-        if (string.IsNullOrWhiteSpace(type)) return false;
-        string t = type.Trim();
-        // Matrix forms first (else "Float4" matches before "Float4x4").
-        int xPos = t.IndexOf('x', StringComparison.OrdinalIgnoreCase);
-        if (xPos > 0 && xPos < t.Length - 1)
-        {
-            string lhs = t.Substring(0, xPos);
-            string rhs = t.Substring(xPos + 1);
-            if (TryParseScalarWithRows(lhs, out scalar, out rows) && int.TryParse(rhs, out cols))
-            {
-                isMatrix = true;
-                return true;
-            }
-        }
-        if (TryParseScalarWithRows(t, out scalar, out rows))
-        {
-            cols = 1;
-            isMatrix = false;
-            return true;
-        }
-        return false;
-    }
-
-    private static bool TryParseScalarWithRows(string t, out ShaderParamType scalar, out int rows)
-    {
-        rows = 1;
-        scalar = ShaderParamType.Float;
-        string lower = t.ToLowerInvariant();
-        string baseName;
-        if      (lower.StartsWith("float")) { baseName = "float"; scalar = ShaderParamType.Float; }
-        else if (lower.StartsWith("uint"))  { baseName = "uint";  scalar = ShaderParamType.UInt;  }
-        else if (lower.StartsWith("int"))   { baseName = "int";   scalar = ShaderParamType.Int;   }
-        else if (lower.StartsWith("bool"))  { baseName = "bool";  scalar = ShaderParamType.Bool;  }
-        else if (lower.StartsWith("half"))  { baseName = "half";  scalar = ShaderParamType.Half;  }
-        else return false;
-
-        string suffix = t.Substring(baseName.Length);
-        if (string.IsNullOrEmpty(suffix)) return true;     // scalar
-        if (int.TryParse(suffix, out int n) && n is >= 1 and <= 4) { rows = n; return true; }
-        return false;
     }
 }

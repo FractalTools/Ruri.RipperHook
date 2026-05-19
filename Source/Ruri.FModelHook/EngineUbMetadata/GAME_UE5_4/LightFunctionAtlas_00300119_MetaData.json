@@ -1,35 +1,73 @@
 {
-  "name": "LightFunctionAtlas",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightFunctionAtlas.h:30 (FLightFunctionAtlasGlobalParameters)",
-  "layoutHash": "0x00300119",
-  "constantBufferSize": 28,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "LightFunctionAtlas",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/LightFunctionAtlas.h:30 (FLightFunctionAtlasGlobalParameters)",
+  "LayoutHash": "0x00300119",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LightFunctionAtlas",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Slot_UVSize",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 28,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 24,
-      "name": "Slot_UVSize",
-      "type": "Float"
+      "Name": "LightFunctionAtlasTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "LightFunctionAtlasTexture",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "LightFunctionAtlasSampler",
+      "Sampler": 2,
+      "BindPoint": 2
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "LightInfoDataBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "LightFunctionAtlasTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "LightInfoDataBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 1,
+      "Offset": 8,
+      "Name": "LightInfoDataBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 2,
-      "offset": 16,
-      "name": "LightFunctionAtlasSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 2,
+      "Offset": 16,
+      "Name": "LightFunctionAtlasSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

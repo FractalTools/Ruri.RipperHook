@@ -1,21 +1,42 @@
 {
-  "name": "SubsurfaceUniformParameters",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessSubsurface.cpp:422 (FSubsurfaceUniformParameters)",
-  "layoutHash": "0x00100100",
-  "constantBufferSize": 8,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "MaxGroupCount",
-      "type": "UInt"
-    },
-    {
-      "offset": 4,
-      "name": "bRectPrimitive",
-      "type": "UInt"
-    }
-  ],
-  "resources": []
+  "Name": "SubsurfaceUniformParameters",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessSubsurface.cpp:422 (FSubsurfaceUniformParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SubsurfaceUniformParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxGroupCount",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bRectPrimitive",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 8,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

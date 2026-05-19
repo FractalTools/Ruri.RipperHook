@@ -1,16 +1,32 @@
 {
-  "name": "PSConstants",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/Runtime/Oculus/OculusVR/Source/OculusHMD/Private/OculusHMD_StressTester.cpp:24 (FOculusPixelShaderConstantParameters)",
-  "layoutHash": "0x00100100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "Name",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "PSConstants",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Plugins/Runtime/Oculus/OculusVR/Source/OculusHMD/Private/OculusHMD_StressTester.cpp:24 (FOculusPixelShaderConstantParameters)",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "PSConstants",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Name",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }

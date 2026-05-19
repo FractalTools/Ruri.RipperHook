@@ -1,197 +1,397 @@
 {
-  "name": "ForwardLightData",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:689 (FForwardLightData)",
-  "layoutHash": "0x1BB814CD",
-  "constantBufferSize": 596,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "ForwardLightData",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:689 (FForwardLightData)",
+  "LayoutHash": "0x1BB814CD",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "ForwardLightData",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "DirectionalLightTranslatedWorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 4,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "DirectionalLightTranslatedWorldToStaticShadow",
+        "NameIndex": -1,
+        "Index": 528,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "NumLocalLights",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumReflectionCaptures",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "HasDirectionalLight",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumGridCells",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CulledGridSize",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxCulledLightsPerCell",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightGridPixelSizeShift",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightGridZParams",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 3,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightVolumetricScatteringIntensity",
+        "NameIndex": -1,
+        "Index": 92,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightShadowMapChannelMask",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightDistanceFadeMAD",
+        "NameIndex": -1,
+        "Index": 104,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumDirectionalLightCascades",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightVSM",
+        "NameIndex": -1,
+        "Index": 116,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CascadeEndDepths",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightShadowmapMinMax",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 4,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightShadowmapAtlasBufferSize",
+        "NameIndex": -1,
+        "Index": 464,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightDepthBias",
+        "NameIndex": -1,
+        "Index": 480,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightUseStaticShadowing",
+        "NameIndex": -1,
+        "Index": 484,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SimpleLightsEndIndex",
+        "NameIndex": -1,
+        "Index": 488,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ClusteredDeferredSupportedEndIndex",
+        "NameIndex": -1,
+        "Index": 492,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LumenSupportedStartIndex",
+        "NameIndex": -1,
+        "Index": 496,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightStaticShadowBufferSize",
+        "NameIndex": -1,
+        "Index": 512,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectLightingShowFlag",
+        "NameIndex": -1,
+        "Index": 592,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 596,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "NumLocalLights",
-      "type": "UInt"
+      "Name": "DirectionalLightShadowmapAtlas",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 4,
-      "name": "NumReflectionCaptures",
-      "type": "UInt"
+      "Name": "DirectionalLightStaticShadowmap",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 8,
-      "name": "HasDirectionalLight",
-      "type": "UInt"
-    },
-    {
-      "offset": 12,
-      "name": "NumGridCells",
-      "type": "UInt"
-    },
-    {
-      "offset": 16,
-      "name": "CulledGridSize",
-      "type": "Int3"
-    },
-    {
-      "offset": 28,
-      "name": "MaxCulledLightsPerCell",
-      "type": "UInt"
-    },
-    {
-      "offset": 32,
-      "name": "LightGridPixelSizeShift",
-      "type": "UInt"
-    },
-    {
-      "offset": 48,
-      "name": "LightGridZParams",
-      "type": "Float3"
-    },
-    {
-      "offset": 64,
-      "name": "DirectionalLightDirection",
-      "type": "Float3"
-    },
-    {
-      "offset": 80,
-      "name": "DirectionalLightColor",
-      "type": "Float3"
-    },
-    {
-      "offset": 92,
-      "name": "DirectionalLightVolumetricScatteringIntensity",
-      "type": "Float"
-    },
-    {
-      "offset": 96,
-      "name": "DirectionalLightShadowMapChannelMask",
-      "type": "UInt"
-    },
-    {
-      "offset": 104,
-      "name": "DirectionalLightDistanceFadeMAD",
-      "type": "Float2"
-    },
-    {
-      "offset": 112,
-      "name": "NumDirectionalLightCascades",
-      "type": "UInt"
-    },
-    {
-      "offset": 116,
-      "name": "DirectionalLightVSM",
-      "type": "Int"
-    },
-    {
-      "offset": 128,
-      "name": "CascadeEndDepths",
-      "type": "Float4"
-    },
-    {
-      "offset": 144,
-      "name": "DirectionalLightTranslatedWorldToShadowMatrix",
-      "type": "Float4x4",
-      "arraySize": 4
-    },
-    {
-      "offset": 400,
-      "name": "DirectionalLightShadowmapMinMax",
-      "type": "Float4",
-      "arraySize": 4
-    },
-    {
-      "offset": 464,
-      "name": "DirectionalLightShadowmapAtlasBufferSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 480,
-      "name": "DirectionalLightDepthBias",
-      "type": "Float"
-    },
-    {
-      "offset": 484,
-      "name": "DirectionalLightUseStaticShadowing",
-      "type": "UInt"
-    },
-    {
-      "offset": 488,
-      "name": "SimpleLightsEndIndex",
-      "type": "UInt"
-    },
-    {
-      "offset": 492,
-      "name": "ClusteredDeferredSupportedEndIndex",
-      "type": "UInt"
-    },
-    {
-      "offset": 496,
-      "name": "LumenSupportedStartIndex",
-      "type": "UInt"
-    },
-    {
-      "offset": 512,
-      "name": "DirectionalLightStaticShadowBufferSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 528,
-      "name": "DirectionalLightTranslatedWorldToStaticShadow",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 592,
-      "name": "DirectLightingShowFlag",
-      "type": "UInt"
+      "Name": "DummyRectLightSourceTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 600,
-      "name": "DirectionalLightShadowmapAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Name": "ShadowmapSampler",
+      "Sampler": 1,
+      "BindPoint": 1
     },
     {
-      "index": 1,
-      "offset": 608,
-      "name": "ShadowmapSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "StaticShadowmapSampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "ForwardLocalLightBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     },
     {
-      "index": 2,
-      "offset": 616,
-      "name": "DirectionalLightStaticShadowmap",
-      "type": "UBMT_TEXTURE"
+      "Name": "NumCulledLightsGrid",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
     },
     {
-      "index": 3,
-      "offset": 624,
-      "name": "StaticShadowmapSampler",
-      "type": "UBMT_SAMPLER"
+      "Name": "CulledLightDataGrid",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 600,
+      "Name": "DirectionalLightShadowmapAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     },
     {
-      "index": 4,
-      "offset": 632,
-      "name": "ForwardLocalLightBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 1,
+      "Offset": 608,
+      "Name": "ShadowmapSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 5,
-      "offset": 640,
-      "name": "NumCulledLightsGrid",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 2,
+      "Offset": 616,
+      "Name": "DirectionalLightStaticShadowmap",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 6,
-      "offset": 648,
-      "name": "CulledLightDataGrid",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Index": 3,
+      "Offset": 624,
+      "Name": "StaticShadowmapSampler",
+      "UbmtType": "UBMT_SAMPLER"
     },
     {
-      "index": 7,
-      "offset": 656,
-      "name": "DummyRectLightSourceTexture",
-      "type": "UBMT_TEXTURE"
+      "Index": 4,
+      "Offset": 632,
+      "Name": "ForwardLocalLightBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 640,
+      "Name": "NumCulledLightsGrid",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 648,
+      "Name": "CulledLightDataGrid",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 656,
+      "Name": "DummyRectLightSourceTexture",
+      "UbmtType": "UBMT_TEXTURE"
     }
   ]
 }

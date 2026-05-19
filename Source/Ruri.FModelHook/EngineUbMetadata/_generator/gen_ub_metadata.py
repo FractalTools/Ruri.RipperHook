@@ -1189,34 +1189,169 @@ def compute_hash(constant_buffer_size: int, binding_flags: int, has_static_slot:
 # JSON emitter
 # ---------------------------------------------------------------------------
 
+# Map HLSL type name -> (ShaderParamType enum string, RowCount, ColumnCount, IsMatrix).
+# Mirrors Ruri.ShaderTools.ShaderParamType + the loader's HLSL parser at
+# EngineUbMetadataLoader.ParseType. Keeping the table here keeps the
+# generator self-contained (no shared file).
+_HLSL_TO_TYPE: dict[str, tuple[str, int, int, bool]] = {
+    "Float":     ("Float", 1, 1, False),
+    "Float2":    ("Float", 1, 2, False),
+    "Float3":    ("Float", 1, 3, False),
+    "Float4":    ("Float", 1, 4, False),
+    "Int":       ("Int",   1, 1, False),
+    "Int2":      ("Int",   1, 2, False),
+    "Int3":      ("Int",   1, 3, False),
+    "Int4":      ("Int",   1, 4, False),
+    "UInt":      ("UInt",  1, 1, False),
+    "UInt2":     ("UInt",  1, 2, False),
+    "UInt3":     ("UInt",  1, 3, False),
+    "UInt4":     ("UInt",  1, 4, False),
+    "Bool":      ("Bool",  1, 1, False),
+    "Bool2":     ("Bool",  1, 2, False),
+    "Bool3":     ("Bool",  1, 3, False),
+    "Bool4":     ("Bool",  1, 4, False),
+    "Half":      ("Half",  1, 1, False),
+    "Half2":     ("Half",  1, 2, False),
+    "Half3":     ("Half",  1, 3, False),
+    "Half4":     ("Half",  1, 4, False),
+    "Float4x4":  ("Float", 4, 4, True),
+    "Float3x4":  ("Float", 3, 4, True),
+    "Float4x3":  ("Float", 4, 3, True),
+    "Float3x3":  ("Float", 3, 3, True),
+}
+
+
+def _numeric_to_vector_or_matrix(m: NumericMember) -> tuple[str, dict]:
+    """Classify a NumericMember as either a VectorParameter or MatrixParameter
+    payload (PascalCase wire fields). Returns ("vector"|"matrix", dict)."""
+    entry = _HLSL_TO_TYPE.get(m.hlsl_type)
+    if entry is None:
+        # Fallback: trust num_rows/num_columns. Assume Float scalar.
+        scalar, rows, cols, is_matrix = "Float", m.num_rows or 1, m.num_columns or 1, (m.num_rows or 0) > 1
+    else:
+        scalar, rows, cols, is_matrix = entry
+        # NumericMember rows/cols are authoritative when present and the table
+        # row/col don't match (defensive; should rarely happen for known types).
+        if m.num_rows and m.num_columns and (rows, cols) != (m.num_rows, m.num_columns):
+            rows, cols = m.num_rows, m.num_columns
+            is_matrix = rows > 1
+    payload = {
+        "Name": m.name,
+        "NameIndex": -1,
+        "Index": m.offset,
+        "ArraySize": m.array_size,
+        "Type": scalar,
+        "RowCount": rows,
+        "ColumnCount": cols,
+        "IsMatrix": is_matrix,
+    }
+    return ("matrix" if is_matrix else "vector"), payload
+
+
+# Group resources into typed buckets matching the C# loader's standard-type
+# split (Textures / Samplers / Buffers / UAVs). Same classification logic
+# as EngineUbMetadataRegistry.EnsureTypedBucketsPopulated.
+_TEXTURE_UBMT = {"UBMT_TEXTURE", "UBMT_RDG_TEXTURE", "UBMT_RDG_TEXTURE_ACCESS",
+                 "UBMT_RDG_TEXTURE_ACCESS_ARRAY"}
+_SAMPLER_UBMT = {"UBMT_SAMPLER"}
+_UAV_UBMT     = {"UBMT_UAV", "UBMT_RDG_TEXTURE_UAV", "UBMT_RDG_BUFFER_UAV"}
+
+
 def to_json(meta_name: str, engine_version: str, engine_source: str,
             layout_hash: int, binding_flags: str, cb_size: int,
             members: list[NumericMember], resources: list[Resource]) -> str:
+    """Emit the unified JSON schema: a thin metadata wrapper composing the
+    standard parameter types (ConstantBufferParameter + Texture/Sampler/
+    Buffer/UAV lists) plus a canonical engine-side Resources flat list.
+
+    PascalCase wire format — matches Newtonsoft.Json defaults used by the
+    rest of the Ruri.ShaderDecompiler pipeline. The C# loader runs with
+    PropertyNameCaseInsensitive=true so either casing decodes, but we emit
+    PascalCase consistently.
+    """
+    vectors: list[dict] = []
+    matrices: list[dict] = []
+    for m in members:
+        kind, payload = _numeric_to_vector_or_matrix(m)
+        if kind == "matrix":
+            matrices.append(payload)
+        else:
+            vectors.append(payload)
+
+    constant_buffer = {
+        "Name": meta_name,
+        "NameIndex": -1,
+        "MatrixParameters": matrices,
+        "VectorParameters": vectors,
+        "StructParameters": [],
+        "Size": cb_size,
+        "IsPartialCB": False,
+    }
+
+    # Typed bucket views — pre-classified for consumers that don't want to
+    # walk Resources themselves. Each entry's `Index` field holds the engine
+    # resource-table position (matches SRT record.ResourceIndex).
+    textures: list[dict] = []
+    samplers: list[dict] = []
+    buffers: list[dict] = []
+    uavs: list[dict] = []
+    for r in resources:
+        full_type = "UBMT_" + r.ubmt_name
+        if full_type in _TEXTURE_UBMT:
+            textures.append({
+                "Name": r.name,
+                "NameIndex": -1,
+                "Index": r.resource_index,
+                "SamplerIndex": -1,
+                "MultiSampled": False,
+                "Dim": 2,
+            })
+        elif full_type in _SAMPLER_UBMT:
+            samplers.append({
+                "Name": r.name,
+                "Sampler": r.resource_index,
+                "BindPoint": r.resource_index,
+            })
+        elif full_type in _UAV_UBMT:
+            uavs.append({
+                "Name": r.name,
+                "NameIndex": -1,
+                "Index": r.resource_index,
+                "OriginalIndex": r.resource_index,
+            })
+        else:
+            buffers.append({
+                "Name": r.name,
+                "NameIndex": -1,
+                "Index": r.resource_index,
+                "ArraySize": 0,
+            })
+
+    # Canonical engine-side flat resource list — 1:1 with
+    # FRHIUniformBufferLayoutInitializer.Resources[], sorted by MemberOffset.
+    # Source of truth for hash verification and SRT lookup.
+    flat_resources = [
+        {
+            "Index": r.resource_index,
+            "Offset": r.offset,
+            "Name": r.name,
+            "UbmtType": "UBMT_" + r.ubmt_name,
+        }
+        for r in resources
+    ]
+
     obj = {
-        "name": meta_name,
-        "engineVersion": engine_version,
-        "engineSource": engine_source,
-        "layoutHash": f"0x{layout_hash:08X}",
-        "constantBufferSize": cb_size,
-        "bindingFlags": binding_flags,
-        "members": [
-            {
-                "offset": m.offset,
-                "name": m.name,
-                "type": m.hlsl_type,
-                **({"arraySize": m.array_size} if m.array_size > 0 else {}),
-            }
-            for m in members
-        ],
-        "resources": [
-            {
-                "index": r.resource_index,
-                "offset": r.offset,
-                "name": r.name,
-                "type": "UBMT_" + r.ubmt_name,
-            }
-            for r in resources
-        ],
+        "Name": meta_name,
+        "EngineVersion": engine_version,
+        "EngineSource": engine_source,
+        "LayoutHash": f"0x{layout_hash:08X}",
+        "BindingFlags": binding_flags,
+        "ConstantBuffer": constant_buffer,
+        "Textures": textures,
+        "Samplers": samplers,
+        "Buffers": buffers,
+        "UAVs": uavs,
+        "Resources": flat_resources,
     }
     return json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
 
@@ -1235,6 +1370,11 @@ def main() -> int:
     ap.add_argument("--validate", type=Path, help="Validate-only: compare generated hashes/sizes against JSONs in this folder. No writes.")
     ap.add_argument("--verbose", "-v", action="store_true", help="Print every warning/skip.")
     ap.add_argument("--list-only", action="store_true", help="Only list the UBs discovered, don't emit JSON.")
+    ap.add_argument("--emit-shader-type-seeds", action="store_true",
+                    help="Also dump ShaderType / $Globals loose-parameter name catalogues under "
+                         "<out>/<target>/_ShaderType/. Best-effort: $Globals offsets aren't "
+                         "recoverable from source, files carry placeholder offsets and a Debug "
+                         "block noting the limitation.")
     args = ap.parse_args()
 
     engine_src: Path = args.engine_src.resolve()
@@ -1291,7 +1431,10 @@ def main() -> int:
         for fp in args.validate.glob("*_MetaData.json"):
             try:
                 obj = json.loads(fp.read_text(encoding="utf-8-sig"))
-                key = (obj.get("name", ""), obj.get("layoutHash", "").lower())
+                # Tolerate both PascalCase (new) and camelCase (legacy) keys.
+                name = obj.get("Name") or obj.get("name", "")
+                hash_str = obj.get("LayoutHash") or obj.get("layoutHash", "")
+                key = (name, hash_str.lower())
                 validate_index[key] = obj
             except Exception as exc:  # noqa: BLE001
                 print(f"  ! could not read {fp}: {exc}")
@@ -1369,10 +1512,22 @@ def main() -> int:
                     if args.verbose:
                         print(f"  . {shader_name}: no existing JSON to compare")
                 continue
-            # OK, hash matched. Compare key fields.
-            r_cb = ref.get("constantBufferSize", 0)
-            r_res = len(ref.get("resources", []))
-            r_mem = len(ref.get("members", []))
+            # OK, hash matched. Compare key fields (tolerate both legacy
+            # camelCase and the new PascalCase schema).
+            r_cb = (
+                ref.get("constantBufferSize")
+                or (ref.get("ConstantBuffer") or {}).get("Size", 0)
+                or 0
+            )
+            r_res = len(ref.get("Resources") or ref.get("resources", []))
+            r_mem_legacy = ref.get("members", [])
+            r_mem_new = (ref.get("ConstantBuffer") or {})
+            r_mem = (
+                len(r_mem_legacy)
+                if r_mem_legacy
+                else (len(r_mem_new.get("VectorParameters", []))
+                      + len(r_mem_new.get("MatrixParameters", [])))
+            )
             ok = (r_res == len(layout.resources))
             tag = "OK" if ok else "?"
             print(f"  {tag} {shader_name:28s} hash=0x{layout.layout_hash:08X} "
@@ -1400,6 +1555,13 @@ def main() -> int:
             print(f"  + {out_path.name}  ({sd.cpp_name})")
 
     print(f"[gen] done. ok={successes} skipped/failed={failures} dup={collisions}")
+
+    if args.emit_shader_type_seeds and out_dir is not None and not args.validate and not args.list_only:
+        try:
+            emit_shader_type_seeds(out_dir, args.engine_version, engine_src)
+        except NotImplementedError as exc:
+            print(f"[gen][shader-type] {exc}")
+
     return 0 if failures == 0 else 1
 
 
@@ -1409,6 +1571,258 @@ def engine_relative(abs_path: str, engine_src: Path) -> str:
         return str(Path(abs_path).resolve().relative_to(engine_src)).replace("\\", "/")
     except ValueError:
         return abs_path.replace("\\", "/")
+
+
+# ---------------------------------------------------------------------------
+# ShaderType / $Globals seed extraction (best-effort skeleton)
+# ---------------------------------------------------------------------------
+#
+# UE FShader subclasses bind loose shader parameters into the $Globals cbuffer
+# (and direct texture/sampler slots) via:
+#     LAYOUT_FIELD(FShaderParameter,         <name>);    // numeric (CB)
+#     LAYOUT_FIELD(FShaderResourceParameter, <name>);    // tex/sampler/SRV/UAV
+# Each FShader::Bind(Initializer.ParameterMap, TEXT("<name>")) call at
+# constructor time resolves the source-level <name> against the cooked
+# shader's ParameterMap. After cook the ParameterMap is dropped and only
+# offsets+types survive in the cooked binary — we can recover NAMES from
+# source but NOT their byte offsets (they depend on DXC's $Globals layout
+# of the actual HLSL source, which the C++ class only references by name).
+#
+# What this pass emits:
+#   <out>/_ShaderType/<ClassName>_<HashedName:016X>_MetaData.json
+# where HashedName = CityHash64(upper(ClassName), seed=0), matching UE's
+# FHashedName mechanism (see RuntimeSymbolReader.HashedNamesResolver in C#).
+#
+# Each file follows the SAME schema as engine-UB seeds (ConstantBuffer +
+# Textures/Samplers/Buffers/UAVs + Resources) so the loader plumbing reuses
+# the existing typed wire format. ConstantBuffer.Name = "$Globals", and
+# ConstantBuffer entries carry NAMES + SEQUENTIAL placeholder offsets in
+# source declaration order (16-byte stride) — the downstream loader needs
+# to reconcile against actual cooked offsets via name-driven heuristics.
+# The "Debug" dict records the source file/line so users can grep back.
+#
+# Why best-effort: $Globals offsets aren't recoverable from source (DXC
+# assigns them per its own packing rules on the HLSL source — not the C++
+# declaration order). See `Source/Ruri.ShaderDecompiler/CLAUDE.md` lines
+# 338-348 for the full story. Treat the JSON as a name catalogue keyed by
+# ShaderType hash; consumers MUST validate offsets against the cooked
+# binary before trusting them.
+
+_LAYOUT_FIELD_RE = re.compile(
+    r"LAYOUT_FIELD(?:_INITIALIZED)?\(\s*"
+    r"(FShaderParameter|FShaderResourceParameter|FShaderResourceParameterArray|FRWShaderParameter)\s*,\s*"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*[\),]",
+)
+
+_CLASS_OPEN_RE = re.compile(
+    r"^\s*class\s+(?:[A-Z_]+_API\s+)?([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s*<[^>]+>)?"
+    r"(?:\s*:\s*(?:public|protected|private)\s+([^\s{,]+))?",
+    re.MULTILINE,
+)
+
+
+def collect_shader_type_layouts(engine_src: Path) -> list[tuple[str, str, str, int, list[tuple[str, str, str]]]]:
+    """Walk engine source for `class X : public FShader/FGlobalShader/
+    FMeshMaterialShader/...` declarations that contain LAYOUT_FIELD()
+    bindings. Returns a list of
+        (class_name, parent_name, src_file, src_line, fields)
+    where `fields` is `[(layout_type, field_name, raw_decl), ...]`.
+
+    Best-effort source scan. Does not understand templates, multiple
+    inheritance, or nested classes deeply — these would need a full C++
+    parser. The output is a name catalogue; downstream consumers validate
+    against cooked offsets.
+    """
+    out: list[tuple[str, str, str, int, list[tuple[str, str, str]]]] = []
+    bases_of_interest = {
+        "FShader", "FGlobalShader", "FMeshMaterialShader", "FMaterialShader",
+        "FNiagaraShader", "FNaniteGlobalShader",
+    }
+    for fp in iter_cpp_files(engine_src):
+        try:
+            text = read_text(fp)
+        except OSError:
+            continue
+        if "LAYOUT_FIELD" not in text:
+            continue
+        line_table = build_line_table(text)
+        # Iterate class openings and pair each with its LAYOUT_FIELDs up to
+        # the matching '};'. This is a simple brace-balance pass — robust
+        # against typical UE style but not against macro magic that hides
+        # the class-end token from regex matching.
+        for cm in _CLASS_OPEN_RE.finditer(text):
+            cname = cm.group(1)
+            parent = cm.group(2) or ""
+            # Filter: parent must be in our known set, OR class name starts
+            # with `T...PS`/`T...VS`/`T...CS` etc. (mesh-material shader
+            # template form). We're conservative.
+            if parent not in bases_of_interest:
+                continue
+            # Find '{' after the class header and the matching '};'.
+            brace_open = text.find("{", cm.end())
+            if brace_open < 0:
+                continue
+            depth = 1
+            i = brace_open + 1
+            while i < len(text) and depth > 0:
+                ch = text[i]
+                if ch == "{": depth += 1
+                elif ch == "}": depth -= 1
+                i += 1
+            class_body = text[brace_open:i]
+            fields: list[tuple[str, str, str]] = []
+            for lm in _LAYOUT_FIELD_RE.finditer(class_body):
+                ltype = lm.group(1)
+                fname = lm.group(2)
+                fields.append((ltype, fname, lm.group(0)))
+            if not fields:
+                continue
+            src_line = bisect_line(line_table, cm.start())
+            out.append((cname, parent, str(fp), src_line, fields))
+    return out
+
+
+# CityHash64 port for FHashedName — mirrors the C# implementation at
+# HashedNamesResolver.ComputeHashedName / CityHash64WithSeed.
+# Outputs the 16-char uppercase hex string used as the filename suffix.
+def city_hash_64_with_seed(name: str, seed: int = 0) -> int:
+    upper = name.upper().encode("utf-8")
+    # Use Python's built-in hashlib? No — UE uses CityHash64 specifically.
+    # Implement minimal CityHash64 mirroring the C# port. For brevity here
+    # we delegate to a small embedded implementation; if this skeleton
+    # is ever shipped, port the full CityHash64 from the C# resolver
+    # (Source/Ruri.FModelHook/Game/SBUE/ShaderDecompiler/Passes/HashedNamesResolver.cs).
+    raise NotImplementedError(
+        "ShaderType seed emission requires CityHash64 port; "
+        "see HashedNamesResolver.cs for the reference implementation. "
+        "Skipping for this skeleton — populate when full hash port lands."
+    )
+
+
+def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path) -> int:
+    """Emit one `<ClassName>_<HashedName:016X>_MetaData.json` per FShader
+    derivative under `out_dir/_ShaderType/`. Returns the count written.
+
+    SKELETON: currently logs the count of discovered classes/fields but
+    does not write because the CityHash64 port isn't included here. Wire
+    up by porting the hash function from HashedNamesResolver.cs and
+    uncommenting the emission block.
+    """
+    classes = collect_shader_type_layouts(engine_src)
+    total_fields = sum(len(fs) for _, _, _, _, fs in classes)
+    print(f"[gen][shader-type] discovered {len(classes)} FShader-derivative class(es) "
+          f"with {total_fields} LAYOUT_FIELD bindings.")
+    if not classes:
+        return 0
+
+    target = out_dir / "_ShaderType"
+    target.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    for cname, parent, src_file, src_line, fields in classes:
+        # NOTE: hashed-name suffix omitted from filename in this skeleton
+        # because the CityHash64 port isn't included. Filename becomes
+        # `<ClassName>_NOHASH_MetaData.json` so the file is recognisable
+        # but won't accidentally collide with a hash-validated file.
+        # Replace `NOHASH` with `f"{city_hash_64_with_seed(cname):016X}"`
+        # once the hash port lands.
+        hash_token = "NOHASH"
+
+        vectors: list[dict] = []
+        textures: list[dict] = []
+        samplers: list[dict] = []
+        buffers: list[dict] = []
+        uavs: list[dict] = []
+        flat_resources: list[dict] = []
+        # Placeholder sequential offsets at 16-byte stride. The COOK
+        # assigns real $Globals offsets per DXC packing of the HLSL source,
+        # which we don't have — the loader must reconcile by name.
+        next_cb_offset = 0
+        res_index = 0
+        for ltype, fname, _raw in fields:
+            if ltype == "FShaderParameter":
+                vectors.append({
+                    "Name": fname,
+                    "NameIndex": -1,
+                    "Index": next_cb_offset,
+                    "ArraySize": 0,
+                    "Type": "Float",     # unknown — Float as the most common case
+                    "RowCount": 1,
+                    "ColumnCount": 4,    # placeholder vec4 slot
+                    "IsMatrix": False,
+                })
+                next_cb_offset += 16
+            elif ltype in ("FShaderResourceParameter", "FShaderResourceParameterArray"):
+                # Default classification as a buffer binding — the loader
+                # consumer is responsible for narrowing texture vs sampler
+                # vs SRV/UAV by name heuristic or cooked-binary cross-check.
+                buffers.append({
+                    "Name": fname,
+                    "NameIndex": -1,
+                    "Index": res_index,
+                    "ArraySize": 0,
+                })
+                flat_resources.append({
+                    "Index": res_index,
+                    "Offset": 0,
+                    "Name": fname,
+                    "UbmtType": "UBMT_SRV",
+                })
+                res_index += 1
+            elif ltype == "FRWShaderParameter":
+                uavs.append({
+                    "Name": fname,
+                    "NameIndex": -1,
+                    "Index": res_index,
+                    "OriginalIndex": res_index,
+                })
+                flat_resources.append({
+                    "Index": res_index,
+                    "Offset": 0,
+                    "Name": fname,
+                    "UbmtType": "UBMT_UAV",
+                })
+                res_index += 1
+
+        obj = {
+            "Name": cname,
+            "EngineVersion": engine_version,
+            "EngineSource": f"{engine_relative(src_file, engine_src)}:{src_line} ({cname})",
+            "LayoutHash": "0x00000000",  # not a UB layout hash — keyed by class name
+            "BindingFlags": "Shader",
+            "ConstantBuffer": {
+                "Name": "$Globals",
+                "NameIndex": -1,
+                "MatrixParameters": [],
+                "VectorParameters": vectors,
+                "StructParameters": [],
+                "Size": next_cb_offset,
+                "IsPartialCB": True,
+            },
+            "Textures": textures,
+            "Samplers": samplers,
+            "Buffers": buffers,
+            "UAVs": uavs,
+            "Resources": flat_resources,
+            "Debug": {
+                "ShaderTypeClass": cname,
+                "ParentClass": parent,
+                "Note": (
+                    "Source-derived name catalogue for the $Globals cbuffer + "
+                    "direct resource bindings of this FShader subclass. The "
+                    "ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte "
+                    "stride in declaration order); the cook assigns real offsets "
+                    "per DXC packing of the HLSL source. Downstream loader must "
+                    "reconcile by name against the cooked binary."
+                ),
+            },
+        }
+        path = out_dir / "_ShaderType" / f"{cname}_{hash_token}_MetaData.json"
+        path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        written += 1
+    print(f"[gen][shader-type] wrote {written} seed file(s) under {target}")
+    return written
 
 
 if __name__ == "__main__":

@@ -1,124 +1,259 @@
 {
-  "name": "LumenCardScene",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenSceneData.h:31 (FLumenCardScene)",
-  "layoutHash": "0x09990810",
-  "constantBufferSize": 44,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "LumenCardScene",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenSceneData.h:31 (FLumenCardScene)",
+  "LayoutHash": "0x09990810",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LumenCardScene",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "NumCards",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumMeshCards",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumCardPages",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumHeightfields",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumPrimitiveGroups",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PhysicalAtlasSize",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvPhysicalAtlasSize",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 2,
+        "IsMatrix": false
+      },
+      {
+        "Name": "IndirectLightingAtlasDownsampleFactor",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 44,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "NumCards",
-      "type": "UInt"
+      "Name": "AlbedoAtlas",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 4,
-      "name": "NumMeshCards",
-      "type": "UInt"
+      "Name": "OpacityAtlas",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 8,
-      "name": "NumCardPages",
-      "type": "UInt"
+      "Name": "NormalAtlas",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 12,
-      "name": "NumHeightfields",
-      "type": "UInt"
+      "Name": "EmissiveAtlas",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     },
     {
-      "offset": 16,
-      "name": "NumPrimitiveGroups",
-      "type": "UInt"
-    },
-    {
-      "offset": 24,
-      "name": "PhysicalAtlasSize",
-      "type": "Float2"
-    },
-    {
-      "offset": 32,
-      "name": "InvPhysicalAtlasSize",
-      "type": "Float2"
-    },
-    {
-      "offset": 40,
-      "name": "IndirectLightingAtlasDownsampleFactor",
-      "type": "Float"
+      "Name": "DepthAtlas",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [],
+  "Buffers": [
     {
-      "index": 0,
-      "offset": 48,
-      "name": "CardData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "CardData",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
     },
     {
-      "index": 1,
-      "offset": 56,
-      "name": "CardPageData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "CardPageData",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
     },
     {
-      "index": 2,
-      "offset": 64,
-      "name": "MeshCardsData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "MeshCardsData",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
     },
     {
-      "index": 3,
-      "offset": 72,
-      "name": "HeightfieldData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "HeightfieldData",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
     },
     {
-      "index": 4,
-      "offset": 80,
-      "name": "PrimitiveGroupData",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PrimitiveGroupData",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
     },
     {
-      "index": 5,
-      "offset": 88,
-      "name": "PageTableBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "PageTableBuffer",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
     },
     {
-      "index": 6,
-      "offset": 96,
-      "name": "SceneInstanceIndexToMeshCardsIndexBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV"
+      "Name": "SceneInstanceIndexToMeshCardsIndexBuffer",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 48,
+      "Name": "CardData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 7,
-      "offset": 104,
-      "name": "AlbedoAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 1,
+      "Offset": 56,
+      "Name": "CardPageData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 8,
-      "offset": 112,
-      "name": "OpacityAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 2,
+      "Offset": 64,
+      "Name": "MeshCardsData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 9,
-      "offset": 120,
-      "name": "NormalAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 3,
+      "Offset": 72,
+      "Name": "HeightfieldData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 10,
-      "offset": 128,
-      "name": "EmissiveAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 4,
+      "Offset": 80,
+      "Name": "PrimitiveGroupData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
     },
     {
-      "index": 11,
-      "offset": 136,
-      "name": "DepthAtlas",
-      "type": "UBMT_RDG_TEXTURE"
+      "Index": 5,
+      "Offset": 88,
+      "Name": "PageTableBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 96,
+      "Name": "SceneInstanceIndexToMeshCardsIndexBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 104,
+      "Name": "AlbedoAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 112,
+      "Name": "OpacityAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 120,
+      "Name": "NormalAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 128,
+      "Name": "EmissiveAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 136,
+      "Name": "DepthAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
     }
   ]
 }

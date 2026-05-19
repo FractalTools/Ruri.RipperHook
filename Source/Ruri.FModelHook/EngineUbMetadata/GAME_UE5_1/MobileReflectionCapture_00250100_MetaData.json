@@ -1,29 +1,60 @@
 {
-  "name": "MobileReflectionCapture",
-  "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:1149 (FMobileReflectionCaptureShaderParameters)",
-  "layoutHash": "0x00250100",
-  "constantBufferSize": 16,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "MobileReflectionCapture",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:1149 (FMobileReflectionCaptureShaderParameters)",
+  "LayoutHash": "0x00250100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "MobileReflectionCapture",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Params",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
     {
-      "offset": 0,
-      "name": "Params",
-      "type": "Float4"
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
     }
   ],
-  "resources": [
+  "Samplers": [
     {
-      "index": 0,
-      "offset": 16,
-      "name": "Texture",
-      "type": "UBMT_TEXTURE"
+      "Name": "TextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
     },
     {
-      "index": 1,
-      "offset": 24,
-      "name": "TextureSampler",
-      "type": "UBMT_SAMPLER"
+      "Index": 1,
+      "Offset": 24,
+      "Name": "TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
     }
   ]
 }

@@ -1,29 +1,59 @@
 {
-  "name": "LightmapGBufferParams",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/LightmapGBuffer.h:16 (FLightmapGBufferParams)",
-  "layoutHash": "0x002D0219",
-  "constantBufferSize": 32,
-  "bindingFlags": "Static",
-  "members": [],
-  "resources": [
+  "Name": "LightmapGBufferParams",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/LightmapGBuffer.h:16 (FLightmapGBufferParams)",
+  "LayoutHash": "0x002D0219",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "LightmapGBufferParams",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "ScratchTilePoolLayer0",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Name": "ScratchTilePoolLayer0",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "ScratchTilePoolLayer1",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Name": "ScratchTilePoolLayer1",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
     },
     {
-      "index": 2,
-      "offset": 16,
-      "name": "ScratchTilePoolLayer2",
-      "type": "UBMT_RDG_TEXTURE_UAV"
+      "Name": "ScratchTilePoolLayer2",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "ScratchTilePoolLayer0",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "ScratchTilePoolLayer1",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "ScratchTilePoolLayer2",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
     }
   ]
 }

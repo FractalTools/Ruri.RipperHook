@@ -1,41 +1,82 @@
 {
-  "name": "InstanceVF",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h:42 (FInstancedStaticMeshVertexFactoryUniformShaderParameters)",
-  "layoutHash": "0x06360706",
-  "constantBufferSize": 36,
-  "bindingFlags": "Shader",
-  "members": [
+  "Name": "InstanceVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h:42 (FInstancedStaticMeshVertexFactoryUniformShaderParameters)",
+  "LayoutHash": "0x06360706",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "InstanceVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "NumCustomDataFloats",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 36,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
     {
-      "offset": 32,
-      "name": "NumCustomDataFloats",
-      "type": "Int"
+      "Name": "VertexFetch_InstanceOriginBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VertexFetch_InstanceTransformBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VertexFetch_InstanceLightmapBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "InstanceCustomDataBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
     }
   ],
-  "resources": [
+  "UAVs": [],
+  "Resources": [
     {
-      "index": 0,
-      "offset": 0,
-      "name": "VertexFetch_InstanceOriginBuffer",
-      "type": "UBMT_SRV"
+      "Index": 0,
+      "Offset": 0,
+      "Name": "VertexFetch_InstanceOriginBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 1,
-      "offset": 8,
-      "name": "VertexFetch_InstanceTransformBuffer",
-      "type": "UBMT_SRV"
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VertexFetch_InstanceTransformBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 2,
-      "offset": 16,
-      "name": "VertexFetch_InstanceLightmapBuffer",
-      "type": "UBMT_SRV"
+      "Index": 2,
+      "Offset": 16,
+      "Name": "VertexFetch_InstanceLightmapBuffer",
+      "UbmtType": "UBMT_SRV"
     },
     {
-      "index": 3,
-      "offset": 24,
-      "name": "InstanceCustomDataBuffer",
-      "type": "UBMT_SRV"
+      "Index": 3,
+      "Offset": 24,
+      "Name": "InstanceCustomDataBuffer",
+      "UbmtType": "UBMT_SRV"
     }
   ]
 }

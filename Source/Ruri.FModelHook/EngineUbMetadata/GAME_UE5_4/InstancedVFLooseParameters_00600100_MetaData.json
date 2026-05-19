@@ -1,41 +1,82 @@
 {
-  "name": "InstancedVFLooseParameters",
-  "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h:50 (FInstancedStaticMeshVFLooseUniformShaderParameters)",
-  "layoutHash": "0x00600100",
-  "constantBufferSize": 96,
-  "bindingFlags": "Shader",
-  "members": [
-    {
-      "offset": 0,
-      "name": "InstancingViewZCompareZero",
-      "type": "Float4"
-    },
-    {
-      "offset": 16,
-      "name": "InstancingViewZCompareOne",
-      "type": "Float4"
-    },
-    {
-      "offset": 32,
-      "name": "InstancingViewZConstant",
-      "type": "Float4"
-    },
-    {
-      "offset": 48,
-      "name": "InstancingTranslatedWorldViewOriginZero",
-      "type": "Float4"
-    },
-    {
-      "offset": 64,
-      "name": "InstancingTranslatedWorldViewOriginOne",
-      "type": "Float4"
-    },
-    {
-      "offset": 80,
-      "name": "InstancingFadeOutParams",
-      "type": "Float4"
-    }
-  ],
-  "resources": []
+  "Name": "InstancedVFLooseParameters",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h:50 (FInstancedStaticMeshVFLooseUniformShaderParameters)",
+  "LayoutHash": "0x00600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "InstancedVFLooseParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "InstancingViewZCompareZero",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstancingViewZCompareOne",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstancingViewZConstant",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstancingTranslatedWorldViewOriginZero",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstancingTranslatedWorldViewOriginOne",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InstancingFadeOutParams",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 4,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 96,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
 }
