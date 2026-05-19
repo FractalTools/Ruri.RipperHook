@@ -8,7 +8,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
 internal static class MaterialConstantBufferReader
 {
-    public static ConstantBufferParameter? Read(JsonElement uniformExpressionSet)
+    // [preshader-debug] one-shot toggle: enabled only while the env var
+    // RURI_PRESHADER_DEBUG is set. Filters via name substring to avoid spam.
+    private static readonly string? PreshaderDebugFilter =
+        Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG");
+
+    public static ConstantBufferParameter? Read(JsonElement uniformExpressionSet, string? materialPath = null)
     {
         if (!uniformExpressionSet.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement uniformBufferLayoutInitializer)
             || uniformBufferLayoutInitializer.ValueKind != JsonValueKind.Object)
@@ -114,7 +119,7 @@ internal static class MaterialConstantBufferReader
                 continue;
             }
 
-            string baseName = DerivePreshaderName(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset);
+            string baseName = DerivePreshaderName(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows);
             switch (kind)
             {
                 case FieldKind.Float:
@@ -278,7 +283,7 @@ internal static class MaterialConstantBufferReader
         return new string(chars[..numE]);
     }
 
-    private static string DerivePreshaderName(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset)
+    private static string DerivePreshaderName(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath = null, int rows = 0)
     {
         string anonymous = $"f_{byteOffset}";
         if (size < 3 || offset >= (uint)data.Length || offset + 3 > (uint)data.Length)
@@ -287,6 +292,14 @@ internal static class MaterialConstantBufferReader
         }
         if (data[offset] != 3)
         {
+            // Non-Parameter lead (typically a Constant pushed first, then a
+            // Parameter pulled in by a binary op): fall through to the
+            // single-param scan so we still capture the slot's
+            // expression-of-one-param semantic, even though we can't
+            // structurally identify the exact op chain.
+            string? recoveredFromNonParamLead = TryRecoverViaSingleParamScan(data, offset, size, parameters);
+            if (recoveredFromNonParamLead != null) return recoveredFromNonParamLead;
+            DumpPreshaderDebug(data, offset, size, parameters, byteOffset, materialPath, rows, "<nonParamLead>");
             return anonymous;
         }
 
@@ -366,6 +379,25 @@ internal static class MaterialConstantBufferReader
             }
         }
 
+        // Parameter; Swizzle(.xyz); Parameter(same); Swizzle(.w); AppendVector
+        // Identity round-trip (size 3 + 6 + 3 + 6 + 1 = 19 bytes total, restSize == 16).
+        //
+        // UE's HLSLMaterialTranslator emits this whole-vector reconstruction
+        // when the material expression evaluates a Float4 parameter without a
+        // trailing per-component swizzle. Semantically it's just `<param>`.
+        // The unique-name deduplicator downstream rewrites collisions as
+        // `<param>_at_<offset>` so the canonical-slot vs. preshader-reconstructed
+        // slot stay distinct in the final cbuffer dump.
+        if (restSize == 16 && rest + 16 <= data.Length
+            && data[rest] == 36 && data[rest + 1] == 3 && data[rest + 2] == 0 && data[rest + 3] == 1 && data[rest + 4] == 2 /* .xyz */
+            && data[rest + 6] == 3
+            && BitConverter.ToUInt16(data, rest + 7) == paramIdx
+            && data[rest + 9] == 36 && data[rest + 10] == 1 && data[rest + 11] == 3 /* .w */
+            && data[rest + 15] == 37 /* AppendVector */)
+        {
+            return baseName;
+        }
+
         // Parameter; Swizzle(.xyz); Parameter(same); Swizzle(.w); AppendVector; Swizzle(<final>)
         // (size 3 + 6 + 3 + 6 + 1 + 6 = 25 bytes total, restSize == 22)
         //
@@ -397,7 +429,126 @@ internal static class MaterialConstantBufferReader
             }
         }
 
+        // Last-resort: if the entire byte stream references exactly one
+        // material Parameter, the slot is some derived expression of that
+        // parameter — better to name it after the parameter (the
+        // unique-name dedup adds `_at_<offset>` for the duplicate) than
+        // leave it as an opaque `f_<N>` slot.
+        string? recovered = TryRecoverViaSingleParamScan(data, offset, size, parameters);
+        if (recovered != null)
+        {
+            return recovered;
+        }
+
+        DumpPreshaderDebug(data, offset, size, parameters, byteOffset, materialPath, rows, baseName);
         return anonymous;
+    }
+
+    // Walks the preshader byte stream opcode-by-opcode and returns the
+    // referenced parameter's name when exactly one distinct Parameter
+    // (opcode 3) is encountered. Used as a fallback when the structural
+    // pattern matchers can't recognise the expression shape.
+    //
+    // Proper opcode walking (rather than byte-scanning for `0x03`) is
+    // required to avoid false positives on bytes that happen to land at
+    // value 3 inside a Constant's IEEE-754 mantissa. The walker only
+    // needs to know the operand sizes of the opcodes that can appear
+    // around a Parameter — Constant/ComponentSwizzle/Parameter — every
+    // other opcode is treated as a single byte (correct for unary, binary,
+    // and stack-only ops). If the walk runs into an unknown variable-size
+    // opcode it bails out (returns null) rather than guess.
+    private static string? TryRecoverViaSingleParamScan(byte[] data, uint offset, uint size, JsonElement parameters)
+    {
+        int n = checked((int)size);
+        int dataStart = checked((int)offset);
+        if (dataStart + n > data.Length) n = data.Length - dataStart;
+        if (n < 3) return null;
+
+        ushort? singleIdx = null;
+        int i = 0;
+        while (i < n)
+        {
+            byte op = data[dataStart + i];
+            int operandBytes;
+
+            if (op == 3) // Parameter: u16 operand
+            {
+                if (i + 1 + 2 > n) return null;
+                ushort idx = BitConverter.ToUInt16(data, dataStart + i + 1);
+                if (idx >= parameters.GetArrayLength()) return null;
+                if (singleIdx.HasValue && singleIdx.Value != idx) return null;
+                singleIdx = idx;
+                operandBytes = 2;
+            }
+            else if (op == 2) // Constant: 1 type byte + value bytes
+            {
+                if (i + 1 >= n) return null;
+                int valueBytes = data[dataStart + i + 1] switch
+                {
+                    1 => 4,   // Float
+                    2 => 8,   // Float2
+                    3 => 12,  // Float3
+                    4 => 16,  // Float4
+                    _ => -1,  // Unknown — abort walking
+                };
+                if (valueBytes < 0) return null;
+                operandBytes = 1 + valueBytes;
+            }
+            else if (op == 36) // ComponentSwizzle: numE + 4 component indices
+            {
+                operandBytes = 5;
+            }
+            else
+            {
+                // Unary / binary / stack-only ops: no operand.
+                operandBytes = 0;
+            }
+
+            i += 1 + operandBytes;
+        }
+
+        if (!singleIdx.HasValue) return null;
+        FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[singleIdx.Value]);
+        return string.IsNullOrEmpty(info?.Name) ? null : info!.Name;
+    }
+
+    private static void DumpPreshaderDebug(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath, int rows, string baseName)
+    {
+        if (string.IsNullOrEmpty(PreshaderDebugFilter)) return;
+        if (string.IsNullOrEmpty(materialPath) || materialPath.IndexOf(PreshaderDebugFilter, StringComparison.OrdinalIgnoreCase) < 0) return;
+        int n = checked((int)size);
+        int start = checked((int)offset);
+        if (start + n > data.Length) n = data.Length - start;
+        if (n <= 0) return;
+        System.Text.StringBuilder sb = new();
+        sb.Append("[preshader-debug] mat=").Append(System.IO.Path.GetFileName(materialPath))
+          .Append(" cb=").Append(byteOffset)
+          .Append(" kind=").Append(rows).Append("xN")
+          .Append(" leadParam=").Append(baseName)
+          .Append(" restSize=").Append(n - 3)
+          .Append(" bytes=[");
+        for (int i = 0; i < n; i++)
+        {
+            if (i > 0) sb.Append(' ');
+            sb.Append(data[start + i].ToString("X2"));
+        }
+        sb.Append("] refs=[");
+        // Walk the byte stream looking for opcode 3 (Parameter) followed by a u16 idx,
+        // resolve each to a parameter name from the parameters JsonElement.
+        bool first = true;
+        for (int i = 0; i + 3 <= n; i++)
+        {
+            if (data[start + i] != 3) continue;
+            ushort idx = BitConverter.ToUInt16(data, start + i + 1);
+            if (idx >= parameters.GetArrayLength()) continue;
+            FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[idx]);
+            if (info == null) continue;
+            if (!first) sb.Append(',');
+            sb.Append('@').Append(i).Append(':').Append(info.Name);
+            first = false;
+        }
+        sb.Append(']');
+        Console.WriteLine(sb.ToString());
     }
 
     // Bytes match `EPreshaderOpcode` (`Engine/Public/Shader/Preshader.h:19-75`):

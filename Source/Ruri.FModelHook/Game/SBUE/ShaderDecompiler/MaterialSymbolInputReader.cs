@@ -48,7 +48,7 @@ internal static class SymbolInputsReader
 
     private static void ReadUniformExpressionSet(SymbolInputs inputs, JsonElement uniformExpressionSet)
     {
-        inputs.MaterialConstantBuffer = MaterialConstantBufferReader.Read(uniformExpressionSet);
+        inputs.MaterialConstantBuffer = MaterialConstantBufferReader.Read(uniformExpressionSet, inputs.MaterialPath);
         ReadUniformNumericParameters(uniformExpressionSet, inputs.NumericParameterInfos);
         inputs.MaterialResourceCounts = ReadMaterialResourceCounts(uniformExpressionSet);
     }
