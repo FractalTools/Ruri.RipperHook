@@ -1,0 +1,49 @@
+{
+  "Name": "SwizzleRgbUB",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:662 (FModifyAlphaSwizzleRgbaUB)",
+  "LayoutHash": "0x00150100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SwizzleRgbUB",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SamplerP",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "Name": "Bones",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/GPUSkinVertexFactory.h:36 (FBoneMatricesUniformShaderParameters)",
+  "LayoutHash": "0x00300100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "Bones",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "BoneMatrices",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 1,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

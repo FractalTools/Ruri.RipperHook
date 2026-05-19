@@ -1,0 +1,21 @@
+{
+  "Name": "MyShaderBindingName",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1386 (FMyParameterStruct)",
+  "LayoutHash": "0x00000100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "MyShaderBindingName",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

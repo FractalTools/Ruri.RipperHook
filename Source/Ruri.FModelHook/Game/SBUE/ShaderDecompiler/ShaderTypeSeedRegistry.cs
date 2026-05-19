@@ -35,6 +35,16 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 internal sealed class ShaderTypeSeedRegistry
 {
     private readonly Dictionary<ulong, EngineUbMetadata> _byHash;
+    // Secondary index keyed by class-name prefix (descending length) so
+    // templated cook names like `TLightMapDensityPSFNoLightMapPolicy` can
+    // fall back to the bare-template seed `TLightMapDensityPS`. UE's
+    // `IMPLEMENT_*_SHADER_TYPE` uses `##`-concatenation to produce names
+    // like `<Base>##<PolicyName>` for each policy specialisation; the
+    // generator only captures `<Base>` because the `##` expansion isn't
+    // a regex-tractable operation. Prefix-match gets the loose-parameter
+    // names right for every specialisation as long as the base is
+    // captured.
+    private readonly List<(string Prefix, EngineUbMetadata Meta)> _byNamePrefixDesc;
 
     public string SourceDirectory { get; }
     public int FileCount => _byHash.Count;
@@ -43,6 +53,13 @@ internal sealed class ShaderTypeSeedRegistry
     {
         SourceDirectory = sourceDir;
         _byHash = byHash;
+        // Sort by descending prefix length so longer matches win (avoids
+        // `TBasePassPSF...` getting eaten by a shorter `TBase...` seed).
+        _byNamePrefixDesc = byHash.Values
+            .Where(m => !string.IsNullOrEmpty(m.Name))
+            .Select(m => (Prefix: m.Name, Meta: m))
+            .OrderByDescending(t => t.Prefix.Length)
+            .ToList();
     }
 
     public static ShaderTypeSeedRegistry Empty { get; } = new(string.Empty,
@@ -160,6 +177,38 @@ internal sealed class ShaderTypeSeedRegistry
         {
             meta = found;
             return true;
+        }
+        return false;
+    }
+
+    // Two-tier lookup. First tries the exact `FShaderType::HashedName` match
+    // (which only hits for non-templated bases). Falls back to longest-prefix
+    // string match on `cookedTypeName` so templated specialisations like
+    // `TLightMapDensityPSFNoLightMapPolicy` (cooked) recover names from the
+    // bare base seed `TLightMapDensityPS`. The base class's
+    // `LAYOUT_FIELD(FShaderParameter, ...)` declarations are inherited by
+    // every macro-instantiated specialisation, so the loose-parameter names
+    // are the same across all policies.
+    //
+    // Returns true if EITHER lookup succeeded; `matchedBy` describes which.
+    public bool TryLookupWithFallback(string hashHex, string? cookedTypeName, out EngineUbMetadata meta, out string matchedBy)
+    {
+        meta = null!;
+        matchedBy = string.Empty;
+        if (TryLookup(hashHex, out meta))
+        {
+            matchedBy = "exact-hash";
+            return true;
+        }
+        if (string.IsNullOrWhiteSpace(cookedTypeName)) return false;
+        foreach (var (prefix, m) in _byNamePrefixDesc)
+        {
+            if (cookedTypeName.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                meta = m;
+                matchedBy = $"prefix-of:{prefix}";
+                return true;
+            }
         }
         return false;
     }

@@ -144,14 +144,22 @@ internal static class Pass180_PrepareShaderBinaries
         if (container != null
             && !string.IsNullOrWhiteSpace(container.ShaderTypeHash)
             && state.ShaderTypeSeedRegistry.FileCount > 0
-            && state.ShaderTypeSeedRegistry.TryLookup(container.ShaderTypeHash, out EngineUbMetadata typeSeed))
+            && state.ShaderTypeSeedRegistry.TryLookupWithFallback(
+                container.ShaderTypeHash, container.ShaderTypeName,
+                out EngineUbMetadata typeSeed, out string matchKind))
         {
-            if (s_seedHitsByClass.TryAdd(typeSeed.Name, true))
+            // Key by (cooked-class-name, seed-class) so a single seed-class
+            // matched by multiple templated specialisations only logs once
+            // for each distinct (cook, seed) pair (e.g. one line each for
+            // `TBasePassPSFNoLightMap` → `TBasePassPS`,
+            // `TBasePassPSFHQLightMap` → `TBasePassPS`, etc.).
+            string key = $"{container.ShaderTypeName}=>{typeSeed.Name}";
+            if (s_seedHitsByClass.TryAdd(key, true))
             {
                 int loose = typeSeed.ConstantBuffer?.VectorParameters?.Length ?? 0;
                 int tex = (typeSeed.Textures?.Count ?? 0) + (typeSeed.Samplers?.Count ?? 0);
                 int buf = (typeSeed.Buffers?.Count ?? 0) + (typeSeed.UAVs?.Count ?? 0);
-                state.Log($"[ShaderTypeSeed-hit] hash={container.ShaderTypeHash} class={typeSeed.Name} loose-params={loose} resources={tex + buf}");
+                state.Log($"[ShaderTypeSeed-hit] cookName={container.ShaderTypeName} via={matchKind} seedClass={typeSeed.Name} loose-params={loose} resources={tex + buf}");
             }
         }
 

@@ -1,0 +1,83 @@
+{
+  "Name": "ReflectionCaptureSM5",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:898 (FReflectionCaptureShaderData)",
+  "LayoutHash": "0xBFD00301",
+  "BindingFlags": "StaticAndShader",
+  "ConstantBuffer": {
+    "Name": "ReflectionCaptureSM5",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "BoxTransform",
+        "NameIndex": -1,
+        "Index": 21824,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "PositionAndRadius",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TilePosition",
+        "NameIndex": -1,
+        "Index": 5456,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureProperties",
+        "NameIndex": -1,
+        "Index": 10912,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureOffsetAndAverageBrightness",
+        "NameIndex": -1,
+        "Index": 16368,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BoxScales",
+        "NameIndex": -1,
+        "Index": 43648,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 49104,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

@@ -1,0 +1,47 @@
+{
+  "Name": "PointCloudVF",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Plugins/Experimental/AR/PointCloud/Source/PointCloud/Private/PointCloudVertexFactory.h:13 (FPointCloudVertexFactoryParameters)",
+  "LayoutHash": "0x0016010E",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "PointCloudVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "VertexFetch_PointLocationBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VertexFetch_PointColorBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "VertexFetch_PointLocationBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VertexFetch_PointColorBuffer",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

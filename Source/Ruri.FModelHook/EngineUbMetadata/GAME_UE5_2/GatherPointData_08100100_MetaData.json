@@ -1,0 +1,43 @@
+{
+  "Name": "GatherPointData",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingGlobalIllumination.cpp:570 (FGatherPointData)",
+  "LayoutHash": "0x08100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "GatherPointData",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ViewMatrices",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 32,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "Count",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 2064,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}
