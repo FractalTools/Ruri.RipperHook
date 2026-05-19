@@ -6,8 +6,90 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
+// EPreshaderOpcode layout changes between UE versions — see
+// `Engine/Public/Shader/Preshader.h` per release:
+//
+//   * UE 5.0-5.3 (canonical layout used by this reader's case statements):
+//       0..3 Nop/ConstantZero/Constant/Parameter
+//       4..8 Add/Sub/Mul/Div/Fmod
+//       9..11 Min/Max/Clamp
+//       12..18 Sin/Cos/Tan/Asin/Acos/Atan/Atan2
+//       19/20 Dot/Cross
+//       21..35 Sqrt/Rcp/Length/Normalize/Saturate/Abs/Floor/Ceil/Round/Trunc/
+//              Sign/Frac/Fractional/Log2/Log10
+//       36/37 ComponentSwizzle/AppendVector
+//       38..42 TextureSize/TexelSize/ExtTexCoordScaleRot/ExtTexCoordOffset/
+//              RuntimeVirtualTextureUniform
+//       43/44 GetField/SetField
+//       45..53 Neg/Jump/JumpIfFalse/PushValue/Less/Assign/Greater/LessEqual/
+//              GreaterEqual
+//
+//   * UE 5.4-5.6: inserts `SparseVolumeTextureUniform` at slot 43, pushing
+//     GetField..GreaterEqual up by +1, and appends Exp/Exp2/Log at 55..57.
+//
+//   * UE 5.7+: inserts `Modulo` at slot 9, shifting EVERY opcode at
+//     slot 9+ up by +1 (so Min=10, Max=11, ..., GreaterEqual=55, Exp=56,
+//     Exp2=57, Log=58 in UE 5.7).
+//
+// The decoder's switch hardcodes the UE 5.1 numbering. For 5.4+ we
+// translate the cooked byte to its UE 5.1 equivalent at decode time;
+// opcodes that have no UE 5.1 counterpart (SparseVolumeTextureUniform,
+// Modulo, Exp/Exp2/Log) translate to 255 — the default branch then
+// safely aborts the preshader stream.
+internal enum UeMaterialPreshaderVersion
+{
+    Ue51 = 51,  // UE 5.0-5.3 — canonical layout used by the switch
+    Ue54 = 54,  // UE 5.4-5.6 — SparseVolumeTextureUniform inserted at 43
+    Ue57 = 57,  // UE 5.7+ — Modulo inserted at 9 on top of the 5.4 shift
+}
+
 internal static class MaterialConstantBufferReader
 {
+    // Active preshader-opcode layout. Set once at pipeline startup
+    // (DecompilePipeline.Run → after Pass140 has populated
+    // `state.GameVersionEnum`). Default is Ue51 so existing 5.0-5.3
+    // cooks keep working without any wiring change.
+    public static UeMaterialPreshaderVersion PreshaderVersion { get; set; } = UeMaterialPreshaderVersion.Ue51;
+
+    // Translate a cooked opcode byte to the UE 5.1 canonical numbering
+    // the switch below expects. Returns 255 for opcodes with no 5.1
+    // equivalent (Modulo, SparseVolumeTextureUniform, Exp/Exp2/Log) —
+    // those land in the `default` arm and safely terminate decoding.
+    //
+    // Layout cheat sheet (numbers are the raw cooked opcode bytes that
+    // map to each semantic op):
+    //   UE 5.1     UE 5.4    UE 5.7    Semantic
+    //   ---------  --------- --------- ----------------------------
+    //   0-8        0-8       0-8        Nop..Fmod (identical)
+    //   —          —         9          Modulo (no 5.1 equiv)
+    //   9-42       9-42      10-43      Min..RuntimeVirtualTextureUniform
+    //   —          43        44         SparseVolumeTextureUniform (no 5.1 equiv)
+    //   43-53      44-54     45-55      GetField..GreaterEqual
+    //   —          55/56/57  56/57/58   Exp/Exp2/Log (no 5.1 equiv)
+    private static byte TranslateOpcode(byte raw)
+    {
+        switch (PreshaderVersion)
+        {
+            case UeMaterialPreshaderVersion.Ue51:
+                return raw;
+
+            case UeMaterialPreshaderVersion.Ue54:
+                if (raw <= 42) return raw;           // 0..42 unchanged
+                if (raw == 43) return 255;           // SparseVolumeTextureUniform
+                if (raw <= 54) return (byte)(raw - 1); // 44..54 → 43..53
+                return 255;                          // 55+ = Exp/Exp2/Log etc.
+
+            case UeMaterialPreshaderVersion.Ue57:
+                if (raw <= 8) return raw;            // 0..8 unchanged
+                if (raw == 9) return 255;            // Modulo
+                if (raw <= 43) return (byte)(raw - 1); // 10..43 → 9..42 (5.1 layout)
+                if (raw == 44) return 255;           // SparseVolumeTextureUniform
+                if (raw <= 55) return (byte)(raw - 2); // 45..55 → 43..53
+                return 255;                          // 56+ = Exp/Exp2/Log etc.
+        }
+        return raw;
+    }
+
     // [preshader-debug] one-shot toggle: enabled only while the env var
     // RURI_PRESHADER_DEBUG is set. Filters via name substring to avoid spam.
     private static readonly string? PreshaderDebugFilter =
@@ -507,7 +589,11 @@ internal static class MaterialConstantBufferReader
         int i = 0;
         while (i < n)
         {
-            byte op = data[dataStart + i];
+            byte rawOp = data[dataStart + i];
+            // Translate to the UE 5.1 canonical opcode the switch knows
+            // about. For UE 5.0-5.3 this is the identity. See
+            // `UeMaterialPreshaderVersion` for the per-version diffs.
+            byte op = TranslateOpcode(rawOp);
             i++;
 
             switch (op)
@@ -966,7 +1052,11 @@ internal static class MaterialConstantBufferReader
         int i = 0;
         while (i < n)
         {
-            byte op = data[dataStart + i];
+            // Translate cooked opcode to UE 5.1 canonical numbering — slots
+            // 2/3 (Constant/Parameter) are unchanged across versions, but
+            // 36 (ComponentSwizzle in 5.1) is Log10 in UE 5.7 and we MUST
+            // NOT consume its 5-byte payload otherwise.
+            byte op = TranslateOpcode(data[dataStart + i]);
             int operandBytes;
 
             if (op == 3) // Parameter: u16 operand
@@ -995,6 +1085,13 @@ internal static class MaterialConstantBufferReader
             else if (op == 36) // ComponentSwizzle: numE + 4 component indices
             {
                 operandBytes = 5;
+            }
+            else if (op == 255)
+            {
+                // No-5.1-equivalent (Modulo / SparseVolumeTextureUniform /
+                // Exp / Exp2 / Log) — we can't safely guess the operand
+                // size, so abort the walk.
+                return null;
             }
             else
             {

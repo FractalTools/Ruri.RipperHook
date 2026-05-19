@@ -94,6 +94,15 @@ public static class DecompilePipeline
                 // game name DOESN'T already start with GAME_UE — in that case
                 // the specific folder IS the base, no further fallback exists.
                 bool tryBaseFallback = Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.TryMatchBaseEngineVersion;
+
+                // Detect the UE base version from GameVersionEnum so we can
+                // pick the right preshader-opcode layout (UE 5.4 inserted
+                // SparseVolumeTextureUniform at slot 43; UE 5.7 inserted
+                // Modulo at slot 9). Material expression decoding falls
+                // back to anonymous Material_f_<N> when the byte stream
+                // mis-dispatches, so getting this right is what unlocks
+                // expression-named parameters on 5.4+ cooks.
+                MaterialConstantBufferReader.PreshaderVersion = DetectPreshaderVersion(state.GameVersionEnum, state.Log);
                 state.EngineUbRegistry = EngineUbMetadataRegistry.LoadForGame(
                     engineUbDir,
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
@@ -169,6 +178,43 @@ public static class DecompilePipeline
             // the .ushaderlib afterwards.
             state.Library?.Dispose();
         }
+    }
+
+    // Map `state.GameVersionEnum` to the preshader-opcode layout used by
+    // the cook. Logic:
+    //   1. If GameVersionEnum is already a `GAME_UE5_<X>` token, use X
+    //      directly.
+    //   2. Otherwise (game-specific tag like `GAME_InfinityNikki`), try
+    //      to derive the base UE folder via the same helper the engine-UB
+    //      registry uses.
+    //   3. Default to Ue51 when nothing resolves — that's the layout the
+    //      reader's switch statement hardcodes.
+    private static UeMaterialPreshaderVersion DetectPreshaderVersion(string? gameVersionEnum, Action<string>? log)
+    {
+        if (string.IsNullOrWhiteSpace(gameVersionEnum)) return UeMaterialPreshaderVersion.Ue51;
+
+        string? baseUe = null;
+        if (gameVersionEnum!.StartsWith("GAME_UE5_", StringComparison.Ordinal))
+        {
+            baseUe = gameVersionEnum;
+        }
+        else if (EngineUbMetadataRegistry.TryDeriveBaseUeFromEGameForShaderTypes(gameVersionEnum, out string derived))
+        {
+            baseUe = derived;
+        }
+        if (string.IsNullOrEmpty(baseUe)) return UeMaterialPreshaderVersion.Ue51;
+
+        // Pull the minor version number out of `GAME_UE5_<X>`.
+        // X<4 → Ue51, X in {4,5,6} → Ue54, X>=7 → Ue57.
+        const string prefix = "GAME_UE5_";
+        if (!baseUe!.StartsWith(prefix, StringComparison.Ordinal)) return UeMaterialPreshaderVersion.Ue51;
+        if (!int.TryParse(baseUe!.AsSpan(prefix.Length), out int minor)) return UeMaterialPreshaderVersion.Ue51;
+        UeMaterialPreshaderVersion picked =
+            minor >= 7 ? UeMaterialPreshaderVersion.Ue57 :
+            minor >= 4 ? UeMaterialPreshaderVersion.Ue54 :
+                         UeMaterialPreshaderVersion.Ue51;
+        log?.Invoke($"    Pass145: preshader-opcode layout = {picked} (derived from {gameVersionEnum}{(baseUe == gameVersionEnum ? "" : $" → {baseUe}")})");
+        return picked;
     }
 
     private readonly struct TimingCookie : IDisposable
