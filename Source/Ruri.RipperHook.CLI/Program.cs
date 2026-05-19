@@ -45,6 +45,16 @@ internal static class Program
 
         ApplyHooks(opts);
 
+        if (opts.BuildCabMapPath is { Length: > 0 } buildOut)
+        {
+            if (opts.LoadPaths.Length == 0)
+            {
+                Console.Error.WriteLine("[Ruri.CLI] --build-cab-map needs --load <rootDir> to scan.");
+                return 1;
+            }
+            return CabMap.Build(opts.LoadPaths[0], buildOut);
+        }
+
         if (opts.LoadPaths.Length == 0)
         {
             Console.Error.WriteLine("[Ruri.CLI] --load is required for headless mode. Use the GUI executable for the AssetRipper Web UI, or pass --list-hooks to query hook ids.");

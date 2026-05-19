@@ -20,6 +20,21 @@ internal sealed class CliOptions
     public LogType LogLevel { get; init; } = LogType.Info;
     public bool FailFast { get; init; } = true;
     public string[] Passthrough { get; init; } = [];
+
+    /// <summary>
+    /// Set to write a CABMap (.bin) for the directory given in <see cref="LoadPaths"/>[0],
+    /// then exit. Scanning every file in a big game tree is slow (minutes for Endfield_Data),
+    /// so build once and reuse via <see cref="CabMapPath"/>.
+    /// </summary>
+    public string? BuildCabMapPath { get; init; }
+
+    /// <summary>
+    /// When set, the CABMap at this path is loaded and used to resolve the transitive
+    /// dependency closure of each file in <see cref="LoadPaths"/>. AR then sees every chk the
+    /// seed bundles cross-reference, which is the only way to get a complete character
+    /// AnimatorController (its BlendTrees / clip refs live in sibling chks).
+    /// </summary>
+    public string? CabMapPath { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -34,6 +49,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<bool> Silent { get; }
     public Option<LogType> LogLevel { get; }
     public Option<bool> FailFast { get; }
+    public Option<string?> BuildCabMap { get; }
+    public Option<string?> CabMap { get; }
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -85,6 +102,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         Silent = new Option<bool>("--silent", "Suppress non-error log output.");
         LogLevel = new Option<LogType>("--log-level", () => LogType.Info, "Log level threshold (Verbose|Debug|Info|Warning|Error).");
         FailFast = new Option<bool>("--fail-fast", () => true, "Abort on first per-asset export failure (default true).");
+        BuildCabMap = new Option<string?>("--build-cab-map", "Build a CABMap (.bin) for --load[0] and exit. Format matches the GUI Asset Browser CABMap.");
+        CabMap = new Option<string?>("--cab-map", "Load a CABMap (.bin) and expand each --load entry to its transitive CAB dependencies before handing files to AR.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -103,6 +122,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             Silent,
             LogLevel,
             FailFast,
+            BuildCabMap,
+            CabMap,
             Passthrough,
         };
         return root;
@@ -123,6 +144,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             Silent = pr.GetValueForOption(Silent),
             LogLevel = pr.GetValueForOption(LogLevel),
             FailFast = pr.GetValueForOption(FailFast),
+            BuildCabMapPath = pr.GetValueForOption(BuildCabMap),
+            CabMapPath = pr.GetValueForOption(CabMap),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }
