@@ -1,7 +1,7 @@
 {
   "name": "WaterVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:16-21 (FWaterVertexFactoryParameters)",
+  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:16 (FWaterVertexFactoryParameters)",
   "layoutHash": "0x00100100",
   "constantBufferSize": 16,
   "bindingFlags": "Shader",

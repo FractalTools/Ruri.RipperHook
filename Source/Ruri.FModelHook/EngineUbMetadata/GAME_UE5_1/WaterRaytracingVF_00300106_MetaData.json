@@ -1,0 +1,28 @@
+{
+  "name": "WaterRaytracingVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:25 (FWaterVertexFactoryRaytracingParameters)",
+  "layoutHash": "0x00300106",
+  "constantBufferSize": 48,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 16,
+      "name": "InstanceData0",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "InstanceData1",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "VertexBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

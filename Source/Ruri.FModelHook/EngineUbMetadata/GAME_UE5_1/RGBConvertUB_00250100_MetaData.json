@@ -1,0 +1,34 @@
+{
+  "name": "RGBConvertUB",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:272 (FRGBConvertUB)",
+  "layoutHash": "0x00250100",
+  "constantBufferSize": 12,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "UVScale",
+      "type": "Float2"
+    },
+    {
+      "offset": 8,
+      "name": "SrgbToLinear",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 16,
+      "name": "Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 24,
+      "name": "Sampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

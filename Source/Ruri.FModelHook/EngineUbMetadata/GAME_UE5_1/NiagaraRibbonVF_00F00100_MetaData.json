@@ -1,10 +1,9 @@
 {
   "name": "NiagaraRibbonVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:28-70 (FNiagaraRibbonUniformParameters)",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:28 (FNiagaraRibbonUniformParameters)",
   "layoutHash": "0x00F00100",
-  "_comment": "Distinct from NiagaraRibbonVFLooseParameters (different struct, different hash).",
-  "constantBufferSize": 240,
+  "constantBufferSize": 232,
   "bindingFlags": "Shader",
   "members": [
     {

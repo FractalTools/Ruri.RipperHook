@@ -1,0 +1,125 @@
+{
+  "name": "MobileSceneTextures",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:38 (FMobileSceneTextureUniformParameters)",
+  "layoutHash": "0x00A8029C",
+  "constantBufferSize": 160,
+  "bindingFlags": "Static",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneColorTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "SceneDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "CustomDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "SceneVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "SceneVelocityTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 13,
+      "offset": 104,
+      "name": "SceneDepthAuxTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 14,
+      "offset": 112,
+      "name": "GBufferATextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 15,
+      "offset": 120,
+      "name": "GBufferBTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 16,
+      "offset": 128,
+      "name": "GBufferCTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 17,
+      "offset": 136,
+      "name": "GBufferDTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 18,
+      "offset": 144,
+      "name": "SceneDepthAuxTextureSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

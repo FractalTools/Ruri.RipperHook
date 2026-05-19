@@ -1,0 +1,60 @@
+{
+  "name": "MobileDirectionalLight",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneView.h:585 (FMobileDirectionalLightShaderParameters)",
+  "layoutHash": "0x01750130",
+  "constantBufferSize": 340,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "DirectionalLightColor",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "DirectionalLightDirectionAndShadowTransition",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "DirectionalLightShadowSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "DirectionalLightDistanceFadeMADAndSpecularScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "DirectionalLightShadowDistances",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "DirectionalLightScreenToShadow",
+      "type": "Float4x4",
+      "arraySize": 4
+    },
+    {
+      "offset": 336,
+      "name": "DirectionalLightShadowMapChannelMask",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 344,
+      "name": "DirectionalLightShadowTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 352,
+      "name": "DirectionalLightShadowSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

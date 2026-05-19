@@ -1,0 +1,39 @@
+{
+  "name": "VLMVoxelizationParams",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/VolumetricLightmapVoxelization.h:18 (FVLMVoxelizationParams)",
+  "layoutHash": "0x004D0214",
+  "constantBufferSize": 36,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 0,
+      "name": "VolumeCenter",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "VolumeExtent",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "VolumeMaxDim",
+      "type": "Int"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 40,
+      "name": "VoxelizeVolume",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "index": 1,
+      "offset": 48,
+      "name": "IndirectionTexture",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

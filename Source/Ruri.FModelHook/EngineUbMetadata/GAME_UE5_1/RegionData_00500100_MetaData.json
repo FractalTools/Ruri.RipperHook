@@ -1,0 +1,71 @@
+{
+  "name": "RegionData",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Experimental/ColorCorrectRegions/Source/ColorCorrectRegions/Public/ColorCorrectRegionsPostProcessMaterial.h:25 (FCCRRegionDataInputParameter)",
+  "layoutHash": "0x00500100",
+  "constantBufferSize": 80,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Rotate",
+      "type": "Float3"
+    },
+    {
+      "offset": 16,
+      "name": "Translate",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "Scale",
+      "type": "Float3"
+    },
+    {
+      "offset": 44,
+      "name": "WhiteTemp",
+      "type": "Float"
+    },
+    {
+      "offset": 48,
+      "name": "Tint",
+      "type": "Float"
+    },
+    {
+      "offset": 52,
+      "name": "Inner",
+      "type": "Float"
+    },
+    {
+      "offset": 56,
+      "name": "Outer",
+      "type": "Float"
+    },
+    {
+      "offset": 60,
+      "name": "Falloff",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "Intensity",
+      "type": "Float"
+    },
+    {
+      "offset": 68,
+      "name": "FakeLight",
+      "type": "Float"
+    },
+    {
+      "offset": 72,
+      "name": "ExcludeStencil",
+      "type": "UInt"
+    },
+    {
+      "offset": 76,
+      "name": "Invert",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

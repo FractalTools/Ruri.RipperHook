@@ -1,0 +1,51 @@
+{
+  "name": "RayTracingDecalParameters",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDecals.cpp:56 (FDecalParametersRayTracing)",
+  "layoutHash": "0x00E00100",
+  "constantBufferSize": 212,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "WorldToDecal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 64,
+      "name": "DecalToWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 128,
+      "name": "DecalPositionHigh",
+      "type": "Float3"
+    },
+    {
+      "offset": 144,
+      "name": "DecalToWorldInvScale",
+      "type": "Float3"
+    },
+    {
+      "offset": 160,
+      "name": "DecalOrientation",
+      "type": "Float3"
+    },
+    {
+      "offset": 176,
+      "name": "DecalParams",
+      "type": "Float2"
+    },
+    {
+      "offset": 192,
+      "name": "DecalColorParam",
+      "type": "Float4"
+    },
+    {
+      "offset": 208,
+      "name": "DecalWriteFlags",
+      "type": "UInt"
+    }
+  ],
+  "resources": []
+}

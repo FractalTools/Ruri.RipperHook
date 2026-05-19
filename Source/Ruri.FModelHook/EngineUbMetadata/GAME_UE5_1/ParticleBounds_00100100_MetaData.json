@@ -1,0 +1,26 @@
+{
+  "name": "ParticleBounds",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:2054 (FParticleBoundsParameters)",
+  "layoutHash": "0x00100100",
+  "constantBufferSize": 12,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ChunksPerGroup",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "ExtraChunkCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "ParticleCount",
+      "type": "UInt"
+    }
+  ],
+  "resources": []
+}

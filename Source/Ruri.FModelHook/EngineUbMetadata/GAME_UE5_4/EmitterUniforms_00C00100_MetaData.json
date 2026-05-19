@@ -1,0 +1,91 @@
+{
+  "name": "EmitterUniforms",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:725 (FGPUSpriteEmitterUniformParameters)",
+  "layoutHash": "0x00C00100",
+  "constantBufferSize": 188,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorCurve",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "ColorScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "ColorBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "MiscCurve",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "MiscScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "MiscBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "SizeBySpeed",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "SubImageSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "TangentSelector",
+      "type": "Float4"
+    },
+    {
+      "offset": 144,
+      "name": "CameraFacingBlend",
+      "type": "Float3"
+    },
+    {
+      "offset": 156,
+      "name": "RemoveHMDRoll",
+      "type": "Float"
+    },
+    {
+      "offset": 160,
+      "name": "RotationRateScale",
+      "type": "Float"
+    },
+    {
+      "offset": 164,
+      "name": "RotationBias",
+      "type": "Float"
+    },
+    {
+      "offset": 168,
+      "name": "CameraMotionBlurAmount",
+      "type": "Float"
+    },
+    {
+      "offset": 176,
+      "name": "PivotOffset",
+      "type": "Float2"
+    },
+    {
+      "offset": 184,
+      "name": "UseVelocityForMotionBlur",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

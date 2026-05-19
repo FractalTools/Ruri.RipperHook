@@ -1,7 +1,7 @@
 {
   "name": "IndirectLightingCache",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightMapRendering.h:19-36",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightMapRendering.h:19 (FIndirectLightingCacheUniformParameters)",
   "layoutHash": "0x041D0905",
   "constantBufferSize": 224,
   "bindingFlags": "Shader",
@@ -62,39 +62,39 @@
   "resources": [
     {
       "index": 0,
+      "offset": 224,
       "name": "IndirectLightingCacheTexture0",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 1,
+      "offset": 232,
       "name": "IndirectLightingCacheTexture1",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 2,
+      "offset": 240,
       "name": "IndirectLightingCacheTexture2",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 3,
+      "offset": 248,
       "name": "IndirectLightingCacheTextureSampler0",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 4,
+      "offset": 256,
       "name": "IndirectLightingCacheTextureSampler1",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 5,
+      "offset": 264,
       "name": "IndirectLightingCacheTextureSampler2",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     }
   ]
 }

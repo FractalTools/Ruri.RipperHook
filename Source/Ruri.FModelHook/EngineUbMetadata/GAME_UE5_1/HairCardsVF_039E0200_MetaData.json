@@ -1,0 +1,124 @@
+{
+  "name": "HairCardsVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h:21 (FHairCardsVertexFactoryUniformShaderParameters)",
+  "layoutHash": "0x039E0200",
+  "constantBufferSize": 8,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Flags",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "MaxVertexCount",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 8,
+      "name": "PositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 16,
+      "name": "PreviousPositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 24,
+      "name": "NormalsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 32,
+      "name": "UVsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 40,
+      "name": "MaterialsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 48,
+      "name": "DepthTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 56,
+      "name": "DepthSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 7,
+      "offset": 64,
+      "name": "TangentTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 72,
+      "name": "TangentSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 9,
+      "offset": 80,
+      "name": "CoverageTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 88,
+      "name": "CoverageSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 11,
+      "offset": 96,
+      "name": "AttributeTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 104,
+      "name": "AttributeSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 13,
+      "offset": 112,
+      "name": "AuxilaryDataTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 14,
+      "offset": 120,
+      "name": "AuxilaryDataSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 15,
+      "offset": 128,
+      "name": "MaterialTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 16,
+      "offset": 136,
+      "name": "MaterialSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

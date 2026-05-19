@@ -1,9 +1,9 @@
 {
   "name": "EmitterUniforms",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:492-508 (FGPUSpriteEmitterUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:492 (FGPUSpriteEmitterUniformParameters)",
   "layoutHash": "0x00C00100",
-  "constantBufferSize": 192,
+  "constantBufferSize": 184,
   "bindingFlags": "Shader",
   "members": [
     {

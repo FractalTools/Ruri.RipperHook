@@ -1,7 +1,7 @@
 {
   "name": "EmitterDynamicUniforms",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:517-525 (FGPUSpriteEmitterDynamicUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:517 (FGPUSpriteEmitterDynamicUniformParameters)",
   "layoutHash": "0x00600100",
   "constantBufferSize": 96,
   "bindingFlags": "Shader",

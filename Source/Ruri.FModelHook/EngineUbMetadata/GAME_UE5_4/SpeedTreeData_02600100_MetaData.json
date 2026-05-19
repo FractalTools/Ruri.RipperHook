@@ -1,0 +1,201 @@
+{
+  "name": "SpeedTreeData",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SpeedTreeWind.h:334 (FSpeedTreeUniformParameters)",
+  "layoutHash": "0x02600100",
+  "constantBufferSize": 608,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "WindVector",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "WindGlobal",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "WindBranch",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "WindBranchTwitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "WindBranchWhip",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "WindBranchAnchor",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "WindBranchAdherences",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "WindTurbulences",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "WindLeaf1Ripple",
+      "type": "Float4"
+    },
+    {
+      "offset": 144,
+      "name": "WindLeaf1Tumble",
+      "type": "Float4"
+    },
+    {
+      "offset": 160,
+      "name": "WindLeaf1Twitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 176,
+      "name": "WindLeaf2Ripple",
+      "type": "Float4"
+    },
+    {
+      "offset": 192,
+      "name": "WindLeaf2Tumble",
+      "type": "Float4"
+    },
+    {
+      "offset": 208,
+      "name": "WindLeaf2Twitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 224,
+      "name": "WindFrondRipple",
+      "type": "Float4"
+    },
+    {
+      "offset": 240,
+      "name": "WindRollingBranch",
+      "type": "Float4"
+    },
+    {
+      "offset": 256,
+      "name": "WindRollingLeafAndDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 272,
+      "name": "WindRollingNoise",
+      "type": "Float4"
+    },
+    {
+      "offset": 288,
+      "name": "WindAnimation",
+      "type": "Float4"
+    },
+    {
+      "offset": 304,
+      "name": "PrevWindVector",
+      "type": "Float4"
+    },
+    {
+      "offset": 320,
+      "name": "PrevWindGlobal",
+      "type": "Float4"
+    },
+    {
+      "offset": 336,
+      "name": "PrevWindBranch",
+      "type": "Float4"
+    },
+    {
+      "offset": 352,
+      "name": "PrevWindBranchTwitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 368,
+      "name": "PrevWindBranchWhip",
+      "type": "Float4"
+    },
+    {
+      "offset": 384,
+      "name": "PrevWindBranchAnchor",
+      "type": "Float4"
+    },
+    {
+      "offset": 400,
+      "name": "PrevWindBranchAdherences",
+      "type": "Float4"
+    },
+    {
+      "offset": 416,
+      "name": "PrevWindTurbulences",
+      "type": "Float4"
+    },
+    {
+      "offset": 432,
+      "name": "PrevWindLeaf1Ripple",
+      "type": "Float4"
+    },
+    {
+      "offset": 448,
+      "name": "PrevWindLeaf1Tumble",
+      "type": "Float4"
+    },
+    {
+      "offset": 464,
+      "name": "PrevWindLeaf1Twitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 480,
+      "name": "PrevWindLeaf2Ripple",
+      "type": "Float4"
+    },
+    {
+      "offset": 496,
+      "name": "PrevWindLeaf2Tumble",
+      "type": "Float4"
+    },
+    {
+      "offset": 512,
+      "name": "PrevWindLeaf2Twitch",
+      "type": "Float4"
+    },
+    {
+      "offset": 528,
+      "name": "PrevWindFrondRipple",
+      "type": "Float4"
+    },
+    {
+      "offset": 544,
+      "name": "PrevWindRollingBranch",
+      "type": "Float4"
+    },
+    {
+      "offset": 560,
+      "name": "PrevWindRollingLeafAndDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 576,
+      "name": "PrevWindRollingNoise",
+      "type": "Float4"
+    },
+    {
+      "offset": 592,
+      "name": "PrevWindAnimation",
+      "type": "Float4"
+    }
+  ],
+  "resources": []
+}

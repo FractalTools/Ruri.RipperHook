@@ -1,0 +1,96 @@
+{
+  "name": "Atmosphere",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.h:38 (FAtmosphereUniformShaderParameters)",
+  "layoutHash": "0x00B00100",
+  "constantBufferSize": 176,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "MultiScatteringFactor",
+      "type": "Float"
+    },
+    {
+      "offset": 4,
+      "name": "BottomRadiusKm",
+      "type": "Float"
+    },
+    {
+      "offset": 8,
+      "name": "TopRadiusKm",
+      "type": "Float"
+    },
+    {
+      "offset": 12,
+      "name": "RayleighDensityExpScale",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "RayleighScattering",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "MieScattering",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "MieDensityExpScale",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "MieExtinction",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "MiePhaseG",
+      "type": "Float"
+    },
+    {
+      "offset": 96,
+      "name": "MieAbsorption",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "AbsorptionDensity0LayerWidth",
+      "type": "Float"
+    },
+    {
+      "offset": 116,
+      "name": "AbsorptionDensity0ConstantTerm",
+      "type": "Float"
+    },
+    {
+      "offset": 120,
+      "name": "AbsorptionDensity0LinearTerm",
+      "type": "Float"
+    },
+    {
+      "offset": 124,
+      "name": "AbsorptionDensity1ConstantTerm",
+      "type": "Float"
+    },
+    {
+      "offset": 128,
+      "name": "AbsorptionDensity1LinearTerm",
+      "type": "Float"
+    },
+    {
+      "offset": 144,
+      "name": "AbsorptionExtinction",
+      "type": "Float4"
+    },
+    {
+      "offset": 160,
+      "name": "GroundAlbedo",
+      "type": "Float4"
+    }
+  ],
+  "resources": []
+}

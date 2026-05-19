@@ -1,0 +1,47 @@
+{
+  "name": "ReflectionCaptureES31",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:852 (FMobileReflectionCaptureShaderData)",
+  "layoutHash": "0x38400301",
+  "constantBufferSize": 14400,
+  "bindingFlags": "StaticAndShader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "PositionAndRadius",
+      "type": "Float4",
+      "arraySize": 100
+    },
+    {
+      "offset": 1600,
+      "name": "TilePosition",
+      "type": "Float4",
+      "arraySize": 100
+    },
+    {
+      "offset": 3200,
+      "name": "CaptureProperties",
+      "type": "Float4",
+      "arraySize": 100
+    },
+    {
+      "offset": 4800,
+      "name": "CaptureOffsetAndAverageBrightness",
+      "type": "Float4",
+      "arraySize": 100
+    },
+    {
+      "offset": 6400,
+      "name": "BoxTransform",
+      "type": "Float4x4",
+      "arraySize": 100
+    },
+    {
+      "offset": 12800,
+      "name": "BoxScales",
+      "type": "Float4",
+      "arraySize": 100
+    }
+  ],
+  "resources": []
+}

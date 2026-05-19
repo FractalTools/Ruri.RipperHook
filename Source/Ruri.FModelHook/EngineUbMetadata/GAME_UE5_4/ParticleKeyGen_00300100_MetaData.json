@@ -1,0 +1,41 @@
+{
+  "name": "ParticleKeyGen",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleSortingGPU.cpp:27 (FParticleKeyGenParameters)",
+  "layoutHash": "0x00300100",
+  "constantBufferSize": 36,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ViewOrigin",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "ChunksPerGroup",
+      "type": "UInt"
+    },
+    {
+      "offset": 20,
+      "name": "ExtraChunkCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 24,
+      "name": "OutputOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 28,
+      "name": "EmitterKey",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "KeyCount",
+      "type": "UInt"
+    }
+  ],
+  "resources": []
+}

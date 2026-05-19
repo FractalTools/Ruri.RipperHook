@@ -1,0 +1,29 @@
+{
+  "name": "GCBoneLooseParameters",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCollectionRendering.h:24 (FGCBoneLooseParameters)",
+  "layoutHash": "0x00260118",
+  "constantBufferSize": 32,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "VertexFetch_BoneTransformBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "VertexFetch_BonePrevTransformBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "VertexFetch_BoneMapBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

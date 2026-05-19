@@ -1,11 +1,10 @@
 {
   "name": "Primitive",
   "engineVersion": "5.4.4",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/PrimitiveUniformShaderParameters.h:26-73 (FPrimitiveUniformShaderParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/PrimitiveUniformShaderParameters.h:26 (FPrimitiveUniformShaderParameters)",
   "layoutHash": "0x03000100",
   "constantBufferSize": 768,
   "bindingFlags": "Shader",
-  "_comment": "FPrimitiveUniformShaderParameters (UE5.4): restructured layout \u2014 adds PositionHigh/WorldToPreviousWorld/ObjectWorldPositionHighAndRadius/ObjectWorldPositionLow/MinMaterialDisplacement/MaxMaterialDisplacement/ActorWorldPositionHigh/ActorWorldPositionLow/InstancePayloadExtensionSize/WireframeAndPrimitiveColor/MaxWPOExtent/CustomStencilValueAndMask/VisibilityFlags; CustomPrimitiveData is now [9] (NumCustomPrimitiveDataFloat4s=9).",
   "members": [
     {
       "offset": 0,

@@ -1,0 +1,132 @@
+{
+  "name": "HairStrandsVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h:47 (FHairStrandsVertexFactoryUniformShaderParameters)",
+  "layoutHash": "0x0086010E",
+  "constantBufferSize": 48,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Radius",
+      "type": "Float"
+    },
+    {
+      "offset": 4,
+      "name": "RootScale",
+      "type": "Float"
+    },
+    {
+      "offset": 8,
+      "name": "TipScale",
+      "type": "Float"
+    },
+    {
+      "offset": 12,
+      "name": "Length",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "Density",
+      "type": "Float"
+    },
+    {
+      "offset": 20,
+      "name": "RaytracingRadiusScale",
+      "type": "Float"
+    },
+    {
+      "offset": 24,
+      "name": "CullingEnable",
+      "type": "UInt"
+    },
+    {
+      "offset": 28,
+      "name": "HasMaterial",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "StableRasterization",
+      "type": "UInt"
+    },
+    {
+      "offset": 36,
+      "name": "ScatterSceneLighing",
+      "type": "UInt"
+    },
+    {
+      "offset": 40,
+      "name": "RaytracingProceduralSplits",
+      "type": "UInt"
+    },
+    {
+      "offset": 44,
+      "name": "GroupIndex",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 48,
+      "name": "PositionOffsetBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 56,
+      "name": "PreviousPositionOffsetBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 64,
+      "name": "PositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 72,
+      "name": "PreviousPositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 80,
+      "name": "Attribute0Buffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 88,
+      "name": "Attribute1Buffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 6,
+      "offset": 96,
+      "name": "MaterialBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 7,
+      "offset": 104,
+      "name": "TangentBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 8,
+      "offset": 112,
+      "name": "CulledVertexIdsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 9,
+      "offset": 120,
+      "name": "CulledVertexRadiusScaleBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

@@ -1,0 +1,212 @@
+{
+  "name": "DistortionPass",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/DistortionRendering.cpp:75 (FDistortionPassUniformParameters)",
+  "layoutHash": "0x02B51858",
+  "constantBufferSize": 664,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 112,
+      "name": "Substrate.Common.MaxBytesPerPixel",
+      "type": "UInt"
+    },
+    {
+      "offset": 116,
+      "name": "Substrate.Common.MaxClosurePerPixel",
+      "type": "UInt"
+    },
+    {
+      "offset": 120,
+      "name": "Substrate.Common.bRoughDiffuse",
+      "type": "UInt"
+    },
+    {
+      "offset": 124,
+      "name": "Substrate.Common.PeelLayersAboveDepth",
+      "type": "UInt"
+    },
+    {
+      "offset": 128,
+      "name": "Substrate.Common.bRoughnessTracking",
+      "type": "UInt"
+    },
+    {
+      "offset": 144,
+      "name": "Substrate.FirstSliceStoringSubstrateSSSData",
+      "type": "Int"
+    },
+    {
+      "offset": 176,
+      "name": "DistortionParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 192,
+      "name": "AVSM.TranslatedWorldToShadow",
+      "type": "Float4x4",
+      "arraySize": 6
+    },
+    {
+      "offset": 576,
+      "name": "AVSM.TranslatedWorldOrigin",
+      "type": "Float3"
+    },
+    {
+      "offset": 592,
+      "name": "AVSM.TranslatedWorldPlane",
+      "type": "Float4"
+    },
+    {
+      "offset": 608,
+      "name": "AVSM.Resolution",
+      "type": "Int2"
+    },
+    {
+      "offset": 616,
+      "name": "AVSM.NumShadowMatrices",
+      "type": "Int"
+    },
+    {
+      "offset": 620,
+      "name": "AVSM.MaxSampleCount",
+      "type": "Int"
+    },
+    {
+      "offset": 624,
+      "name": "AVSM.bIsEmpty",
+      "type": "Int"
+    },
+    {
+      "offset": 628,
+      "name": "AVSM.bIsDirectionalLight",
+      "type": "Int"
+    },
+    {
+      "offset": 656,
+      "name": "UseAVSM",
+      "type": "Int"
+    },
+    {
+      "offset": 660,
+      "name": "TransmittanceThreshold",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneTextures.SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneTextures.SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "SceneTextures.ScenePartialDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "SceneTextures.GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "SceneTextures.GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "SceneTextures.GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "SceneTextures.GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "SceneTextures.GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "SceneTextures.GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "SceneTextures.GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "SceneTextures.ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "SceneTextures.CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "SceneTextures.CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 13,
+      "offset": 104,
+      "name": "SceneTextures.PointClampSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 14,
+      "offset": 152,
+      "name": "Substrate.MaterialTextureArray",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 15,
+      "offset": 160,
+      "name": "Substrate.TopLayerTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 16,
+      "offset": 632,
+      "name": "AVSM.LinkedListBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 17,
+      "offset": 640,
+      "name": "AVSM.IndirectionBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 18,
+      "offset": 648,
+      "name": "AVSM.SampleBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

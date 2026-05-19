@@ -1,0 +1,54 @@
+{
+  "name": "RayTracingDecals",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDecals.h:13 (FRayTracingDecals)",
+  "layoutHash": "0x00490118",
+  "constantBufferSize": 60,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 16,
+      "name": "TranslatedBoundMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "TranslatedBoundMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 44,
+      "name": "GridResolution",
+      "type": "UInt"
+    },
+    {
+      "offset": 48,
+      "name": "GridMaxCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 52,
+      "name": "GridAxis",
+      "type": "UInt"
+    },
+    {
+      "offset": 56,
+      "name": "Count",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "Grid",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "GridData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

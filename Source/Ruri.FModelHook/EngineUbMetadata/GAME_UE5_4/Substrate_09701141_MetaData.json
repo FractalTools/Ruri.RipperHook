@@ -1,0 +1,98 @@
+{
+  "name": "Substrate",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Substrate/Substrate.h:60 (FSubstrateGlobalUniformParameters)",
+  "layoutHash": "0x09701141",
+  "constantBufferSize": 56,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Common.MaxBytesPerPixel",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "Common.MaxClosurePerPixel",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "Common.bRoughDiffuse",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "Common.PeelLayersAboveDepth",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "Common.bRoughnessTracking",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "SliceStoringDebugSubstrateTreeData",
+      "type": "Int"
+    },
+    {
+      "offset": 36,
+      "name": "FirstSliceStoringSubstrateSSSData",
+      "type": "Int"
+    },
+    {
+      "offset": 40,
+      "name": "TileSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 44,
+      "name": "TileSizeLog2",
+      "type": "UInt"
+    },
+    {
+      "offset": 48,
+      "name": "TileCount",
+      "type": "Int2"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 56,
+      "name": "MaterialTextureArray",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 64,
+      "name": "TopLayerTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 72,
+      "name": "OpaqueRoughRefractionTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 80,
+      "name": "ClosureOffsetTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 88,
+      "name": "ClosureTileBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 96,
+      "name": "ClosureTileCountBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

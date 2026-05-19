@@ -1,0 +1,79 @@
+{
+  "name": "IrradianceCachingParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/IrradianceCaching.h:9 (FIrradianceCachingParameters)",
+  "layoutHash": "0x07500617",
+  "constantBufferSize": 20,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "HashTableSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "CacheSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "Quality",
+      "type": "Int"
+    },
+    {
+      "offset": 12,
+      "name": "Spacing",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "CornerRejection",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 24,
+      "name": "IrradianceCacheRecords",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 1,
+      "offset": 32,
+      "name": "IrradianceCacheRecordBackfaceHits",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 2,
+      "offset": 40,
+      "name": "RWHashTable",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 3,
+      "offset": 48,
+      "name": "RWHashToIndex",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 4,
+      "offset": 56,
+      "name": "RWIndexToHash",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 5,
+      "offset": 64,
+      "name": "RecordAllocator",
+      "type": "UBMT_UAV"
+    },
+    {
+      "index": 6,
+      "offset": 72,
+      "name": "HashTableSemaphore",
+      "type": "UBMT_UAV"
+    }
+  ]
+}

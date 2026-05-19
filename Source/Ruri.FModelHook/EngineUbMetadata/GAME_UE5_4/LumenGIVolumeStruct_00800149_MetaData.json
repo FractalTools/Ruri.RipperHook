@@ -1,0 +1,95 @@
+{
+  "name": "LumenGIVolumeStruct",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenTranslucencyVolumeLighting.h:43 (FLumenTranslucencyLightingUniforms)",
+  "layoutHash": "0x00800149",
+  "constantBufferSize": 124,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 24,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.Enabled",
+      "type": "UInt"
+    },
+    {
+      "offset": 28,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.RelativeDepthThreshold",
+      "type": "Float"
+    },
+    {
+      "offset": 32,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.SpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 36,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.Contrast",
+      "type": "Float"
+    },
+    {
+      "offset": 96,
+      "name": "Parameters.TranslucencyGIGridZParams",
+      "type": "Float3"
+    },
+    {
+      "offset": 108,
+      "name": "Parameters.TranslucencyGIGridPixelSizeShift",
+      "type": "UInt"
+    },
+    {
+      "offset": 112,
+      "name": "Parameters.TranslucencyGIGridSize",
+      "type": "Int3"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.Radiance",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.Normal",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "Parameters.FrontLayerTranslucencyReflectionParameters.SceneDepth",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 48,
+      "name": "Parameters.TranslucencyGIVolume0",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 56,
+      "name": "Parameters.TranslucencyGIVolume1",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 64,
+      "name": "Parameters.TranslucencyGIVolumeHistory0",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 72,
+      "name": "Parameters.TranslucencyGIVolumeHistory1",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 80,
+      "name": "Parameters.TranslucencyGIVolumeSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

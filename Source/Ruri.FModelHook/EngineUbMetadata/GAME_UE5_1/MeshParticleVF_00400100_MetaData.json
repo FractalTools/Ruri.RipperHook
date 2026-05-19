@@ -1,9 +1,9 @@
 {
   "name": "MeshParticleVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/MeshParticleVertexFactory.h:27-35 (FMeshParticleUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/MeshParticleVertexFactory.h:27 (FMeshParticleUniformParameters)",
   "layoutHash": "0x00400100",
-  "constantBufferSize": 64,
+  "constantBufferSize": 60,
   "bindingFlags": "Shader",
   "members": [
     {

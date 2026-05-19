@@ -1,0 +1,23 @@
+{
+  "name": "PointCloudVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Experimental/AR/PointCloud/Source/PointCloud/Private/PointCloudVertexFactory.h:13 (FPointCloudVertexFactoryParameters)",
+  "layoutHash": "0x0016010E",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "VertexFetch_PointLocationBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "VertexFetch_PointColorBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

@@ -1,10 +1,9 @@
 {
   "name": "NiagaraSpriteVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:21-90 (FNiagaraSpriteUniformParameters)",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:21 (FNiagaraSpriteUniformParameters)",
   "layoutHash": "0x02600100",
-  "_comment": "Distinct from NiagaraSpriteVFLooseParameters (different struct, different hash).",
-  "constantBufferSize": 608,
+  "constantBufferSize": 596,
   "bindingFlags": "Shader",
   "members": [
     {

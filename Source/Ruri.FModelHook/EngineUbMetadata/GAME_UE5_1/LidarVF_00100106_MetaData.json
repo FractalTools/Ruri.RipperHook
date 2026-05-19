@@ -1,0 +1,17 @@
+{
+  "name": "LidarVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Enterprise/LidarPointCloud/Source/LidarPointCloudRuntime/Private/Rendering/LidarPointCloudRenderBuffers.h:14 (FLidarPointCloudVertexFactoryUniformShaderParameters)",
+  "layoutHash": "0x00100106",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "VertexFetch_Buffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

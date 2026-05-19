@@ -1,0 +1,152 @@
+{
+  "name": "MobileShadowDepthPass",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:265 (FMobileShadowDepthPassUniformParameters)",
+  "layoutHash": "0x02C8029C",
+  "constantBufferSize": 704,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 160,
+      "name": "ProjectionMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 224,
+      "name": "ViewMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 288,
+      "name": "ShadowParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 304,
+      "name": "bClampToNearPlane",
+      "type": "Float"
+    },
+    {
+      "offset": 320,
+      "name": "ShadowViewProjectionMatrices",
+      "type": "Float4x4",
+      "arraySize": 6
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneTextures.SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneTextures.SceneColorTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "SceneTextures.SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "SceneTextures.SceneDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "SceneTextures.CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "SceneTextures.CustomDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "SceneTextures.CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "SceneTextures.SceneVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "SceneTextures.SceneVelocityTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "SceneTextures.GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "SceneTextures.GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "SceneTextures.GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "SceneTextures.GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 13,
+      "offset": 104,
+      "name": "SceneTextures.SceneDepthAuxTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 14,
+      "offset": 112,
+      "name": "SceneTextures.GBufferATextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 15,
+      "offset": 120,
+      "name": "SceneTextures.GBufferBTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 16,
+      "offset": 128,
+      "name": "SceneTextures.GBufferCTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 17,
+      "offset": 136,
+      "name": "SceneTextures.GBufferDTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 18,
+      "offset": 144,
+      "name": "SceneTextures.SceneDepthAuxTextureSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

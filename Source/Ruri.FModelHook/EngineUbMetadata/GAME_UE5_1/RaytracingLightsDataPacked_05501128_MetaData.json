@@ -1,0 +1,62 @@
+{
+  "name": "RaytracingLightsDataPacked",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h:15 (FRaytracingLightDataPacked)",
+  "layoutHash": "0x05501128",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Count",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "IESLightProfileInvCount",
+      "type": "Float"
+    },
+    {
+      "offset": 8,
+      "name": "CellCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "CellScale",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 16,
+      "name": "IESLightProfileTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 1,
+      "offset": 24,
+      "name": "IESLightProfileTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 32,
+      "name": "LightDataBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 40,
+      "name": "LightIndices",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 48,
+      "name": "LightCullingVolume",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "InstanceCulling",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h:22 (FInstanceCullingGlobalUniforms)",
+  "layoutHash": "0x00300219",
+  "constantBufferSize": 20,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 16,
+      "name": "BufferCapacity",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "InstanceIdsBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "PageInfoBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "LightmapGBufferParams",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/LightmapGBuffer.h:16 (FLightmapGBufferParams)",
+  "layoutHash": "0x002D0219",
+  "constantBufferSize": 32,
+  "bindingFlags": "Static",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "ScratchTilePoolLayer0",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "ScratchTilePoolLayer1",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "ScratchTilePoolLayer2",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

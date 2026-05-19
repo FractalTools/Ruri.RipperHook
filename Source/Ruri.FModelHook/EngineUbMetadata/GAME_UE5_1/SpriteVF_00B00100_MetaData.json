@@ -1,9 +1,9 @@
 {
   "name": "SpriteVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleVertexFactory.h:72-88 (FParticleSpriteUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleVertexFactory.h:72 (FParticleSpriteUniformParameters)",
   "layoutHash": "0x00B00100",
-  "constantBufferSize": 176,
+  "constantBufferSize": 168,
   "bindingFlags": "Shader",
   "members": [
     {

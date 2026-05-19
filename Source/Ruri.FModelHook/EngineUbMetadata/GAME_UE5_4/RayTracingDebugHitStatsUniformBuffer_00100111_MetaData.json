@@ -1,0 +1,17 @@
+{
+  "name": "RayTracingDebugHitStatsUniformBuffer",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDebug.cpp:121 (FRayTracingDebugHitStatsUniformBufferParameters)",
+  "layoutHash": "0x00100111",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "HitStatsOutput",
+      "type": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

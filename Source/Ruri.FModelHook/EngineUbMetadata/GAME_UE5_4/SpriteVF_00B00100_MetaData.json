@@ -1,0 +1,91 @@
+{
+  "name": "SpriteVF",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleVertexFactory.h:72 (FParticleSpriteUniformParameters)",
+  "layoutHash": "0x00B00100",
+  "constantBufferSize": 172,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "AxisLockRight",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "AxisLockUp",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "TangentSelector",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "NormalsSphereCenter",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "NormalsCylinderUnitDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "SubImageSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "CameraFacingBlend",
+      "type": "Float3"
+    },
+    {
+      "offset": 108,
+      "name": "RemoveHMDRoll",
+      "type": "Float"
+    },
+    {
+      "offset": 112,
+      "name": "MacroUVParameters",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "RotationScale",
+      "type": "Float"
+    },
+    {
+      "offset": 132,
+      "name": "RotationBias",
+      "type": "Float"
+    },
+    {
+      "offset": 136,
+      "name": "NormalsType",
+      "type": "Float"
+    },
+    {
+      "offset": 140,
+      "name": "InvDeltaSeconds",
+      "type": "Float"
+    },
+    {
+      "offset": 144,
+      "name": "LWCTile",
+      "type": "Float3"
+    },
+    {
+      "offset": 160,
+      "name": "PivotOffset",
+      "type": "Float2"
+    },
+    {
+      "offset": 168,
+      "name": "UseVelocityForMotionBlur",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

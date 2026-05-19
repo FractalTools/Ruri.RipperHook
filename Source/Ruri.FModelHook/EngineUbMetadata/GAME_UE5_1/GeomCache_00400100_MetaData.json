@@ -1,9 +1,8 @@
 {
   "name": "GeomCache",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCacheVertexFactory.h:17-23 (FGeometryCacheVertexFactoryUniformBufferParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCacheVertexFactory.h:17 (FGeometryCacheVertexFactoryUniformBufferParameters)",
   "layoutHash": "0x00400100",
-  "_comment": "Hash collides with MeshParticleVF (different structs) - registry keys by (Name, Hash).",
   "constantBufferSize": 64,
   "bindingFlags": "Shader",
   "members": [

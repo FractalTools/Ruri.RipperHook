@@ -1,0 +1,41 @@
+{
+  "name": "MobileReflectionCapture",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:1096 (FMobileReflectionCaptureShaderParameters)",
+  "layoutHash": "0x05380408",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Params",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 16,
+      "name": "Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 24,
+      "name": "TextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 32,
+      "name": "TextureBlend",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 40,
+      "name": "TextureBlendSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

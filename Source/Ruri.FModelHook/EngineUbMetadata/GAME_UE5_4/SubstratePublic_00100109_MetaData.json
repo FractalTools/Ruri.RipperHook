@@ -1,0 +1,17 @@
+{
+  "name": "SubstratePublic",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Substrate/Substrate.h:75 (FSubstratePublicGlobalUniformParameters)",
+  "layoutHash": "0x00100109",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "TopLayerTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "name": "MaterialPassParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp:735 (FVisibilityMaterialPassUniformParameters)",
+  "layoutHash": "0x10491319",
+  "constantBufferSize": 20,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 0,
+      "name": "MaxResolution",
+      "type": "Int2"
+    },
+    {
+      "offset": 8,
+      "name": "MaxSampleCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "NodeGroupSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "bUpdateSampleCoverage",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 24,
+      "name": "NodeIndex",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 32,
+      "name": "TotalNodeCounter",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 40,
+      "name": "NodeCoord",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 48,
+      "name": "NodeVis",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 56,
+      "name": "IndirectArgs",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 64,
+      "name": "OutNodeData",
+      "type": "UBMT_RDG_BUFFER_UAV"
+    },
+    {
+      "index": 6,
+      "offset": 72,
+      "name": "OutNodeVelocity",
+      "type": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

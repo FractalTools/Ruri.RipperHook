@@ -1,0 +1,10 @@
+{
+  "name": "APEXClothParam",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/GPUSkinVertexFactory.h:27 (FAPEXClothUniformShaderParameters)",
+  "layoutHash": "0x00000100",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": []
+}

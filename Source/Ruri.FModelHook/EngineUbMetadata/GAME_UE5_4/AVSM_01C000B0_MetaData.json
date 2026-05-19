@@ -1,0 +1,71 @@
+{
+  "name": "AVSM",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:381 (FAdaptiveVolumetricShadowMapUniformBufferParameters)",
+  "layoutHash": "0x01C000B0",
+  "constantBufferSize": 440,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "TranslatedWorldToShadow",
+      "type": "Float4x4",
+      "arraySize": 6
+    },
+    {
+      "offset": 384,
+      "name": "TranslatedWorldOrigin",
+      "type": "Float3"
+    },
+    {
+      "offset": 400,
+      "name": "TranslatedWorldPlane",
+      "type": "Float4"
+    },
+    {
+      "offset": 416,
+      "name": "Resolution",
+      "type": "Int2"
+    },
+    {
+      "offset": 424,
+      "name": "NumShadowMatrices",
+      "type": "Int"
+    },
+    {
+      "offset": 428,
+      "name": "MaxSampleCount",
+      "type": "Int"
+    },
+    {
+      "offset": 432,
+      "name": "bIsEmpty",
+      "type": "Int"
+    },
+    {
+      "offset": 436,
+      "name": "bIsDirectionalLight",
+      "type": "Int"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 440,
+      "name": "LinkedListBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 448,
+      "name": "IndirectionBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 456,
+      "name": "SampleBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 {
   "name": "BeamTrailVF",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleBeamTrailVertexFactory.h:20-26 (FParticleBeamTrailUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/ParticleBeamTrailVertexFactory.h:20 (FParticleBeamTrailUniformParameters)",
   "layoutHash": "0x00500100",
-  "constantBufferSize": 80,
+  "constantBufferSize": 76,
   "bindingFlags": "Shader",
   "members": [
     {

@@ -1,11 +1,10 @@
 {
   "name": "ForwardLightData",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:689-725",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:689 (FForwardLightData)",
   "layoutHash": "0x1BB814CD",
   "constantBufferSize": 596,
   "bindingFlags": "Shader",
-  "_comment": "FForwardLightData declared via BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT_WITH_CONSTRUCTOR. Pure leaf struct (no nested SHADER_PARAMETER_STRUCT) \u2014 8 resources in declaration order.",
   "members": [
     {
       "offset": 0,
@@ -148,51 +147,51 @@
   "resources": [
     {
       "index": 0,
+      "offset": 600,
       "name": "DirectionalLightShadowmapAtlas",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
+      "offset": 608,
       "name": "ShadowmapSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 2,
+      "offset": 616,
       "name": "DirectionalLightStaticShadowmap",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 3,
+      "offset": 624,
       "name": "StaticShadowmapSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 4,
+      "offset": 632,
       "name": "ForwardLocalLightBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 5,
+      "offset": 640,
       "name": "NumCulledLightsGrid",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 6,
+      "offset": 648,
       "name": "CulledLightDataGrid",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 7,
+      "offset": 656,
       "name": "DummyRectLightSourceTexture",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     }
   ]
 }

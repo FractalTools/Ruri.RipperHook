@@ -1,0 +1,22 @@
+{
+  "name": "GatherPointData",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingGlobalIllumination.cpp:541 (FGatherPointData)",
+  "layoutHash": "0x08100100",
+  "constantBufferSize": 2064,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Count",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "ViewMatrices",
+      "type": "Float4x4",
+      "arraySize": 32
+    }
+  ],
+  "resources": []
+}

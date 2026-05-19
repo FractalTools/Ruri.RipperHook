@@ -1,7 +1,7 @@
 {
   "name": "TranslucentSelfShadow",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:1317-1326 (FTranslucentSelfShadowUniformParameters)",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h:1317 (FTranslucentSelfShadowUniformParameters)",
   "layoutHash": "0x05950908",
   "constantBufferSize": 112,
   "bindingFlags": "Shader",
@@ -30,27 +30,27 @@
   "resources": [
     {
       "index": 0,
+      "offset": 112,
       "name": "Transmission0",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 1,
+      "offset": 120,
       "name": "Transmission1",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 2,
+      "offset": 128,
       "name": "Transmission0Sampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 3,
+      "offset": 136,
       "name": "Transmission1Sampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     }
   ]
 }

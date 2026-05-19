@@ -1,0 +1,55 @@
+{
+  "name": "PrecomputedLightingBuffer",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/LightmapUniformShaderParameters.h:17 (FPrecomputedLightingUniformParameters)",
+  "layoutHash": "0x00F00100",
+  "constantBufferSize": 240,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "StaticShadowMapMasks",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "InvUniformPenumbraSizes",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "LightMapCoordinateScaleBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "ShadowMapCoordinateScaleBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "LightMapScale",
+      "type": "Float4",
+      "arraySize": 2
+    },
+    {
+      "offset": 96,
+      "name": "LightMapAdd",
+      "type": "Float4",
+      "arraySize": 2
+    },
+    {
+      "offset": 128,
+      "name": "LightmapVTPackedPageTableUniform",
+      "type": "UInt4",
+      "arraySize": 2
+    },
+    {
+      "offset": 160,
+      "name": "LightmapVTPackedUniform",
+      "type": "UInt4",
+      "arraySize": 5
+    }
+  ],
+  "resources": []
+}

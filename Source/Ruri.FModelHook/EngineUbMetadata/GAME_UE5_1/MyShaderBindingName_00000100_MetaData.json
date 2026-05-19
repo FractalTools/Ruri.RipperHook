@@ -1,0 +1,10 @@
+{
+  "name": "MyShaderBindingName",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1361 (FMyParameterStruct)",
+  "layoutHash": "0x00000100",
+  "constantBufferSize": 0,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": []
+}

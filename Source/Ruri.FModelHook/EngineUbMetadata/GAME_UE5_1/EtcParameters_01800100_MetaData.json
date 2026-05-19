@@ -1,0 +1,23 @@
+{
+  "name": "EtcParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/VT/RuntimeVirtualTextureRender.cpp:29 (FEtcParameters)",
+  "layoutHash": "0x01800100",
+  "constantBufferSize": 384,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ALPHA_DISTANCE_TABLES",
+      "type": "Float4",
+      "arraySize": 16
+    },
+    {
+      "offset": 256,
+      "name": "RGB_DISTANCE_TABLES",
+      "type": "Float4",
+      "arraySize": 8
+    }
+  ],
+  "resources": []
+}

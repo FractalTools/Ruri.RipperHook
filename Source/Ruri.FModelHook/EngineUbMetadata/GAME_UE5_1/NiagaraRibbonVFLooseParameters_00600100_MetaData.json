@@ -1,9 +1,9 @@
 {
   "name": "NiagaraRibbonVFLooseParameters",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:73-87",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraRibbonVertexFactory.h:73 (FNiagaraRibbonVFLooseParameters)",
   "layoutHash": "0x00600100",
-  "constantBufferSize": 20,
+  "constantBufferSize": 84,
   "bindingFlags": "Shader",
   "members": [
     {
@@ -27,7 +27,7 @@
       "type": "UInt"
     },
     {
-      "offset": 16,
+      "offset": 80,
       "name": "IndirectDrawOutputOffset",
       "type": "Int"
     }
@@ -35,51 +35,51 @@
   "resources": [
     {
       "index": 0,
+      "offset": 16,
       "name": "SortedIndices",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 1,
+      "offset": 24,
       "name": "TangentsAndDistances",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 2,
+      "offset": 32,
       "name": "MultiRibbonIndices",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 3,
+      "offset": 40,
       "name": "PackedPerRibbonDataByIndex",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 4,
+      "offset": 48,
       "name": "NiagaraParticleDataFloat",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 5,
+      "offset": 56,
       "name": "NiagaraParticleDataHalf",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 6,
+      "offset": 64,
       "name": "SliceVertexData",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     },
     {
       "index": 7,
+      "offset": 72,
       "name": "IndirectDrawOutput",
-      "type": "UBMT_SRV",
-      "offset": 0
+      "type": "UBMT_SRV"
     }
   ]
 }

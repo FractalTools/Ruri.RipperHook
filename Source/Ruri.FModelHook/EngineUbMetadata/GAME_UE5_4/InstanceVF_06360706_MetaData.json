@@ -1,0 +1,41 @@
+{
+  "name": "InstanceVF",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h:42 (FInstancedStaticMeshVertexFactoryUniformShaderParameters)",
+  "layoutHash": "0x06360706",
+  "constantBufferSize": 36,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 32,
+      "name": "NumCustomDataFloats",
+      "type": "Int"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "VertexFetch_InstanceOriginBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "VertexFetch_InstanceTransformBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "VertexFetch_InstanceLightmapBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "InstanceCustomDataBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "DeferredDecal",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/CompositionLighting/PostProcessDeferredDecals.h:50 (FDeferredDecalUniformParameters)",
+  "layoutHash": "0x00200204",
+  "constantBufferSize": 32,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 8,
+      "name": "NormalReprojectionEnabled",
+      "type": "Int"
+    },
+    {
+      "offset": 12,
+      "name": "NormalReprojectionThresholdLow",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "NormalReprojectionThresholdHigh",
+      "type": "Float"
+    },
+    {
+      "offset": 20,
+      "name": "NormalReprojectionThresholdScaleHelper",
+      "type": "Float"
+    },
+    {
+      "offset": 24,
+      "name": "NormalReprojectionJitter",
+      "type": "Float2"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "PreviousFrameNormal",
+      "type": "UBMT_TEXTURE"
+    }
+  ]
+}

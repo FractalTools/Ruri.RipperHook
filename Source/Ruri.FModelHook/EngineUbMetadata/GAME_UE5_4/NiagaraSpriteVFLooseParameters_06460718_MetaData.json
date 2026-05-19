@@ -1,0 +1,72 @@
+{
+  "name": "NiagaraSpriteVFLooseParameters",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h:94 (FNiagaraSpriteVFLooseParameters)",
+  "layoutHash": "0x06460718",
+  "constantBufferSize": 24,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "NumCutoutVerticesPerFrame",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "NiagaraFloatDataStride",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "ParticleAlignmentMode",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "ParticleFacingMode",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "SortedIndicesOffset",
+      "type": "UInt"
+    },
+    {
+      "offset": 20,
+      "name": "IndirectArgsOffset",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 24,
+      "name": "CutoutGeometry",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 32,
+      "name": "NiagaraParticleDataFloat",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 40,
+      "name": "NiagaraParticleDataHalf",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 48,
+      "name": "SortedIndices",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 56,
+      "name": "IndirectArgsBuffer",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

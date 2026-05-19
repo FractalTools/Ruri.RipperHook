@@ -1,40 +1,46 @@
 {
   "name": "ReflectionCaptureSM5",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:839-849 (FReflectionCaptureShaderData, GMaxNumReflectionCaptures=341)",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:839 (FReflectionCaptureShaderData)",
   "layoutHash": "0xBFD00301",
-  "constantBufferSize": 32784,
-  "bindingFlags": "Shader",
+  "constantBufferSize": 49104,
+  "bindingFlags": "StaticAndShader",
   "members": [
     {
       "offset": 0,
       "name": "PositionAndRadius",
-      "type": "Float4"
+      "type": "Float4",
+      "arraySize": 341
     },
     {
       "offset": 5456,
       "name": "TilePosition",
-      "type": "Float4"
+      "type": "Float4",
+      "arraySize": 341
     },
     {
       "offset": 10912,
       "name": "CaptureProperties",
-      "type": "Float4"
+      "type": "Float4",
+      "arraySize": 341
     },
     {
       "offset": 16368,
       "name": "CaptureOffsetAndAverageBrightness",
-      "type": "Float4"
+      "type": "Float4",
+      "arraySize": 341
     },
     {
       "offset": 21824,
       "name": "BoxTransform",
-      "type": "Float4x4"
+      "type": "Float4x4",
+      "arraySize": 341
     },
     {
-      "offset": 27328,
+      "offset": 43648,
       "name": "BoxScales",
-      "type": "Float4"
+      "type": "Float4",
+      "arraySize": 341
     }
   ],
   "resources": []

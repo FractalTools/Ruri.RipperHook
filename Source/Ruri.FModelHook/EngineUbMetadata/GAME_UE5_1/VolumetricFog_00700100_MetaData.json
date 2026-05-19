@@ -1,0 +1,51 @@
+{
+  "name": "VolumetricFog",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h:750 (FVolumetricFogGlobalData)",
+  "layoutHash": "0x00700100",
+  "constantBufferSize": 104,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "GridSizeInt",
+      "type": "Int3"
+    },
+    {
+      "offset": 16,
+      "name": "GridSize",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "GridZParams",
+      "type": "Float3"
+    },
+    {
+      "offset": 48,
+      "name": "SVPosToVolumeUV",
+      "type": "Float2"
+    },
+    {
+      "offset": 56,
+      "name": "MaxDistance",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "HeightFogInscatteringColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 80,
+      "name": "HeightFogDirectionalLightInscatteringColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 96,
+      "name": "FogGridToPixelXY",
+      "type": "Int2"
+    }
+  ],
+  "resources": []
+}

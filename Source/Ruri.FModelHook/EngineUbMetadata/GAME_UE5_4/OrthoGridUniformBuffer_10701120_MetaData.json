@@ -1,0 +1,84 @@
+{
+  "name": "OrthoGridUniformBuffer",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h:203 (FOrthoVoxelGridUniformBufferParameters)",
+  "layoutHash": "0x10701120",
+  "constantBufferSize": 56,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "TopLevelGridWorldBoundsMin",
+      "type": "Float3"
+    },
+    {
+      "offset": 16,
+      "name": "TopLevelGridWorldBoundsMax",
+      "type": "Float3"
+    },
+    {
+      "offset": 32,
+      "name": "TopLevelGridResolution",
+      "type": "Int3"
+    },
+    {
+      "offset": 44,
+      "name": "bUseOrthoGrid",
+      "type": "Int"
+    },
+    {
+      "offset": 48,
+      "name": "bUseMajorantGrid",
+      "type": "Int"
+    },
+    {
+      "offset": 52,
+      "name": "bEnableIndirectionGrid",
+      "type": "Int"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 56,
+      "name": "TopLevelGridBitmaskBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 64,
+      "name": "TopLevelGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 72,
+      "name": "IndirectionGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 80,
+      "name": "ExtinctionGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 88,
+      "name": "EmissionGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 96,
+      "name": "ScatteringGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 6,
+      "offset": 104,
+      "name": "MajorantGridBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

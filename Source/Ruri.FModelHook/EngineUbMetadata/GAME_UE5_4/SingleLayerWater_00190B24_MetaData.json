@@ -1,0 +1,133 @@
+{
+  "name": "SingleLayerWater",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SingleLayerWaterRendering.cpp:1198 (FSingleLayerWaterPassUniformParameters)",
+  "layoutHash": "0x00190B24",
+  "constantBufferSize": 252,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 64,
+      "name": "SceneWithoutSingleLayerWaterMinMaxUV",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "DistortionParams",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "SceneWithoutSingleLayerWaterTextureSize",
+      "type": "Float2"
+    },
+    {
+      "offset": 104,
+      "name": "SceneWithoutSingleLayerWaterInvTextureSize",
+      "type": "Float2"
+    },
+    {
+      "offset": 112,
+      "name": "bMainDirectionalLightVSMFiltering",
+      "type": "UInt"
+    },
+    {
+      "offset": 116,
+      "name": "bSeparateMainDirLightLuminance",
+      "type": "UInt"
+    },
+    {
+      "offset": 128,
+      "name": "ForwardDirLightCloudShadow.CloudShadowmapTranslatedWorldToLightClipMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 192,
+      "name": "ForwardDirLightCloudShadow.CloudShadowmapFarDepthKm",
+      "type": "Float"
+    },
+    {
+      "offset": 216,
+      "name": "ForwardDirLightCloudShadow.CloudShadowmapStrength",
+      "type": "Float"
+    },
+    {
+      "offset": 224,
+      "name": "BlueNoise.Dimensions",
+      "type": "Int3"
+    },
+    {
+      "offset": 240,
+      "name": "BlueNoise.ModuloMasks",
+      "type": "Int3"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneColorWithoutSingleLayerWaterTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneColorWithoutSingleLayerWaterSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "SceneDepthWithoutSingleLayerWaterTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "SceneDepthWithoutSingleLayerWaterSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "CustomDepthSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 7,
+      "offset": 200,
+      "name": "ForwardDirLightCloudShadow.CloudShadowmapTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 208,
+      "name": "ForwardDirLightCloudShadow.CloudShadowmapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 9,
+      "offset": 256,
+      "name": "BlueNoise.ScalarTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 264,
+      "name": "BlueNoise.Vec2Texture",
+      "type": "UBMT_TEXTURE"
+    }
+  ]
+}

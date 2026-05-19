@@ -1,0 +1,66 @@
+{
+  "name": "NV12ConvertUB",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:202 (FNV12ConvertUB)",
+  "layoutHash": "0x06C60928",
+  "constantBufferSize": 152,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorTransform",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 64,
+      "name": "CSTransform",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 128,
+      "name": "OutputWidth",
+      "type": "UInt"
+    },
+    {
+      "offset": 132,
+      "name": "EOTF",
+      "type": "UInt"
+    },
+    {
+      "offset": 136,
+      "name": "SwapChroma",
+      "type": "UInt"
+    },
+    {
+      "offset": 144,
+      "name": "UVScale",
+      "type": "Float2"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 152,
+      "name": "SRV_Y",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 160,
+      "name": "SRV_UV",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 168,
+      "name": "SamplerB",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 3,
+      "offset": 176,
+      "name": "SamplerP",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

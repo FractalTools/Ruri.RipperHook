@@ -1,792 +1,792 @@
 {
   "name": "RenderVolumetricCloudParameters",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Renderer/Private/VolumetricCloudRendering.cpp:534-567 (FRenderVolumetricCloudGlobalParameters)",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/VolumetricCloudRendering.cpp:534 (FRenderVolumetricCloudGlobalParameters)",
   "layoutHash": "0x1BED196D",
-  "constantBufferSize": 2480,
-  "bindingFlags": "Shader",
+  "constantBufferSize": 2724,
+  "bindingFlags": "Static",
   "members": [
     {
       "offset": 0,
-      "name": "VolumetricCloud_GroundAlbedo",
+      "name": "VolumetricCloud.GroundAlbedo",
       "type": "Float4"
     },
     {
       "offset": 16,
-      "name": "VolumetricCloud_CloudLayerCenterKm",
+      "name": "VolumetricCloud.CloudLayerCenterKm",
       "type": "Float3"
     },
     {
       "offset": 28,
-      "name": "VolumetricCloud_PlanetRadiusKm",
+      "name": "VolumetricCloud.PlanetRadiusKm",
       "type": "Float"
     },
     {
       "offset": 32,
-      "name": "VolumetricCloud_BottomRadiusKm",
+      "name": "VolumetricCloud.BottomRadiusKm",
       "type": "Float"
     },
     {
       "offset": 36,
-      "name": "VolumetricCloud_TopRadiusKm",
+      "name": "VolumetricCloud.TopRadiusKm",
       "type": "Float"
     },
     {
       "offset": 40,
-      "name": "VolumetricCloud_TracingStartMaxDistance",
+      "name": "VolumetricCloud.TracingStartMaxDistance",
       "type": "Float"
     },
     {
       "offset": 44,
-      "name": "VolumetricCloud_TracingMaxDistanceMode",
+      "name": "VolumetricCloud.TracingMaxDistanceMode",
       "type": "Int"
     },
     {
       "offset": 48,
-      "name": "VolumetricCloud_TracingMaxDistance",
+      "name": "VolumetricCloud.TracingMaxDistance",
       "type": "Float"
     },
     {
       "offset": 52,
-      "name": "VolumetricCloud_SampleCountMin",
+      "name": "VolumetricCloud.SampleCountMin",
       "type": "Int"
     },
     {
       "offset": 56,
-      "name": "VolumetricCloud_SampleCountMax",
+      "name": "VolumetricCloud.SampleCountMax",
       "type": "Int"
     },
     {
       "offset": 60,
-      "name": "VolumetricCloud_InvDistanceToSampleCountMax",
+      "name": "VolumetricCloud.InvDistanceToSampleCountMax",
       "type": "Float"
     },
     {
       "offset": 64,
-      "name": "VolumetricCloud_ShadowSampleCountMax",
+      "name": "VolumetricCloud.ShadowSampleCountMax",
       "type": "Int"
     },
     {
       "offset": 68,
-      "name": "VolumetricCloud_ShadowTracingMaxDistance",
+      "name": "VolumetricCloud.ShadowTracingMaxDistance",
       "type": "Float"
     },
     {
       "offset": 72,
-      "name": "VolumetricCloud_StopTracingTransmittanceThreshold",
+      "name": "VolumetricCloud.StopTracingTransmittanceThreshold",
       "type": "Float"
     },
     {
       "offset": 76,
-      "name": "VolumetricCloud_SkyLightCloudBottomVisibility",
+      "name": "VolumetricCloud.SkyLightCloudBottomVisibility",
       "type": "Float"
     },
     {
       "offset": 80,
-      "name": "VolumetricCloud_AtmosphericLightCloudScatteredLuminanceScale",
+      "name": "VolumetricCloud.AtmosphericLightCloudScatteredLuminanceScale",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 112,
-      "name": "VolumetricCloud_CloudShadowmapFarDepthKm",
+      "name": "VolumetricCloud.CloudShadowmapFarDepthKm",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 144,
-      "name": "VolumetricCloud_CloudShadowmapStrength",
+      "name": "VolumetricCloud.CloudShadowmapStrength",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 176,
-      "name": "VolumetricCloud_CloudShadowmapDepthBias",
+      "name": "VolumetricCloud.CloudShadowmapDepthBias",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 208,
-      "name": "VolumetricCloud_CloudShadowmapSampleCount",
+      "name": "VolumetricCloud.CloudShadowmapSampleCount",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 240,
-      "name": "VolumetricCloud_CloudShadowmapSizeInvSize",
+      "name": "VolumetricCloud.CloudShadowmapSizeInvSize",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 272,
-      "name": "VolumetricCloud_CloudShadowmapTracingSizeInvSize",
+      "name": "VolumetricCloud.CloudShadowmapTracingSizeInvSize",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 304,
-      "name": "VolumetricCloud_CloudShadowmapTranslatedWorldToLightClipMatrix",
+      "name": "VolumetricCloud.CloudShadowmapTranslatedWorldToLightClipMatrix",
       "type": "Float4x4",
       "arraySize": 2
     },
     {
       "offset": 432,
-      "name": "VolumetricCloud_CloudShadowmapTranslatedWorldToLightClipMatrixInv",
+      "name": "VolumetricCloud.CloudShadowmapTranslatedWorldToLightClipMatrixInv",
       "type": "Float4x4",
       "arraySize": 2
     },
     {
       "offset": 560,
-      "name": "VolumetricCloud_CloudShadowmapTracingPixelScaleOffset",
+      "name": "VolumetricCloud.CloudShadowmapTracingPixelScaleOffset",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 592,
-      "name": "VolumetricCloud_CloudShadowmapLightDir",
+      "name": "VolumetricCloud.CloudShadowmapLightDir",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 624,
-      "name": "VolumetricCloud_CloudShadowmapLightPos",
+      "name": "VolumetricCloud.CloudShadowmapLightPos",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 656,
-      "name": "VolumetricCloud_CloudShadowmapLightAnchorPos",
+      "name": "VolumetricCloud.CloudShadowmapLightAnchorPos",
       "type": "Float4",
       "arraySize": 2
     },
     {
       "offset": 688,
-      "name": "VolumetricCloud_CloudSkyAOFarDepthKm",
+      "name": "VolumetricCloud.CloudSkyAOFarDepthKm",
       "type": "Float"
     },
     {
       "offset": 692,
-      "name": "VolumetricCloud_CloudSkyAOStrength",
+      "name": "VolumetricCloud.CloudSkyAOStrength",
       "type": "Float"
     },
     {
       "offset": 696,
-      "name": "VolumetricCloud_CloudSkyAOSampleCount",
+      "name": "VolumetricCloud.CloudSkyAOSampleCount",
       "type": "Float"
     },
     {
       "offset": 704,
-      "name": "VolumetricCloud_CloudSkyAOSizeInvSize",
+      "name": "VolumetricCloud.CloudSkyAOSizeInvSize",
       "type": "Float4"
     },
     {
       "offset": 720,
-      "name": "VolumetricCloud_CloudSkyAOTranslatedWorldToLightClipMatrix",
+      "name": "VolumetricCloud.CloudSkyAOTranslatedWorldToLightClipMatrix",
       "type": "Float4x4"
     },
     {
       "offset": 784,
-      "name": "VolumetricCloud_CloudSkyAOTranslatedWorldToLightClipMatrixInv",
+      "name": "VolumetricCloud.CloudSkyAOTranslatedWorldToLightClipMatrixInv",
       "type": "Float4x4"
     },
     {
       "offset": 848,
-      "name": "VolumetricCloud_CloudSkyAOTraceDir",
+      "name": "VolumetricCloud.CloudSkyAOTraceDir",
       "type": "Float3"
     },
     {
-      "offset": 864,
-      "name": "Light0Shadow_TranslatedWorldPosition",
+      "offset": 1008,
+      "name": "Light0Shadow.TranslatedWorldPosition",
       "type": "Float3"
     },
     {
-      "offset": 876,
-      "name": "Light0Shadow_InvRadius",
+      "offset": 1020,
+      "name": "Light0Shadow.InvRadius",
       "type": "Float"
     },
     {
-      "offset": 880,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_TranslatedWorldToShadowMatrix",
+      "offset": 1024,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.TranslatedWorldToShadowMatrix",
       "type": "Float4x4"
     },
     {
-      "offset": 944,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_ShadowmapMinMax",
+      "offset": 1088,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.ShadowmapMinMax",
       "type": "Float4"
     },
     {
-      "offset": 960,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_DepthBiasParameters",
+      "offset": 1104,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.DepthBiasParameters",
       "type": "Float4"
     },
     {
-      "offset": 976,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_ShadowInjectParams",
+      "offset": 1120,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.ShadowInjectParams",
       "type": "Float4"
     },
     {
-      "offset": 992,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_ClippingPlanes",
+      "offset": 1136,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.ClippingPlanes",
       "type": "Float4",
       "arraySize": 2
     },
     {
-      "offset": 1024,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_OnePassPointShadowProjection_ShadowViewProjectionMatrices",
+      "offset": 1216,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowViewProjectionMatrices",
       "type": "Float4x4",
       "arraySize": 6
     },
     {
-      "offset": 1408,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_OnePassPointShadowProjection_InvShadowmapResolution",
-      "type": "Float"
-    },
-    {
-      "offset": 1424,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_bStaticallyShadowed",
-      "type": "UInt"
-    },
-    {
-      "offset": 1440,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_TranslatedWorldToStaticShadowMatrix",
-      "type": "Float4x4"
-    },
-    {
-      "offset": 1504,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_StaticShadowBufferSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 1520,
-      "name": "VirtualShadowMapId0",
-      "type": "Int"
-    },
-    {
-      "offset": 1536,
-      "name": "TracingCoordToZbufferCoordScaleBias",
-      "type": "UInt4"
-    },
-    {
-      "offset": 1552,
-      "name": "TracingCoordToFullResPixelCoordScaleBias",
-      "type": "UInt4"
-    },
-    {
-      "offset": 1568,
-      "name": "SceneDepthTextureMinMaxCoord",
-      "type": "UInt4"
-    },
-    {
-      "offset": 1584,
-      "name": "NoiseFrameIndexModPattern",
-      "type": "UInt"
-    },
-    {
-      "offset": 1588,
-      "name": "OpaqueIntersectionMode",
-      "type": "Int"
-    },
-    {
-      "offset": 1592,
-      "name": "VolumetricRenderTargetMode",
-      "type": "UInt"
-    },
-    {
-      "offset": 1596,
-      "name": "SampleCountDebugMode",
-      "type": "UInt"
-    },
-    {
       "offset": 1600,
-      "name": "IsReflectionRendering",
-      "type": "UInt"
-    },
-    {
-      "offset": 1604,
-      "name": "HasValidHZB",
-      "type": "UInt"
-    },
-    {
-      "offset": 1608,
-      "name": "ClampRayTToDepthBufferPostHZB",
-      "type": "UInt"
-    },
-    {
-      "offset": 1612,
-      "name": "TraceShadowmap",
-      "type": "UInt"
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.OnePassPointShadowProjection.InvShadowmapResolution",
+      "type": "Float"
     },
     {
       "offset": 1616,
-      "name": "LocalLightsShadowSampleCount",
-      "type": "Float"
-    },
-    {
-      "offset": 1632,
-      "name": "HZBUvFactor",
-      "type": "Float3"
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.bStaticallyShadowed",
+      "type": "UInt"
     },
     {
       "offset": 1648,
-      "name": "HZBSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 1664,
-      "name": "OutputSizeInvSize",
-      "type": "Float4"
-    },
-    {
-      "offset": 1680,
-      "name": "StepSizeOnZeroConservativeDensity",
-      "type": "Int"
-    },
-    {
-      "offset": 1684,
-      "name": "EnableAerialPerspectiveSampling",
-      "type": "Int"
-    },
-    {
-      "offset": 1688,
-      "name": "EnableDistantSkyLightSampling",
-      "type": "Int"
-    },
-    {
-      "offset": 1692,
-      "name": "EnableAtmosphericLightsSampling",
-      "type": "Int"
-    },
-    {
-      "offset": 1696,
-      "name": "EnableHeightFog",
-      "type": "Int"
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.TranslatedWorldToStaticShadowMatrix",
+      "type": "Float4x4"
     },
     {
       "offset": 1712,
-      "name": "FogStruct_ExponentialFogParameters",
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.StaticShadowBufferSize",
       "type": "Float4"
     },
     {
       "offset": 1728,
-      "name": "FogStruct_ExponentialFogParameters2",
-      "type": "Float4"
-    },
-    {
-      "offset": 1744,
-      "name": "FogStruct_ExponentialFogColorParameter",
-      "type": "Float4"
-    },
-    {
-      "offset": 1760,
-      "name": "FogStruct_ExponentialFogParameters3",
-      "type": "Float4"
-    },
-    {
-      "offset": 1776,
-      "name": "FogStruct_SkyAtmosphereAmbientContributionColorScale",
-      "type": "Float4"
-    },
-    {
-      "offset": 1792,
-      "name": "FogStruct_InscatteringLightDirection",
-      "type": "Float4"
-    },
-    {
-      "offset": 1808,
-      "name": "FogStruct_DirectionalInscatteringColor",
-      "type": "Float4"
-    },
-    {
-      "offset": 1824,
-      "name": "FogStruct_SinCosInscatteringColorCubemapRotation",
-      "type": "Float2"
-    },
-    {
-      "offset": 1840,
-      "name": "FogStruct_FogInscatteringTextureParameters",
-      "type": "Float3"
-    },
-    {
-      "offset": 1852,
-      "name": "FogStruct_ApplyVolumetricFog",
-      "type": "Float"
-    },
-    {
-      "offset": 1856,
-      "name": "FogStruct_VolumetricFogStartDistance",
-      "type": "Float"
-    },
-    {
-      "offset": 1860,
-      "name": "FogStruct_VolumetricFogNearFadeInDistanceInv",
-      "type": "Float"
-    },
-    {
-      "offset": 1872,
-      "name": "ForwardLightData_NumLocalLights",
-      "type": "UInt"
-    },
-    {
-      "offset": 1876,
-      "name": "ForwardLightData_NumReflectionCaptures",
-      "type": "UInt"
-    },
-    {
-      "offset": 1880,
-      "name": "ForwardLightData_HasDirectionalLight",
-      "type": "UInt"
-    },
-    {
-      "offset": 1884,
-      "name": "ForwardLightData_NumGridCells",
-      "type": "UInt"
-    },
-    {
-      "offset": 1888,
-      "name": "ForwardLightData_CulledGridSize",
-      "type": "Int3"
-    },
-    {
-      "offset": 1900,
-      "name": "ForwardLightData_MaxCulledLightsPerCell",
-      "type": "UInt"
-    },
-    {
-      "offset": 1904,
-      "name": "ForwardLightData_LightGridPixelSizeShift",
-      "type": "UInt"
-    },
-    {
-      "offset": 1920,
-      "name": "ForwardLightData_LightGridZParams",
-      "type": "Float3"
-    },
-    {
-      "offset": 1936,
-      "name": "ForwardLightData_DirectionalLightDirection",
-      "type": "Float3"
-    },
-    {
-      "offset": 1952,
-      "name": "ForwardLightData_DirectionalLightColor",
-      "type": "Float3"
-    },
-    {
-      "offset": 1964,
-      "name": "ForwardLightData_DirectionalLightVolumetricScatteringIntensity",
-      "type": "Float"
-    },
-    {
-      "offset": 1968,
-      "name": "ForwardLightData_DirectionalLightShadowMapChannelMask",
-      "type": "UInt"
-    },
-    {
-      "offset": 1976,
-      "name": "ForwardLightData_DirectionalLightDistanceFadeMAD",
-      "type": "Float2"
-    },
-    {
-      "offset": 1984,
-      "name": "ForwardLightData_NumDirectionalLightCascades",
-      "type": "UInt"
-    },
-    {
-      "offset": 1988,
-      "name": "ForwardLightData_DirectionalLightVSM",
+      "name": "VirtualShadowMapId0",
       "type": "Int"
     },
     {
+      "offset": 1744,
+      "name": "TracingCoordToZbufferCoordScaleBias",
+      "type": "UInt4"
+    },
+    {
+      "offset": 1760,
+      "name": "TracingCoordToFullResPixelCoordScaleBias",
+      "type": "UInt4"
+    },
+    {
+      "offset": 1776,
+      "name": "SceneDepthTextureMinMaxCoord",
+      "type": "UInt4"
+    },
+    {
+      "offset": 1792,
+      "name": "NoiseFrameIndexModPattern",
+      "type": "UInt"
+    },
+    {
+      "offset": 1796,
+      "name": "OpaqueIntersectionMode",
+      "type": "Int"
+    },
+    {
+      "offset": 1800,
+      "name": "VolumetricRenderTargetMode",
+      "type": "UInt"
+    },
+    {
+      "offset": 1804,
+      "name": "SampleCountDebugMode",
+      "type": "UInt"
+    },
+    {
+      "offset": 1808,
+      "name": "IsReflectionRendering",
+      "type": "UInt"
+    },
+    {
+      "offset": 1812,
+      "name": "HasValidHZB",
+      "type": "UInt"
+    },
+    {
+      "offset": 1816,
+      "name": "ClampRayTToDepthBufferPostHZB",
+      "type": "UInt"
+    },
+    {
+      "offset": 1820,
+      "name": "TraceShadowmap",
+      "type": "UInt"
+    },
+    {
+      "offset": 1824,
+      "name": "LocalLightsShadowSampleCount",
+      "type": "Float"
+    },
+    {
+      "offset": 1840,
+      "name": "HZBUvFactor",
+      "type": "Float3"
+    },
+    {
+      "offset": 1856,
+      "name": "HZBSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 1888,
+      "name": "OutputSizeInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 1904,
+      "name": "StepSizeOnZeroConservativeDensity",
+      "type": "Int"
+    },
+    {
+      "offset": 1908,
+      "name": "EnableAerialPerspectiveSampling",
+      "type": "Int"
+    },
+    {
+      "offset": 1912,
+      "name": "EnableDistantSkyLightSampling",
+      "type": "Int"
+    },
+    {
+      "offset": 1916,
+      "name": "EnableAtmosphericLightsSampling",
+      "type": "Int"
+    },
+    {
+      "offset": 1920,
+      "name": "EnableHeightFog",
+      "type": "Int"
+    },
+    {
+      "offset": 1936,
+      "name": "FogStruct.ExponentialFogParameters",
+      "type": "Float4"
+    },
+    {
+      "offset": 1952,
+      "name": "FogStruct.ExponentialFogParameters2",
+      "type": "Float4"
+    },
+    {
+      "offset": 1968,
+      "name": "FogStruct.ExponentialFogColorParameter",
+      "type": "Float4"
+    },
+    {
+      "offset": 1984,
+      "name": "FogStruct.ExponentialFogParameters3",
+      "type": "Float4"
+    },
+    {
       "offset": 2000,
-      "name": "ForwardLightData_CascadeEndDepths",
+      "name": "FogStruct.SkyAtmosphereAmbientContributionColorScale",
       "type": "Float4"
     },
     {
       "offset": 2016,
-      "name": "ForwardLightData_DirectionalLightTranslatedWorldToShadowMatrix",
+      "name": "FogStruct.InscatteringLightDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 2032,
+      "name": "FogStruct.DirectionalInscatteringColor",
+      "type": "Float4"
+    },
+    {
+      "offset": 2048,
+      "name": "FogStruct.SinCosInscatteringColorCubemapRotation",
+      "type": "Float2"
+    },
+    {
+      "offset": 2064,
+      "name": "FogStruct.FogInscatteringTextureParameters",
+      "type": "Float3"
+    },
+    {
+      "offset": 2076,
+      "name": "FogStruct.ApplyVolumetricFog",
+      "type": "Float"
+    },
+    {
+      "offset": 2080,
+      "name": "FogStruct.VolumetricFogStartDistance",
+      "type": "Float"
+    },
+    {
+      "offset": 2084,
+      "name": "FogStruct.VolumetricFogNearFadeInDistanceInv",
+      "type": "Float"
+    },
+    {
+      "offset": 2128,
+      "name": "ForwardLightData.NumLocalLights",
+      "type": "UInt"
+    },
+    {
+      "offset": 2132,
+      "name": "ForwardLightData.NumReflectionCaptures",
+      "type": "UInt"
+    },
+    {
+      "offset": 2136,
+      "name": "ForwardLightData.HasDirectionalLight",
+      "type": "UInt"
+    },
+    {
+      "offset": 2140,
+      "name": "ForwardLightData.NumGridCells",
+      "type": "UInt"
+    },
+    {
+      "offset": 2144,
+      "name": "ForwardLightData.CulledGridSize",
+      "type": "Int3"
+    },
+    {
+      "offset": 2156,
+      "name": "ForwardLightData.MaxCulledLightsPerCell",
+      "type": "UInt"
+    },
+    {
+      "offset": 2160,
+      "name": "ForwardLightData.LightGridPixelSizeShift",
+      "type": "UInt"
+    },
+    {
+      "offset": 2176,
+      "name": "ForwardLightData.LightGridZParams",
+      "type": "Float3"
+    },
+    {
+      "offset": 2192,
+      "name": "ForwardLightData.DirectionalLightDirection",
+      "type": "Float3"
+    },
+    {
+      "offset": 2208,
+      "name": "ForwardLightData.DirectionalLightColor",
+      "type": "Float3"
+    },
+    {
+      "offset": 2220,
+      "name": "ForwardLightData.DirectionalLightVolumetricScatteringIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 2224,
+      "name": "ForwardLightData.DirectionalLightShadowMapChannelMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 2232,
+      "name": "ForwardLightData.DirectionalLightDistanceFadeMAD",
+      "type": "Float2"
+    },
+    {
+      "offset": 2240,
+      "name": "ForwardLightData.NumDirectionalLightCascades",
+      "type": "UInt"
+    },
+    {
+      "offset": 2244,
+      "name": "ForwardLightData.DirectionalLightVSM",
+      "type": "Int"
+    },
+    {
+      "offset": 2256,
+      "name": "ForwardLightData.CascadeEndDepths",
+      "type": "Float4"
+    },
+    {
+      "offset": 2272,
+      "name": "ForwardLightData.DirectionalLightTranslatedWorldToShadowMatrix",
       "type": "Float4x4",
       "arraySize": 4
     },
     {
-      "offset": 2272,
-      "name": "ForwardLightData_DirectionalLightShadowmapMinMax",
+      "offset": 2528,
+      "name": "ForwardLightData.DirectionalLightShadowmapMinMax",
       "type": "Float4",
       "arraySize": 4
     },
     {
-      "offset": 2336,
-      "name": "ForwardLightData_DirectionalLightShadowmapAtlasBufferSize",
+      "offset": 2592,
+      "name": "ForwardLightData.DirectionalLightShadowmapAtlasBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 2352,
-      "name": "ForwardLightData_DirectionalLightDepthBias",
+      "offset": 2608,
+      "name": "ForwardLightData.DirectionalLightDepthBias",
       "type": "Float"
     },
     {
-      "offset": 2356,
-      "name": "ForwardLightData_DirectionalLightUseStaticShadowing",
+      "offset": 2612,
+      "name": "ForwardLightData.DirectionalLightUseStaticShadowing",
       "type": "UInt"
     },
     {
-      "offset": 2360,
-      "name": "ForwardLightData_SimpleLightsEndIndex",
+      "offset": 2616,
+      "name": "ForwardLightData.SimpleLightsEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 2364,
-      "name": "ForwardLightData_ClusteredDeferredSupportedEndIndex",
+      "offset": 2620,
+      "name": "ForwardLightData.ClusteredDeferredSupportedEndIndex",
       "type": "UInt"
     },
     {
-      "offset": 2368,
-      "name": "ForwardLightData_LumenSupportedStartIndex",
+      "offset": 2624,
+      "name": "ForwardLightData.LumenSupportedStartIndex",
       "type": "UInt"
     },
     {
-      "offset": 2384,
-      "name": "ForwardLightData_DirectionalLightStaticShadowBufferSize",
+      "offset": 2640,
+      "name": "ForwardLightData.DirectionalLightStaticShadowBufferSize",
       "type": "Float4"
     },
     {
-      "offset": 2400,
-      "name": "ForwardLightData_DirectionalLightTranslatedWorldToStaticShadow",
+      "offset": 2656,
+      "name": "ForwardLightData.DirectionalLightTranslatedWorldToStaticShadow",
       "type": "Float4x4"
     },
     {
-      "offset": 2464,
-      "name": "ForwardLightData_DirectLightingShowFlag",
+      "offset": 2720,
+      "name": "ForwardLightData.DirectLightingShowFlag",
       "type": "UInt"
     }
   ],
   "resources": [
     {
       "index": 0,
-      "name": "SceneTextures_SceneColorTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 864,
+      "name": "SceneTextures.SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 1,
-      "name": "SceneTextures_SceneDepthTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 872,
+      "name": "SceneTextures.SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 2,
-      "name": "SceneTextures_GBufferATexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 880,
+      "name": "SceneTextures.GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 3,
-      "name": "SceneTextures_GBufferBTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 888,
+      "name": "SceneTextures.GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 4,
-      "name": "SceneTextures_GBufferCTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 896,
+      "name": "SceneTextures.GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 5,
-      "name": "SceneTextures_GBufferDTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 904,
+      "name": "SceneTextures.GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 6,
-      "name": "SceneTextures_GBufferETexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 912,
+      "name": "SceneTextures.GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 7,
-      "name": "SceneTextures_GBufferFTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 920,
+      "name": "SceneTextures.GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 8,
-      "name": "SceneTextures_GBufferVelocityTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 928,
+      "name": "SceneTextures.GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 9,
-      "name": "SceneTextures_ScreenSpaceAOTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 936,
+      "name": "SceneTextures.ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 10,
-      "name": "SceneTextures_CustomDepthTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 944,
+      "name": "SceneTextures.CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 11,
-      "name": "SceneTextures_CustomStencilTexture",
-      "type": "UBMT_RDG_TEXTURE_SRV",
-      "offset": 0
+      "offset": 952,
+      "name": "SceneTextures.CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
     },
     {
       "index": 12,
-      "name": "SceneTextures_PointClampSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 960,
+      "name": "SceneTextures.PointClampSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 13,
+      "offset": 976,
       "name": "SceneDepthTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 14,
+      "offset": 984,
       "name": "CloudShadowTexture0",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 15,
+      "offset": 992,
       "name": "CloudShadowTexture1",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 16,
+      "offset": 1000,
       "name": "CloudBilinearTextureSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 17,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_ShadowDepthTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 1168,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.ShadowDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 18,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_ShadowDepthTextureSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 1176,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.ShadowDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 19,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_OnePassPointShadowProjection_ShadowDepthCubeTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 1184,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTexture",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 20,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_OnePassPointShadowProjection_ShadowDepthCubeTexture2",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 1192,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTexture2",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 21,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_OnePassPointShadowProjection_ShadowDepthCubeTextureSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 1200,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.OnePassPointShadowProjection.ShadowDepthCubeTextureSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 22,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_StaticShadowDepthTexture",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "offset": 1624,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.StaticShadowDepthTexture",
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 23,
-      "name": "Light0Shadow_VolumeShadowingShaderParameters_StaticShadowDepthTextureSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 1632,
+      "name": "Light0Shadow.VolumeShadowingShaderParameters.StaticShadowDepthTextureSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 24,
+      "offset": 1872,
       "name": "HZBTexture",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 25,
+      "offset": 1880,
       "name": "HZBSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 26,
-      "name": "FogStruct_FogInscatteringColorCubemap",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "offset": 2088,
+      "name": "FogStruct.FogInscatteringColorCubemap",
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 27,
-      "name": "FogStruct_FogInscatteringColorSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 2096,
+      "name": "FogStruct.FogInscatteringColorSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 28,
-      "name": "FogStruct_IntegratedLightScattering",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 2104,
+      "name": "FogStruct.IntegratedLightScattering",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 29,
-      "name": "FogStruct_IntegratedLightScatteringSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 2112,
+      "name": "FogStruct.IntegratedLightScatteringSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 30,
-      "name": "ForwardLightData_DirectionalLightShadowmapAtlas",
-      "type": "UBMT_RDG_TEXTURE",
-      "offset": 0
+      "offset": 2728,
+      "name": "ForwardLightData.DirectionalLightShadowmapAtlas",
+      "type": "UBMT_RDG_TEXTURE"
     },
     {
       "index": 31,
-      "name": "ForwardLightData_ShadowmapSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 2736,
+      "name": "ForwardLightData.ShadowmapSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 32,
-      "name": "ForwardLightData_DirectionalLightStaticShadowmap",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "offset": 2744,
+      "name": "ForwardLightData.DirectionalLightStaticShadowmap",
+      "type": "UBMT_TEXTURE"
     },
     {
       "index": 33,
-      "name": "ForwardLightData_StaticShadowmapSampler",
-      "type": "UBMT_SAMPLER",
-      "offset": 0
+      "offset": 2752,
+      "name": "ForwardLightData.StaticShadowmapSampler",
+      "type": "UBMT_SAMPLER"
     },
     {
       "index": 34,
-      "name": "ForwardLightData_ForwardLocalLightBuffer",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "offset": 2760,
+      "name": "ForwardLightData.ForwardLocalLightBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 35,
-      "name": "ForwardLightData_NumCulledLightsGrid",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "offset": 2768,
+      "name": "ForwardLightData.NumCulledLightsGrid",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 36,
-      "name": "ForwardLightData_CulledLightDataGrid",
-      "type": "UBMT_RDG_BUFFER_SRV",
-      "offset": 0
+      "offset": 2776,
+      "name": "ForwardLightData.CulledLightDataGrid",
+      "type": "UBMT_RDG_BUFFER_SRV"
     },
     {
       "index": 37,
-      "name": "ForwardLightData_DummyRectLightSourceTexture",
-      "type": "UBMT_TEXTURE",
-      "offset": 0
+      "offset": 2784,
+      "name": "ForwardLightData.DummyRectLightSourceTexture",
+      "type": "UBMT_TEXTURE"
     }
   ]
 }

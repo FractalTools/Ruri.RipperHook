@@ -1,0 +1,111 @@
+{
+  "name": "SkyAtmosphere",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp:231 (FSkyAtmosphereInternalCommonParameters)",
+  "layoutHash": "0x00A00100",
+  "constantBufferSize": 156,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "SampleCountMin",
+      "type": "Float"
+    },
+    {
+      "offset": 4,
+      "name": "SampleCountMax",
+      "type": "Float"
+    },
+    {
+      "offset": 8,
+      "name": "DistanceToSampleCountMaxInv",
+      "type": "Float"
+    },
+    {
+      "offset": 12,
+      "name": "FastSkySampleCountMin",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "FastSkySampleCountMax",
+      "type": "Float"
+    },
+    {
+      "offset": 20,
+      "name": "FastSkyDistanceToSampleCountMaxInv",
+      "type": "Float"
+    },
+    {
+      "offset": 32,
+      "name": "CameraAerialPerspectiveVolumeSizeAndInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "CameraAerialPerspectiveVolumeDepthResolution",
+      "type": "Float"
+    },
+    {
+      "offset": 52,
+      "name": "CameraAerialPerspectiveVolumeDepthResolutionInv",
+      "type": "Float"
+    },
+    {
+      "offset": 56,
+      "name": "CameraAerialPerspectiveVolumeDepthSliceLengthKm",
+      "type": "Float"
+    },
+    {
+      "offset": 60,
+      "name": "CameraAerialPerspectiveVolumeDepthSliceLengthKmInv",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "CameraAerialPerspectiveSampleCountPerSlice",
+      "type": "Float"
+    },
+    {
+      "offset": 80,
+      "name": "TransmittanceLutSizeAndInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "MultiScatteredLuminanceLutSizeAndInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "SkyViewLutSizeAndInvSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "TransmittanceSampleCount",
+      "type": "Float"
+    },
+    {
+      "offset": 132,
+      "name": "MultiScatteringSampleCount",
+      "type": "Float"
+    },
+    {
+      "offset": 136,
+      "name": "AerialPespectiveViewDistanceScale",
+      "type": "Float"
+    },
+    {
+      "offset": 140,
+      "name": "FogShowFlagFactor",
+      "type": "Float"
+    },
+    {
+      "offset": 144,
+      "name": "SkyLuminanceFactor",
+      "type": "Float3"
+    }
+  ],
+  "resources": []
+}

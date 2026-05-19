@@ -1,0 +1,41 @@
+{
+  "name": "ColorCorrectHighlights",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/Experimental/ColorCorrectRegions/Source/ColorCorrectRegions/Public/ColorCorrectRegionsPostProcessMaterial.h:72 (FCCRColorCorrectHighlightsParameter)",
+  "layoutHash": "0x00600100",
+  "constantBufferSize": 84,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorSaturation",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "ColorContrast",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "ColorGamma",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "ColorGain",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "ColorOffset",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "HighlightsMin",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

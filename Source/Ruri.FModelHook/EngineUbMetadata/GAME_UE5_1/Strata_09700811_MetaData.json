@@ -1,0 +1,103 @@
+{
+  "name": "Strata",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Strata/Strata.h:46 (FStrataGlobalUniformParameters)",
+  "layoutHash": "0x09700811",
+  "constantBufferSize": 64,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "MaxBytesPerPixel",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "bRoughDiffuse",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "PeelLayersAboveDepth",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "SliceStoringDebugStrataTree",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "FirstSliceStoringStrataSSSData",
+      "type": "Int"
+    },
+    {
+      "offset": 20,
+      "name": "TileSize",
+      "type": "UInt"
+    },
+    {
+      "offset": 24,
+      "name": "TileSizeLog2",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "TileCount",
+      "type": "Int2"
+    },
+    {
+      "offset": 40,
+      "name": "TileOffset",
+      "type": "Int2"
+    },
+    {
+      "offset": 48,
+      "name": "OverflowTileCount",
+      "type": "Int2"
+    },
+    {
+      "offset": 56,
+      "name": "OverflowTileOffset",
+      "type": "Int2"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 64,
+      "name": "MaterialTextureArray",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 72,
+      "name": "TopLayerTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 80,
+      "name": "OpaqueRoughRefractionTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 88,
+      "name": "BSDFOffsetTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 96,
+      "name": "BSDFTileTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 104,
+      "name": "BSDFTileCountBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

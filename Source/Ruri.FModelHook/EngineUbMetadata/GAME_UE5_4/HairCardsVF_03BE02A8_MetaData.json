@@ -1,0 +1,149 @@
+{
+  "name": "HairCardsVF",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h:25 (FHairCardsVertexFactoryUniformShaderParameters)",
+  "layoutHash": "0x03BE02A8",
+  "constantBufferSize": 28,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Flags",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "LayoutIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "TextureCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "AttributeTextureIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "AttributeChannelIndex",
+      "type": "UInt"
+    },
+    {
+      "offset": 20,
+      "name": "MaxVertexCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 24,
+      "name": "CoverageBias",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 32,
+      "name": "PositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 40,
+      "name": "PreviousPositionBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 48,
+      "name": "NormalsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 56,
+      "name": "UVsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 64,
+      "name": "MaterialsBuffer",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 72,
+      "name": "Texture0Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 80,
+      "name": "Texture0Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 7,
+      "offset": 88,
+      "name": "Texture1Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 96,
+      "name": "Texture1Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 9,
+      "offset": 104,
+      "name": "Texture2Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 112,
+      "name": "Texture2Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 11,
+      "offset": 120,
+      "name": "Texture3Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 128,
+      "name": "Texture3Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 13,
+      "offset": 136,
+      "name": "Texture4Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 14,
+      "offset": 144,
+      "name": "Texture4Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 15,
+      "offset": 152,
+      "name": "Texture5Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 16,
+      "offset": 160,
+      "name": "Texture5Sampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

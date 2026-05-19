@@ -1,0 +1,47 @@
+{
+  "name": "GeomCacheMVF",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/GeometryCacheVertexFactory.h:27 (FGeometryCacheManualVertexFetchUniformBufferParameters)",
+  "layoutHash": "0x06300708",
+  "constantBufferSize": 48,
+  "bindingFlags": "Shader",
+  "members": [],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "Position",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "MotionBlurData",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "TangentX",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "TangentZ",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "Color",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "TexCoords",
+      "type": "UBMT_SRV"
+    }
+  ]
+}

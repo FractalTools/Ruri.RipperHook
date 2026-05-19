@@ -1,0 +1,116 @@
+{
+  "name": "Simulation",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:761 (FParticleSimulationParameters)",
+  "layoutHash": "0x01100100",
+  "constantBufferSize": 260,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "AttributeCurve",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "AttributeCurveScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "AttributeCurveBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "AttributeScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "AttributeBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "MiscCurve",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "MiscScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "MiscBias",
+      "type": "Float4"
+    },
+    {
+      "offset": 128,
+      "name": "Acceleration",
+      "type": "Float3"
+    },
+    {
+      "offset": 144,
+      "name": "OrbitOffsetBase",
+      "type": "Float3"
+    },
+    {
+      "offset": 160,
+      "name": "OrbitOffsetRange",
+      "type": "Float3"
+    },
+    {
+      "offset": 176,
+      "name": "OrbitFrequencyBase",
+      "type": "Float3"
+    },
+    {
+      "offset": 192,
+      "name": "OrbitFrequencyRange",
+      "type": "Float3"
+    },
+    {
+      "offset": 208,
+      "name": "OrbitPhaseBase",
+      "type": "Float3"
+    },
+    {
+      "offset": 224,
+      "name": "OrbitPhaseRange",
+      "type": "Float3"
+    },
+    {
+      "offset": 236,
+      "name": "CollisionRadiusScale",
+      "type": "Float"
+    },
+    {
+      "offset": 240,
+      "name": "CollisionRadiusBias",
+      "type": "Float"
+    },
+    {
+      "offset": 244,
+      "name": "CollisionTimeBias",
+      "type": "Float"
+    },
+    {
+      "offset": 248,
+      "name": "CollisionRandomSpread",
+      "type": "Float"
+    },
+    {
+      "offset": 252,
+      "name": "CollisionRandomDistribution",
+      "type": "Float"
+    },
+    {
+      "offset": 256,
+      "name": "OneMinusFriction",
+      "type": "Float"
+    }
+  ],
+  "resources": []
+}

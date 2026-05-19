@@ -1,0 +1,96 @@
+{
+  "name": "FogStruct",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/FogRendering.h:14 (FFogUniformParameters)",
+  "layoutHash": "0x05C80828",
+  "constantBufferSize": 152,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ExponentialFogParameters",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "ExponentialFogParameters2",
+      "type": "Float4"
+    },
+    {
+      "offset": 32,
+      "name": "ExponentialFogColorParameter",
+      "type": "Float4"
+    },
+    {
+      "offset": 48,
+      "name": "ExponentialFogParameters3",
+      "type": "Float4"
+    },
+    {
+      "offset": 64,
+      "name": "SkyAtmosphereAmbientContributionColorScale",
+      "type": "Float4"
+    },
+    {
+      "offset": 80,
+      "name": "InscatteringLightDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 96,
+      "name": "DirectionalInscatteringColor",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "SinCosInscatteringColorCubemapRotation",
+      "type": "Float2"
+    },
+    {
+      "offset": 128,
+      "name": "FogInscatteringTextureParameters",
+      "type": "Float3"
+    },
+    {
+      "offset": 140,
+      "name": "ApplyVolumetricFog",
+      "type": "Float"
+    },
+    {
+      "offset": 144,
+      "name": "VolumetricFogStartDistance",
+      "type": "Float"
+    },
+    {
+      "offset": 148,
+      "name": "VolumetricFogNearFadeInDistanceInv",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 152,
+      "name": "FogInscatteringColorCubemap",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 160,
+      "name": "FogInscatteringColorSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 168,
+      "name": "IntegratedLightScattering",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 176,
+      "name": "IntegratedLightScatteringSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

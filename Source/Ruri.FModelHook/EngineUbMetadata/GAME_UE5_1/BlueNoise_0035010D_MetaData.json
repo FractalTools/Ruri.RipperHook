@@ -1,0 +1,34 @@
+{
+  "name": "BlueNoise",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/BlueNoise.h:14 (FBlueNoise)",
+  "layoutHash": "0x0035010D",
+  "constantBufferSize": 28,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Dimensions",
+      "type": "Int3"
+    },
+    {
+      "offset": 16,
+      "name": "ModuloMasks",
+      "type": "Int3"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 32,
+      "name": "ScalarTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 40,
+      "name": "Vec2Texture",
+      "type": "UBMT_TEXTURE"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "name": "WaterVF",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h:15 (FWaterVertexFactoryParameters)",
+  "layoutHash": "0x00300100",
+  "constantBufferSize": 36,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "LODScale",
+      "type": "Float"
+    },
+    {
+      "offset": 4,
+      "name": "LeafSize",
+      "type": "Float"
+    },
+    {
+      "offset": 8,
+      "name": "CaptureDepthRange",
+      "type": "Float"
+    },
+    {
+      "offset": 12,
+      "name": "NumQuadsPerTileSide",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "NumQuadsLOD0",
+      "type": "Int"
+    },
+    {
+      "offset": 20,
+      "name": "NumDensities",
+      "type": "Int"
+    },
+    {
+      "offset": 24,
+      "name": "bRenderSelected",
+      "type": "Int"
+    },
+    {
+      "offset": 28,
+      "name": "bRenderUnselected",
+      "type": "Int"
+    },
+    {
+      "offset": 32,
+      "name": "bLODMorphingEnabled",
+      "type": "Int"
+    }
+  ],
+  "resources": []
+}

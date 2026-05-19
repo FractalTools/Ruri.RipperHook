@@ -1,9 +1,9 @@
 {
   "name": "DeferredLightUniforms",
   "engineVersion": "5.1.1",
-  "engineSource": "D:\\GameStudy\\UnrealEngine-5.1.1-release\\Engine\\Source\\Runtime\\Renderer\\Private\\LightRendering.h (FDeferredLightUniformStruct)",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightRendering.h:22 (FDeferredLightUniformStruct)",
   "layoutHash": "0x00A00100",
-  "constantBufferSize": 44,
+  "constantBufferSize": 156,
   "bindingFlags": "Shader",
   "members": [
     {
@@ -40,6 +40,86 @@
       "offset": 40,
       "name": "LightingChannelMask",
       "type": "UInt"
+    },
+    {
+      "offset": 48,
+      "name": "LightParameters.TranslatedWorldPosition",
+      "type": "Float3"
+    },
+    {
+      "offset": 60,
+      "name": "LightParameters.InvRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "LightParameters.Color",
+      "type": "Float3"
+    },
+    {
+      "offset": 76,
+      "name": "LightParameters.FalloffExponent",
+      "type": "Float"
+    },
+    {
+      "offset": 80,
+      "name": "LightParameters.Direction",
+      "type": "Float3"
+    },
+    {
+      "offset": 92,
+      "name": "LightParameters.SpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 96,
+      "name": "LightParameters.Tangent",
+      "type": "Float3"
+    },
+    {
+      "offset": 108,
+      "name": "LightParameters.SourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 112,
+      "name": "LightParameters.SpotAngles",
+      "type": "Float2"
+    },
+    {
+      "offset": 120,
+      "name": "LightParameters.SoftSourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 124,
+      "name": "LightParameters.SourceLength",
+      "type": "Float"
+    },
+    {
+      "offset": 128,
+      "name": "LightParameters.RectLightBarnCosAngle",
+      "type": "Float"
+    },
+    {
+      "offset": 132,
+      "name": "LightParameters.RectLightBarnLength",
+      "type": "Float"
+    },
+    {
+      "offset": 136,
+      "name": "LightParameters.RectLightAtlasUVOffset",
+      "type": "Float2"
+    },
+    {
+      "offset": 144,
+      "name": "LightParameters.RectLightAtlasUVScale",
+      "type": "Float2"
+    },
+    {
+      "offset": 152,
+      "name": "LightParameters.RectLightAtlasMaxLevel",
+      "type": "Float"
     }
   ],
   "resources": []

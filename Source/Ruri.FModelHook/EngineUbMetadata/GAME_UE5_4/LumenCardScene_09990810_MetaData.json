@@ -1,0 +1,124 @@
+{
+  "name": "LumenCardScene",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenSceneData.h:31 (FLumenCardScene)",
+  "layoutHash": "0x09990810",
+  "constantBufferSize": 44,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "NumCards",
+      "type": "UInt"
+    },
+    {
+      "offset": 4,
+      "name": "NumMeshCards",
+      "type": "UInt"
+    },
+    {
+      "offset": 8,
+      "name": "NumCardPages",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "NumHeightfields",
+      "type": "UInt"
+    },
+    {
+      "offset": 16,
+      "name": "NumPrimitiveGroups",
+      "type": "UInt"
+    },
+    {
+      "offset": 24,
+      "name": "PhysicalAtlasSize",
+      "type": "Float2"
+    },
+    {
+      "offset": 32,
+      "name": "InvPhysicalAtlasSize",
+      "type": "Float2"
+    },
+    {
+      "offset": 40,
+      "name": "IndirectLightingAtlasDownsampleFactor",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 48,
+      "name": "CardData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 56,
+      "name": "CardPageData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 64,
+      "name": "MeshCardsData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 72,
+      "name": "HeightfieldData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 80,
+      "name": "PrimitiveGroupData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 88,
+      "name": "PageTableBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 6,
+      "offset": 96,
+      "name": "SceneInstanceIndexToMeshCardsIndexBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 7,
+      "offset": 104,
+      "name": "AlbedoAtlas",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 112,
+      "name": "OpacityAtlas",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 9,
+      "offset": 120,
+      "name": "NormalAtlas",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 128,
+      "name": "EmissiveAtlas",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 136,
+      "name": "DepthAtlas",
+      "type": "UBMT_RDG_TEXTURE"
+    }
+  ]
+}

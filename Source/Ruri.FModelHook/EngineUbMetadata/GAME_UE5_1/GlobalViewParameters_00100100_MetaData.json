@@ -1,0 +1,16 @@
+{
+  "name": "GlobalViewParameters",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Public/ShaderParameterMacros.h:1695 (FGlobalViewParameters)",
+  "layoutHash": "0x00100100",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ViewSizeAndInvSize",
+      "type": "Float4"
+    }
+  ],
+  "resources": []
+}

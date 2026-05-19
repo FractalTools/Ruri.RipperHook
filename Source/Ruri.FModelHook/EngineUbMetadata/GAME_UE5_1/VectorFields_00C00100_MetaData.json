@@ -1,0 +1,46 @@
+{
+  "name": "VectorFields",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:899 (FVectorFieldUniformParameters)",
+  "layoutHash": "0x00C00100",
+  "constantBufferSize": 192,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "Count",
+      "type": "Int"
+    },
+    {
+      "offset": 16,
+      "name": "WorldToVolume",
+      "type": "Float4x4",
+      "arraySize": 1
+    },
+    {
+      "offset": 80,
+      "name": "VolumeToWorld",
+      "type": "Float4x4",
+      "arraySize": 1
+    },
+    {
+      "offset": 144,
+      "name": "IntensityAndTightness",
+      "type": "Float4",
+      "arraySize": 1
+    },
+    {
+      "offset": 160,
+      "name": "VolumeSize",
+      "type": "Float4",
+      "arraySize": 1
+    },
+    {
+      "offset": 176,
+      "name": "TilingAxes",
+      "type": "Float4",
+      "arraySize": 1
+    }
+  ],
+  "resources": []
+}

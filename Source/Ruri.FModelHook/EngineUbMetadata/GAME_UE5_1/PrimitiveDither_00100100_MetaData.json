@@ -1,7 +1,7 @@
 {
   "name": "PrimitiveDither",
   "engineVersion": "5.1.1",
-  "engineSource": "D:\\GameStudy\\UnrealEngine-5.1.1-release\\Engine\\Source\\Runtime\\Renderer\\Private\\ShaderBaseClasses.h (FDitherUniformShaderParameters)",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/ShaderBaseClasses.h:29 (FDitherUniformShaderParameters)",
   "layoutHash": "0x00100100",
   "constantBufferSize": 4,
   "bindingFlags": "Shader",

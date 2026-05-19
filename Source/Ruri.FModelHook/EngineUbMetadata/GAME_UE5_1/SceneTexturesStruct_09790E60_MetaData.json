@@ -1,24 +1,89 @@
 {
   "name": "SceneTexturesStruct",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:13-36 (FSceneTextureUniformParameters, IMPLEMENT_STATIC_UNIFORM_BUFFER_STRUCT at SceneTexturesConfig.cpp:14 binds it as 'SceneTexturesStruct')",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h:13 (FSceneTextureUniformParameters)",
   "layoutHash": "0x09790E60",
-  "constantBufferSize": 0,
-  "bindingFlags": "Shader",
+  "constantBufferSize": 112,
+  "bindingFlags": "Static",
   "members": [],
   "resources": [
-    { "index":  0, "name": "SceneColorTexture",       "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  1, "name": "SceneDepthTexture",       "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  2, "name": "GBufferATexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  3, "name": "GBufferBTexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  4, "name": "GBufferCTexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  5, "name": "GBufferDTexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  6, "name": "GBufferETexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  7, "name": "GBufferFTexture",         "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  8, "name": "GBufferVelocityTexture",  "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index":  9, "name": "ScreenSpaceAOTexture",    "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index": 10, "name": "CustomDepthTexture",      "type": "UBMT_RDG_TEXTURE", "offset": 0 },
-    { "index": 11, "name": "CustomStencilTexture",    "type": "UBMT_RDG_TEXTURE_SRV", "offset": 0 },
-    { "index": 12, "name": "PointClampSampler",       "type": "UBMT_SAMPLER", "offset": 0 }
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "PointClampSampler",
+      "type": "UBMT_SAMPLER"
+    }
   ]
 }

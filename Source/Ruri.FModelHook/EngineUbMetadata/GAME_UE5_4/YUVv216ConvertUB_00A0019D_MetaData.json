@@ -1,0 +1,58 @@
+{
+  "name": "YUVv216ConvertUB",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:622 (FYUVv216ConvertUB)",
+  "layoutHash": "0x00A0019D",
+  "constantBufferSize": 152,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorTransform",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 64,
+      "name": "CSTransform",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 128,
+      "name": "EOTF",
+      "type": "UInt"
+    },
+    {
+      "offset": 132,
+      "name": "IsCbY0CrY1",
+      "type": "UInt"
+    },
+    {
+      "offset": 136,
+      "name": "IsARGBFmt",
+      "type": "UInt"
+    },
+    {
+      "offset": 140,
+      "name": "SwapChroma",
+      "type": "UInt"
+    },
+    {
+      "offset": 144,
+      "name": "OutputDimX",
+      "type": "Float"
+    },
+    {
+      "offset": 148,
+      "name": "OutputDimY",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 152,
+      "name": "YUVTexture",
+      "type": "UBMT_TEXTURE"
+    }
+  ]
+}

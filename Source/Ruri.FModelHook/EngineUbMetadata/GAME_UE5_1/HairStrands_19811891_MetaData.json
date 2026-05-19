@@ -1,0 +1,108 @@
+{
+  "name": "HairStrands",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsData.h:27 (FHairStrandsViewUniformParameters)",
+  "layoutHash": "0x19811891",
+  "constantBufferSize": 48,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "HairTileCountXY",
+      "type": "Int2"
+    },
+    {
+      "offset": 8,
+      "name": "MaxSamplePerPixelCount",
+      "type": "UInt"
+    },
+    {
+      "offset": 12,
+      "name": "HairDualScatteringRoughnessOverride",
+      "type": "Float"
+    },
+    {
+      "offset": 16,
+      "name": "HairSampleViewportResolution",
+      "type": "Int2"
+    },
+    {
+      "offset": 24,
+      "name": "bHairTileValid",
+      "type": "UInt"
+    },
+    {
+      "offset": 32,
+      "name": "HairOnlyDepthHZBParameters",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 48,
+      "name": "HairCoverageTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 56,
+      "name": "HairOnlyDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 64,
+      "name": "HairOnlyDepthClosestHZBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 72,
+      "name": "HairOnlyDepthFurthestHZBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 80,
+      "name": "HairOnlyDepthHZBSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 5,
+      "offset": 88,
+      "name": "HairSampleOffset",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 96,
+      "name": "HairSampleCount",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 104,
+      "name": "HairSampleData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 8,
+      "offset": 112,
+      "name": "HairSampleCoords",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 9,
+      "offset": 120,
+      "name": "HairTileData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 10,
+      "offset": 128,
+      "name": "HairTileCount",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

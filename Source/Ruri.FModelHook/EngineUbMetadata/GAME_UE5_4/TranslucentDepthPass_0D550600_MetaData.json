@@ -1,0 +1,155 @@
+{
+  "name": "TranslucentDepthPass",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/TranslucentLighting.cpp:214 (FTranslucencyDepthPassUniformParameters)",
+  "layoutHash": "0x0D550600",
+  "constantBufferSize": 304,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 112,
+      "name": "ProjectionMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 176,
+      "name": "bClampToNearPlane",
+      "type": "Float"
+    },
+    {
+      "offset": 180,
+      "name": "InvMaxSubjectDepth",
+      "type": "Float"
+    },
+    {
+      "offset": 192,
+      "name": "TranslucentSelfShadow.WorldToShadowMatrix",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 256,
+      "name": "TranslucentSelfShadow.ShadowUVMinMax",
+      "type": "Float4"
+    },
+    {
+      "offset": 272,
+      "name": "TranslucentSelfShadow.DirectionalLightDirection",
+      "type": "Float4"
+    },
+    {
+      "offset": 288,
+      "name": "TranslucentSelfShadow.DirectionalLightColor",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "SceneTextures.SceneColorTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SceneTextures.SceneDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "SceneTextures.ScenePartialDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "SceneTextures.GBufferATexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "SceneTextures.GBufferBTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "SceneTextures.GBufferCTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "SceneTextures.GBufferDTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "SceneTextures.GBufferETexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "SceneTextures.GBufferFTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "SceneTextures.GBufferVelocityTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "SceneTextures.ScreenSpaceAOTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "SceneTextures.CustomDepthTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "SceneTextures.CustomStencilTexture",
+      "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 13,
+      "offset": 104,
+      "name": "SceneTextures.PointClampSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 14,
+      "offset": 304,
+      "name": "TranslucentSelfShadow.Transmission0",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 15,
+      "offset": 312,
+      "name": "TranslucentSelfShadow.Transmission1",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 16,
+      "offset": 320,
+      "name": "TranslucentSelfShadow.Transmission0Sampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 17,
+      "offset": 328,
+      "name": "TranslucentSelfShadow.Transmission1Sampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

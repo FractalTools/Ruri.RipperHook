@@ -1,28 +1,107 @@
 {
   "name": "LightmapResourceCluster",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:766-783",
+  "engineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h:766 (FLightmapResourceClusterShaderParameters)",
   "layoutHash": "0x0D830F0E",
-  "constantBufferSize": 0,
+  "constantBufferSize": 128,
   "bindingFlags": "Shader",
-  "_comment": "FLightmapResourceClusterShaderParameters. 16 resources in declaration order: 4 Texture2D + 5 SRV (VT*) + 5 SamplerState + 2 Texture2D<uint4> (VT page tables).",
   "members": [],
   "resources": [
-    { "index":  0, "name": "LightMapTexture",                "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index":  1, "name": "SkyOcclusionTexture",            "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index":  2, "name": "AOMaterialMaskTexture",          "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index":  3, "name": "StaticShadowTexture",            "type": "UBMT_TEXTURE", "offset": 0 },
-    { "index":  4, "name": "VTLightMapTexture",              "type": "UBMT_SRV",     "offset": 0 },
-    { "index":  5, "name": "VTLightMapTexture_1",            "type": "UBMT_SRV",     "offset": 0 },
-    { "index":  6, "name": "VTSkyOcclusionTexture",          "type": "UBMT_SRV",     "offset": 0 },
-    { "index":  7, "name": "VTAOMaterialMaskTexture",        "type": "UBMT_SRV",     "offset": 0 },
-    { "index":  8, "name": "VTStaticShadowTexture",          "type": "UBMT_SRV",     "offset": 0 },
-    { "index":  9, "name": "LightMapSampler",                "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 10, "name": "LightMapSampler_1",              "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 11, "name": "SkyOcclusionSampler",            "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 12, "name": "AOMaterialMaskSampler",          "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 13, "name": "StaticShadowTextureSampler",     "type": "UBMT_SAMPLER", "offset": 0 },
-    { "index": 14, "name": "LightmapVirtualTexturePageTable0","type": "UBMT_TEXTURE","offset": 0 },
-    { "index": 15, "name": "LightmapVirtualTexturePageTable1","type": "UBMT_TEXTURE","offset": 0 }
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "LightMapTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "SkyOcclusionTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "AOMaterialMaskTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "StaticShadowTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "VTLightMapTexture",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 40,
+      "name": "VTLightMapTexture_1",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 6,
+      "offset": 48,
+      "name": "VTSkyOcclusionTexture",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 7,
+      "offset": 56,
+      "name": "VTAOMaterialMaskTexture",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 8,
+      "offset": 64,
+      "name": "VTStaticShadowTexture",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 9,
+      "offset": 72,
+      "name": "LightMapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 10,
+      "offset": 80,
+      "name": "LightMapSampler_1",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 11,
+      "offset": 88,
+      "name": "SkyOcclusionSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 12,
+      "offset": 96,
+      "name": "AOMaterialMaskSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 13,
+      "offset": 104,
+      "name": "StaticShadowTextureSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 14,
+      "offset": 112,
+      "name": "LightmapVirtualTexturePageTable0",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 15,
+      "offset": 120,
+      "name": "LightmapVirtualTexturePageTable1",
+      "type": "UBMT_TEXTURE"
+    }
   ]
 }

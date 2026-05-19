@@ -1,0 +1,35 @@
+{
+  "name": "LightFunctionAtlas",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightFunctionAtlas.h:30 (FLightFunctionAtlasGlobalParameters)",
+  "layoutHash": "0x00300119",
+  "constantBufferSize": 28,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 24,
+      "name": "Slot_UVSize",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "LightFunctionAtlasTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "LightInfoDataBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "LightFunctionAtlasSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

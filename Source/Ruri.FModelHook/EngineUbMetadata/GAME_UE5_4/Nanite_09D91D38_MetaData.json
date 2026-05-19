@@ -1,0 +1,136 @@
+{
+  "name": "Nanite",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/Nanite/NaniteShared.h:294 (FNaniteUniformParameters)",
+  "layoutHash": "0x09D91D38",
+  "constantBufferSize": 156,
+  "bindingFlags": "Static",
+  "members": [
+    {
+      "offset": 0,
+      "name": "PageConstants",
+      "type": "Int4"
+    },
+    {
+      "offset": 16,
+      "name": "MaterialConfig",
+      "type": "Int4"
+    },
+    {
+      "offset": 32,
+      "name": "MaxNodes",
+      "type": "UInt"
+    },
+    {
+      "offset": 36,
+      "name": "MaxVisibleClusters",
+      "type": "UInt"
+    },
+    {
+      "offset": 40,
+      "name": "RenderFlags",
+      "type": "UInt"
+    },
+    {
+      "offset": 44,
+      "name": "RayTracingCutError",
+      "type": "Float"
+    },
+    {
+      "offset": 48,
+      "name": "RectScaleOffset",
+      "type": "Float4"
+    },
+    {
+      "offset": 152,
+      "name": "MultiViewEnabled",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 64,
+      "name": "ClusterPageData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 1,
+      "offset": 72,
+      "name": "VisibleClustersSWHW",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 80,
+      "name": "HierarchyBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 3,
+      "offset": 88,
+      "name": "MaterialTileRemap",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 4,
+      "offset": 96,
+      "name": "MaterialDepthTable",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 5,
+      "offset": 104,
+      "name": "ShadingMask",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 6,
+      "offset": 112,
+      "name": "VisBuffer64",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 120,
+      "name": "DbgBuffer64",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 8,
+      "offset": 128,
+      "name": "DbgBuffer32",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 9,
+      "offset": 136,
+      "name": "RayTracingDataBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 10,
+      "offset": 144,
+      "name": "ShadingBinData",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 11,
+      "offset": 160,
+      "name": "MultiViewIndices",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 12,
+      "offset": 168,
+      "name": "MultiViewRectScaleOffsets",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 13,
+      "offset": 176,
+      "name": "InViews",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

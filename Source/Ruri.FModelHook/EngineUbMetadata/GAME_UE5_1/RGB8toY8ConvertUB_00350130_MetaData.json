@@ -1,0 +1,34 @@
+{
+  "name": "RGB8toY8ConvertUB",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:538 (FRGB8toY8ConvertUB)",
+  "layoutHash": "0x00350130",
+  "constantBufferSize": 20,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorTransform",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "LinearToSrgb",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 24,
+      "name": "Texture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 32,
+      "name": "SamplerP",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

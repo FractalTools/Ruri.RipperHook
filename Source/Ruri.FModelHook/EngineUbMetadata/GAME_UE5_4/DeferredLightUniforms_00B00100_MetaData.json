@@ -1,0 +1,141 @@
+{
+  "name": "DeferredLightUniforms",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/LightRendering.h:22 (FDeferredLightUniformStruct)",
+  "layoutHash": "0x00B00100",
+  "constantBufferSize": 164,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ShadowMapChannelMask",
+      "type": "Float4"
+    },
+    {
+      "offset": 16,
+      "name": "DistanceFadeMAD",
+      "type": "Float2"
+    },
+    {
+      "offset": 24,
+      "name": "ContactShadowLength",
+      "type": "Float"
+    },
+    {
+      "offset": 28,
+      "name": "ContactShadowCastingIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 32,
+      "name": "ContactShadowNonCastingIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 36,
+      "name": "VolumetricScatteringIntensity",
+      "type": "Float"
+    },
+    {
+      "offset": 40,
+      "name": "ShadowedBits",
+      "type": "UInt"
+    },
+    {
+      "offset": 44,
+      "name": "LightingChannelMask",
+      "type": "UInt"
+    },
+    {
+      "offset": 48,
+      "name": "LightParameters.TranslatedWorldPosition",
+      "type": "Float3"
+    },
+    {
+      "offset": 60,
+      "name": "LightParameters.InvRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 64,
+      "name": "LightParameters.Color",
+      "type": "Float3"
+    },
+    {
+      "offset": 76,
+      "name": "LightParameters.FalloffExponent",
+      "type": "Float"
+    },
+    {
+      "offset": 80,
+      "name": "LightParameters.Direction",
+      "type": "Float3"
+    },
+    {
+      "offset": 92,
+      "name": "LightParameters.SpecularScale",
+      "type": "Float"
+    },
+    {
+      "offset": 96,
+      "name": "LightParameters.Tangent",
+      "type": "Float3"
+    },
+    {
+      "offset": 108,
+      "name": "LightParameters.SourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 112,
+      "name": "LightParameters.SpotAngles",
+      "type": "Float2"
+    },
+    {
+      "offset": 120,
+      "name": "LightParameters.SoftSourceRadius",
+      "type": "Float"
+    },
+    {
+      "offset": 124,
+      "name": "LightParameters.SourceLength",
+      "type": "Float"
+    },
+    {
+      "offset": 128,
+      "name": "LightParameters.RectLightBarnCosAngle",
+      "type": "Float"
+    },
+    {
+      "offset": 132,
+      "name": "LightParameters.RectLightBarnLength",
+      "type": "Float"
+    },
+    {
+      "offset": 136,
+      "name": "LightParameters.RectLightAtlasUVOffset",
+      "type": "Float2"
+    },
+    {
+      "offset": 144,
+      "name": "LightParameters.RectLightAtlasUVScale",
+      "type": "Float2"
+    },
+    {
+      "offset": 152,
+      "name": "LightParameters.RectLightAtlasMaxLevel",
+      "type": "Float"
+    },
+    {
+      "offset": 156,
+      "name": "LightParameters.IESAtlasIndex",
+      "type": "Float"
+    },
+    {
+      "offset": 160,
+      "name": "LightParameters.LightFunctionAtlasLightIndex",
+      "type": "UInt"
+    }
+  ],
+  "resources": []
+}

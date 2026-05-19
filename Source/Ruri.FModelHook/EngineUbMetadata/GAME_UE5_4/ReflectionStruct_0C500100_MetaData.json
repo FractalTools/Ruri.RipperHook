@@ -1,0 +1,65 @@
+{
+  "name": "ReflectionStruct",
+  "engineVersion": "5.4.4",
+  "engineSource": "Engine/Source/Runtime/Renderer/Private/ReflectionEnvironment.h:25 (FReflectionUniformParameters)",
+  "layoutHash": "0x0C500100",
+  "constantBufferSize": 16,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "SkyLightParameters",
+      "type": "Float4"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 16,
+      "name": "SkyLightCubemap",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 24,
+      "name": "SkyLightCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 2,
+      "offset": 32,
+      "name": "SkyLightBlendDestinationCubemap",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 3,
+      "offset": 40,
+      "name": "SkyLightBlendDestinationCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 4,
+      "offset": 48,
+      "name": "ReflectionCubemap",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 5,
+      "offset": 56,
+      "name": "ReflectionCubemapSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 6,
+      "offset": 64,
+      "name": "PreIntegratedGF",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 7,
+      "offset": 72,
+      "name": "PreIntegratedGFSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

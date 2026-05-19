@@ -1,9 +1,8 @@
 {
   "name": "LandscapeFixedGrid",
   "engineVersion": "5.1.1",
-  "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:126-128 (FLandscapeFixedGridUniformShaderParameters)",
+  "engineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h:126 (FLandscapeFixedGridUniformShaderParameters)",
   "layoutHash": "0x00100100",
-  "_comment": "Hash collides with WaterVF (different structs) - registry keys by (Name, Hash).",
   "constantBufferSize": 16,
   "bindingFlags": "Shader",
   "members": [

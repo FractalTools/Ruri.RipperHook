@@ -1,0 +1,46 @@
+{
+  "name": "YCbCrConvertUB",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp:301 (FYCbCrConvertUB)",
+  "layoutHash": "0x05750928",
+  "constantBufferSize": 68,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 0,
+      "name": "ColorTransform",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 64,
+      "name": "SrgbToLinear",
+      "type": "UInt"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 72,
+      "name": "LumaTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 80,
+      "name": "CbCrTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 2,
+      "offset": 88,
+      "name": "LumaSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 3,
+      "offset": 96,
+      "name": "CbCrSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "name": "VHM",
+  "engineVersion": "5.1.1",
+  "engineSource": "Engine/Plugins/Experimental/VirtualHeightfieldMesh/Source/VirtualHeightfieldMesh/Private/VirtualHeightfieldMeshVertexFactory.h:16 (FVirtualHeightfieldMeshVertexFactoryParameters)",
+  "layoutHash": "0x0718042D",
+  "constantBufferSize": 264,
+  "bindingFlags": "Shader",
+  "members": [
+    {
+      "offset": 40,
+      "name": "NumQuadsPerTileSide",
+      "type": "Int"
+    },
+    {
+      "offset": 48,
+      "name": "VTPackedUniform",
+      "type": "UInt4"
+    },
+    {
+      "offset": 64,
+      "name": "VTPackedPageTableUniform0",
+      "type": "UInt4"
+    },
+    {
+      "offset": 80,
+      "name": "VTPackedPageTableUniform1",
+      "type": "UInt4"
+    },
+    {
+      "offset": 96,
+      "name": "PageTableSize",
+      "type": "Float4"
+    },
+    {
+      "offset": 112,
+      "name": "PhysicalTextureSize",
+      "type": "Float2"
+    },
+    {
+      "offset": 128,
+      "name": "VirtualHeightfieldToLocal",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 192,
+      "name": "VirtualHeightfieldToWorld",
+      "type": "Float4x4"
+    },
+    {
+      "offset": 256,
+      "name": "MaxLod",
+      "type": "Float"
+    },
+    {
+      "offset": 260,
+      "name": "LodBiasScale",
+      "type": "Float"
+    }
+  ],
+  "resources": [
+    {
+      "index": 0,
+      "offset": 0,
+      "name": "PageTableTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 1,
+      "offset": 8,
+      "name": "HeightTexture",
+      "type": "UBMT_SRV"
+    },
+    {
+      "index": 2,
+      "offset": 16,
+      "name": "HeightSampler",
+      "type": "UBMT_SAMPLER"
+    },
+    {
+      "index": 3,
+      "offset": 24,
+      "name": "LodBiasTexture",
+      "type": "UBMT_TEXTURE"
+    },
+    {
+      "index": 4,
+      "offset": 32,
+      "name": "LodBiasSampler",
+      "type": "UBMT_SAMPLER"
+    }
+  ]
+}
