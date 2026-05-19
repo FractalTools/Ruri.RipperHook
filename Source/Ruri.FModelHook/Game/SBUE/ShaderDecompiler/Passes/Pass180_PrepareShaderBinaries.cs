@@ -38,6 +38,15 @@ internal static class Pass180_PrepareShaderBinaries
     // with thousands of shaders. ConcurrentDictionary because the shader-prep
     // loop runs in parallel.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_seedHitsByClass = new(StringComparer.Ordinal);
+    // Coverage-gap surfaces, summarised at end of Pass180.
+    //   _unknownShaderTypeHashes: cooked TypeHash not in any hash-to-name
+    //     index → class wasn't captured by generator's IMPLEMENT_*_SHADER_TYPE
+    //     scan. Candidate for generator scope extension.
+    //   _unmatchedClassNames: TypeHash resolved to a name BUT no seed exists
+    //     for the bare base class → seed catalogue can be extended by adding
+    //     LAYOUT_FIELD scans for this class's parent.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unknownShaderTypeHashes = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unmatchedClassNames = new(StringComparer.Ordinal);
 
     // Build a `$Globals` ConstantBufferParameter by pairing seed loose-param
     // NAMES (source-declaration order, no cook offsets) with cook's
@@ -118,6 +127,8 @@ internal static class Pass180_PrepareShaderBinaries
     public static void DoPass(PipelineState state)
     {
         s_seedHitsByClass.Clear();
+        s_unknownShaderTypeHashes.Clear();
+        s_unmatchedClassNames.Clear();
         if (state.Library is null) throw new InvalidOperationException("Pass110 must run before Pass180.");
 
         string outputDir = Path.GetFullPath(state.Options.OutputDirectory);
@@ -171,6 +182,33 @@ internal static class Pass180_PrepareShaderBinaries
         }
 
         state.Log($"    PrepareShaderBinaries: prepped {state.ShaderPrepByIndex.Count}/{wantedIndices.Count} binaries.");
+
+        // ShaderType seed coverage summary. Two categories of miss:
+        //   * "unknown-hash": cooked TypeHash that's not in our hash-to-name
+        //     index — generator scan missed this IMPLEMENT_*_SHADER_TYPE
+        //     invocation. User can investigate by searching UE source for
+        //     `IMPLEMENT_*_SHADER_TYPE(...,<class>,...);` whose
+        //     CityHash64(UPPER(class)) matches the unknown hash.
+        //   * "unmatched-class": hash resolved to a class name BUT no
+        //     LAYOUT_FIELD seed exists for that base class — class probably
+        //     uses SHADER_PARAMETER_STRUCT(...) instead, which puts its
+        //     parameters in a named cbuffer (engine UB) NOT $Globals.
+        // The first count is what the generator should grow to cover.
+        if (state.ShaderTypeSeedRegistry.HashToNameCount > 0)
+        {
+            int unknown = s_unknownShaderTypeHashes.Count;
+            int unmatched = s_unmatchedClassNames.Count;
+            int matched = s_seedHitsByClass.Count;
+            state.Log($"    ShaderType seed coverage: matched-classes={matched} unmatched-class-with-name={unmatched} unknown-hashes={unknown}");
+            // Show the first 5 unknown hashes as a hint for which classes
+            // the user should consider adding to the generator's scan.
+            int limit = 5;
+            foreach (string h in s_unknownShaderTypeHashes.Keys)
+            {
+                if (limit-- <= 0) break;
+                state.Log($"      unknown-hash={h} (generator's IMPLEMENT_*_SHADER_TYPE scan missed this class)");
+            }
+        }
     }
 
     private static ShaderPrep PrepareSingleShader(PipelineState state, int shaderIndex, byte[] raw)
@@ -217,6 +255,37 @@ internal static class Pass180_PrepareShaderBinaries
         // sub-stage — without it, blindly injecting seed offsets risks
         // mismatched names because DXC packs $Globals per HLSL source-decl
         // order, not C++ source-decl order, and those may diverge.
+        // Track ShaderType lookup misses for a coverage report at end of run.
+        // Hash that's in the cook but missing from both seed registry AND
+        // hash-to-name index → candidate for generator scope extension.
+        if (container != null
+            && !string.IsNullOrWhiteSpace(container.ShaderTypeHash)
+            && state.ShaderTypeSeedRegistry.HashToNameCount > 0)
+        {
+            string? resolvedName = state.ShaderTypeSeedRegistry.ResolveTypeName(container.ShaderTypeHash);
+            if (resolvedName == null)
+            {
+                // Hash unknown to the index — class wasn't captured by the
+                // generator's IMPLEMENT_*_SHADER_TYPE scan. Stash in the
+                // shared "unknown" bag (dedup'd, one entry per distinct hash).
+                s_unknownShaderTypeHashes.TryAdd(container.ShaderTypeHash, true);
+            }
+            else
+            {
+                // Resolved name — record whether a seed exists for it.
+                if (state.ShaderTypeSeedRegistry.TryLookupWithFallback(
+                        container.ShaderTypeHash, container.ShaderTypeName,
+                        out EngineUbMetadata _, out string _))
+                {
+                    // Already counted via the hit-log path below.
+                }
+                else
+                {
+                    s_unmatchedClassNames.TryAdd(resolvedName, true);
+                }
+            }
+        }
+
         if (container != null
             && !string.IsNullOrWhiteSpace(container.ShaderTypeHash)
             && state.ShaderTypeSeedRegistry.FileCount > 0

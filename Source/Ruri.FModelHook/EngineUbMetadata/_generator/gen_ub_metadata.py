@@ -2052,6 +2052,26 @@ _IMPLEMENT_SHADER_TYPE_RE = re.compile(
     re.MULTILINE,
 )
 
+# Catch the broader family of `IMPLEMENT_*_SHADER(class, ...)` macros that
+# DON'T use the `_TYPE` suffix and pass the class as the FIRST arg. The
+# canonical example is `IMPLEMENT_GLOBAL_SHADER(ShaderClass, ...)`
+# (GlobalShader.h:406) which doesn't go through `IMPLEMENT_SHADER_TYPE` —
+# it expands to `ShaderClass::ShaderMetaType ShaderClass::StaticType(...)`
+# directly, so my macro-expansion path doesn't catch it.
+#
+# Other variants caught by this pattern:
+#   IMPLEMENT_RESOLVE_SHADER(ShaderClass, ...)
+#   IMPLEMENT_SHADOW_PROJECTION_PIXEL_SHADER(...) — class as first arg
+#   IMPLEMENT_VIRTUALTEXTURE_SHADER_TYPE(...) (separate `_TYPE` match)
+#   IMPLEMENT_LUMEN_RAYGEN_RAYTRACING_SHADER(class, ...)
+_IMPLEMENT_SHADER_FIRST_ARG_RE = re.compile(
+    r"\bIMPLEMENT_(?:GLOBAL_SHADER|RESOLVE_SHADER|"
+    r"[A-Z_]+_PIXEL_SHADER|[A-Z_]+_VERTEX_SHADER|[A-Z_]+_COMPUTE_SHADER|"
+    r"[A-Z_]+_RAYTRACING_SHADER|VIRTUALTEXTURE_SHADER_TYPE)\s*\(\s*"
+    r"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,)]",
+    re.MULTILINE,
+)
+
 # Macro definitions that use `##` concatenation to build shader-type names.
 # Capture: macro_name, arg_list, body.
 _MACRO_DEF_WITH_HASHHASH_RE = re.compile(
@@ -2239,7 +2259,7 @@ def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
             text = read_text(fp)
         except OSError:
             continue
-        if "SHADER_TYPE" not in text:
+        if "SHADER_TYPE" not in text and "_SHADER(" not in text and "_SHADER \t" not in text:
             continue
         for m in _IMPLEMENT_SHADER_TYPE_RE.finditer(text):
             n = m.group(1).strip()
@@ -2247,6 +2267,22 @@ def emit_hash_to_name_index(out_dir: Path, engine_src: Path) -> int:
             if "##" in n or not n:
                 continue
             # Strip any whitespace inside templated names: `T<A, B>` -> `T<A,B>`
+            n = re.sub(r"\s+", "", n)
+            names.add(n)
+        # ALSO scan for IMPLEMENT_GLOBAL_SHADER / IMPLEMENT_RESOLVE_SHADER /
+        # similar `IMPLEMENT_*_SHADER` macros where the first arg is the
+        # class. These don't have `_TYPE` so the main regex skips them.
+        for m in _IMPLEMENT_SHADER_FIRST_ARG_RE.finditer(text):
+            n = m.group(1).strip()
+            if "##" in n or not n:
+                continue
+            # Skip ARG-shaped tokens that aren't class identifiers (e.g.
+            # `ShaderClass` as a macro PARAMETER name in
+            # `#define IMPLEMENT_GLOBAL_SHADER(ShaderClass, ...)`).
+            # Class names by UE convention start with F/T/U/C/I/A;
+            # macro params are typically `ShaderClass`/`ShaderType`/etc.
+            if n in ("ShaderClass", "ShaderType", "ClassName", "PSClass", "VSClass"):
+                continue
             n = re.sub(r"\s+", "", n)
             names.add(n)
 
