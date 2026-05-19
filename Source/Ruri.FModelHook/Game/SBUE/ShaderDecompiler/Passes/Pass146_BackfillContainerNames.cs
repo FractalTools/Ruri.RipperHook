@@ -28,6 +28,11 @@ internal static class Pass146_BackfillContainerNames
             return;
         }
 
+        // Track which hashes failed to resolve so we can surface coverage gaps
+        // at the end of the pass (same diagnostic pattern as Pass180).
+        System.Collections.Generic.HashSet<string> unknownVfHashes = new(System.StringComparer.OrdinalIgnoreCase);
+        System.Collections.Generic.HashSet<string> unknownPipelineHashes = new(System.StringComparer.OrdinalIgnoreCase);
+
         foreach (ShaderContainerInfo info in state.ContainerByShaderIndex.Values)
         {
             if (string.IsNullOrEmpty(info.VertexFactoryTypeName) && !string.IsNullOrEmpty(info.VertexFactoryTypeHash))
@@ -38,6 +43,10 @@ internal static class Pass146_BackfillContainerNames
                     info.VertexFactoryTypeName = name!;
                     vfFilled++;
                 }
+                else
+                {
+                    unknownVfHashes.Add(info.VertexFactoryTypeHash);
+                }
             }
             if (string.IsNullOrEmpty(info.PipelineTypeName) && !string.IsNullOrEmpty(info.PipelineTypeHash))
             {
@@ -46,6 +55,10 @@ internal static class Pass146_BackfillContainerNames
                 {
                     info.PipelineTypeName = name!;
                     pipeFilled++;
+                }
+                else
+                {
+                    unknownPipelineHashes.Add(info.PipelineTypeHash);
                 }
             }
         }
@@ -69,5 +82,13 @@ internal static class Pass146_BackfillContainerNames
         }
 
         state.Log($"    Pass146: backfilled VertexFactoryTypeName={vfFilled}, PipelineTypeName={pipeFilled} container(s).");
+        if (unknownVfHashes.Count > 0)
+        {
+            state.Log($"    Pass146 unknown VertexFactoryType hashes: {unknownVfHashes.Count} (generator's IMPLEMENT_VERTEX_FACTORY_TYPE scan missed these — likely game-specific factories).");
+        }
+        if (unknownPipelineHashes.Count > 0)
+        {
+            state.Log($"    Pass146 unknown PipelineType hashes: {unknownPipelineHashes.Count} (generator's IMPLEMENT_SHADERPIPELINE_TYPE_* scan missed these).");
+        }
     }
 }
