@@ -1,0 +1,159 @@
+{
+  "Name": "TParticleSimulationPS",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp:1027 (TParticleSimulationPS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "CollisionDepthBounds",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "PositionTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "PositionTextureSampler",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VelocityTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VelocityTextureSampler",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AttributesTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AttributesTextureSampler",
+      "NameIndex": -1,
+      "Index": 5,
+      "ArraySize": 0
+    },
+    {
+      "Name": "RenderAttributesTexture",
+      "NameIndex": -1,
+      "Index": 6,
+      "ArraySize": 0
+    },
+    {
+      "Name": "RenderAttributesTextureSampler",
+      "NameIndex": -1,
+      "Index": 7,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CurveTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CurveTextureSampler",
+      "NameIndex": -1,
+      "Index": 9,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "PositionTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "PositionTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 0,
+      "Name": "VelocityTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 0,
+      "Name": "VelocityTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 0,
+      "Name": "AttributesTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 0,
+      "Name": "AttributesTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 6,
+      "Offset": 0,
+      "Name": "RenderAttributesTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 7,
+      "Offset": 0,
+      "Name": "RenderAttributesTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 8,
+      "Offset": 0,
+      "Name": "CurveTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 9,
+      "Offset": 0,
+      "Name": "CurveTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "TParticleSimulationPS",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

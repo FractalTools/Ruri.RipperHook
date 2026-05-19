@@ -1,0 +1,63 @@
+{
+  "Name": "FStereoLayerPS_Base",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/StereoLayerRendering.h:69 (FStereoLayerPS_Base)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "InIsOpaque",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "InTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "InTextureSampler",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "InTexture",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "InTextureSampler",
+      "UbmtType": "UBMT_SRV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FStereoLayerPS_Base",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}

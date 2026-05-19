@@ -1,0 +1,88 @@
+{
+  "Name": "FNiagaraDrawIndirectArgsGenCS",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraDrawIndirect.h:65 (FNiagaraDrawIndirectArgsGenCS)",
+  "LayoutHash": "0x00000000",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "TaskCountParam",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": true
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "TaskInfosParam",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "CulledInstanceCountsParam",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [
+    {
+      "Name": "InstanceCountsParam",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    },
+    {
+      "Name": "DrawIndirectArgsParam",
+      "NameIndex": -1,
+      "Index": 3,
+      "OriginalIndex": 3
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "TaskInfosParam",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 0,
+      "Name": "CulledInstanceCountsParam",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 0,
+      "Name": "InstanceCountsParam",
+      "UbmtType": "UBMT_UAV"
+    },
+    {
+      "Index": 3,
+      "Offset": 0,
+      "Name": "DrawIndirectArgsParam",
+      "UbmtType": "UBMT_UAV"
+    }
+  ],
+  "Debug": {
+    "ShaderTypeClass": "FNiagaraDrawIndirectArgsGenCS",
+    "ParentClass": "FGlobalShader",
+    "Note": "Source-derived name catalogue for the $Globals cbuffer + direct resource bindings of this FShader subclass. The ConstantBuffer offsets are SEQUENTIAL PLACEHOLDERS (16-byte stride in declaration order); the cook assigns real offsets per DXC packing of the HLSL source. Downstream loader must reconcile by name against the cooked binary."
+  }
+}
