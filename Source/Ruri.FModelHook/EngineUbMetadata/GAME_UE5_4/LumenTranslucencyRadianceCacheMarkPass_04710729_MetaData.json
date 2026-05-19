@@ -2,17 +2,44 @@
   "name": "LumenTranslucencyRadianceCacheMarkPass",
   "engineVersion": "5.4.4",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenTranslucencyRadianceCache.cpp:68 (FLumenTranslucencyRadianceCacheMarkPassUniformParameters)",
-  "layoutHash": "0x09950A70",
-  "constantBufferSize": 132,
+  "layoutHash": "0x04710729",
+  "constantBufferSize": 356,
   "bindingFlags": "Static",
   "members": [
     {
-      "offset": 120,
+      "offset": 128,
+      "name": "PackedWorldPositionToRadianceProbeCoord",
+      "type": "Float4",
+      "arraySize": 6
+    },
+    {
+      "offset": 224,
+      "name": "PackedRadianceProbeCoordToWorldPosition",
+      "type": "Float4",
+      "arraySize": 6
+    },
+    {
+      "offset": 320,
+      "name": "RadianceProbeClipmapResolutionForMark",
+      "type": "UInt"
+    },
+    {
+      "offset": 324,
+      "name": "NumRadianceProbeClipmapsForMark",
+      "type": "UInt"
+    },
+    {
+      "offset": 328,
+      "name": "InvClipmapFadeSizeForMark",
+      "type": "Float"
+    },
+    {
+      "offset": 344,
       "name": "ViewportUVToHZBBufferUV",
       "type": "Float2"
     },
     {
-      "offset": 128,
+      "offset": 352,
       "name": "HZBMipLevel",
       "type": "Float"
     }
@@ -105,6 +132,12 @@
     {
       "index": 14,
       "offset": 112,
+      "name": "RWRadianceProbeIndirectionTexture",
+      "type": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "index": 15,
+      "offset": 336,
       "name": "FurthestHZBTexture",
       "type": "UBMT_RDG_TEXTURE"
     }

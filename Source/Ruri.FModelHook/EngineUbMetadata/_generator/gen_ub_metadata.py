@@ -672,6 +672,14 @@ def parse_struct_block(
 
         # Resolve typedefs
         cpp_type = TYPE_ALIASES.get(cpp_type, cpp_type)
+        # Strip namespace qualifier on struct-include / struct-nested types.
+        # UE source uses e.g. `SHADER_PARAMETER_STRUCT_INCLUDE(LumenRadianceCache::
+        # FRadianceCacheInterpolationParameters, ...)` but `structs_by_name` is
+        # keyed on the bare struct name. Without stripping, the lookup misses
+        # and the whole nested branch is silently skipped — losing every
+        # numeric field inside it.
+        if (is_include or is_nested) and "::" in cpp_type:
+            cpp_type = cpp_type.rsplit("::", 1)[-1]
 
         # locate file line of the macro
         abs_pos = span_start + m.start()

@@ -2,8 +2,8 @@
   "name": "BasePass",
   "engineVersion": "5.4.4",
   "engineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h:78 (FSharedBasePassUniformParameters)",
-  "layoutHash": "0x00681F24",
-  "constantBufferSize": 2388,
+  "layoutHash": "0x05811651",
+  "constantBufferSize": 2420,
   "bindingFlags": "Shader",
   "members": [
     {
@@ -638,7 +638,12 @@
       "type": "Float3"
     },
     {
-      "offset": 2384,
+      "offset": 2408,
+      "name": "LightFunctionAtlas_Slot_UVSize",
+      "type": "Float"
+    },
+    {
+      "offset": 2416,
       "name": "UseBasePassSkylight",
       "type": "UInt"
     }
@@ -859,6 +864,24 @@
       "offset": 2368,
       "name": "LFV_LocalFogVolumeTileDataTexture",
       "type": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "index": 36,
+      "offset": 2384,
+      "name": "LightFunctionAtlas_LightFunctionAtlasTexture",
+      "type": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "index": 37,
+      "offset": 2392,
+      "name": "LightFunctionAtlas_LightInfoDataBuffer",
+      "type": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "index": 38,
+      "offset": 2400,
+      "name": "LightFunctionAtlas_LightFunctionAtlasSampler",
+      "type": "UBMT_SAMPLER"
     }
   ]
 }
