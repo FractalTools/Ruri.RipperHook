@@ -96,6 +96,13 @@ internal sealed class PipelineState
     // files match the convention. See EngineUbMetadataLoader for semantics.
     public EngineUbMetadataRegistry EngineUbRegistry { get; set; } = EngineUbMetadataRegistry.Empty;
 
+    // Source-derived name catalogue keyed by `FShaderType::HashedName`
+    // (CityHash64WithSeed of UPPER class name, seed=0). Serves `$Globals` /
+    // loose-parameter and direct-resource name recovery for FShader
+    // subclasses whose names get dropped at cook by `FShaderParameterMap`.
+    // Loaded alongside the engine-UB registry in Pass145.
+    public ShaderTypeSeedRegistry ShaderTypeSeedRegistry { get; set; } = ShaderTypeSeedRegistry.Empty;
+
     // FModel EGame enum name from UnifiedShaderMetadata.GameVersionEnum
     // (e.g. "GAME_UE5_1", "GAME_InfinityNikki"). Filled by Pass 140 and
     // consumed by the engine-UB registry load (Pass 145) to pick the

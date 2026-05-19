@@ -99,6 +99,17 @@ public static class DecompilePipeline
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
                     tryBaseFallback,
                     state.Log, state.LogError);
+
+                // Same priority pattern for the ShaderType seed registry: it
+                // serves `FShaderType::HashedName` → loose-parameter name
+                // catalogue lookups (the `$Globals` cbuffer + direct texture
+                // bindings whose names are dropped at cook). Reuses the
+                // engineUbDir so the user only has one symbol pack to manage.
+                state.ShaderTypeSeedRegistry = ShaderTypeSeedRegistry.LoadForGame(
+                    engineUbDir,
+                    string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
+                    tryBaseFallback,
+                    state.Log, state.LogError);
             }
             using (new TimingCookie(state, "Pass 150: Build shader-map view"))      Pass150_BuildShaderMapView.DoPass(state);
             using (new TimingCookie(state, "Pass 160: Load symbol sources"))        Pass160_LoadSymbolSources.DoPass(state);

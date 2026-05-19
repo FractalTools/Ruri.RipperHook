@@ -101,6 +101,16 @@ internal sealed class EngineUbMetadataRegistry
         {
             foreach (string file in Directory.EnumerateFiles(root, "*_MetaData.json", SearchOption.AllDirectories))
             {
+                // Skip `_ShaderType/` sibling subtree — those are
+                // ShaderType-keyed seeds owned by ShaderTypeSeedRegistry, not
+                // engine UB seeds. They share the `*_MetaData.json` glob but
+                // their `LayoutHash` field is always 0x00000000 (FShaderType
+                // is hash-keyed by FHashedName, not by UB layout hash), so
+                // loading them here pollutes the (Name, Hash) map with 0x0
+                // entries and counts every one as "skipped" via the down-
+                // stream null/zero validation in TryLoadFile.
+                string normalized = file.Replace('\\', '/');
+                if (normalized.Contains("/_ShaderType/", StringComparison.OrdinalIgnoreCase)) continue;
                 if (!seenFiles.Add(Path.GetFullPath(file))) continue;
                 if (TryLoadFile(file, byNameAndHash, hashesByName, logError)) loaded++;
                 else skipped++;
@@ -246,6 +256,13 @@ internal sealed class EngineUbMetadataRegistry
         baseUeName = asName;
         return true;
     }
+
+    // Same enum-arithmetic base-version derivation, exposed for sibling
+    // registries that need to apply the GAME_<X> → GAME_UE<F>_<X> fallback
+    // (e.g. `ShaderTypeSeedRegistry`). Kept as a thin pass-through wrapper
+    // so the actual logic stays in one place.
+    internal static bool TryDeriveBaseUeFromEGameForShaderTypes(string gameVersionEnum, out string baseUeName)
+        => TryDeriveBaseUeFromEGame(gameVersionEnum, out baseUeName);
 
     // Cache the serializer options. JsonStringEnumConverter accepts "Float",
     // "Int", etc. — matches the generator's PascalCase enum names and the
