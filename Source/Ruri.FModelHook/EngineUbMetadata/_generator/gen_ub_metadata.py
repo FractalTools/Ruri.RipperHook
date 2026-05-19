@@ -2112,17 +2112,19 @@ _IMPLEMENT_SHADER_TYPE_VARIANT_RE = re.compile(
 # anyway. This recovers names declared with the macro-less `RegisterShaderType`
 # path AND any classes whose IMPLEMENT_* invocation uses a macro family we
 # haven't enumerated yet.
+#
+# Base must END at `Shader\b` (word boundary) so RHI classes whose name
+# happens to contain `Shader` as a sub-token (`FRHIShaderResourceView`,
+# `FD3D11BoundShaderState`, etc.) don't sneak in. The earlier
+# `F[A-Z][A-Za-z0-9_]*Shader[A-Za-z0-9_]*` form over-matched because
+# `[A-Za-z0-9_]*` allowed `Shader` followed by `ResourceView` / `State`.
 _CLASS_FSHADER_DECL_RE = re.compile(
     r"\bclass\s+(?:[A-Z][A-Z0-9_]+_API\s+)?([A-Z][A-Za-z0-9_]+)\b"
     r"\s*(?::|<[^>{}]+>\s*:)\s*public\s+"
-    r"(?:F[A-Z][A-Za-z0-9_]*Shader[A-Za-z0-9_]*"
+    r"(?:F[A-Z][A-Za-z0-9_]*Shader"  # base name MUST end at `Shader`
     r"|TGlobalShader<[^>]+>"
     r"|TShader<[^>]+>"
-    r"|TGlobalShaderPermutation<[^>]+>"
-    r"|FMeshMaterialShader"
-    r"|FMaterialShader"
-    r"|FNiagaraShader"
-    r"|FGlobalShader)\b",
+    r"|TGlobalShaderPermutation<[^>]+>)\b",
     re.MULTILINE,
 )
 
