@@ -2046,7 +2046,12 @@ def emit_shader_type_seeds(out_dir: Path, engine_version: str, engine_src: Path)
 # ---------------------------------------------------------------------------
 
 _IMPLEMENT_SHADER_TYPE_RE = re.compile(
-    r"\bIMPLEMENT_(?:MESH_|MATERIAL_|GLOBAL_|COMPUTE_|RAYTRACING_|NIAGARA_)?SHADER_TYPE\s*\("
+    # Accept ANY uppercase prefix before `SHADER_TYPE` so plugin-side
+    # wrappers like IMPLEMENT_OCIO_SHADER_TYPE / IMPLEMENT_MINMAX_SHADER_TYPE
+    # land here without enumerating each plugin's macro name. The plain
+    # `IMPLEMENT_SHADER_TYPE` is included via the optional `?` on the
+    # prefix group.
+    r"\bIMPLEMENT_(?:[A-Z][A-Z0-9_]*_)?SHADER_TYPE\s*\("
     r"[^,]*,\s*"  # template<> or template<TYPE>
     r"([A-Za-z_][A-Za-z_0-9<>:,\s##]*?)\s*,",
     re.MULTILINE,
