@@ -1,0 +1,165 @@
+{
+  "Name": "BeerShadowMap",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h",
+  "LayoutHash": "0x01CC00BC",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "BeerShadowMap",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "TranslatedWorldToShadow",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "TranslatedWorldOrigin",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TranslatedWorldPlane",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SplitDepths",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Resolution",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumShadowMatrices",
+        "NameIndex": -1,
+        "Index": 392,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxSampleCount",
+        "NameIndex": -1,
+        "Index": 396,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bIsEmpty",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bIsDirectionalLight",
+        "NameIndex": -1,
+        "Index": 404,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DownsampleFactor",
+        "NameIndex": -1,
+        "Index": 408,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 448,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "BeerShadowMapTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "RadianceTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "TextureSampler",
+      "Sampler": 2,
+      "BindPoint": 2
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 416,
+      "Name": "BeerShadowMapTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 424,
+      "Name": "RadianceTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 432,
+      "Name": "TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "Name": "MobileReflectionCapture",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneManagement.h",
+  "LayoutHash": "0x00250100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "MobileReflectionCapture",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Params",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "TextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 24,
+      "Name": "TextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

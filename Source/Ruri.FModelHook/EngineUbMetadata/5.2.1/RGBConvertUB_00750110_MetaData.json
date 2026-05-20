@@ -1,0 +1,81 @@
+{
+  "Name": "RGBConvertUB",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp",
+  "LayoutHash": "0x00750110",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "RGBConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "CSTransform",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "UVScale",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "EOTF",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 112,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Sampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 8,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 16,
+      "Name": "Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

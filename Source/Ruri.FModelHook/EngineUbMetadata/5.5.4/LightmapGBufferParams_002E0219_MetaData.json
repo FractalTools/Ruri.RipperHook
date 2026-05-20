@@ -1,0 +1,59 @@
+{
+  "Name": "LightmapGBufferParams",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/LightmapGBuffer.h",
+  "LayoutHash": "0x002E0219",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "LightmapGBufferParams",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "ScratchTilePoolLayer0",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "ScratchTilePoolLayer1",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "ScratchTilePoolLayer2",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "ScratchTilePoolLayer0",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "ScratchTilePoolLayer1",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "ScratchTilePoolLayer2",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

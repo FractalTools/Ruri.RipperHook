@@ -1,0 +1,70 @@
+{
+  "Name": "HairVisibilityPass",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp",
+  "LayoutHash": "0x002E021D",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "HairVisibilityPass",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxPPLLNodeCount",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "PPLLCounter",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "PPLLNodeIndex",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "PPLLNodeData",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 8,
+      "Name": "PPLLCounter",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 16,
+      "Name": "PPLLNodeIndex",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 24,
+      "Name": "PPLLNodeData",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "Name": "InstanceVF",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Source/Runtime/Engine/Classes/Engine/InstancedStaticMesh.h",
+  "LayoutHash": "0x06360706",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "InstanceVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "NumCustomDataFloats",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "VertexFetch_InstanceOriginBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "VertexFetch_InstanceTransformBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "VertexFetch_InstanceLightmapBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "InstanceCustomDataBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "VertexFetch_InstanceOriginBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VertexFetch_InstanceTransformBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "VertexFetch_InstanceLightmapBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "InstanceCustomDataBuffer",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

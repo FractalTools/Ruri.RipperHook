@@ -1,0 +1,187 @@
+{
+  "Name": "NaniteShading",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Nanite/NaniteShared.h",
+  "LayoutHash": "0x09790B20",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "NaniteShading",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MultiViewEnabled",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 112,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "ShadingMask",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "VisBuffer64",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DbgBuffer64",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DbgBuffer32",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "ClusterPageData",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VisibleClustersSWHW",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "HierarchyBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "AssemblyTransforms",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "ShadingBinData",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MultiViewIndices",
+      "NameIndex": -1,
+      "Index": 9,
+      "ArraySize": 0
+    },
+    {
+      "Name": "MultiViewRectScaleOffsets",
+      "NameIndex": -1,
+      "Index": 10,
+      "ArraySize": 0
+    },
+    {
+      "Name": "InViews",
+      "NameIndex": -1,
+      "Index": 11,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "ClusterPageData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VisibleClustersSWHW",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "HierarchyBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "AssemblyTransforms",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "ShadingMask",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "VisBuffer64",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "DbgBuffer64",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "DbgBuffer32",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "ShadingBinData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 9,
+      "Offset": 80,
+      "Name": "MultiViewIndices",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 10,
+      "Offset": 88,
+      "Name": "MultiViewRectScaleOffsets",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 11,
+      "Offset": 96,
+      "Name": "InViews",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

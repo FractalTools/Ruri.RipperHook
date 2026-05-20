@@ -1,0 +1,35 @@
+{
+  "Name": "BatchedPrimitive",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h",
+  "LayoutHash": "0x00100311",
+  "BindingFlags": "StaticAndShader",
+  "ConstantBuffer": {
+    "Name": "BatchedPrimitive",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "Data",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "Data",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

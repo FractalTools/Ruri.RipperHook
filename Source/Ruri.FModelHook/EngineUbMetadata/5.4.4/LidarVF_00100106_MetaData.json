@@ -1,0 +1,37 @@
+{
+  "Name": "LidarVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Enterprise/LidarPointCloud/Source/LidarPointCloudRuntime/Private/Rendering/LidarPointCloudRenderBuffers.h",
+  "LayoutHash": "0x00100106",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LidarVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "VertexFetch_Buffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "VertexFetch_Buffer",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

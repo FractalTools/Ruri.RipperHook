@@ -1,0 +1,116 @@
+{
+  "Name": "NV12ConvertUB",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp",
+  "LayoutHash": "0x06760908",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "NV12ConvertUB",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ColorTransform",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "OutputWidth",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SrgbToLinear",
+        "NameIndex": -1,
+        "Index": 68,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScale",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 112,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SRV_Y",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SRV_UV",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SamplerB",
+      "Sampler": 2,
+      "BindPoint": 2
+    },
+    {
+      "Name": "SamplerP",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 80,
+      "Name": "SRV_Y",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 88,
+      "Name": "SRV_UV",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 96,
+      "Name": "SamplerB",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 3,
+      "Offset": 104,
+      "Name": "SamplerP",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

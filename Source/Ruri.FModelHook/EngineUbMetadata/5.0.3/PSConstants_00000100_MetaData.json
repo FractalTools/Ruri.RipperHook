@@ -1,0 +1,21 @@
+{
+  "Name": "PSConstants",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Plugins/Runtime/Oculus/OculusVR/Source/OculusHMD/Private/OculusHMD_StressTester.cpp",
+  "LayoutHash": "0x00000100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "PSConstants",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

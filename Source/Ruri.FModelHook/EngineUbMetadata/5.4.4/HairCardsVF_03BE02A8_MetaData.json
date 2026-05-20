@@ -1,0 +1,315 @@
+{
+  "Name": "HairCardsVF",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h",
+  "LayoutHash": "0x03BE02A8",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "HairCardsVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Flags",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LayoutIndex",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TextureCount",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AttributeTextureIndex",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "AttributeChannelIndex",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxVertexCount",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CoverageBias",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 176,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "PositionBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "PreviousPositionBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "NormalsBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "UVsBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MaterialsBuffer",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture0Texture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture1Texture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture2Texture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture3Texture",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture4Texture",
+      "NameIndex": -1,
+      "Index": 13,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Texture5Texture",
+      "NameIndex": -1,
+      "Index": 15,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Texture0Sampler",
+      "Sampler": 6,
+      "BindPoint": 6
+    },
+    {
+      "Name": "Texture1Sampler",
+      "Sampler": 8,
+      "BindPoint": 8
+    },
+    {
+      "Name": "Texture2Sampler",
+      "Sampler": 10,
+      "BindPoint": 10
+    },
+    {
+      "Name": "Texture3Sampler",
+      "Sampler": 12,
+      "BindPoint": 12
+    },
+    {
+      "Name": "Texture4Sampler",
+      "Sampler": 14,
+      "BindPoint": 14
+    },
+    {
+      "Name": "Texture5Sampler",
+      "Sampler": 16,
+      "BindPoint": 16
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 32,
+      "Name": "PositionBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 1,
+      "Offset": 40,
+      "Name": "PreviousPositionBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 48,
+      "Name": "NormalsBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 56,
+      "Name": "UVsBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 64,
+      "Name": "MaterialsBuffer",
+      "UbmtType": "UBMT_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 72,
+      "Name": "Texture0Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 80,
+      "Name": "Texture0Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 7,
+      "Offset": 88,
+      "Name": "Texture1Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 96,
+      "Name": "Texture1Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 9,
+      "Offset": 104,
+      "Name": "Texture2Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 112,
+      "Name": "Texture2Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 11,
+      "Offset": 120,
+      "Name": "Texture3Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 12,
+      "Offset": 128,
+      "Name": "Texture3Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 13,
+      "Offset": 136,
+      "Name": "Texture4Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 14,
+      "Offset": 144,
+      "Name": "Texture4Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 15,
+      "Offset": 152,
+      "Name": "Texture5Texture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 16,
+      "Offset": 160,
+      "Name": "Texture5Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

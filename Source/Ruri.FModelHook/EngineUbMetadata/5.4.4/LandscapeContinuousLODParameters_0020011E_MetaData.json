@@ -1,0 +1,68 @@
+{
+  "Name": "LandscapeContinuousLODParameters",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h",
+  "LayoutHash": "0x0020011E",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LandscapeContinuousLODParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LandscapeIndex",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Min",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Size",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SectionLODBias",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 24,
+      "Name": "SectionLODBias",
+      "UbmtType": "UBMT_SRV"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "Name": "VelocityClippedDepth",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VelocityRendering.cpp",
+  "LayoutHash": "0x0010020F",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "VelocityClippedDepth",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "RWVelocity",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "RWVelocity",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

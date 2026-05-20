@@ -1,0 +1,30 @@
+{
+  "Note": "FVertexFactoryType::HashedName -> source-recovered class name. Populates VertexFactoryTypeName at decompile time when the cooked stableinfo.json left it empty.",
+  "EntryCount": 24,
+  "Entries": {
+    "00080C76633ABF12": "FGPUSpriteVertexFactory",
+    "079F2E53866F7D19": "FNiagaraRibbonVertexFactory",
+    "0F6FFD962915DF39": "FPointCloudVertexFactory",
+    "129926B9C2CD5708": "FHairStrandsVertexFactory",
+    "1ADEFAD780CD16C5": "FParticleSpriteVertexFactory",
+    "2D369A5E3DB20467": "FNiagaraMeshVertexFactory",
+    "2F7FB09897DDA57C": "FParticleBeamTrailVertexFactory",
+    "33336C9C0077D712": "FNaniteVertexFactory",
+    "4E93DE7E80F5830C": "FGeometryCollectionVertexFactory",
+    "548F2EFF10BED802": "FLandscapeXYOffsetVertexFactory",
+    "5FBFB2D35C0542DD": "FLidarPointCloudVertexFactoryBase",
+    "6D728306D56D412F": "FMeshParticleVertexFactory",
+    "7147892324646D3B": "FVirtualHeightfieldMeshVertexFactory",
+    "71B13DDF13A79FEB": "FGeometryCacheVertexVertexFactory",
+    "861E2503A57FC1A3": "FVectorFieldVisualizationVertexFactory",
+    "872B1640E244CA06": "FSplineMeshVertexFactory",
+    "9136892E106A411F": "FHairCardsVertexFactory",
+    "9F41D10D68BB52D8": "FLocalVertexFactory",
+    "B2D60D07A558B78B": "FLandscapeVertexFactory",
+    "B6BF0016CF23675C": "FNiagaraSpriteVertexFactory",
+    "BEAC6FB5F7C78FB3": "Nanite::FVertexFactory",
+    "C5DC2EA00D2A6A83": "FLandscapeFixedGridVertexFactory",
+    "D707462E7BC6486D": "FLandscapeTileVertexFactory",
+    "EE241CAAE7D4FC7E": "FInstancedStaticMeshVertexFactory"
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "Name": "MaterialPassParameters",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp",
+  "LayoutHash": "0x1150101B",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "MaterialPassParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxResolution",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxSampleCount",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NodeGroupSize",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bUpdateSampleCoverage",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bInterpolationEnabled",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 80,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "NodeIndex",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [
+    {
+      "Name": "TotalNodeCounter",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "NodeCoord",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "NodeVis",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    },
+    {
+      "Name": "IndirectArgs",
+      "NameIndex": -1,
+      "Index": 4,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [
+    {
+      "Name": "OutNodeData",
+      "NameIndex": -1,
+      "Index": 5,
+      "OriginalIndex": 5
+    },
+    {
+      "Name": "OutNodeVelocity",
+      "NameIndex": -1,
+      "Index": 6,
+      "OriginalIndex": 6
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 24,
+      "Name": "NodeIndex",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 32,
+      "Name": "TotalNodeCounter",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 40,
+      "Name": "NodeCoord",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 3,
+      "Offset": 48,
+      "Name": "NodeVis",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 4,
+      "Offset": 56,
+      "Name": "IndirectArgs",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 5,
+      "Offset": 64,
+      "Name": "OutNodeData",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    },
+    {
+      "Index": 6,
+      "Offset": 72,
+      "Name": "OutNodeVelocity",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

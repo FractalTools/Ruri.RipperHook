@@ -1,0 +1,78 @@
+{
+  "Name": "VLMVoxelizationParams",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/VolumetricLightmapVoxelization.h",
+  "LayoutHash": "0x004D0214",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "VLMVoxelizationParams",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "VolumeCenter",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VolumeExtent",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VolumeMaxDim",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "VoxelizeVolume",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "IndirectionTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 40,
+      "Name": "VoxelizeVolume",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 48,
+      "Name": "IndirectionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

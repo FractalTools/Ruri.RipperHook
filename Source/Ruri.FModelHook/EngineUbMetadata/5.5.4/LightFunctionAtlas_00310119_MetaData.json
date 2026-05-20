@@ -1,0 +1,73 @@
+{
+  "Name": "LightFunctionAtlas",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/LightFunctionAtlas.h",
+  "LayoutHash": "0x00310119",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "LightFunctionAtlas",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Slot_UVSize",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "LightFunctionAtlasTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "LightFunctionAtlasSampler",
+      "Sampler": 2,
+      "BindPoint": 2
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "LightInfoDataBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "LightFunctionAtlasTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "LightInfoDataBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "LightFunctionAtlasSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

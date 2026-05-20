@@ -1,0 +1,550 @@
+{
+  "Name": "DecalPass",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/CompositionLighting/PostProcessDeferredDecals.h",
+  "LayoutHash": "0x04510265",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "DecalPass",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 336,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SceneTextures_SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferATexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferETexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferFTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 16,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 17,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 19,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 21,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 23,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneVelocityTexture",
+      "NameIndex": -1,
+      "Index": 24,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferATexture",
+      "NameIndex": -1,
+      "Index": 26,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 27,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 28,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 29,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthAuxTexture",
+      "NameIndex": -1,
+      "Index": 30,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthAuxTextureArray",
+      "NameIndex": -1,
+      "Index": 31,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_LocalLightTextureA",
+      "NameIndex": -1,
+      "Index": 32,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MobileSceneTextures_LocalLightTextureB",
+      "NameIndex": -1,
+      "Index": 33,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SceneTextures_PointClampSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    },
+    {
+      "Name": "MobileSceneTextures_SceneColorTextureSampler",
+      "Sampler": 15,
+      "BindPoint": 15
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthTextureSampler",
+      "Sampler": 18,
+      "BindPoint": 18
+    },
+    {
+      "Name": "MobileSceneTextures_ScenePartialDepthTextureSampler",
+      "Sampler": 20,
+      "BindPoint": 20
+    },
+    {
+      "Name": "MobileSceneTextures_CustomDepthTextureSampler",
+      "Sampler": 22,
+      "BindPoint": 22
+    },
+    {
+      "Name": "MobileSceneTextures_SceneVelocityTextureSampler",
+      "Sampler": 25,
+      "BindPoint": 25
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferATextureSampler",
+      "Sampler": 34,
+      "BindPoint": 34
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferBTextureSampler",
+      "Sampler": 35,
+      "BindPoint": 35
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferCTextureSampler",
+      "Sampler": 36,
+      "BindPoint": 36
+    },
+    {
+      "Name": "MobileSceneTextures_GBufferDTextureSampler",
+      "Sampler": 37,
+      "BindPoint": 37
+    },
+    {
+      "Name": "MobileSceneTextures_SceneDepthAuxTextureSampler",
+      "Sampler": 38,
+      "BindPoint": 38
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "EyeAdaptationBuffer",
+      "NameIndex": -1,
+      "Index": 39,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneTextures_SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneTextures_SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneTextures_GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "SceneTextures_GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "SceneTextures_GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "SceneTextures_GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "SceneTextures_GBufferETexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "SceneTextures_GBufferFTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "SceneTextures_CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "SceneTextures_CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 13,
+      "Offset": 104,
+      "Name": "SceneTextures_PointClampSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 14,
+      "Offset": 112,
+      "Name": "MobileSceneTextures_SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 15,
+      "Offset": 120,
+      "Name": "MobileSceneTextures_SceneColorTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 16,
+      "Offset": 128,
+      "Name": "MobileSceneTextures_SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 17,
+      "Offset": 136,
+      "Name": "MobileSceneTextures_SceneDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 18,
+      "Offset": 144,
+      "Name": "MobileSceneTextures_SceneDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 19,
+      "Offset": 152,
+      "Name": "MobileSceneTextures_ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 20,
+      "Offset": 160,
+      "Name": "MobileSceneTextures_ScenePartialDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 21,
+      "Offset": 168,
+      "Name": "MobileSceneTextures_CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 22,
+      "Offset": 176,
+      "Name": "MobileSceneTextures_CustomDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 23,
+      "Offset": 184,
+      "Name": "MobileSceneTextures_CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 24,
+      "Offset": 192,
+      "Name": "MobileSceneTextures_SceneVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 25,
+      "Offset": 200,
+      "Name": "MobileSceneTextures_SceneVelocityTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 26,
+      "Offset": 208,
+      "Name": "MobileSceneTextures_GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 27,
+      "Offset": 216,
+      "Name": "MobileSceneTextures_GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 28,
+      "Offset": 224,
+      "Name": "MobileSceneTextures_GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 29,
+      "Offset": 232,
+      "Name": "MobileSceneTextures_GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 30,
+      "Offset": 240,
+      "Name": "MobileSceneTextures_SceneDepthAuxTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 31,
+      "Offset": 248,
+      "Name": "MobileSceneTextures_SceneDepthAuxTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 32,
+      "Offset": 256,
+      "Name": "MobileSceneTextures_LocalLightTextureA",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 33,
+      "Offset": 264,
+      "Name": "MobileSceneTextures_LocalLightTextureB",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 34,
+      "Offset": 272,
+      "Name": "MobileSceneTextures_GBufferATextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 35,
+      "Offset": 280,
+      "Name": "MobileSceneTextures_GBufferBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 36,
+      "Offset": 288,
+      "Name": "MobileSceneTextures_GBufferCTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 37,
+      "Offset": 296,
+      "Name": "MobileSceneTextures_GBufferDTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 38,
+      "Offset": 304,
+      "Name": "MobileSceneTextures_SceneDepthAuxTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 39,
+      "Offset": 320,
+      "Name": "EyeAdaptationBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    }
+  ]
+}

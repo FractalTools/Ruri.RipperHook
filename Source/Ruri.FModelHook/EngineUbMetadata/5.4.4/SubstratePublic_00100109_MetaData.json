@@ -1,0 +1,37 @@
+{
+  "Name": "SubstratePublic",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Substrate/Substrate.h",
+  "LayoutHash": "0x00100109",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SubstratePublic",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "TopLayerTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "TopLayerTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    }
+  ]
+}

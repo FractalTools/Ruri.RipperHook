@@ -1,0 +1,2271 @@
+{
+  "Name": "MobileBasePass",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/MobileBasePassRendering.h",
+  "LayoutHash": "0x14510218",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "MobileBasePass",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "Forward_DirectionalLightTranslatedWorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 720,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "Forward_DirectionalLightTranslatedWorldToStaticShadow",
+        "NameIndex": -1,
+        "Index": 848,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "PlanarReflection_InverseTransposeMirrorMatrix",
+        "NameIndex": -1,
+        "Index": 1088,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "PlanarReflection_ProjectionWithExtraFOV",
+        "NameIndex": -1,
+        "Index": 1168,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "AmbientOcclusionStaticFraction",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters2",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogColorParameter",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters3",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_SkyAtmosphereAmbientContributionColorScale",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_InscatteringLightDirection",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_DirectionalInscatteringColor",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_SinCosInscatteringColorCubemapRotation",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_FogInscatteringTextureParameters",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_EndDistance",
+        "NameIndex": -1,
+        "Index": 156,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ApplyVolumetricFog",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_VolumetricFogStartDistance",
+        "NameIndex": -1,
+        "Index": 164,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_VolumetricFogNearFadeInDistanceInv",
+        "NameIndex": -1,
+        "Index": 168,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_VolumetricFogAlbedo",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_VolumetricFogPhaseG",
+        "NameIndex": -1,
+        "Index": 188,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_ExponentialFogParameters",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_ExponentialFogParameters2",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_ExponentialFogColorParameter",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_ExponentialFogParameters3",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_SkyAtmosphereAmbientContributionColorScale",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_InscatteringLightDirection",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_DirectionalInscatteringColor",
+        "NameIndex": -1,
+        "Index": 320,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_SinCosInscatteringColorCubemapRotation",
+        "NameIndex": -1,
+        "Index": 336,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_FogInscatteringTextureParameters",
+        "NameIndex": -1,
+        "Index": 352,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_EndDistance",
+        "NameIndex": -1,
+        "Index": 364,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_ApplyVolumetricFog",
+        "NameIndex": -1,
+        "Index": 368,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_VolumetricFogStartDistance",
+        "NameIndex": -1,
+        "Index": 372,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_VolumetricFogNearFadeInDistanceInv",
+        "NameIndex": -1,
+        "Index": 376,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_VolumetricFogAlbedo",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogMMV_VolumetricFogPhaseG",
+        "NameIndex": -1,
+        "Index": 396,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_LocalFogVolumeTileDataTextureResolution",
+        "NameIndex": -1,
+        "Index": 440,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_LocalFogVolumeInstanceCount",
+        "NameIndex": -1,
+        "Index": 448,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_LocalFogVolumeTilePixelSize",
+        "NameIndex": -1,
+        "Index": 452,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_LocalFogVolumeMaxDensityIntoVolumetricFog",
+        "NameIndex": -1,
+        "Index": 456,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_ShouldRenderLocalFogVolumeInVolumetricFog",
+        "NameIndex": -1,
+        "Index": 460,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_GlobalStartDistance",
+        "NameIndex": -1,
+        "Index": 464,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_HalfResTextureSizeAndInvSize",
+        "NameIndex": -1,
+        "Index": 480,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 496,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LFV_DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 512,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_NumLocalLights",
+        "NameIndex": -1,
+        "Index": 544,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_NumDirectionalLights",
+        "NameIndex": -1,
+        "Index": 548,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_NumReflectionCaptures",
+        "NameIndex": -1,
+        "Index": 552,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_HasDirectionalLight",
+        "NameIndex": -1,
+        "Index": 556,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_NumGridCells",
+        "NameIndex": -1,
+        "Index": 560,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_CulledGridSize",
+        "NameIndex": -1,
+        "Index": 576,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_MaxCulledLightsPerCell",
+        "NameIndex": -1,
+        "Index": 588,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_LightGridPixelSizeShift",
+        "NameIndex": -1,
+        "Index": 592,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_LightGridZParams",
+        "NameIndex": -1,
+        "Index": 608,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 624,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightSourceRadius",
+        "NameIndex": -1,
+        "Index": 636,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightSoftSourceRadius",
+        "NameIndex": -1,
+        "Index": 640,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 656,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightVolumetricScatteringIntensity",
+        "NameIndex": -1,
+        "Index": 668,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightSpecularScale",
+        "NameIndex": -1,
+        "Index": 672,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightDiffuseScale",
+        "NameIndex": -1,
+        "Index": 676,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightSceneInfoExtraDataPacked",
+        "NameIndex": -1,
+        "Index": 680,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightDistanceFadeMAD",
+        "NameIndex": -1,
+        "Index": 688,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_NumDirectionalLightCascades",
+        "NameIndex": -1,
+        "Index": 696,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightVSM",
+        "NameIndex": -1,
+        "Index": 700,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_CascadeEndDepths",
+        "NameIndex": -1,
+        "Index": 704,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightShadowmapMinMax",
+        "NameIndex": -1,
+        "Index": 784,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightShadowmapAtlasBufferSize",
+        "NameIndex": -1,
+        "Index": 800,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightDepthBias",
+        "NameIndex": -1,
+        "Index": 816,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightUseStaticShadowing",
+        "NameIndex": -1,
+        "Index": 820,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightHandledByMegaLights",
+        "NameIndex": -1,
+        "Index": 824,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalMegaLightsSupportedStartIndex",
+        "NameIndex": -1,
+        "Index": 828,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectionalLightStaticShadowBufferSize",
+        "NameIndex": -1,
+        "Index": 832,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_DirectLightingShowFlag",
+        "NameIndex": -1,
+        "Index": 912,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_CulledBufferOffsetISR",
+        "NameIndex": -1,
+        "Index": 916,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_LightFunctionAtlasLightIndex",
+        "NameIndex": -1,
+        "Index": 920,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_bAffectsTranslucentLighting",
+        "NameIndex": -1,
+        "Index": 924,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Forward_PreViewTranslationOffsetISR",
+        "NameIndex": -1,
+        "Index": 928,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_ReflectionPlane",
+        "NameIndex": -1,
+        "Index": 1024,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionOrigin",
+        "NameIndex": -1,
+        "Index": 1040,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionXAxis",
+        "NameIndex": -1,
+        "Index": 1056,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionYAxis",
+        "NameIndex": -1,
+        "Index": 1072,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionParameters",
+        "NameIndex": -1,
+        "Index": 1136,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionParameters2",
+        "NameIndex": -1,
+        "Index": 1152,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionScreenScaleBias",
+        "NameIndex": -1,
+        "Index": 1232,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionScreenBound",
+        "NameIndex": -1,
+        "Index": 1248,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_bIsStereo",
+        "NameIndex": -1,
+        "Index": 1256,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_MaxBytesPerPixel",
+        "NameIndex": -1,
+        "Index": 1504,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_MaxClosurePerPixel",
+        "NameIndex": -1,
+        "Index": 1508,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_bRoughDiffuse",
+        "NameIndex": -1,
+        "Index": 1512,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_PeelLayersAboveDepth",
+        "NameIndex": -1,
+        "Index": 1516,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_bRoughnessTracking",
+        "NameIndex": -1,
+        "Index": 1520,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Substrate_bStochasticLighting",
+        "NameIndex": -1,
+        "Index": 1524,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DebugViewMode_AccuracyColors",
+        "NameIndex": -1,
+        "Index": 1536,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DebugViewMode_LODColors",
+        "NameIndex": -1,
+        "Index": 1552,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ReflectionsParameters_SkyLightParameters",
+        "NameIndex": -1,
+        "Index": 1584,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bApplyHalfResLocalFogToSkyMeshes",
+        "NameIndex": -1,
+        "Index": 1736,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBSize",
+        "NameIndex": -1,
+        "Index": 1928,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBViewSize",
+        "NameIndex": -1,
+        "Index": 1936,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBViewRect",
+        "NameIndex": -1,
+        "Index": 1952,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_ViewportUVToHZBBufferUV",
+        "NameIndex": -1,
+        "Index": 1968,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBUvFactorAndInvFactor",
+        "NameIndex": -1,
+        "Index": 1984,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBUVToScreenUVScaleBias",
+        "NameIndex": -1,
+        "Index": 2000,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_HZBBaseTexelSize",
+        "NameIndex": -1,
+        "Index": 2016,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_SamplePixelToHZBUV",
+        "NameIndex": -1,
+        "Index": 2024,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_bIsHZBValid",
+        "NameIndex": -1,
+        "Index": 2032,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_bIsFurthestHZBValid",
+        "NameIndex": -1,
+        "Index": 2036,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_bIsClosestHZBValid",
+        "NameIndex": -1,
+        "Index": 2040,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_ScreenPosToHZBUVScaleBias",
+        "NameIndex": -1,
+        "Index": 2048,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_DummyHZB",
+        "NameIndex": -1,
+        "Index": 2064,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_PrevScreenPositionScaleBias",
+        "NameIndex": -1,
+        "Index": 2064,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_PrevSceneColorBilinearUVMinMax",
+        "NameIndex": -1,
+        "Index": 2080,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_IntensityAndExposureCorrection",
+        "NameIndex": -1,
+        "Index": 2096,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SSRParams_NoiseIndex",
+        "NameIndex": -1,
+        "Index": 2112,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 2128,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Fog_FogInscatteringColorCubemap",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Fog_IntegratedLightScattering",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "FogMMV_FogInscatteringColorCubemap",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "FogMMV_IntegratedLightScattering",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "LFV_LocalFogVolumeTileDataTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Forward_DirectionalLightShadowmapAtlas",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Forward_DirectionalLightStaticShadowmap",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "PlanarReflection_PlanarReflectionTexture",
+      "NameIndex": -1,
+      "Index": 20,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 22,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 24,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 25,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "NameIndex": -1,
+      "Index": 27,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 29,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTextureArray",
+      "NameIndex": -1,
+      "Index": 30,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 32,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomStencilTextureArray",
+      "NameIndex": -1,
+      "Index": 33,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneVelocityTexture",
+      "NameIndex": -1,
+      "Index": 34,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferATexture",
+      "NameIndex": -1,
+      "Index": 36,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 37,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 38,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 39,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthAuxTexture",
+      "NameIndex": -1,
+      "Index": 40,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthAuxTextureArray",
+      "NameIndex": -1,
+      "Index": 41,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_LocalLightTextureA",
+      "NameIndex": -1,
+      "Index": 42,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_LocalLightTextureB",
+      "NameIndex": -1,
+      "Index": 43,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ReflectionsParameters_SkyLightCubemap",
+      "NameIndex": -1,
+      "Index": 50,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ReflectionsParameters_SkyLightBlendDestinationCubemap",
+      "NameIndex": -1,
+      "Index": 52,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ReflectionsParameters_ReflectionCubemap",
+      "NameIndex": -1,
+      "Index": 54,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ReflectionsParameters_PreIntegratedGF",
+      "NameIndex": -1,
+      "Index": 56,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "PreIntegratedGFTexture",
+      "NameIndex": -1,
+      "Index": 58,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "AmbientOcclusionTexture",
+      "NameIndex": -1,
+      "Index": 62,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ScreenSpaceShadowMaskTexture",
+      "NameIndex": -1,
+      "Index": 64,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "ScreenSpaceShadowMaskTextureArray",
+      "NameIndex": -1,
+      "Index": 65,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "HalfResLocalFogVolumeViewTexture",
+      "NameIndex": -1,
+      "Index": 67,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SSRParams_SceneColor",
+      "NameIndex": -1,
+      "Index": 69,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SSRParams_HZBTexture",
+      "NameIndex": -1,
+      "Index": 71,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SSRParams_ClosestHZBTexture",
+      "NameIndex": -1,
+      "Index": 74,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SSRParams_FurthestHZBTexture",
+      "NameIndex": -1,
+      "Index": 76,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferATexture",
+      "NameIndex": -1,
+      "Index": 78,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferBTexture",
+      "NameIndex": -1,
+      "Index": 79,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferCTexture",
+      "NameIndex": -1,
+      "Index": 80,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferATextureArray",
+      "NameIndex": -1,
+      "Index": 81,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferBTextureArray",
+      "NameIndex": -1,
+      "Index": 82,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferCTextureArray",
+      "NameIndex": -1,
+      "Index": 83,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "DBufferRenderMask",
+      "NameIndex": -1,
+      "Index": 84,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Fog_FogInscatteringColorSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    },
+    {
+      "Name": "Fog_IntegratedLightScatteringSampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    },
+    {
+      "Name": "FogMMV_FogInscatteringColorSampler",
+      "Sampler": 5,
+      "BindPoint": 5
+    },
+    {
+      "Name": "FogMMV_IntegratedLightScatteringSampler",
+      "Sampler": 7,
+      "BindPoint": 7
+    },
+    {
+      "Name": "Forward_ShadowmapSampler",
+      "Sampler": 11,
+      "BindPoint": 11
+    },
+    {
+      "Name": "Forward_StaticShadowmapSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    },
+    {
+      "Name": "PlanarReflection_PlanarReflectionSampler",
+      "Sampler": 21,
+      "BindPoint": 21
+    },
+    {
+      "Name": "SceneTextures_SceneColorTextureSampler",
+      "Sampler": 23,
+      "BindPoint": 23
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTextureSampler",
+      "Sampler": 26,
+      "BindPoint": 26
+    },
+    {
+      "Name": "SceneTextures_ScenePartialDepthTextureSampler",
+      "Sampler": 28,
+      "BindPoint": 28
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTextureSampler",
+      "Sampler": 31,
+      "BindPoint": 31
+    },
+    {
+      "Name": "SceneTextures_SceneVelocityTextureSampler",
+      "Sampler": 35,
+      "BindPoint": 35
+    },
+    {
+      "Name": "SceneTextures_GBufferATextureSampler",
+      "Sampler": 44,
+      "BindPoint": 44
+    },
+    {
+      "Name": "SceneTextures_GBufferBTextureSampler",
+      "Sampler": 45,
+      "BindPoint": 45
+    },
+    {
+      "Name": "SceneTextures_GBufferCTextureSampler",
+      "Sampler": 46,
+      "BindPoint": 46
+    },
+    {
+      "Name": "SceneTextures_GBufferDTextureSampler",
+      "Sampler": 47,
+      "BindPoint": 47
+    },
+    {
+      "Name": "SceneTextures_SceneDepthAuxTextureSampler",
+      "Sampler": 48,
+      "BindPoint": 48
+    },
+    {
+      "Name": "ReflectionsParameters_SkyLightCubemapSampler",
+      "Sampler": 51,
+      "BindPoint": 51
+    },
+    {
+      "Name": "ReflectionsParameters_SkyLightBlendDestinationCubemapSampler",
+      "Sampler": 53,
+      "BindPoint": 53
+    },
+    {
+      "Name": "ReflectionsParameters_ReflectionCubemapSampler",
+      "Sampler": 55,
+      "BindPoint": 55
+    },
+    {
+      "Name": "ReflectionsParameters_PreIntegratedGFSampler",
+      "Sampler": 57,
+      "BindPoint": 57
+    },
+    {
+      "Name": "PreIntegratedGFSampler",
+      "Sampler": 59,
+      "BindPoint": 59
+    },
+    {
+      "Name": "AmbientOcclusionSampler",
+      "Sampler": 63,
+      "BindPoint": 63
+    },
+    {
+      "Name": "ScreenSpaceShadowMaskSampler",
+      "Sampler": 66,
+      "BindPoint": 66
+    },
+    {
+      "Name": "HalfResLocalFogVolumeViewSampler",
+      "Sampler": 68,
+      "BindPoint": 68
+    },
+    {
+      "Name": "SSRParams_SceneColorSampler",
+      "Sampler": 70,
+      "BindPoint": 70
+    },
+    {
+      "Name": "SSRParams_HZBSampler",
+      "Sampler": 72,
+      "BindPoint": 72
+    },
+    {
+      "Name": "SSRParams_HZBTextureSampler",
+      "Sampler": 73,
+      "BindPoint": 73
+    },
+    {
+      "Name": "SSRParams_ClosestHZBTextureSampler",
+      "Sampler": 75,
+      "BindPoint": 75
+    },
+    {
+      "Name": "SSRParams_FurthestHZBTextureSampler",
+      "Sampler": 77,
+      "BindPoint": 77
+    },
+    {
+      "Name": "DBufferATextureSampler",
+      "Sampler": 85,
+      "BindPoint": 85
+    },
+    {
+      "Name": "DBufferBTextureSampler",
+      "Sampler": 86,
+      "BindPoint": 86
+    },
+    {
+      "Name": "DBufferCTextureSampler",
+      "Sampler": 87,
+      "BindPoint": 87
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "LFV_LocalFogVolumeInstances",
+      "NameIndex": -1,
+      "Index": 8,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_ForwardLightBuffer",
+      "NameIndex": -1,
+      "Index": 14,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_NumCulledLightsGrid",
+      "NameIndex": -1,
+      "Index": 15,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_CulledLightDataGrid32Bit",
+      "NameIndex": -1,
+      "Index": 16,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_CulledLightDataGrid16Bit",
+      "NameIndex": -1,
+      "Index": 17,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_DirectionalLightIndices",
+      "NameIndex": -1,
+      "Index": 18,
+      "ArraySize": 0
+    },
+    {
+      "Name": "Forward_LightViewData",
+      "NameIndex": -1,
+      "Index": 19,
+      "ArraySize": 0
+    },
+    {
+      "Name": "EyeAdaptationBuffer",
+      "NameIndex": -1,
+      "Index": 60,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [
+    {
+      "Name": "QuadOverdraw",
+      "NameIndex": -1,
+      "Index": 49,
+      "OriginalIndex": 49
+    },
+    {
+      "Name": "RWOcclusionBufferUAV",
+      "NameIndex": -1,
+      "Index": 61,
+      "OriginalIndex": 61
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 192,
+      "Name": "Fog_FogInscatteringColorCubemap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 200,
+      "Name": "Fog_FogInscatteringColorSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 2,
+      "Offset": 208,
+      "Name": "Fog_IntegratedLightScattering",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 216,
+      "Name": "Fog_IntegratedLightScatteringSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 4,
+      "Offset": 400,
+      "Name": "FogMMV_FogInscatteringColorCubemap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 408,
+      "Name": "FogMMV_FogInscatteringColorSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 6,
+      "Offset": 416,
+      "Name": "FogMMV_IntegratedLightScattering",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 424,
+      "Name": "FogMMV_IntegratedLightScatteringSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 8,
+      "Offset": 432,
+      "Name": "LFV_LocalFogVolumeInstances",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 9,
+      "Offset": 528,
+      "Name": "LFV_LocalFogVolumeTileDataTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 10,
+      "Offset": 944,
+      "Name": "Forward_DirectionalLightShadowmapAtlas",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 11,
+      "Offset": 952,
+      "Name": "Forward_ShadowmapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 12,
+      "Offset": 960,
+      "Name": "Forward_DirectionalLightStaticShadowmap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 13,
+      "Offset": 968,
+      "Name": "Forward_StaticShadowmapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 14,
+      "Offset": 976,
+      "Name": "Forward_ForwardLightBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 15,
+      "Offset": 984,
+      "Name": "Forward_NumCulledLightsGrid",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 16,
+      "Offset": 992,
+      "Name": "Forward_CulledLightDataGrid32Bit",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 17,
+      "Offset": 1000,
+      "Name": "Forward_CulledLightDataGrid16Bit",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 18,
+      "Offset": 1008,
+      "Name": "Forward_DirectionalLightIndices",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 19,
+      "Offset": 1016,
+      "Name": "Forward_LightViewData",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 20,
+      "Offset": 1264,
+      "Name": "PlanarReflection_PlanarReflectionTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 21,
+      "Offset": 1272,
+      "Name": "PlanarReflection_PlanarReflectionSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 22,
+      "Offset": 1280,
+      "Name": "SceneTextures_SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 23,
+      "Offset": 1288,
+      "Name": "SceneTextures_SceneColorTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 24,
+      "Offset": 1296,
+      "Name": "SceneTextures_SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 25,
+      "Offset": 1304,
+      "Name": "SceneTextures_SceneDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 26,
+      "Offset": 1312,
+      "Name": "SceneTextures_SceneDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 27,
+      "Offset": 1320,
+      "Name": "SceneTextures_ScenePartialDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 28,
+      "Offset": 1328,
+      "Name": "SceneTextures_ScenePartialDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 29,
+      "Offset": 1336,
+      "Name": "SceneTextures_CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 30,
+      "Offset": 1344,
+      "Name": "SceneTextures_CustomDepthTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 31,
+      "Offset": 1352,
+      "Name": "SceneTextures_CustomDepthTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 32,
+      "Offset": 1360,
+      "Name": "SceneTextures_CustomStencilTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 33,
+      "Offset": 1368,
+      "Name": "SceneTextures_CustomStencilTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 34,
+      "Offset": 1376,
+      "Name": "SceneTextures_SceneVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 35,
+      "Offset": 1384,
+      "Name": "SceneTextures_SceneVelocityTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 36,
+      "Offset": 1392,
+      "Name": "SceneTextures_GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 37,
+      "Offset": 1400,
+      "Name": "SceneTextures_GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 38,
+      "Offset": 1408,
+      "Name": "SceneTextures_GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 39,
+      "Offset": 1416,
+      "Name": "SceneTextures_GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 40,
+      "Offset": 1424,
+      "Name": "SceneTextures_SceneDepthAuxTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 41,
+      "Offset": 1432,
+      "Name": "SceneTextures_SceneDepthAuxTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 42,
+      "Offset": 1440,
+      "Name": "SceneTextures_LocalLightTextureA",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 43,
+      "Offset": 1448,
+      "Name": "SceneTextures_LocalLightTextureB",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 44,
+      "Offset": 1456,
+      "Name": "SceneTextures_GBufferATextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 45,
+      "Offset": 1464,
+      "Name": "SceneTextures_GBufferBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 46,
+      "Offset": 1472,
+      "Name": "SceneTextures_GBufferCTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 47,
+      "Offset": 1480,
+      "Name": "SceneTextures_GBufferDTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 48,
+      "Offset": 1488,
+      "Name": "SceneTextures_SceneDepthAuxTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 49,
+      "Offset": 1568,
+      "Name": "QuadOverdraw",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 50,
+      "Offset": 1600,
+      "Name": "ReflectionsParameters_SkyLightCubemap",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 51,
+      "Offset": 1608,
+      "Name": "ReflectionsParameters_SkyLightCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 52,
+      "Offset": 1616,
+      "Name": "ReflectionsParameters_SkyLightBlendDestinationCubemap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 53,
+      "Offset": 1624,
+      "Name": "ReflectionsParameters_SkyLightBlendDestinationCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 54,
+      "Offset": 1632,
+      "Name": "ReflectionsParameters_ReflectionCubemap",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 55,
+      "Offset": 1640,
+      "Name": "ReflectionsParameters_ReflectionCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 56,
+      "Offset": 1648,
+      "Name": "ReflectionsParameters_PreIntegratedGF",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 57,
+      "Offset": 1656,
+      "Name": "ReflectionsParameters_PreIntegratedGFSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 58,
+      "Offset": 1664,
+      "Name": "PreIntegratedGFTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 59,
+      "Offset": 1672,
+      "Name": "PreIntegratedGFSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 60,
+      "Offset": 1680,
+      "Name": "EyeAdaptationBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+    },
+    {
+      "Index": 61,
+      "Offset": 1688,
+      "Name": "RWOcclusionBufferUAV",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    },
+    {
+      "Index": 62,
+      "Offset": 1696,
+      "Name": "AmbientOcclusionTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 63,
+      "Offset": 1704,
+      "Name": "AmbientOcclusionSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 64,
+      "Offset": 1712,
+      "Name": "ScreenSpaceShadowMaskTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 65,
+      "Offset": 1720,
+      "Name": "ScreenSpaceShadowMaskTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 66,
+      "Offset": 1728,
+      "Name": "ScreenSpaceShadowMaskSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 67,
+      "Offset": 1744,
+      "Name": "HalfResLocalFogVolumeViewTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 68,
+      "Offset": 1752,
+      "Name": "HalfResLocalFogVolumeViewSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 69,
+      "Offset": 1840,
+      "Name": "SSRParams_SceneColor",
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+    },
+    {
+      "Index": 70,
+      "Offset": 1848,
+      "Name": "SSRParams_SceneColorSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 71,
+      "Offset": 1872,
+      "Name": "SSRParams_HZBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 72,
+      "Offset": 1880,
+      "Name": "SSRParams_HZBSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 73,
+      "Offset": 1888,
+      "Name": "SSRParams_HZBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 74,
+      "Offset": 1896,
+      "Name": "SSRParams_ClosestHZBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 75,
+      "Offset": 1904,
+      "Name": "SSRParams_ClosestHZBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 76,
+      "Offset": 1912,
+      "Name": "SSRParams_FurthestHZBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 77,
+      "Offset": 1920,
+      "Name": "SSRParams_FurthestHZBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 78,
+      "Offset": 3520,
+      "Name": "DBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 79,
+      "Offset": 3528,
+      "Name": "DBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 80,
+      "Offset": 3536,
+      "Name": "DBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 81,
+      "Offset": 3544,
+      "Name": "DBufferATextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 82,
+      "Offset": 3552,
+      "Name": "DBufferBTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 83,
+      "Offset": 3560,
+      "Name": "DBufferCTextureArray",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 84,
+      "Offset": 3568,
+      "Name": "DBufferRenderMask",
+      "UbmtType": "UBMT_RDG_TEXTURE"
+    },
+    {
+      "Index": 85,
+      "Offset": 3576,
+      "Name": "DBufferATextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 86,
+      "Offset": 3584,
+      "Name": "DBufferBTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 87,
+      "Offset": 3592,
+      "Name": "DBufferCTextureSampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

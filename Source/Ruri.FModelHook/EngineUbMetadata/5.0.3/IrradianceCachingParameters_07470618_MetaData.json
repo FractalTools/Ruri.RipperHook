@@ -1,0 +1,134 @@
+{
+  "Name": "IrradianceCachingParameters",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/IrradianceCaching.h",
+  "LayoutHash": "0x07470618",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "IrradianceCachingParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "HashTableSize",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CacheSize",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Quality",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Spacing",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CornerRejection",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "IrradianceCacheRecords",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "RWHashTable",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "RWHashToIndex",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    },
+    {
+      "Name": "RWIndexToHash",
+      "NameIndex": -1,
+      "Index": 3,
+      "OriginalIndex": 3
+    },
+    {
+      "Name": "RecordAllocator",
+      "NameIndex": -1,
+      "Index": 4,
+      "OriginalIndex": 4
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 24,
+      "Name": "IrradianceCacheRecords",
+      "UbmtType": "UBMT_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 32,
+      "Name": "RWHashTable",
+      "UbmtType": "UBMT_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 40,
+      "Name": "RWHashToIndex",
+      "UbmtType": "UBMT_UAV"
+    },
+    {
+      "Index": 3,
+      "Offset": 48,
+      "Name": "RWIndexToHash",
+      "UbmtType": "UBMT_UAV"
+    },
+    {
+      "Index": 4,
+      "Offset": 56,
+      "Name": "RecordAllocator",
+      "UbmtType": "UBMT_UAV"
+    }
+  ]
+}

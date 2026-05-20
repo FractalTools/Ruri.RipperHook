@@ -1,0 +1,100 @@
+{
+  "Name": "GPUSceneWriter",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/GPUScene.cpp",
+  "LayoutHash": "0x00220128",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "GPUSceneWriter",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "GPUSceneInstanceDataSOAStride",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GPUSceneFrameNumber",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GPUSceneMaxAllocatedInstanceId",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GPUSceneMaxPersistentPrimitiveIndex",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "GPUSceneInstanceSceneDataRW",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "GPUSceneInstancePayloadDataRW",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "GPUScenePrimitiveSceneDataRW",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "GPUSceneInstanceSceneDataRW",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 24,
+      "Name": "GPUSceneInstancePayloadDataRW",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 32,
+      "Name": "GPUScenePrimitiveSceneDataRW",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

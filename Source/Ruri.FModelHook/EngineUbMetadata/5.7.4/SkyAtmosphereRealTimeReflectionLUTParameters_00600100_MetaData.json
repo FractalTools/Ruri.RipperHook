@@ -1,0 +1,63 @@
+{
+  "Name": "SkyAtmosphereRealTimeReflectionLUTParameters",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp",
+  "LayoutHash": "0x00600100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SkyAtmosphereRealTimeReflectionLUTParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "SkyViewLutReferential",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "SkyPlanetTranslatedWorldCenterAndViewHeight",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SkyCameraTranslatedWorldOrigin",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RealTimeReflectionCapture",
+        "NameIndex": -1,
+        "Index": 92,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 96,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

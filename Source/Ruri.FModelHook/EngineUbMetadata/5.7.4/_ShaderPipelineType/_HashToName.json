@@ -1,0 +1,13 @@
+{
+  "Note": "FShaderPipelineType::HashedName -> source-recovered pipeline name. Populates PipelineTypeName at decompile time when the cooked stableinfo.json left it empty.",
+  "EntryCount": 7,
+  "Entries": {
+    "0921204FA4E4E522": "DepthPosOnlyNoPixelPipeline",
+    "2B9E9B7AC7A57D2E": "StandardVelocityPipeline",
+    "2D98197F2FC35A99": "VelocityMotionVectorsPipeline",
+    "5EDA96ABA8D9CD54": "AnisotropyPipeline",
+    "7B8F1E64951D1B28": "DepthNoPixelPipeline",
+    "A016285000B21F87": "VelocityClippedDepthPipeline",
+    "EACA951120B2FFF6": "DepthPipeline"
+  }
+}

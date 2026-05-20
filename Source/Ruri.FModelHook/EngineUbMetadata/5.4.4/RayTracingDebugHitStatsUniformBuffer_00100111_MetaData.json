@@ -1,0 +1,35 @@
+{
+  "Name": "RayTracingDebugHitStatsUniformBuffer",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDebug.cpp",
+  "LayoutHash": "0x00100111",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "RayTracingDebugHitStatsUniformBuffer",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "HitStatsOutput",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "HitStatsOutput",
+      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+    }
+  ]
+}

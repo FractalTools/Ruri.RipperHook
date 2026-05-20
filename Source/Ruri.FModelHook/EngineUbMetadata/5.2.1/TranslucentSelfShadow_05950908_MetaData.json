@@ -1,0 +1,116 @@
+{
+  "Name": "TranslucentSelfShadow",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h",
+  "LayoutHash": "0x05950908",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "TranslucentSelfShadow",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "WorldToShadowMatrix",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "ShadowUVMinMax",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightDirection",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalLightColor",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 144,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Transmission0",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Transmission1",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Transmission0Sampler",
+      "Sampler": 2,
+      "BindPoint": 2
+    },
+    {
+      "Name": "Transmission1Sampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 112,
+      "Name": "Transmission0",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 120,
+      "Name": "Transmission1",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 128,
+      "Name": "Transmission0Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    },
+    {
+      "Index": 3,
+      "Offset": 136,
+      "Name": "Transmission1Sampler",
+      "UbmtType": "UBMT_SAMPLER"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "Name": "SlateView",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/SlateRHIRenderer/Private/SlateRHIRenderingPolicy.cpp",
+  "LayoutHash": "0x00400201",
+  "BindingFlags": "Static",
+  "ConstantBuffer": {
+    "Name": "SlateView",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "ViewProjection",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

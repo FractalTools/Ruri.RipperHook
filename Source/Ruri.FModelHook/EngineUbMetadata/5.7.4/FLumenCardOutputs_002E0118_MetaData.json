@@ -1,0 +1,59 @@
+{
+  "Name": "FLumenCardOutputs",
+  "EngineVersion": "5.7.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenSceneCardCapture.h",
+  "LayoutHash": "0x002E0118",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "FLumenCardOutputs",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "OutTarget0",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "OutTarget1",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "OutTarget2",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "OutTarget0",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "OutTarget1",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "OutTarget2",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

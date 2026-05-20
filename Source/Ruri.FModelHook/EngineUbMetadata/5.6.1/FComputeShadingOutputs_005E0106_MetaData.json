@@ -1,0 +1,143 @@
+{
+  "Name": "FComputeShadingOutputs",
+  "EngineVersion": "5.6.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h",
+  "LayoutHash": "0x005E0106",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "FComputeShadingOutputs",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 80,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "OutTarget0",
+      "NameIndex": -1,
+      "Index": 0,
+      "OriginalIndex": 0
+    },
+    {
+      "Name": "OutTarget1",
+      "NameIndex": -1,
+      "Index": 1,
+      "OriginalIndex": 1
+    },
+    {
+      "Name": "OutTarget2",
+      "NameIndex": -1,
+      "Index": 2,
+      "OriginalIndex": 2
+    },
+    {
+      "Name": "OutTarget3",
+      "NameIndex": -1,
+      "Index": 3,
+      "OriginalIndex": 3
+    },
+    {
+      "Name": "OutTarget4",
+      "NameIndex": -1,
+      "Index": 4,
+      "OriginalIndex": 4
+    },
+    {
+      "Name": "OutTarget5",
+      "NameIndex": -1,
+      "Index": 5,
+      "OriginalIndex": 5
+    },
+    {
+      "Name": "OutTarget6",
+      "NameIndex": -1,
+      "Index": 6,
+      "OriginalIndex": 6
+    },
+    {
+      "Name": "OutTarget7",
+      "NameIndex": -1,
+      "Index": 7,
+      "OriginalIndex": 7
+    },
+    {
+      "Name": "OutTargets",
+      "NameIndex": -1,
+      "Index": 8,
+      "OriginalIndex": 8
+    },
+    {
+      "Name": "OutTopLayerTarget",
+      "NameIndex": -1,
+      "Index": 9,
+      "OriginalIndex": 9
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "OutTarget0",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "OutTarget1",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "OutTarget2",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "OutTarget3",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "OutTarget4",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "OutTarget5",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "OutTarget6",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "OutTarget7",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "OutTargets",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "OutTopLayerTarget",
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+    }
+  ]
+}

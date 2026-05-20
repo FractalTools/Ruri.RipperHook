@@ -1,0 +1,42 @@
+{
+  "Name": "DebugViewModeStruct",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/DebugViewModeRendering.h",
+  "LayoutHash": "0x00200100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "DebugViewModeStruct",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "AccuracyColors",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LODColors",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}
