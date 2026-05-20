@@ -102,11 +102,31 @@ public static class IndexNameCollector
 
     public static (HashSet<string> ShaderType, HashSet<string> VertexFactory, HashSet<string> Pipeline) CollectAll(IEnumerable<string> sourceFiles)
     {
+        // Cache the file list so the macro-expander second pass doesn't re-
+        // enumerate the file system.
+        List<string> files = sourceFiles.ToList();
         HashSet<string> shaderTypes = new(StringComparer.Ordinal);
         HashSet<string> vfs = new(StringComparer.Ordinal);
         HashSet<string> pipelines = new(StringComparer.Ordinal);
 
-        foreach (string file in sourceFiles)
+        // Pre-pass: collect wrapper-macro definitions that `##`-concatenate
+        // into IMPLEMENT_*_SHADER_TYPE. Then expand every invocation across
+        // the source tree to recover specialised class names like
+        // `TLightMapDensityPSFDummyLightMapPolicy` that don't appear in any
+        // direct IMPLEMENT_*_SHADER_TYPE call site.
+        var macroDefs = ImplementMacroExpander.CollectMacroDefs(files);
+        if (macroDefs.Count > 0)
+        {
+            HashSet<string> expanded = ImplementMacroExpander.ExpandInvocations(macroDefs, files);
+            foreach (string n in expanded)
+            {
+                if (string.IsNullOrEmpty(n) || s_macroParamTokens.Contains(n)) continue;
+                if (IsPseudoInvocation(n)) continue;
+                shaderTypes.Add(n);
+            }
+        }
+
+        foreach (string file in files)
         {
             string text;
             try { text = File.ReadAllText(file); }

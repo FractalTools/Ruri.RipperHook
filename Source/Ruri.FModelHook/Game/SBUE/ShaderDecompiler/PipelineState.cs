@@ -162,7 +162,10 @@ internal sealed class ShaderContainerInfo
     public string MaterialName { get; init; } = string.Empty;
     public string ShaderMapHash { get; init; } = string.Empty;
     public string ShaderTypeHash { get; init; } = string.Empty;
-    public string ShaderTypeName { get; init; } = string.Empty;
+    // Pass146 backfills this from `ShaderTypeSeedRegistry.ResolveTypeName`
+    // when the cooked stableinfo left it blank (export-side resolver
+    // missed the source tree). Mutable for that one-shot fix-up only.
+    public string ShaderTypeName { get; set; } = string.Empty;
     public string VertexFactoryTypeHash { get; init; } = string.Empty;
     // Pass146 backfills this from `VertexFactoryTypeNameIndex` when the
     // cook left it blank. Mutable for that one-shot fix-up only —

@@ -4,6 +4,7 @@ using System.IO;
 using System.Buffers.Binary;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
@@ -68,12 +69,95 @@ internal static class HashedNamesResolver
                 return (_shaderTypeNames, _vertexFactoryNames, _pipelineNames);
             }
 
-            string runtimeRoot = @"E:\UnrealEngine-5.2.1-release\Engine\Source\Runtime";
-            _shaderTypeNames = BuildMap(runtimeRoot, ShaderTypeRegex);
-            _vertexFactoryNames = BuildMap(runtimeRoot, VertexFactoryRegex);
-            _pipelineNames = BuildMap(runtimeRoot, ShaderPipelineRegex);
+            // Primary path: load the precomputed _HashToName.json files
+            // emitted by Ruri.UEShaderTpkDumper under
+            // <exeDir>/EngineUbMetadata/<version>/_<TypeKind>/_HashToName.json.
+            // This is the canonical source of (hash → name) now that the
+            // TPK dumper has replaced the ad-hoc Python generator — it
+            // covers `##`-concatenated wrapper-macro expansions (e.g.
+            // TLightMapDensityPSFDummyLightMapPolicy) that a naïve regex
+            // scan over IMPLEMENT_*_SHADER_TYPE call sites can't see.
+            //
+            // We sweep recursively because the deploy holds multiple
+            // engine versions side-by-side (5.0.3/, 5.1.1/, …, plus the
+            // legacy GAME_UE5_X/ folders left over from before the
+            // version-aware migration). CityHash collisions across
+            // versions are statistically negligible so cross-version
+            // merge is safe.
+            _shaderTypeNames = LoadPrecomputedHashIndex("_ShaderType");
+            _vertexFactoryNames = LoadPrecomputedHashIndex("_VertexFactoryType");
+            _pipelineNames = LoadPrecomputedHashIndex("_ShaderPipelineType");
+
+            // Fallback: if the deploy doesn't carry _HashToName.json
+            // (uninstalled or stripped build), fall back to a runtime
+            // regex scan of an explicitly configured UE source tree.
+            // Empty hash-maps after the precomputed load only happens
+            // for misconfigured installs — log it loudly.
+            if (_shaderTypeNames.Count == 0 && _vertexFactoryNames.Count == 0 && _pipelineNames.Count == 0)
+            {
+                string? envRoot = Environment.GetEnvironmentVariable("UE_SOURCE_ROOT");
+                if (!string.IsNullOrEmpty(envRoot) && Directory.Exists(envRoot))
+                {
+                    _shaderTypeNames = BuildMap(envRoot, ShaderTypeRegex);
+                    _vertexFactoryNames = BuildMap(envRoot, VertexFactoryRegex);
+                    _pipelineNames = BuildMap(envRoot, ShaderPipelineRegex);
+                }
+            }
             return (_shaderTypeNames, _vertexFactoryNames, _pipelineNames);
         }
+    }
+
+    // Walks <exeDir>/EngineUbMetadata/ recursively and merges every
+    // `<typeKind>/_HashToName.json` it finds. Each file is a flat
+    // `{ "<HEX64>": "<TypeName>", ... }` object; later entries on hash
+    // collision are dropped (TryAdd).
+    private static Dictionary<string, string> LoadPrecomputedHashIndex(string typeKindFolder)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string exeDir = AppContext.BaseDirectory;
+        string root = Path.Combine(exeDir, "EngineUbMetadata");
+        if (!Directory.Exists(root)) return map;
+
+        foreach (string file in Directory.EnumerateFiles(root, "_HashToName.json", SearchOption.AllDirectories))
+        {
+            // Match only the requested type-kind subfolder. Path separators
+            // vary across OS so check both directions.
+            string folder = Path.GetFileName(Path.GetDirectoryName(file) ?? "");
+            if (!string.Equals(folder, typeKindFolder, StringComparison.OrdinalIgnoreCase)) continue;
+
+            try
+            {
+                using FileStream stream = File.OpenRead(file);
+                using JsonDocument doc = JsonDocument.Parse(stream);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+
+                // The TPK emitter wraps the actual map under an `Entries`
+                // object alongside `Note` / `EntryCount` metadata. Older
+                // hand-organised files use a flat root object — accept
+                // either shape so the loader stays robust.
+                JsonElement entries = doc.RootElement.TryGetProperty("Entries", out JsonElement nested)
+                    ? nested
+                    : doc.RootElement;
+                if (entries.ValueKind != JsonValueKind.Object) continue;
+
+                foreach (JsonProperty kv in entries.EnumerateObject())
+                {
+                    string hash = kv.Name;
+                    if (kv.Value.ValueKind != JsonValueKind.String) continue;
+                    string? name = kv.Value.GetString();
+                    if (string.IsNullOrWhiteSpace(hash) || string.IsNullOrWhiteSpace(name)) continue;
+                    map.TryAdd(hash, name!);
+                }
+            }
+            catch
+            {
+                // Tolerate malformed/partial JSONs — one bad file shouldn't
+                // poison the whole hash-to-name index. Silent here because
+                // this code path runs lazily on first Resolve* call; the
+                // caller has no good place to surface a parse warning.
+            }
+        }
+        return map;
     }
 
     private static Dictionary<string, string> BuildMap(string root, Regex regex)

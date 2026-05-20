@@ -112,23 +112,37 @@ public static class CityHash64
             mul);
     }
 
+    // CityHash 1.1.0 — matches UE 5.x `Hash/CityHash.cpp::HashLen33to64`.
+    // The 1.0.x variant (rotate-only, no bswap) produces different hashes for
+    // ≥33-byte strings and was the source of a long-class-name hash mismatch
+    // (e.g. TLightMapDensityPSFDummyLightMapPolicy hashed wrong vs cook).
     private static ulong Hash33To64(byte[] s, int p, int n)
     {
         ulong mul = unchecked(K2 + (ulong)n * 2);
         ulong a = unchecked(Fetch64(s, p) * K2);
         ulong b = Fetch64(s, p + 8);
-        ulong c = unchecked(Fetch64(s, p + n - 8) * mul);
-        ulong d = unchecked(Fetch64(s, p + n - 16) * K2);
-        ulong y = unchecked(Ror(a + b, 43) + Ror(c, 30) + d);
-        ulong z = Hash16Mul(y, unchecked(a + Ror(b + K2, 18) + c), mul);
-        ulong e = unchecked(Fetch64(s, p + 16) * mul);
-        ulong f = Fetch64(s, p + 24);
-        ulong g = unchecked((y + Fetch64(s, p + n - 32)) * mul);
-        ulong h = unchecked((z + Fetch64(s, p + n - 24)) * mul);
-        return Hash16Mul(
-            unchecked(Ror(e + f, 43) + Ror(g, 30) + h),
-            unchecked(e + Ror(f + a, 18) + g),
-            mul);
+        ulong c = Fetch64(s, p + n - 24);
+        ulong d = Fetch64(s, p + n - 32);
+        ulong e = unchecked(Fetch64(s, p + 16) * K2);
+        ulong f = unchecked(Fetch64(s, p + 24) * 9);
+        ulong g = Fetch64(s, p + n - 8);
+        ulong h = unchecked(Fetch64(s, p + n - 16) * mul);
+        ulong u = unchecked(Ror(a + g, 43) + (Ror(b, 30) + c) * 9);
+        ulong v = unchecked(((a + g) ^ d) + f + 1);
+        ulong w = unchecked(Bswap64((u + v) * mul) + h);
+        ulong x = unchecked(Ror(e + f, 42) + c);
+        ulong y = unchecked((Bswap64((v + w) * mul) + g) * mul);
+        ulong z = unchecked(e + f + c);
+        a = unchecked(Bswap64((x + z) * mul + y) + b);
+        b = unchecked(ShiftMix((z + a) * mul + d + h) * mul);
+        return unchecked(b + x);
+    }
+
+    private static ulong Bswap64(ulong v)
+    {
+        v = (v << 8 & 0xFF00FF00FF00FF00UL) | (v >> 8 & 0x00FF00FF00FF00FFUL);
+        v = (v << 16 & 0xFFFF0000FFFF0000UL) | (v >> 16 & 0x0000FFFF0000FFFFUL);
+        return (v << 32) | (v >> 32);
     }
 
     private static (ulong, ulong) Weak16(ulong w, ulong x, ulong y, ulong z, ulong a, ulong b)

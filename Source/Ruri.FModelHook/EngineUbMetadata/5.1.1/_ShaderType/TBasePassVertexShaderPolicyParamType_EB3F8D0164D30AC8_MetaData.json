@@ -1,0 +1,24 @@
+{
+  "Name": "TBasePassVertexShaderPolicyParamType",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "BasePassRendering.h",
+  "LayoutHash": "0xEB3F8D0164D30AC8",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}
