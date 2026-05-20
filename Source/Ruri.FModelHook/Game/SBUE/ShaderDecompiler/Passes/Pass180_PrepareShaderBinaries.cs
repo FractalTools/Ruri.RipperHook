@@ -81,9 +81,18 @@ internal static class Pass180_PrepareShaderBinaries
 
         int seedCount = seed.ConstantBuffer!.VectorParameters.Length;
         int cookCount = parameters.GetArrayLength();
-        if (seedCount != cookCount) return null;
+        // Pair seed names with cook offsets up to the SHORTER of the two
+        // counts. Stripped-tail case: the cooker drops unused trailing
+        // loose params, leaving cookCount < seedCount. We still name the
+        // first N — far better than leaving every member anonymous.
+        // The opposite case (cookCount > seedCount) is rarer but possible
+        // if the seed scan missed LAYOUT_FIELDs declared via macro
+        // expansion — pair the prefix and fall through anonymous for the
+        // overflow.
+        int pairCount = Math.Min(seedCount, cookCount);
+        if (pairCount == 0) return null;
 
-        VectorParameter[] reconciled = new VectorParameter[seedCount];
+        VectorParameter[] reconciled = new VectorParameter[cookCount];
         int i = 0;
         foreach (System.Text.Json.JsonElement p in parameters.EnumerateArray())
         {
@@ -93,19 +102,39 @@ internal static class Pass180_PrepareShaderBinaries
                 ? sz.GetInt32() : 0;
             if (baseIdx < 0 || sizeBytes <= 0) return null;
 
-            VectorParameter src = seed.ConstantBuffer.VectorParameters[i];
             int rowCount = Math.Clamp(sizeBytes / 4, 1, 4);
-            reconciled[i] = new VectorParameter
+            if (i < pairCount)
             {
-                Name = src.Name,
-                NameIndex = -1,
-                Type = src.Type,
-                Index = baseIdx,
-                ArraySize = src.ArraySize,
-                IsMatrix = false,
-                RowCount = (byte)rowCount,
-                ColumnCount = 1,
-            };
+                VectorParameter src = seed.ConstantBuffer.VectorParameters[i];
+                reconciled[i] = new VectorParameter
+                {
+                    Name = src.Name,
+                    NameIndex = -1,
+                    Type = src.Type,
+                    Index = baseIdx,
+                    ArraySize = src.ArraySize,
+                    IsMatrix = false,
+                    RowCount = (byte)rowCount,
+                    ColumnCount = 1,
+                };
+            }
+            else
+            {
+                // Cook has more params than seed knows about — name the
+                // overflow `<Class>_<offset>` so they're at least
+                // identifiable in the rewrite output.
+                reconciled[i] = new VectorParameter
+                {
+                    Name = $"_loose_at_c{baseIdx / 16}",
+                    NameIndex = -1,
+                    Type = ShaderParamType.Float,
+                    Index = baseIdx,
+                    ArraySize = 0,
+                    IsMatrix = false,
+                    RowCount = (byte)rowCount,
+                    ColumnCount = 1,
+                };
+            }
             i++;
         }
 
