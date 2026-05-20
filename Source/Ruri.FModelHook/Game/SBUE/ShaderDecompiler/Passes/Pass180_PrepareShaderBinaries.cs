@@ -237,6 +237,16 @@ internal static class Pass180_PrepareShaderBinaries
                 if (limit-- <= 0) break;
                 state.Log($"      unknown-hash={h} (generator's IMPLEMENT_*_SHADER_TYPE scan missed this class)");
             }
+            // Dump the unmatched-with-name list so we can see which classes
+            // resolve to a known name but have no seed file (or no prefix
+            // match in the seed registry). These are the next targets for
+            // the TPK dumper to emit per-class LAYOUT_FIELD JSONs.
+            int unmatchedLimit = 50;
+            foreach (string n in s_unmatchedClassNames.Keys)
+            {
+                if (unmatchedLimit-- <= 0) { state.Log($"      ... ({unmatched - 50} more unmatched-class-with-name not shown)"); break; }
+                state.Log($"      unmatched-with-name={n}");
+            }
         }
     }
 
@@ -340,8 +350,7 @@ internal static class Pass180_PrepareShaderBinaries
             // `LooseParameterBuffers[0].Parameters[]` real byte offsets, then
             // inject as `$Globals` ConstantBufferParameter so the rewriter
             // names the slots. Only fires when ParameterMapInfo loaded
-            // (Pass165) AND counts/sizes match — otherwise the source-decl
-            // ↔ HLSL-decl order may have diverged and we'd risk mis-naming.
+            // (Pass165) AND seed has at least one loose VectorParameter.
             if (typeSeed.ConstantBuffer != null
                 && typeSeed.ConstantBuffer.VectorParameters != null
                 && typeSeed.ConstantBuffer.VectorParameters.Length > 0
