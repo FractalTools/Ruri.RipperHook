@@ -57,12 +57,18 @@ public sealed class LayoutWalker
     private readonly IReadOnlyDictionary<string, int> _ubmtTable;
     private readonly IReadOnlyDictionary<string, long> _constants;
     private readonly Dictionary<string, StructBlock> _structRegistry;
+    private readonly IReadOnlyDictionary<string, MacroTableExpander.TableEntry> _macroTables;
 
-    public LayoutWalker(IReadOnlyDictionary<string, int> ubmtTable, IReadOnlyDictionary<string, long> constants, Dictionary<string, StructBlock> structRegistry)
+    public LayoutWalker(
+        IReadOnlyDictionary<string, int> ubmtTable,
+        IReadOnlyDictionary<string, long> constants,
+        Dictionary<string, StructBlock> structRegistry,
+        IReadOnlyDictionary<string, MacroTableExpander.TableEntry>? macroTables = null)
     {
         _ubmtTable = ubmtTable;
         _constants = constants;
         _structRegistry = structRegistry;
+        _macroTables = macroTables ?? new Dictionary<string, MacroTableExpander.TableEntry>();
     }
 
     public LayoutResult Walk(StructBlock block)
@@ -77,8 +83,15 @@ public sealed class LayoutWalker
             Resources = new(),
         };
 
+        // Expand macro tables in the body BEFORE walking members. View etc.
+        // declare hundreds of members via `VIEW_UNIFORM_BUFFER_MEMBER_TABLE(...)`
+        // which we expand recursively into SHADER_PARAMETER lines first.
+        string expandedBody = _macroTables.Count > 0
+            ? MacroTableExpander.Expand(block.Body, _macroTables)
+            : block.Body;
+
         var ctx = new WalkContext();
-        WalkBlock(block.Body, prefix: string.Empty, baseOffset: 0, ctx, result);
+        WalkBlock(expandedBody, prefix: string.Empty, baseOffset: 0, ctx, result);
 
         // Round struct size up to STRUCT_ALIGN, matching the C++ packing rule.
         // UE's `FShaderParametersMetadata::ComputeFieldOffsets` does this

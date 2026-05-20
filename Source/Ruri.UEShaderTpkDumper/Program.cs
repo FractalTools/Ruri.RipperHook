@@ -87,7 +87,14 @@ public static class Program
         var constants = ConstantsCollector.Collect(sourceFiles);
         Console.WriteLine($"[tpk] constants: {constants.Count}");
 
-        // 3. Struct block enumeration.
+        // 3. Macro-table collection — UE's `VIEW_UNIFORM_BUFFER_MEMBER_TABLE`
+        //    et al. expand to multiple SHADER_PARAMETER lines inside struct
+        //    bodies. Collect them now so the walker can pre-expand each
+        //    struct body.
+        var macroTables = MacroTableExpander.Collect(sourceFiles);
+        Console.WriteLine($"[tpk] macro tables: {macroTables.Count}");
+
+        // 4. Struct block enumeration.
         Dictionary<string, StructBlock> registry = new(StringComparer.Ordinal);
         int blockCount = 0;
         foreach (string file in sourceFiles)
@@ -114,7 +121,7 @@ public static class Program
         string outDir = Path.Combine(outRoot, engine.Version.ToString());
         Directory.CreateDirectory(outDir);
         int emitted = 0;
-        var walker = new LayoutWalker(ubmtTable, constants, registry);
+        var walker = new LayoutWalker(ubmtTable, constants, registry, macroTables);
         foreach (StructBlock block in registry.Values)
         {
             if (block.Kind == "param") continue;
