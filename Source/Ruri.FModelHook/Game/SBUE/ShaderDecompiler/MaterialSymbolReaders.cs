@@ -52,7 +52,19 @@ internal sealed class MaterialJsonSymbolReader
             return null;
         }
 
-        SymbolInputs? inputs = SymbolInputsReader.Read(normalizedPath, shaderPlatform, root[0]);
+        // Pick the asset entry that actually carries material symbols.
+        // `root[0]` is the right pick for a plain material/material-instance
+        // package (FMaterial / UMaterialInstanceConstant sit at index 0).
+        // But level/landscape packages (e.g. `_Generated_/MainGrid_L2_*`)
+        // have `LandscapeComponent` at index 0 with the material symbols
+        // hiding on later `LandscapeMaterialInstanceConstant` entries — we
+        // pick the FIRST entry whose `LoadedMaterialResources` is non-empty.
+        // First-wins is a coarse heuristic: each landscape file holds N
+        // instances (one per cell) with slightly different parameter
+        // overrides. The names (which is what symbol recovery needs) are
+        // identical across instances; only the override VALUES differ.
+        JsonElement materialAsset = SelectMaterialAsset(root);
+        SymbolInputs? inputs = SymbolInputsReader.Read(normalizedPath, shaderPlatform, materialAsset);
         if (inputs == null)
         {
             _cache[cacheKey] = null;
@@ -63,11 +75,40 @@ internal sealed class MaterialJsonSymbolReader
         // referenced UMaterialParameterCollection assets — these aren't in the
         // Material UB itself, they're separate bindings that previously
         // collapsed to anonymous `_m0[N]` flat arrays.
-        MaterialParameterCollectionReader.ResolveAndInject(root[0], inputs, _exportRoot, _exportRootName);
+        MaterialParameterCollectionReader.ResolveAndInject(materialAsset, inputs, _exportRoot, _exportRootName);
 
         MaterialSymbolSource source = BuildSource(normalizedPath, inputs);
         _cache[cacheKey] = source;
         return source;
+    }
+
+    // Pick the JSON-array entry that owns the material symbols. For a
+    // plain material package this is just `root[0]`. For level packages
+    // (landscape-instance assets in particular) the LANDSCAPE COMPONENT
+    // sits at index 0 with the actual material data on later
+    // `LandscapeMaterialInstanceConstant` entries — fall back to the
+    // first entry that has a non-empty `LoadedMaterialResources` array.
+    private static JsonElement SelectMaterialAsset(JsonElement root)
+    {
+        if (HasLoadedMaterialResources(root[0]))
+        {
+            return root[0];
+        }
+        foreach (JsonElement entry in root.EnumerateArray())
+        {
+            if (HasLoadedMaterialResources(entry))
+            {
+                return entry;
+            }
+        }
+        return root[0];
+    }
+
+    private static bool HasLoadedMaterialResources(JsonElement entry)
+    {
+        if (entry.ValueKind != JsonValueKind.Object) return false;
+        if (!entry.TryGetProperty("LoadedMaterialResources", out JsonElement loaded)) return false;
+        return loaded.ValueKind == JsonValueKind.Array && loaded.GetArrayLength() > 0;
     }
 
     private string? ResolveMaterialJsonPath(string materialPath)
