@@ -214,7 +214,8 @@ internal static class Pass200_EmitShaderLabFiles
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            foreach (string line in SplitLines(program.SourceCode!))
+            string source = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash);
+            foreach (string line in SplitLines(source))
             {
                 sb.AppendLine(line);
             }
@@ -530,7 +531,8 @@ internal static class Pass200_EmitShaderLabFiles
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            string adapted = AdaptHlslForUnity(program.SourceCode!);
+            string renamed = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash);
+            string adapted = AdaptHlslForUnity(renamed);
             foreach (string line in SplitLines(adapted))
             {
                 sb.Append("            ");
@@ -752,6 +754,56 @@ internal static class Pass200_EmitShaderLabFiles
         }
         string firstArg = (firstArgEnd > lt + 1) ? raw.Substring(lt + 1, firstArgEnd - lt - 1).Trim() : string.Empty;
         return SanitizeIdent(string.IsNullOrEmpty(firstArg) ? head : (head + "_" + firstArg));
+    }
+
+    // Rewrite the SPIRV-Cross default `_Globals_m0[N]` flat-array form
+    // into a class-tagged name so the user can see at a glance which
+    // shader's loose parameters are at play. The flat-array form remains
+    // an array (no individual member naming — that would require
+    // restructuring the cbuffer block, which only the rewriter can do
+    // safely) but the IDENTIFIER acquires class context.
+    //
+    // Example transform when `ShaderTypeName="FLumenCardVS"`:
+    //   cbuffer type_Globals : register(b0, space0)
+    //   {
+    //       float4 _Globals_m0[2] : packoffset(c0);
+    //   };
+    //   ...
+    //   _Globals_m0[1u].y    →    _looseFLumenCardVS[1u].y
+    //
+    // No-op when ShaderTypeName is empty (we have nothing better than the
+    // SPIRV-Cross default) or when `_Globals_m0` isn't in the source
+    // (already named via seed reconciliation OR no $Globals cbuffer at
+    // all). This pass is intentionally a single string-replace, never
+    // touching shader structure — the rewriter remains the only piece
+    // that mutates SPIR-V.
+    private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return source;
+        if (!source.Contains("_Globals_m0", StringComparison.Ordinal)) return source;
+        // Best discriminator (in priority order):
+        //   1. ShaderTypeName - real C++ class name from the seed registry
+        //   2. ShaderHash[0:8] - when the class hash didn't resolve to a name
+        //      (custom game shaders not in engine source); the cook still
+        //      ships a unique-per-shader SHA1 prefix that's stable across
+        //      runs and matches the suffix already in the filename.
+        // Anything else means we have nothing better than the SPIRV-Cross
+        // default - leave the source untouched.
+        string discriminator;
+        if (!string.IsNullOrWhiteSpace(shaderTypeName))
+        {
+            discriminator = SanitizeIdent(shaderTypeName);
+        }
+        else if (!string.IsNullOrWhiteSpace(shaderHash) && shaderHash.Length >= 8)
+        {
+            discriminator = "h" + SanitizeIdent(shaderHash[..8]);
+        }
+        else
+        {
+            return source;
+        }
+        if (string.IsNullOrEmpty(discriminator)) return source;
+        return source.Replace("_Globals_m0", $"_loose_{discriminator}", StringComparison.Ordinal);
     }
 
     // Replace HLSL-illegal characters with underscores so the resulting
