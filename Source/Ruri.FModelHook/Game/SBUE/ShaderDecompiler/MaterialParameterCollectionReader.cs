@@ -36,10 +36,14 @@ internal static class MaterialParameterCollectionReader
     // object paths.
     public static void ResolveAndInject(JsonElement asset, SymbolInputs inputs, string exportRoot, string exportRootName)
     {
-        if (!asset.TryGetProperty("CachedExpressionData", out JsonElement ced)
-            || ced.ValueKind != JsonValueKind.Object
-            || !ced.TryGetProperty("ParameterCollectionInfos", out JsonElement pcis)
-            || pcis.ValueKind != JsonValueKind.Array)
+        // ParameterCollectionInfos live on the ROOT material in the parent
+        // chain — material instances (incl. LandscapeMaterialInstanceConstant)
+        // inherit them but don't carry their own copy. Walk Properties.Parent
+        // upward until we either find PCI or exhaust the chain. Default of
+        // 8 hops covers any realistic instance hierarchy without risk of
+        // infinite loop on a misformed asset.
+        JsonElement pcis = FindParameterCollectionInfos(asset, exportRoot, exportRootName, maxHops: 8);
+        if (pcis.ValueKind != JsonValueKind.Array)
         {
             return;
         }
@@ -63,6 +67,67 @@ internal static class MaterialParameterCollectionReader
                 inputs.ExtraConstantBuffers.Add(cb);
             }
             index++;
+        }
+    }
+
+    // Walk the MaterialInstance.Parent chain looking for CachedExpressionData.ParameterCollectionInfos.
+    // The chain is `LandscapeMaterialInstanceConstant → MI_X → MI_Y → ... → M_Root`,
+    // and only the root material's CachedExpressionData actually carries PCI.
+    private static JsonElement FindParameterCollectionInfos(JsonElement asset, string exportRoot, string exportRootName, int maxHops)
+    {
+        JsonElement current = asset;
+        for (int hop = 0; hop <= maxHops; hop++)
+        {
+            if (current.ValueKind == JsonValueKind.Object
+                && current.TryGetProperty("CachedExpressionData", out JsonElement ced)
+                && ced.ValueKind == JsonValueKind.Object
+                && ced.TryGetProperty("ParameterCollectionInfos", out JsonElement pcis)
+                && pcis.ValueKind == JsonValueKind.Array
+                && pcis.GetArrayLength() > 0)
+            {
+                return pcis;
+            }
+            if (!TryResolveParentAsset(current, exportRoot, exportRootName, out current))
+            {
+                break;
+            }
+        }
+        return default;
+    }
+
+    // Read `Properties.Parent.ObjectPath` and resolve it through the export
+    // root to a JSON file. Returns root[0] from the parent file (which is
+    // always the parent material's main asset entry).
+    private static bool TryResolveParentAsset(JsonElement asset, string exportRoot, string exportRootName, out JsonElement parent)
+    {
+        parent = default;
+        if (asset.ValueKind != JsonValueKind.Object) return false;
+        if (!asset.TryGetProperty("Properties", out JsonElement props)
+            || props.ValueKind != JsonValueKind.Object) return false;
+        if (!props.TryGetProperty("Parent", out JsonElement parentRef)
+            || parentRef.ValueKind != JsonValueKind.Object) return false;
+        if (!parentRef.TryGetProperty("ObjectPath", out JsonElement opEl)
+            || opEl.ValueKind != JsonValueKind.String) return false;
+
+        string objectPath = opEl.GetString() ?? "";
+        string? jsonPath = ResolveAssetPath(objectPath, exportRoot, exportRootName);
+        if (jsonPath == null || !File.Exists(jsonPath)) return false;
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+            if (doc.RootElement.ValueKind != JsonValueKind.Array
+                || doc.RootElement.GetArrayLength() == 0)
+            {
+                return false;
+            }
+            // Clone so the returned element survives the using-document dispose.
+            parent = doc.RootElement[0].Clone();
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
