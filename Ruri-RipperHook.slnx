@@ -126,6 +126,7 @@
   <Project Path="Source/Ruri.FModelHook/Ruri.FModelHook.csproj" />
   <Project Path="Source/Ruri.ShaderDecompiler/Ruri.ShaderDecompiler.csproj" />
   <Project Path="Source/Ruri.SourceGenerated/Ruri.SourceGenerated.csproj" />
+  <Project Path="Source/Ruri.UEShaderTpkDumper/Ruri.UEShaderTpkDumper.csproj" />
   <Project Path="Tpk/Tpk.ConsoleApp/Tpk.ConsoleApp.csproj" />
   <Project Path="Tpk/Tpk.TypeTrees.Json/Tpk.TypeTrees.Json.csproj" />
   <Project Path="Tpk/Tpk/Tpk.csproj" />
