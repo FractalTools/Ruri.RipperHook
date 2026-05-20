@@ -39,12 +39,24 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Constants from UE source: EUniformBufferBaseType + alignment + size table.
 # Mirrors ShaderParameterMacros.h:780-1116 + ShaderParameterMetadata.cpp:471 +
-# RHIUniformBufferLayoutInitializer.h:62-92. Byte-identical between UE 5.1.1
-# and UE 5.4.4 (verified in UE_SYMBOL_SOURCES.md §3).
+# RHIUniformBufferLayoutInitializer.h:62-92.
+#
+# Version drift (`Engine/Source/Runtime/RHI/Public/RHIDefinitions.h`):
+#   * UE 5.0-5.4: original layout (23 entries, 0..22).
+#   * UE 5.5+: `UBMT_RDG_TEXTURE_NON_PIXEL_SRV` inserted at slot 13
+#     (between UBMT_RDG_TEXTURE_SRV and UBMT_RDG_TEXTURE_UAV), pushing
+#     every later entry up by +1. UBMT_RESOURCE_COLLECTION also appears
+#     at slot 23 (right before EUniformBufferBaseType_Num).
+#
+# This matters because `FRHIUniformBufferLayoutInitializer::ComputeHash`
+# folds the integer enum values into the layout hash. Wrong values →
+# wrong hashes → cooked UBs don't match seed files → loose-parameter
+# names go anonymous.
 # ---------------------------------------------------------------------------
 
-# EUniformBufferBaseType enum (RHIDefinitions.h:1414).
-UBMT = {
+# UE 5.0-5.4 layout — also the default when no engine-version selector
+# is set. Override at module load via `select_ubmt_for_version()`.
+_UBMT_UE5_0_TO_5_4 = {
     "INVALID":                       0,
     "BOOL":                          1,
     "INT32":                         2,
@@ -69,6 +81,73 @@ UBMT = {
     "REFERENCED_STRUCT":            21,
     "RENDER_TARGET_BINDING_SLOTS":  22,
 }
+
+# UE 5.5+ layout — RDG_TEXTURE_NON_PIXEL_SRV inserted at 13, RESOURCE_COLLECTION at 23.
+_UBMT_UE5_5_PLUS = {
+    "INVALID":                       0,
+    "BOOL":                          1,
+    "INT32":                         2,
+    "UINT32":                        3,
+    "FLOAT32":                       4,
+    "TEXTURE":                       5,
+    "SRV":                           6,
+    "UAV":                           7,
+    "SAMPLER":                       8,
+    "RDG_TEXTURE":                   9,
+    "RDG_TEXTURE_ACCESS":           10,
+    "RDG_TEXTURE_ACCESS_ARRAY":     11,
+    "RDG_TEXTURE_SRV":              12,
+    "RDG_TEXTURE_NON_PIXEL_SRV":    13,  # NEW in 5.5
+    "RDG_TEXTURE_UAV":              14,
+    "RDG_BUFFER_ACCESS":            15,
+    "RDG_BUFFER_ACCESS_ARRAY":      16,
+    "RDG_BUFFER_SRV":               17,
+    "RDG_BUFFER_UAV":               18,
+    "RDG_UNIFORM_BUFFER":           19,
+    "NESTED_STRUCT":                20,
+    "INCLUDED_STRUCT":              21,
+    "REFERENCED_STRUCT":            22,
+    "RENDER_TARGET_BINDING_SLOTS":  23,
+    "RESOURCE_COLLECTION":          24,  # NEW in 5.5
+}
+
+# Active mapping — mutated by select_ubmt_for_version() at startup.
+UBMT = dict(_UBMT_UE5_0_TO_5_4)
+
+
+def select_ubmt_for_version(engine_version: str) -> None:
+    """Switch the active `UBMT` mapping based on the engine version string
+    (e.g. "5.4.4", "5.7.4"). Major+minor only; patch is ignored. Idempotent."""
+    global UBMT
+    try:
+        parts = engine_version.split(".")
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return
+    if major == 5 and minor >= 5:
+        UBMT.clear()
+        UBMT.update(_UBMT_UE5_5_PLUS)
+    else:
+        UBMT.clear()
+        UBMT.update(_UBMT_UE5_0_TO_5_4)
+
+
+def _ubmt_value(name: str) -> int:
+    """Resolve a UBMT name to its integer enum value. UE 5.0-5.4 doesn't
+    have `RDG_TEXTURE_NON_PIXEL_SRV` or `RESOURCE_COLLECTION`; for those
+    we fall back to the closest pre-5.5 slot so a source tree that
+    references the macro doesn't hard-error. The fallback only fires
+    when the active UBMT mapping is missing the key — once
+    select_ubmt_for_version switches to the 5.5+ table the lookup hits
+    directly."""
+    if name in UBMT:
+        return UBMT[name]
+    if name == "RDG_TEXTURE_NON_PIXEL_SRV":
+        return UBMT["RDG_TEXTURE_SRV"]
+    if name == "RESOURCE_COLLECTION":
+        return UBMT["RENDER_TARGET_BINDING_SLOTS"]
+    raise KeyError(f"Unknown UBMT name {name!r} (UBMT has {len(UBMT)} entries; did select_ubmt_for_version() run?)")
 
 POINTER_ALIGN = 8        # SHADER_PARAMETER_POINTER_ALIGNMENT
 ARRAY_ELEM_ALIGN = 16    # SHADER_PARAMETER_ARRAY_ELEMENT_ALIGNMENT
@@ -572,7 +651,11 @@ MACRO_INFO: dict[str, tuple[bool, str]] = {
     "SHADER_PARAMETER_RDG_TEXTURE_ARRAY":          (True,  "RDG_TEXTURE"),
     "SHADER_PARAMETER_RDG_TEXTURE_SRV":            (True,  "RDG_TEXTURE_SRV"),
     "SHADER_PARAMETER_RDG_TEXTURE_SRV_ARRAY":      (True,  "RDG_TEXTURE_SRV"),
-    "SHADER_PARAMETER_RDG_TEXTURE_NON_PIXEL_SRV":  (True,  "RDG_TEXTURE_SRV"),
+    # UE 5.5+ has a dedicated `UBMT_RDG_TEXTURE_NON_PIXEL_SRV` UBMT slot.
+    # For 5.0-5.4 we silently fall back to `RDG_TEXTURE_SRV` (the runtime
+    # treats both the same in those versions). select_ubmt_for_version()
+    # is responsible for switching the integer mapping at startup.
+    "SHADER_PARAMETER_RDG_TEXTURE_NON_PIXEL_SRV":  (True,  "RDG_TEXTURE_NON_PIXEL_SRV"),
     "SHADER_PARAMETER_RDG_TEXTURE_UAV":            (True,  "RDG_TEXTURE_UAV"),
     "SHADER_PARAMETER_RDG_TEXTURE_UAV_ARRAY":      (True,  "RDG_TEXTURE_UAV"),
     "SHADER_PARAMETER_RDG_BUFFER_SRV":             (True,  "RDG_BUFFER_SRV"),
@@ -896,7 +979,7 @@ def compute_layout(
                             cur.resources.append(Resource(
                                 name=f"{prefix}{m.name}",
                                 ubmt_name=m.ubmt,
-                                ubmt_value=UBMT[m.ubmt],
+                                ubmt_value=_ubmt_value(m.ubmt),
                                 offset=off,
                                 resource_index=0,  # assigned post-sort
                             ))
@@ -907,7 +990,7 @@ def compute_layout(
                         cur.resources.append(Resource(
                             name=f"{prefix}{m.name}",
                             ubmt_name=m.ubmt,
-                            ubmt_value=UBMT[m.ubmt],
+                            ubmt_value=_ubmt_value(m.ubmt),
                             offset=off,
                             resource_index=0,
                         ))
@@ -1014,7 +1097,7 @@ def compute_layout(
                             res_off = off + ln + i * POINTER_ALIGN
                             cur.resources.append(Resource(
                                 name=f"{pfx}{m.name}", ubmt_name=m.ubmt,
-                                ubmt_value=UBMT[m.ubmt], offset=res_off,
+                                ubmt_value=_ubmt_value(m.ubmt), offset=res_off,
                                 resource_index=0,
                             ))
                         ln += elem_size * array_n
@@ -1023,7 +1106,7 @@ def compute_layout(
                         res_off = off + ln
                         cur.resources.append(Resource(
                             name=f"{pfx}{m.name}", ubmt_name=m.ubmt,
-                            ubmt_value=UBMT[m.ubmt], offset=res_off,
+                            ubmt_value=_ubmt_value(m.ubmt), offset=res_off,
                             resource_index=0,
                         ))
                         ln += elem_size
@@ -1407,6 +1490,14 @@ def main() -> int:
     def warn(msg: str) -> None:
         if args.verbose:
             print(msg)
+
+    # Pick the right `EUniformBufferBaseType` integer mapping before any
+    # layout-hash computation. UE 5.5 inserted UBMT_RDG_TEXTURE_NON_PIXEL_SRV
+    # at slot 13, shifting later values up by +1, and appended
+    # UBMT_RESOURCE_COLLECTION at slot 23. Using the wrong mapping silently
+    # mis-hashes every UB whose resources reference UBMT_RDG_TEXTURE_UAV+.
+    select_ubmt_for_version(args.engine_version)
+    print(f"[gen] UBMT mapping: {len(UBMT)} entries (RDG_TEXTURE_UAV={UBMT.get('RDG_TEXTURE_UAV')}) for UE {args.engine_version}")
 
     print(f"[gen] scanning {engine_src} ...")
     constants = collect_constants(engine_src)
