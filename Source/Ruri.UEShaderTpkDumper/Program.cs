@@ -166,6 +166,33 @@ public static class Program
             emitted++;
         }
         Console.WriteLine($"[tpk] emitted {emitted} layout JSONs under {outDir}");
+
+        // 6. ShaderType seed extraction — LAYOUT_FIELD scan over every
+        //    FShader-derived class. Emits one seed JSON per class with the
+        //    parameter NAMES (source-declaration order). Pass180's
+        //    TryReconcileGlobalsCB pairs these names with cook-side real
+        //    byte offsets to recover `$Globals` member names.
+        var classes = ShaderTypeSeedScanner.ScanAll(sourceFiles).ToList();
+        int seedCount = ShaderTypeSeedEmitter.Emit(outDir, classes, engine.Version.ToString());
+        Console.WriteLine($"[tpk] emitted {seedCount} ShaderType seed JSONs ({classes.Sum(c => c.Fields.Count)} LAYOUT_FIELDs)");
+
+        // 7. Hash-to-name indexes — three sister tables for ShaderType,
+        //    VertexFactoryType, and ShaderPipelineType. Same CityHash math,
+        //    different name sources.
+        var (shaderTypeNames, vfNames, pipelineNames) = IndexNameCollector.CollectAll(sourceFiles);
+        int stCount = HashNameIndexEmitter.Emit(outDir, "_ShaderType",
+            "FShaderType::HashedName -> source-recovered class name. "
+            + "Populates ShaderTypeName at decompile time when the cooked stableinfo.json left it empty.",
+            shaderTypeNames);
+        int vfCount = HashNameIndexEmitter.Emit(outDir, "_VertexFactoryType",
+            "FVertexFactoryType::HashedName -> source-recovered class name. "
+            + "Populates VertexFactoryTypeName at decompile time when the cooked stableinfo.json left it empty.",
+            vfNames);
+        int pipeCount = HashNameIndexEmitter.Emit(outDir, "_ShaderPipelineType",
+            "FShaderPipelineType::HashedName -> source-recovered pipeline name. "
+            + "Populates PipelineTypeName at decompile time when the cooked stableinfo.json left it empty.",
+            pipelineNames);
+        Console.WriteLine($"[tpk] hash-to-name: ShaderType={stCount}, VertexFactoryType={vfCount}, ShaderPipelineType={pipeCount}");
     }
 
     private const string HelpText = """
