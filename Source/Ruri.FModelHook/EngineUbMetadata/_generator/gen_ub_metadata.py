@@ -1257,6 +1257,17 @@ def compute_hash(constant_buffer_size: int, binding_flags: int, has_static_slot:
     """Re-implements ``FRHIUniformBufferLayoutInitializer::ComputeHash`` byte-for-byte.
 
     Source: ``RHIResources.h:806-836`` (5.1) / ``RHIUniformBufferLayoutInitializer.h:62-92`` (5.4)
+
+    UE 5.5+ NOTE — UE 5.5 added 3 new bits to the hash from
+    `ERHIUniformBufferFlags`:
+        bit 1: NoEmulatedUniformBuffer
+        bit 2: NeedsReflectedMembers
+        bit 3: UniformView
+    These default to 0 and only get OR'd in for UBs that explicitly set
+    them. Standard user-facing UBs (no flags set) hash identically
+    between 5.4 and 5.7. UBs that DO set them (rare; mostly RDG
+    internals) would still hash wrong here. Known limitation; deferred
+    until a real failure surfaces.
     """
     h = ((constant_buffer_size & 0xFFFF) << 16) \
         | ((binding_flags & 0xFF) << 8) \
