@@ -814,49 +814,73 @@ internal static class Pass200_EmitShaderLabFiles
             result = result.Replace("_Globals_m0", $"_loose_{discriminator}", StringComparison.Ordinal);
         }
 
-        // 2. Rename anonymous `T<N>` texture bindings that the SRT decoder
-        //    failed to symbolise. These are real textures the cooked shader
-        //    binds at register t<N> — engine-side resources (volumetric
-        //    lightmaps, BasePass globals, landscape continuous-LOD tables,
-        //    etc.) whose owning UB isn't in the runtime's seed-name index.
+        // 2. Rename anonymous `T<N>` texture bindings and `U<N>` UAV
+        //    bindings that the SRT decoder failed to symbolise. These
+        //    are real bindings the cooked shader exposes at register
+        //    t<N>/u<N> — engine-side resources (volumetric lightmaps,
+        //    BasePass globals, landscape continuous-LOD tables, etc.)
+        //    whose owning UB isn't in the runtime's seed-name index.
         //    Without this fallback they stay as the SPIRV-Cross default
-        //    identifiers `T0`, `T1`, ... — opaque, indistinguishable
+        //    identifiers `T0/T1/U0/U1/...` — opaque, indistinguishable
         //    across shaders that reuse the same numeric slot.
         //
         //    The transform converts both the declaration and every usage
-        //    of `T<N>` into `<class>_T<N>` (e.g. `MainGrid_L2_T5`) so each
-        //    shader's loose texture set is at least scoped to its class.
-        //    Detection uses a regex anchored on the canonical declaration
-        //    form `Texture<Dim><Sampling> T<N> : register(t<N>` — any
-        //    `T<N>` whose declaration matches that anchor gets renamed
-        //    along with every word-boundary reference; other identifiers
-        //    that happen to look like `T<digits>` (uncommon, but possible)
-        //    are left alone.
-        if (result.Contains(" : register(t", StringComparison.Ordinal))
+        //    into `<class>_<original>` (e.g. `MainGrid_L2_T5`). Detection
+        //    uses a regex anchored on the canonical declaration form
+        //    (`^<Type> <prefix><N> : register(<x><N>`) so unrelated
+        //    identifiers that happen to look like `T<digits>` or
+        //    `U<digits>` are left alone; references are then renamed
+        //    via word-boundary replace.
+        if (result.Contains(" : register(", StringComparison.Ordinal))
         {
-            // Collect the set of anonymous T-numbered slots actually
-            // declared in this shader. Each declaration line looks like:
-            //   Texture2D<float4> T0 : register(t0, space0);
-            //   RWTexture2D<float4> T17 : register(u17, space0);
-            //   ByteAddressBuffer T5 : register(t5, space0);
-            HashSet<string> anonNames = new(StringComparer.Ordinal);
+            HashSet<string> anonNames = new(StringComparison.Ordinal == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
-                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+(T\d+)\s*:\s*register\(",
+                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+([TU]\d+)\s*:\s*register\(",
                 System.Text.RegularExpressions.RegexOptions.Multiline))
             {
                 anonNames.Add(m.Groups[1].Value);
             }
             foreach (string anon in anonNames)
             {
-                // Word-boundary replace — `T1` must not match inside
-                // `TEXCOORD_1` or similar identifiers. \b on both sides
-                // handles the boundary correctly because `T<digit>` is
-                // a pure identifier token.
                 result = System.Text.RegularExpressions.Regex.Replace(
                     result,
                     @"\b" + System.Text.RegularExpressions.Regex.Escape(anon) + @"\b",
                     $"{discriminator}_{anon}");
+            }
+        }
+
+        // 3. Rename anonymous `<CBName>_m0[` flat-array members where the
+        //    cbuffer block carries a real name but its single member is
+        //    still the SPIRV-Cross default `_m0`. This shows up for
+        //    cbuffers the rewriter didn't restructure (e.g.
+        //    `MaterialCollection0` when the project's
+        //    UMaterialParameterCollection resolution failed for a
+        //    specific shader). The block-name already provides context,
+        //    so the member just needs a less opaque suffix —
+        //    `MaterialCollection0_m0` -> `MaterialCollection0_loose`.
+        //    Targeted match: only rename when the token follows a known
+        //    cbuffer name AND the cbuffer was declared in this file
+        //    (collected from `cbuffer type_<Name>` lines so we don't
+        //    accidentally rename `Material_m0` if Material isn't a CB).
+        if (result.Contains("_m0", StringComparison.Ordinal))
+        {
+            HashSet<string> cbufferNames = new(StringComparer.Ordinal);
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                result,
+                @"^cbuffer\s+type_([A-Za-z_][A-Za-z0-9_]*)\s*:",
+                System.Text.RegularExpressions.RegexOptions.Multiline))
+            {
+                cbufferNames.Add(m.Groups[1].Value);
+            }
+            foreach (string cb in cbufferNames)
+            {
+                string token = $"{cb}_m0";
+                if (!result.Contains(token, StringComparison.Ordinal)) continue;
+                result = System.Text.RegularExpressions.Regex.Replace(
+                    result,
+                    @"\b" + System.Text.RegularExpressions.Regex.Escape(token) + @"\b",
+                    $"{cb}_loose");
             }
         }
 
