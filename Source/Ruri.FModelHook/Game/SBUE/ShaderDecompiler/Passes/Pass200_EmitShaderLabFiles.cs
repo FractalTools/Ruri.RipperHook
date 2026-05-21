@@ -833,20 +833,47 @@ internal static class Pass200_EmitShaderLabFiles
         //    via word-boundary replace.
         if (result.Contains(" : register(", StringComparison.Ordinal))
         {
-            HashSet<string> anonNames = new(StringComparison.Ordinal == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.Ordinal);
+            // Match the canonical anonymous-binding declaration forms:
+            //   Texture2D<float4> T0 : register(t0, space0);      ← SM5 DXBC fallback
+            //   RWTexture2D<float4> U2 : register(u2, space0);    ← SM5 UAV
+            //   Texture3D<uint4> _8 : register(t0, space0);       ← SM6 DXIL fallback (SSA id)
+            // Identifier captured as group 1, slot prefix (t/u/s/b) + index as 2,3.
+            // For T<N>/U<N>: rename to <class>_T<N> (keep the existing
+            //   numeric suffix — Stage 46/47 convention).
+            // For _<id>: rename to <class>_<slotPrefix><slotIdx> using the
+            //   register slot, so two shaders' "_8" textures at different
+            //   register slots get DIFFERENT names.
+            Dictionary<string, string> rename = new(StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
-                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+([TU]\d+)\s*:\s*register\(",
+                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+([TU]\d+|_\d+)\s*:\s*register\(([tusb])(\d+)",
                 System.Text.RegularExpressions.RegexOptions.Multiline))
             {
-                anonNames.Add(m.Groups[1].Value);
+                string ident = m.Groups[1].Value;
+                if (rename.ContainsKey(ident)) continue;
+                string slotPrefix = m.Groups[2].Value;
+                string slotIdx = m.Groups[3].Value;
+                string suffix;
+                if (ident.StartsWith("_", StringComparison.Ordinal))
+                {
+                    // SM6/SSA-id form — use the register slot for the name
+                    // (e.g. `t3` → `T3`, `u17` → `U17`) so the renamed
+                    // identifier is slot-deterministic across shaders.
+                    suffix = $"{slotPrefix.ToUpperInvariant()}{slotIdx}";
+                }
+                else
+                {
+                    // T<N>/U<N> form — preserve original suffix.
+                    suffix = ident;
+                }
+                rename[ident] = $"{discriminator}_{suffix}";
             }
-            foreach (string anon in anonNames)
+            foreach (KeyValuePair<string, string> kv in rename)
             {
                 result = System.Text.RegularExpressions.Regex.Replace(
                     result,
-                    @"\b" + System.Text.RegularExpressions.Regex.Escape(anon) + @"\b",
-                    $"{discriminator}_{anon}");
+                    @"\b" + System.Text.RegularExpressions.Regex.Escape(kv.Key) + @"\b",
+                    kv.Value);
             }
         }
 
