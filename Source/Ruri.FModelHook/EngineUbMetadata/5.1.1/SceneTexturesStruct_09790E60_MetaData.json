@@ -125,79 +125,92 @@
       "Index": 0,
       "Offset": 0,
       "Name": "SceneColorTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "SceneDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "GBufferATexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "GBufferBTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "GBufferCTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "GBufferDTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 6,
       "Offset": 48,
       "Name": "GBufferETexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 7,
       "Offset": 56,
       "Name": "GBufferFTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 8,
       "Offset": 64,
       "Name": "GBufferVelocityTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 9,
       "Offset": 72,
       "Name": "ScreenSpaceAOTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 10,
       "Offset": 80,
       "Name": "CustomDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 11,
       "Offset": 88,
       "Name": "CustomStencilTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV",
+      "ShaderType": "Texture2D<uint2>"
     },
     {
       "Index": 12,
       "Offset": 96,
       "Name": "PointClampSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

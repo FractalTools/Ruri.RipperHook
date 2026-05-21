@@ -833,39 +833,55 @@ internal static class Pass200_EmitShaderLabFiles
         //    via word-boundary replace.
         if (result.Contains(" : register(", StringComparison.Ordinal))
         {
-            // Match the canonical anonymous-binding declaration forms:
-            //   Texture2D<float4> T0 : register(t0, space0);      ← SM5 DXBC fallback
-            //   RWTexture2D<float4> U2 : register(u2, space0);    ← SM5 UAV
-            //   Texture3D<uint4> _8 : register(t0, space0);       ← SM6 DXIL fallback (SSA id)
-            // Identifier captured as group 1, slot prefix (t/u/s/b) + index as 2,3.
-            // For T<N>/U<N>: rename to <class>_T<N> (keep the existing
-            //   numeric suffix — Stage 46/47 convention).
-            // For _<id>: rename to <class>_<slotPrefix><slotIdx> using the
-            //   register slot, so two shaders' "_8" textures at different
-            //   register slots get DIFFERENT names.
+            // Match the canonical anonymous-binding declaration forms.
+            // Capture groups:
+            //   1 — the declared HLSL type token, including angle-bracket
+            //       generics: `Texture2D<float4>`, `RWTexture2D<float4>`,
+            //       `ByteAddressBuffer`, `RWByteAddressBuffer`,
+            //       `Buffer<float4>`, `Texture3D<uint4>`, ...
+            //   2 — the anonymous identifier (T<N>, U<N>, or _<digits>)
+            //   3 — slot prefix (t/u/s/b)
+            //   4 — slot index (decimal)
+            //
+            // Rename priority:
+            //   A. Type-uniqueness via EngineTypeUniquenessIndex — when the
+            //      engine UB metadata has EXACTLY ONE resource matching the
+            //      cooked binding's (UbmtType, HLSL type) pair, rename to
+            //      `<UB>_<ResourceName>` (real plaintext name).
+            //   B. Class-hash + slot fallback: `<class>_T<N>` (T/U form keeps
+            //      its original suffix; SSA-id form gets `<class>_<slotPrefix
+            //      .upper><slotIdx>` so the identifier is slot-deterministic).
             Dictionary<string, string> rename = new(StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
-                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+([TU]\d+|_\d+)\s*:\s*register\(([tusb])(\d+)",
+                @"^([A-Za-z][A-Za-z0-9_]*(?:<[^>]+>)?)\s+([TU]\d+|_\d+)\s*:\s*register\(([tusb])(\d+)",
                 System.Text.RegularExpressions.RegexOptions.Multiline))
             {
-                string ident = m.Groups[1].Value;
+                string hlslType = m.Groups[1].Value.Trim();
+                string ident = m.Groups[2].Value;
+                string slotPrefix = m.Groups[3].Value;
+                string slotIdx = m.Groups[4].Value;
                 if (rename.ContainsKey(ident)) continue;
-                string slotPrefix = m.Groups[2].Value;
-                string slotIdx = m.Groups[3].Value;
-                string suffix;
-                if (ident.StartsWith("_", StringComparison.Ordinal))
+
+                // (A) Type-uniqueness lookup. Map HLSL declaration types to
+                //     the engine's UBMT classification:
+                //       Texture<Dim>                        -> UBMT_TEXTURE
+                //       RWTexture<Dim>                      -> UBMT_UAV
+                //       ByteAddressBuffer / Buffer<...> SRV -> UBMT_SRV
+                //       RWByteAddressBuffer / RW SRV/UAV    -> UBMT_UAV
+                //       SamplerState / SamplerComparisonState -> UBMT_SAMPLER
+                string ubmtKind = ClassifyUbmtFromHlslType(hlslType, slotPrefix);
+                if (!string.IsNullOrEmpty(ubmtKind)
+                    && EngineTypeUniquenessIndex.TryResolveUnique(ubmtKind, hlslType, out string ubName, out string resName))
                 {
-                    // SM6/SSA-id form — use the register slot for the name
-                    // (e.g. `t3` → `T3`, `u17` → `U17`) so the renamed
-                    // identifier is slot-deterministic across shaders.
-                    suffix = $"{slotPrefix.ToUpperInvariant()}{slotIdx}";
+                    rename[ident] = $"{ubName}_{resName}";
+                    continue;
                 }
-                else
-                {
-                    // T<N>/U<N> form — preserve original suffix.
-                    suffix = ident;
-                }
+
+                // (B) Fallback rename with class-hash discriminator.
+                string suffix = ident.StartsWith("_", StringComparison.Ordinal)
+                    ? $"{slotPrefix.ToUpperInvariant()}{slotIdx}"
+                    : ident;
                 rename[ident] = $"{discriminator}_{suffix}";
             }
             foreach (KeyValuePair<string, string> kv in rename)
@@ -912,6 +928,53 @@ internal static class Pass200_EmitShaderLabFiles
         }
 
         return result;
+    }
+
+    // Classify an HLSL declaration type token (e.g. `Texture2D<float4>`,
+    // `RWByteAddressBuffer`, `SamplerState`) into one of UE's
+    // EUniformBufferBaseType enum names so the type-uniqueness lookup
+    // can match against engine UB metadata.
+    //
+    // The slot prefix from `register(<t|u|s|b><N>)` is the tie-breaker
+    // for ambiguous HLSL types — `Buffer<float4>` on a `u` register is
+    // a UAV; on a `t` register it's an SRV. Returns empty string for
+    // types we can't classify (caller falls back to hash-tagged rename).
+    private static string ClassifyUbmtFromHlslType(string hlslType, string slotPrefix)
+    {
+        if (string.IsNullOrEmpty(hlslType)) return string.Empty;
+
+        // Strip generic parameters for the head-type check.
+        int lt = hlslType.IndexOf('<');
+        string head = lt < 0 ? hlslType : hlslType.Substring(0, lt);
+
+        // RW prefix => UAV regardless of head.
+        if (head.StartsWith("RW", StringComparison.Ordinal)) return "UBMT_UAV";
+
+        // Sampler types (no RW variant).
+        if (head == "SamplerState" || head == "SamplerComparisonState") return "UBMT_SAMPLER";
+
+        // Texture<Dim>: t-register => UBMT_TEXTURE
+        //   (also covers TextureCube, Texture2DArray, etc.)
+        if (head.StartsWith("Texture", StringComparison.Ordinal))
+        {
+            return slotPrefix == "u" ? "UBMT_UAV" : "UBMT_TEXTURE";
+        }
+
+        // ByteAddressBuffer / Buffer<...> / StructuredBuffer<...>: SRV
+        //   on t-register, UAV on u-register.
+        if (head == "ByteAddressBuffer"
+            || head == "Buffer"
+            || head == "StructuredBuffer"
+            || head == "AppendStructuredBuffer"
+            || head == "ConsumeStructuredBuffer")
+        {
+            return slotPrefix == "u" ? "UBMT_UAV" : "UBMT_SRV";
+        }
+
+        // Ray tracing acceleration structure (SRV).
+        if (head == "RaytracingAccelerationStructure") return "UBMT_SRV";
+
+        return string.Empty;
     }
 
     // Replace HLSL-illegal characters with underscores so the resulting

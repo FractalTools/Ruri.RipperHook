@@ -97,31 +97,36 @@
       "Index": 0,
       "Offset": 16,
       "Name": "IESLightProfileTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 1,
       "Offset": 24,
       "Name": "IESLightProfileTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 32,
       "Name": "LightDataBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     },
     {
       "Index": 3,
       "Offset": 40,
       "Name": "LightIndices",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 4,
       "Offset": 48,
       "Name": "LightCullingVolume",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     }
   ]
 }

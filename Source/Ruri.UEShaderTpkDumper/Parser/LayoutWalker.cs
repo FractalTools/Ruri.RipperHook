@@ -24,6 +24,14 @@ public sealed class ResolvedResource
     public required string Ubmt;     // UBMT slot name without UBMT_ prefix
     public required string Name;
     public required int ResourceIndex;  // assigned post-sort
+    // HLSL/CPP-side type signature as it appears in
+    // `SHADER_PARAMETER_TEXTURE(Texture3D<uint4>, …)` etc. Used by the
+    // runtime symbol resolver to pick a real name when the SRT didn't
+    // record an entry but the engine UB has a type-unique resource (e.g.
+    // `Texture3D<uint4>` -> View.VolumetricLightmapIndirectionTexture).
+    // May be empty for the few macros that don't carry a type token
+    // (e.g. RENDER_TARGET_BINDING_SLOTS).
+    public string ShaderType { get; set; } = string.Empty;
 }
 
 public sealed class LayoutResult
@@ -170,6 +178,7 @@ public sealed class LayoutWalker
                     Ubmt = line.Ubmt,
                     Offset = off,
                     ResourceIndex = 0,
+                    ShaderType = line.ShaderType ?? string.Empty,
                 });
             }
             ctx.LocalNext += elemSize * arrayN;
@@ -184,6 +193,7 @@ public sealed class LayoutWalker
                 Ubmt = line.Ubmt,
                 Offset = off,
                 ResourceIndex = 0,
+                ShaderType = line.ShaderType ?? string.Empty,
             });
             ctx.LocalNext += elemSize;
         }

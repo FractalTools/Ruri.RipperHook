@@ -120,4 +120,12 @@ internal sealed class EngineUbResourceSlot
     // EUniformBufferBaseType enum name: UBMT_TEXTURE, UBMT_SAMPLER,
     // UBMT_SRV, UBMT_UAV, UBMT_RDG_TEXTURE, UBMT_RDG_BUFFER, etc.
     public string UbmtType { get; set; } = string.Empty;
+    // HLSL/CPP-side type signature as it appears in the UE source macro
+    // — e.g. `Texture3D<uint4>`, `ByteAddressBuffer`, `SamplerState`.
+    // Empty for the rare macros without a type token. Used by the
+    // type-uniqueness rename path: when the cooked shader has an
+    // anonymous binding of a given (UbmtType, ShaderType) combo and the
+    // engine UB index has exactly one resource matching that combo, the
+    // anonymous slot can be confidently renamed to that real source name.
+    public string ShaderType { get; set; } = string.Empty;
 }

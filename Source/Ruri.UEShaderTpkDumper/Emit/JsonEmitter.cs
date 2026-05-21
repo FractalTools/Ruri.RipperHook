@@ -167,6 +167,15 @@ public static class JsonEmitter
                 ["Offset"] = r.Offset,
                 ["Name"] = r.Name,
                 ["UbmtType"] = "UBMT_" + r.Ubmt,
+                // HLSL/CPP-side type signature (e.g. "Texture3D<uint4>",
+                // "ByteAddressBuffer", "SamplerState"). Empty for macros
+                // that don't carry one (RENDER_TARGET_BINDING_SLOTS).
+                // Used at decompile time by the type-uniqueness rename
+                // path: if the engine has exactly one resource matching
+                // a given (UbmtType, ShaderType) pair, an anonymous slot
+                // of that exact type can be confidently renamed to the
+                // real UE source name.
+                ["ShaderType"] = r.ShaderType,
             });
         }
         return list;
