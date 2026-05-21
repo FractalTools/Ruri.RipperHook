@@ -193,10 +193,10 @@ internal static class Pass030_ScanMaterialPackages
     // per scan mode.
     private static UnifiedMaterialMetadata? LoadAndExtractByPath(AbstractVfsFileProvider provider, string packagePath, ref int loaded, ref int loadFailures)
     {
-        CUE4Parse.UE4.Assets.Exports.UObject? asset;
+        CUE4Parse.UE4.Assets.IPackage? package;
         try
         {
-            asset = provider.LoadPackageObject(packagePath);
+            package = provider.LoadPackage(packagePath);
             loaded++;
         }
         catch (Exception ex)
@@ -206,28 +206,41 @@ internal static class Pass030_ScanMaterialPackages
             return null;
         }
 
-        if (asset == null) return null;
+        if (package == null) return null;
 
         try
         {
-            if (asset is UMaterialInterface material)
+            // Walk every export and prefer the FIRST UMaterialInterface
+            // we find. For ordinary material packages this is the only
+            // (or first) export and `LoadPackageObject` would have
+            // worked the same; for level-package _Generated_ landscape
+            // material instances (e.g. MainGrid_L2_X0_Y-1_DL0) the
+            // FIRST export is a LandscapeComponent and the actual
+            // LandscapeMaterialInstanceConstant lives a few exports
+            // later — `LoadPackageObject` would fall through to the
+            // generic-stub branch and lose ALL shader-map type info,
+            // leaving every shader in those packages with empty
+            // ShaderTypeHash/VertexFactoryTypeHash downstream.
+            UMaterialInterface? material = null;
+            CUE4Parse.UE4.Assets.Exports.UObject? firstExport = null;
+            foreach (CUE4Parse.UE4.Assets.Exports.UObject export in package.GetExports())
+            {
+                firstExport ??= export;
+                if (export is UMaterialInterface mat)
+                {
+                    material = mat;
+                    break;
+                }
+            }
+            if (material != null)
             {
                 return ExtractMaterialContext(material, packagePath);
             }
-            // Anything else that survived the candidate filter — the
-            // dominant case is Niagara (NS_/NE_/NSC_/NM_). The generic
-            // path produces a stub metadata entry: no LoadedShaderMaps
-            // (Niagara has its own separate shader-map graph that we
-            // don't fold into the unified file today), no RenderState
-            // (Niagara doesn't drive material PSO state), but the
-            // CachedParameters bucket gets populated and the caller
-            // stamps the package's shader-map hashes on top.
-            //
-            // Returning a stub-with-CachedParameters is intentionally
-            // additive: it lets the downstream Pass 140 hash bridge see
-            // these packages and the file-naming chain (Pass 150)
-            // surface "NS_Foo" instead of "UnknownMaterial".
-            return ExtractGenericContext(asset, packagePath);
+            if (firstExport != null)
+            {
+                return ExtractGenericContext(firstExport, packagePath);
+            }
+            return null;
         }
         catch (Exception ex)
         {
