@@ -780,7 +780,6 @@ internal static class Pass200_EmitShaderLabFiles
     private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
-        if (!source.Contains("_Globals_m0", StringComparison.Ordinal)) return source;
         // Best discriminator (in priority order):
         //   1. ShaderTypeName - real C++ class name from the seed registry
         //   2. ShaderHash[0:8] - when the class hash didn't resolve to a name
@@ -803,7 +802,65 @@ internal static class Pass200_EmitShaderLabFiles
             return source;
         }
         if (string.IsNullOrEmpty(discriminator)) return source;
-        return source.Replace("_Globals_m0", $"_loose_{discriminator}", StringComparison.Ordinal);
+
+        string result = source;
+
+        // 1. Rename the SPIRV-Cross default $Globals member when the
+        //    runtime didn't successfully reconcile it. Plain string-
+        //    replace is safe — the SPIRV-Cross convention emits a single
+        //    token `_Globals_m0` with no name collisions.
+        if (result.Contains("_Globals_m0", StringComparison.Ordinal))
+        {
+            result = result.Replace("_Globals_m0", $"_loose_{discriminator}", StringComparison.Ordinal);
+        }
+
+        // 2. Rename anonymous `T<N>` texture bindings that the SRT decoder
+        //    failed to symbolise. These are real textures the cooked shader
+        //    binds at register t<N> — engine-side resources (volumetric
+        //    lightmaps, BasePass globals, landscape continuous-LOD tables,
+        //    etc.) whose owning UB isn't in the runtime's seed-name index.
+        //    Without this fallback they stay as the SPIRV-Cross default
+        //    identifiers `T0`, `T1`, ... — opaque, indistinguishable
+        //    across shaders that reuse the same numeric slot.
+        //
+        //    The transform converts both the declaration and every usage
+        //    of `T<N>` into `<class>_T<N>` (e.g. `MainGrid_L2_T5`) so each
+        //    shader's loose texture set is at least scoped to its class.
+        //    Detection uses a regex anchored on the canonical declaration
+        //    form `Texture<Dim><Sampling> T<N> : register(t<N>` — any
+        //    `T<N>` whose declaration matches that anchor gets renamed
+        //    along with every word-boundary reference; other identifiers
+        //    that happen to look like `T<digits>` (uncommon, but possible)
+        //    are left alone.
+        if (result.Contains(" : register(t", StringComparison.Ordinal))
+        {
+            // Collect the set of anonymous T-numbered slots actually
+            // declared in this shader. Each declaration line looks like:
+            //   Texture2D<float4> T0 : register(t0, space0);
+            //   RWTexture2D<float4> T17 : register(u17, space0);
+            //   ByteAddressBuffer T5 : register(t5, space0);
+            HashSet<string> anonNames = new(StringComparer.Ordinal);
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                result,
+                @"^[A-Za-z][A-Za-z0-9_<>\,\s\.]*\s+(T\d+)\s*:\s*register\(",
+                System.Text.RegularExpressions.RegexOptions.Multiline))
+            {
+                anonNames.Add(m.Groups[1].Value);
+            }
+            foreach (string anon in anonNames)
+            {
+                // Word-boundary replace — `T1` must not match inside
+                // `TEXCOORD_1` or similar identifiers. \b on both sides
+                // handles the boundary correctly because `T<digit>` is
+                // a pure identifier token.
+                result = System.Text.RegularExpressions.Regex.Replace(
+                    result,
+                    @"\b" + System.Text.RegularExpressions.Regex.Escape(anon) + @"\b",
+                    $"{discriminator}_{anon}");
+            }
+        }
+
+        return result;
     }
 
     // Replace HLSL-illegal characters with underscores so the resulting
