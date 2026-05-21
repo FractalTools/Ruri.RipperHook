@@ -339,49 +339,57 @@
       "Index": 0,
       "Offset": 344,
       "Name": "DirectionalLightShadowmapAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 352,
       "Name": "ShadowmapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 360,
       "Name": "DirectionalLightStaticShadowmap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 368,
       "Name": "StaticShadowmapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 4,
       "Offset": 376,
       "Name": "ForwardLocalLightBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 5,
       "Offset": 384,
       "Name": "NumCulledLightsGrid",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 6,
       "Offset": 392,
       "Name": "CulledLightDataGrid",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 7,
       "Offset": 400,
       "Name": "DummyRectLightSourceTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     }
   ]
 }

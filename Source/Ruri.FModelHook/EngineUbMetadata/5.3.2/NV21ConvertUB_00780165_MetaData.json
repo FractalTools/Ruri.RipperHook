@@ -84,19 +84,22 @@
       "Index": 0,
       "Offset": 80,
       "Name": "Texture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 88,
       "Name": "SamplerB",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 96,
       "Name": "SamplerP",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

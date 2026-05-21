@@ -174,85 +174,99 @@
       "Index": 0,
       "Offset": 16,
       "Name": "RectLightTexture0",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 24,
       "Name": "RectLightTexture1",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 32,
       "Name": "RectLightTexture2",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 40,
       "Name": "RectLightTexture3",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 4,
       "Offset": 48,
       "Name": "RectLightTexture4",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 5,
       "Offset": 56,
       "Name": "RectLightTexture5",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 6,
       "Offset": 64,
       "Name": "RectLightTexture6",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 7,
       "Offset": 72,
       "Name": "RectLightTexture7",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 8,
       "Offset": 80,
       "Name": "IESLightProfileTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 9,
       "Offset": 88,
       "Name": "IESLightProfileTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 10,
       "Offset": 96,
       "Name": "SSProfilesTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 11,
       "Offset": 104,
       "Name": "LightDataBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     },
     {
       "Index": 12,
       "Offset": 112,
       "Name": "LightIndices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 13,
       "Offset": 120,
       "Name": "LightCullingVolume",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     }
   ]
 }

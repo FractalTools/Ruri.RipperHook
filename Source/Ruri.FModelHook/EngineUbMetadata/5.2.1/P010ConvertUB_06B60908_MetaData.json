@@ -92,25 +92,29 @@
       "Index": 0,
       "Offset": 144,
       "Name": "SRV_Y",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 152,
       "Name": "SRV_UV",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 160,
       "Name": "SamplerB",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 3,
       "Offset": 168,
       "Name": "SamplerP",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

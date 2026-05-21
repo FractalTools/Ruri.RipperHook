@@ -199,25 +199,29 @@
       "Index": 0,
       "Offset": 560,
       "Name": "TopLevelFroxelGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FTopLevelGridData>"
     },
     {
       "Index": 1,
       "Offset": 568,
       "Name": "ExtinctionFroxelGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FScalarGridData>"
     },
     {
       "Index": 2,
       "Offset": 576,
       "Name": "EmissionFroxelGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FVectorGridData>"
     },
     {
       "Index": 3,
       "Offset": 584,
       "Name": "ScatteringFroxelGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FVectorGridData>"
     }
   ]
 }

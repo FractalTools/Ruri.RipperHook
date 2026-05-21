@@ -73,7 +73,8 @@
       "Index": 0,
       "Offset": 80,
       "Name": "YUVTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint4>"
     }
   ]
 }

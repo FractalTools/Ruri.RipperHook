@@ -97,49 +97,57 @@
       "Index": 0,
       "Offset": 24,
       "Name": "SkyLightCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "SkyLightCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "SkyLightBlendDestinationCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "SkyLightBlendDestinationCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 4,
       "Offset": 56,
       "Name": "ReflectionCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCubeArray"
     },
     {
       "Index": 5,
       "Offset": 64,
       "Name": "ReflectionCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 6,
       "Offset": 72,
       "Name": "PreIntegratedGF",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 7,
       "Offset": 80,
       "Name": "PreIntegratedGFSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

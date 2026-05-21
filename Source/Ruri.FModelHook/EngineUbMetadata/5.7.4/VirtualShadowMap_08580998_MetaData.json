@@ -505,73 +505,85 @@
       "Index": 0,
       "Offset": 216,
       "Name": "ProjectionData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 1,
       "Offset": 224,
       "Name": "PageTableSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 232,
       "Name": "PageTable",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 3,
       "Offset": 240,
       "Name": "PageFlags",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 4,
       "Offset": 248,
       "Name": "PageReceiverMasks",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 5,
       "Offset": 256,
       "Name": "AllocatedPageRectBounds",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     },
     {
       "Index": 6,
       "Offset": 264,
       "Name": "UncachedPageRectBounds",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     },
     {
       "Index": 7,
       "Offset": 272,
       "Name": "PhysicalPagePool",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 8,
       "Offset": 280,
       "Name": "CachePrimitiveAsDynamic",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 9,
       "Offset": 576,
       "Name": "LightGridData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 10,
       "Offset": 584,
       "Name": "NumCulledLightsGrid",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 11,
       "Offset": 600,
       "Name": "DirectionalLightIds",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<int>"
     }
   ]
 }

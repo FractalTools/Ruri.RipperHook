@@ -210,163 +210,190 @@
       "Index": 0,
       "Offset": 0,
       "Name": "SceneColorTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "SceneColorTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "SceneDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "SceneDepthTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "SceneDepthTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "ScenePartialDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 6,
       "Offset": 48,
       "Name": "ScenePartialDepthTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 7,
       "Offset": 56,
       "Name": "CustomDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 8,
       "Offset": 64,
       "Name": "CustomDepthTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 9,
       "Offset": 72,
       "Name": "CustomDepthTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 10,
       "Offset": 80,
       "Name": "CustomStencilTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV",
+      "ShaderType": "Texture2D<uint2>"
     },
     {
       "Index": 11,
       "Offset": 88,
       "Name": "CustomStencilTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV",
+      "ShaderType": "Texture2DArray<uint2>"
     },
     {
       "Index": 12,
       "Offset": 96,
       "Name": "SceneVelocityTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 13,
       "Offset": 104,
       "Name": "SceneVelocityTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 14,
       "Offset": 112,
       "Name": "GBufferATexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 15,
       "Offset": 120,
       "Name": "GBufferBTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 16,
       "Offset": 128,
       "Name": "GBufferCTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 17,
       "Offset": 136,
       "Name": "GBufferDTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 18,
       "Offset": 144,
       "Name": "SceneDepthAuxTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 19,
       "Offset": 152,
       "Name": "SceneDepthAuxTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 20,
       "Offset": 160,
       "Name": "LocalLightTextureA",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 21,
       "Offset": 168,
       "Name": "LocalLightTextureB",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 22,
       "Offset": 176,
       "Name": "GBufferATextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 23,
       "Offset": 184,
       "Name": "GBufferBTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 24,
       "Offset": 192,
       "Name": "GBufferCTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 25,
       "Offset": 200,
       "Name": "GBufferDTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 26,
       "Offset": 208,
       "Name": "SceneDepthAuxTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

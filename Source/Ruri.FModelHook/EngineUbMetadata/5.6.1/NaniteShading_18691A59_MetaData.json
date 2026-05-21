@@ -109,67 +109,78 @@
       "Index": 0,
       "Offset": 0,
       "Name": "ClusterPageData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "VisibleClustersSWHW",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "HierarchyBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "ShadingMask",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "VisBuffer64",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<UlongType>"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "DbgBuffer64",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<UlongType>"
     },
     {
       "Index": 6,
       "Offset": 48,
       "Name": "DbgBuffer32",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 7,
       "Offset": 56,
       "Name": "ShadingBinData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 8,
       "Offset": 72,
       "Name": "MultiViewIndices",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 9,
       "Offset": 80,
       "Name": "MultiViewRectScaleOffsets",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 10,
       "Offset": 88,
       "Name": "InViews",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FPackedNaniteView>"
     }
   ]
 }

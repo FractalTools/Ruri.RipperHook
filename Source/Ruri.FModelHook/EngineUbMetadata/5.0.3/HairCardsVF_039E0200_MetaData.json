@@ -163,103 +163,120 @@
       "Index": 0,
       "Offset": 8,
       "Name": "PositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 16,
       "Name": "PreviousPositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 24,
       "Name": "NormalsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 3,
       "Offset": 32,
       "Name": "UVsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 4,
       "Offset": 40,
       "Name": "MaterialsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 5,
       "Offset": 48,
       "Name": "DepthTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 6,
       "Offset": 56,
       "Name": "DepthSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 7,
       "Offset": 64,
       "Name": "TangentTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 8,
       "Offset": 72,
       "Name": "TangentSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 9,
       "Offset": 80,
       "Name": "CoverageTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 10,
       "Offset": 88,
       "Name": "CoverageSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 11,
       "Offset": 96,
       "Name": "AttributeTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 12,
       "Offset": 104,
       "Name": "AttributeSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 13,
       "Offset": 112,
       "Name": "AuxilaryDataTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 14,
       "Offset": 120,
       "Name": "AuxilaryDataSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 15,
       "Offset": 128,
       "Name": "MaterialTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 16,
       "Offset": 136,
       "Name": "MaterialSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

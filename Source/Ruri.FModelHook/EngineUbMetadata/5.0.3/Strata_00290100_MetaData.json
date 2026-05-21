@@ -68,19 +68,22 @@
       "Index": 0,
       "Offset": 8,
       "Name": "MaterialTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 1,
       "Offset": 16,
       "Name": "TopLayerTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 2,
       "Offset": 24,
       "Name": "SSSTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint2>"
     }
   ]
 }

@@ -126,43 +126,50 @@
       "Index": 0,
       "Offset": 56,
       "Name": "TopLevelGridBitmaskBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FTopLevelGridBitmaskData>"
     },
     {
       "Index": 1,
       "Offset": 64,
       "Name": "TopLevelGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FTopLevelGridData>"
     },
     {
       "Index": 2,
       "Offset": 72,
       "Name": "IndirectionGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FTopLevelGridData>"
     },
     {
       "Index": 3,
       "Offset": 80,
       "Name": "ExtinctionGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FScalarGridData>"
     },
     {
       "Index": 4,
       "Offset": 88,
       "Name": "EmissionGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FVectorGridData>"
     },
     {
       "Index": 5,
       "Offset": 96,
       "Name": "ScatteringGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FVectorGridData>"
     },
     {
       "Index": 6,
       "Offset": 104,
       "Name": "MajorantGridBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FScalarGridData>"
     }
   ]
 }

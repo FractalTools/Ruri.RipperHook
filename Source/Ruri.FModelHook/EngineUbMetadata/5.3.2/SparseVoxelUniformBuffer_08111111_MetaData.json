@@ -198,37 +198,43 @@
       "Index": 0,
       "Offset": 176,
       "Name": "ExtinctionTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 1,
       "Offset": 184,
       "Name": "EmissionTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 2,
       "Offset": 192,
       "Name": "AlbedoTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 3,
       "Offset": 200,
       "Name": "TextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 4,
       "Offset": 224,
       "Name": "NumVoxelsBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 5,
       "Offset": 232,
       "Name": "VoxelBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FVoxelDataPacked>"
     }
   ]
 }

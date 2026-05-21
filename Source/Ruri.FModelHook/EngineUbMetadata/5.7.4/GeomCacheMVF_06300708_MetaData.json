@@ -71,37 +71,43 @@
       "Index": 0,
       "Offset": 0,
       "Name": "Position",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "MotionBlurData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "TangentX",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<half4>"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "TangentZ",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<half4>"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "Color",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "TexCoords",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     }
   ]
 }

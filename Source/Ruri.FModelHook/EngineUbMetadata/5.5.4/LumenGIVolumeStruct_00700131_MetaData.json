@@ -156,49 +156,57 @@
       "Index": 0,
       "Offset": 0,
       "Name": "Radiance",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "Normal",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "SceneDepth",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 40,
       "Name": "TranslucencyGIVolume0",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 4,
       "Offset": 48,
       "Name": "TranslucencyGIVolume1",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 5,
       "Offset": 56,
       "Name": "TranslucencyGIVolumeHistory0",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 6,
       "Offset": 64,
       "Name": "TranslucencyGIVolumeHistory1",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 7,
       "Offset": 72,
       "Name": "TranslucencyGIVolumeSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

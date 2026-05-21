@@ -201,25 +201,29 @@
       "Index": 0,
       "Offset": 176,
       "Name": "FogInscatteringColorCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 1,
       "Offset": 184,
       "Name": "FogInscatteringColorSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 192,
       "Name": "IntegratedLightScattering",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 3,
       "Offset": 200,
       "Name": "IntegratedLightScatteringSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

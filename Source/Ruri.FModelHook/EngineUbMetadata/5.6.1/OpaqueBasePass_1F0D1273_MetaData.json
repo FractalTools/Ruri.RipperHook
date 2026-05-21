@@ -1317,289 +1317,337 @@
       "Index": 0,
       "Offset": 400,
       "Name": "Shared_Forward_DirectionalLightShadowmapAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 408,
       "Name": "Shared_Forward_ShadowmapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 416,
       "Name": "Shared_Forward_DirectionalLightStaticShadowmap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 424,
       "Name": "Shared_Forward_StaticShadowmapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 4,
       "Offset": 432,
       "Name": "Shared_Forward_ForwardLightBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 5,
       "Offset": 440,
       "Name": "Shared_Forward_NumCulledLightsGrid",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 6,
       "Offset": 448,
       "Name": "Shared_Forward_CulledLightDataGrid32Bit",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 7,
       "Offset": 456,
       "Name": "Shared_Forward_CulledLightDataGrid16Bit",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 8,
       "Offset": 464,
       "Name": "Shared_Forward_DirectionalLightIndices",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 9,
       "Offset": 472,
       "Name": "Shared_Forward_LightViewData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FLightViewData>"
     },
     {
       "Index": 10,
       "Offset": 496,
       "Name": "Shared_Reflection_SkyLightCubemap",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 11,
       "Offset": 504,
       "Name": "Shared_Reflection_SkyLightCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 12,
       "Offset": 512,
       "Name": "Shared_Reflection_SkyLightBlendDestinationCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 13,
       "Offset": 520,
       "Name": "Shared_Reflection_SkyLightBlendDestinationCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 14,
       "Offset": 528,
       "Name": "Shared_Reflection_ReflectionCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCubeArray"
     },
     {
       "Index": 15,
       "Offset": 536,
       "Name": "Shared_Reflection_ReflectionCubemapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 16,
       "Offset": 544,
       "Name": "Shared_Reflection_PreIntegratedGF",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 17,
       "Offset": 552,
       "Name": "Shared_Reflection_PreIntegratedGFSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 18,
       "Offset": 800,
       "Name": "Shared_PlanarReflection_PlanarReflectionTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 19,
       "Offset": 808,
       "Name": "Shared_PlanarReflection_PlanarReflectionSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 20,
       "Offset": 992,
       "Name": "Shared_Fog_FogInscatteringColorCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 21,
       "Offset": 1000,
       "Name": "Shared_Fog_FogInscatteringColorSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 22,
       "Offset": 1008,
       "Name": "Shared_Fog_IntegratedLightScattering",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 23,
       "Offset": 1016,
       "Name": "Shared_Fog_IntegratedLightScatteringSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 24,
       "Offset": 1200,
       "Name": "Shared_FogISR_FogInscatteringColorCubemap",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
     },
     {
       "Index": 25,
       "Offset": 1208,
       "Name": "Shared_FogISR_FogInscatteringColorSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 26,
       "Offset": 1216,
       "Name": "Shared_FogISR_IntegratedLightScattering",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 27,
       "Offset": 1224,
       "Name": "Shared_FogISR_IntegratedLightScatteringSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 28,
       "Offset": 1232,
       "Name": "Shared_LFV_LocalFogVolumeInstances",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 29,
       "Offset": 1328,
       "Name": "Shared_LFV_LocalFogVolumeTileDataTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE_SRV"
+      "UbmtType": "UBMT_RDG_TEXTURE_SRV",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 30,
       "Offset": 1392,
       "Name": "Substrate_MaterialTextureArrayUAVWithoutRTs",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture2DArray<uint>"
     },
     {
       "Index": 31,
       "Offset": 1400,
       "Name": "Substrate_OpaqueRoughRefractionTextureUAV",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture2D<float3>"
     },
     {
       "Index": 32,
       "Offset": 1416,
       "Name": "ForwardScreenSpaceShadowMaskTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 33,
       "Offset": 1424,
       "Name": "IndirectOcclusionTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 34,
       "Offset": 1432,
       "Name": "ResolvedSceneDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 35,
       "Offset": 1520,
       "Name": "PreIntegratedGFTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 36,
       "Offset": 1528,
       "Name": "PreIntegratedGFSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 37,
       "Offset": 1544,
       "Name": "EyeAdaptationBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 38,
       "Offset": 2880,
       "Name": "DBufferATexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 39,
       "Offset": 2888,
       "Name": "DBufferBTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 40,
       "Offset": 2896,
       "Name": "DBufferCTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 41,
       "Offset": 2904,
       "Name": "DBufferATextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 42,
       "Offset": 2912,
       "Name": "DBufferBTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 43,
       "Offset": 2920,
       "Name": "DBufferCTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 44,
       "Offset": 2928,
       "Name": "DBufferRenderMask",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 45,
       "Offset": 2936,
       "Name": "DBufferATextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 46,
       "Offset": 2944,
       "Name": "DBufferBTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 47,
       "Offset": 2952,
       "Name": "DBufferCTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

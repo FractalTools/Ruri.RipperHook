@@ -59,13 +59,15 @@
       "Index": 0,
       "Offset": 32,
       "Name": "FrontDepthTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<float>"
     },
     {
       "Index": 1,
       "Offset": 40,
       "Name": "DeepShadowViewInfoBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FDeepShadowViewInfo>"
     }
   ]
 }

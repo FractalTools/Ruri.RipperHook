@@ -49,7 +49,8 @@
       "Index": 0,
       "Offset": 0,
       "Name": "SamplerP",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

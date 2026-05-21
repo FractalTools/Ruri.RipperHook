@@ -167,31 +167,36 @@
       "Index": 0,
       "Offset": 64,
       "Name": "ProjectionData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 1,
       "Offset": 72,
       "Name": "PageTable",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 2,
       "Offset": 80,
       "Name": "PageFlags",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 3,
       "Offset": 88,
       "Name": "PageRectBounds",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint4>"
     },
     {
       "Index": 4,
       "Offset": 96,
       "Name": "PhysicalPagePool",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     }
   ]
 }

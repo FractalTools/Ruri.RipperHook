@@ -160,31 +160,36 @@
       "Index": 0,
       "Offset": 0,
       "Name": "PageTableTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint4>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "HeightTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float>"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "HeightSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "LodBiasTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float>"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "LodBiasSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

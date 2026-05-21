@@ -71,37 +71,43 @@
       "Index": 0,
       "Offset": 0,
       "Name": "TritsToInteger",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "QuintsToInteger",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "ScrambleTable",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "ColorScrambleTable48",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "ColorScrambleTable80",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "ColorScrambleTable192",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

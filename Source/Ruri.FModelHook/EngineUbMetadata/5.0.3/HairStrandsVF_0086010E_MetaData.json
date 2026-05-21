@@ -224,61 +224,71 @@
       "Index": 0,
       "Offset": 48,
       "Name": "PositionOffsetBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 56,
       "Name": "PreviousPositionOffsetBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 64,
       "Name": "PositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint4>"
     },
     {
       "Index": 3,
       "Offset": 72,
       "Name": "PreviousPositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint4>"
     },
     {
       "Index": 4,
       "Offset": 80,
       "Name": "Attribute0Buffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float2>"
     },
     {
       "Index": 5,
       "Offset": 88,
       "Name": "Attribute1Buffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 6,
       "Offset": 96,
       "Name": "MaterialBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 7,
       "Offset": 104,
       "Name": "TangentBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 8,
       "Offset": 112,
       "Name": "CulledVertexIdsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 9,
       "Offset": 120,
       "Name": "CulledVertexRadiusScaleBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     }
   ]
 }

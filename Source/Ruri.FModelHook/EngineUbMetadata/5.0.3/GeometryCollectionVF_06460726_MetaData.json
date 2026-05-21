@@ -76,25 +76,29 @@
       "Index": 0,
       "Offset": 24,
       "Name": "VertexFetch_TexCoordBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float2>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "VertexFetch_PositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "VertexFetch_PackedTangentsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "VertexFetch_ColorComponentsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     }
   ]
 }

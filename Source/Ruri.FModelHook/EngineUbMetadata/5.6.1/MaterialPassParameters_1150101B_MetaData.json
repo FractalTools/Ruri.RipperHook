@@ -120,43 +120,50 @@
       "Index": 0,
       "Offset": 24,
       "Name": "NodeIndex",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "TotalNodeCounter",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "NodeCoord",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint2>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "NodeVis",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FPackedHairVis>"
     },
     {
       "Index": 4,
       "Offset": 56,
       "Name": "IndirectArgs",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 5,
       "Offset": 64,
       "Name": "OutNodeData",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<FPackedHairSample>"
     },
     {
       "Index": 6,
       "Offset": 72,
       "Name": "OutNodeVelocity",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWBuffer<float4>"
     }
   ]
 }

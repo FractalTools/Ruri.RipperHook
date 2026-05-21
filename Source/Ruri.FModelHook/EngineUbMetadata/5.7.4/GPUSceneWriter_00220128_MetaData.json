@@ -82,19 +82,22 @@
       "Index": 0,
       "Offset": 16,
       "Name": "GPUSceneInstanceSceneDataRW",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 24,
       "Name": "GPUSceneInstancePayloadDataRW",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 32,
       "Name": "GPUScenePrimitiveSceneDataRW",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<float4>"
     }
   ]
 }

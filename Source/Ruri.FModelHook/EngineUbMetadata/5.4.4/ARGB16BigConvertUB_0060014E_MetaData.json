@@ -73,7 +73,8 @@
       "Index": 0,
       "Offset": 72,
       "Name": "Texture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<uint4>"
     }
   ]
 }

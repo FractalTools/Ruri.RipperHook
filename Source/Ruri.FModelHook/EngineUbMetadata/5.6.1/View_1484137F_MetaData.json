@@ -3236,595 +3236,694 @@
       "Index": 0,
       "Offset": 5096,
       "Name": "MaterialTextureBilinearWrapedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 1,
       "Offset": 5104,
       "Name": "MaterialTextureBilinearClampedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 2,
       "Offset": 5112,
       "Name": "VolumetricLightmapIndirectionTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D<uint4>"
     },
     {
       "Index": 3,
       "Offset": 5120,
       "Name": "VolumetricLightmapBrickAmbientVector",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 4,
       "Offset": 5128,
       "Name": "VolumetricLightmapBrickSHCoefficients0",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 5,
       "Offset": 5136,
       "Name": "VolumetricLightmapBrickSHCoefficients1",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 6,
       "Offset": 5144,
       "Name": "VolumetricLightmapBrickSHCoefficients2",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 7,
       "Offset": 5152,
       "Name": "VolumetricLightmapBrickSHCoefficients3",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 8,
       "Offset": 5160,
       "Name": "VolumetricLightmapBrickSHCoefficients4",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 9,
       "Offset": 5168,
       "Name": "VolumetricLightmapBrickSHCoefficients5",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 10,
       "Offset": 5176,
       "Name": "SkyBentNormalBrickTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 11,
       "Offset": 5184,
       "Name": "DirectionalLightShadowingBrickTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 12,
       "Offset": 5192,
       "Name": "VolumetricLightmapBrickAmbientVectorSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 13,
       "Offset": 5200,
       "Name": "VolumetricLightmapTextureSampler0",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 14,
       "Offset": 5208,
       "Name": "VolumetricLightmapTextureSampler1",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 15,
       "Offset": 5216,
       "Name": "VolumetricLightmapTextureSampler2",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 16,
       "Offset": 5224,
       "Name": "VolumetricLightmapTextureSampler3",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 17,
       "Offset": 5232,
       "Name": "VolumetricLightmapTextureSampler4",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 18,
       "Offset": 5240,
       "Name": "VolumetricLightmapTextureSampler5",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 19,
       "Offset": 5248,
       "Name": "SkyBentNormalTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 20,
       "Offset": 5256,
       "Name": "DirectionalLightShadowingTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 21,
       "Offset": 5264,
       "Name": "GlobalDistanceFieldPageAtlasTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 22,
       "Offset": 5272,
       "Name": "GlobalDistanceFieldCoverageAtlasTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 23,
       "Offset": 5280,
       "Name": "GlobalDistanceFieldPageTableTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D<uint>"
     },
     {
       "Index": 24,
       "Offset": 5288,
       "Name": "GlobalDistanceFieldMipTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 25,
       "Offset": 5296,
       "Name": "GlobalDistanceFieldPageAtlasTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 26,
       "Offset": 5304,
       "Name": "GlobalDistanceFieldCoverageAtlasTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 27,
       "Offset": 5312,
       "Name": "GlobalDistanceFieldMipTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 28,
       "Offset": 5320,
       "Name": "AtmosphereTransmittanceTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 29,
       "Offset": 5328,
       "Name": "AtmosphereTransmittanceTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 30,
       "Offset": 5336,
       "Name": "AtmosphereIrradianceTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 31,
       "Offset": 5344,
       "Name": "AtmosphereIrradianceTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 32,
       "Offset": 5352,
       "Name": "AtmosphereInscatterTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 33,
       "Offset": 5360,
       "Name": "AtmosphereInscatterTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 34,
       "Offset": 5368,
       "Name": "PerlinNoiseGradientTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 35,
       "Offset": 5376,
       "Name": "PerlinNoiseGradientTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 36,
       "Offset": 5384,
       "Name": "PerlinNoise3DTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 37,
       "Offset": 5392,
       "Name": "PerlinNoise3DTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 38,
       "Offset": 5400,
       "Name": "SobolSamplingTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 39,
       "Offset": 5408,
       "Name": "SharedPointWrappedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 40,
       "Offset": 5416,
       "Name": "SharedPointClampedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 41,
       "Offset": 5424,
       "Name": "SharedBilinearWrappedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 42,
       "Offset": 5432,
       "Name": "SharedBilinearClampedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 43,
       "Offset": 5440,
       "Name": "SharedBilinearAnisoClampedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 44,
       "Offset": 5448,
       "Name": "SharedTrilinearWrappedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 45,
       "Offset": 5456,
       "Name": "SharedTrilinearClampedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 46,
       "Offset": 5464,
       "Name": "PreIntegratedBRDF",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 47,
       "Offset": 5472,
       "Name": "PreIntegratedBRDFSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 48,
       "Offset": 5480,
       "Name": "SkyIrradianceEnvironmentMap",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 49,
       "Offset": 5488,
       "Name": "TransmittanceLutTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 50,
       "Offset": 5496,
       "Name": "TransmittanceLutTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 51,
       "Offset": 5504,
       "Name": "SkyViewLutTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 52,
       "Offset": 5512,
       "Name": "SkyViewLutTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 53,
       "Offset": 5520,
       "Name": "CameraAerialPerspectiveVolume",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 54,
       "Offset": 5528,
       "Name": "CameraAerialPerspectiveVolumeSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 55,
       "Offset": 5536,
       "Name": "CameraAerialPerspectiveVolumeMieOnly",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 56,
       "Offset": 5544,
       "Name": "CameraAerialPerspectiveVolumeMieOnlySampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 57,
       "Offset": 5552,
       "Name": "CameraAerialPerspectiveVolumeRayOnly",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 58,
       "Offset": 5560,
       "Name": "CameraAerialPerspectiveVolumeRayOnlySampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 59,
       "Offset": 5568,
       "Name": "DistantSkyLightLutBufferSRV",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 60,
       "Offset": 5576,
       "Name": "MobileDistantSkyLightLutBufferSRV",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 61,
       "Offset": 5584,
       "Name": "HairScatteringLUTTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 62,
       "Offset": 5592,
       "Name": "HairScatteringLUTSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 63,
       "Offset": 5600,
       "Name": "GGXLTCMatTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 64,
       "Offset": 5608,
       "Name": "GGXLTCMatSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 65,
       "Offset": 5616,
       "Name": "GGXLTCAmpTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 66,
       "Offset": 5624,
       "Name": "GGXLTCAmpSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 67,
       "Offset": 5632,
       "Name": "SheenLTCTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 68,
       "Offset": 5640,
       "Name": "SheenLTCSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 69,
       "Offset": 5656,
       "Name": "ShadingEnergyGGXSpecTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float2>"
     },
     {
       "Index": 70,
       "Offset": 5664,
       "Name": "ShadingEnergyGGXGlassTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D<float2>"
     },
     {
       "Index": 71,
       "Offset": 5672,
       "Name": "ShadingEnergyClothSpecTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float2>"
     },
     {
       "Index": 72,
       "Offset": 5680,
       "Name": "ShadingEnergyDiffuseTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float>"
     },
     {
       "Index": 73,
       "Offset": 5688,
       "Name": "ShadingEnergySampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 74,
       "Offset": 5696,
       "Name": "GlintTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2DArray<float4>"
     },
     {
       "Index": 75,
       "Offset": 5704,
       "Name": "GlintSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 76,
       "Offset": 5712,
       "Name": "SimpleVolumeTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D<float>"
     },
     {
       "Index": 77,
       "Offset": 5720,
       "Name": "SimpleVolumeTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 78,
       "Offset": 5728,
       "Name": "SimpleVolumeEnvTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D<float>"
     },
     {
       "Index": 79,
       "Offset": 5736,
       "Name": "SimpleVolumeEnvTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 80,
       "Offset": 5744,
       "Name": "SSProfilesTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 81,
       "Offset": 5752,
       "Name": "SSProfilesSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 82,
       "Offset": 5760,
       "Name": "SSProfilesTransmissionSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 83,
       "Offset": 5768,
       "Name": "SSProfilesPreIntegratedTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 84,
       "Offset": 5776,
       "Name": "SSProfilesPreIntegratedSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 85,
       "Offset": 5784,
       "Name": "SpecularProfileTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2DArray"
     },
     {
       "Index": 86,
       "Offset": 5792,
       "Name": "SpecularProfileSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 87,
       "Offset": 5800,
       "Name": "WaterIndirection",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 88,
       "Offset": 5808,
       "Name": "WaterData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 89,
       "Offset": 5848,
       "Name": "RectLightAtlasTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 90,
       "Offset": 5856,
       "Name": "RectLightAtlasSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 91,
       "Offset": 5888,
       "Name": "IESAtlasTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2DArray<float>"
     },
     {
       "Index": 92,
       "Offset": 5896,
       "Name": "IESAtlasSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 93,
       "Offset": 5904,
       "Name": "LandscapeWeightmapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 94,
       "Offset": 5912,
       "Name": "LandscapeIndirection",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 95,
       "Offset": 5920,
       "Name": "LandscapePerComponentData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 96,
       "Offset": 5928,
       "Name": "VTFeedbackBuffer",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     },
     {
       "Index": 97,
       "Offset": 5936,
       "Name": "PhysicsFieldClipmapBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 98,
       "Offset": 5944,
       "Name": "BlueNoiseScalarTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float>"
     }
   ]
 }

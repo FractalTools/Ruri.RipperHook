@@ -232,67 +232,78 @@
       "Index": 0,
       "Offset": 112,
       "Name": "CardData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 120,
       "Name": "CardPageData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 128,
       "Name": "MeshCardsData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 3,
       "Offset": 136,
       "Name": "HeightfieldData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 4,
       "Offset": 144,
       "Name": "PageTableBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 5,
       "Offset": 152,
       "Name": "SceneInstanceIndexToMeshCardsIndexBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 6,
       "Offset": 160,
       "Name": "OpacityAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 7,
       "Offset": 168,
       "Name": "AlbedoAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 8,
       "Offset": 176,
       "Name": "NormalAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 9,
       "Offset": 184,
       "Name": "EmissiveAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 10,
       "Offset": 192,
       "Name": "DepthAtlas",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
     }
   ]
 }

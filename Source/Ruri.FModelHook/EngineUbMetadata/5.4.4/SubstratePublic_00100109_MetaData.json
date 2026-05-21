@@ -31,7 +31,8 @@
       "Index": 0,
       "Offset": 0,
       "Name": "TopLayerTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<SUBSTRATE_TOP_LAYER_TYPE>"
     }
   ]
 }

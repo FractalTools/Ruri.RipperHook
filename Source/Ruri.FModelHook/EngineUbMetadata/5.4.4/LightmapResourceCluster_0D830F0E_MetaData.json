@@ -137,97 +137,113 @@
       "Index": 0,
       "Offset": 0,
       "Name": "LightMapTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "SkyOcclusionTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "AOMaterialMaskTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "StaticShadowTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 4,
       "Offset": 32,
       "Name": "VTLightMapTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 5,
       "Offset": 40,
       "Name": "VTLightMapTexture_1",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 6,
       "Offset": 48,
       "Name": "VTSkyOcclusionTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 7,
       "Offset": 56,
       "Name": "VTAOMaterialMaskTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 8,
       "Offset": 64,
       "Name": "VTStaticShadowTexture",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<float4>"
     },
     {
       "Index": 9,
       "Offset": 72,
       "Name": "LightMapSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 10,
       "Offset": 80,
       "Name": "LightMapSampler_1",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 11,
       "Offset": 88,
       "Name": "SkyOcclusionSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 12,
       "Offset": 96,
       "Name": "AOMaterialMaskSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 13,
       "Offset": 104,
       "Name": "StaticShadowTextureSampler",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 14,
       "Offset": 112,
       "Name": "LightmapVirtualTexturePageTable0",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint4>"
     },
     {
       "Index": 15,
       "Offset": 120,
       "Name": "LightmapVirtualTexturePageTable1",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint4>"
     }
   ]
 }

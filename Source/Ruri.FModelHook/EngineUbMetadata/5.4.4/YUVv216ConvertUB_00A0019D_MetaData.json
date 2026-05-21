@@ -113,7 +113,8 @@
       "Index": 0,
       "Offset": 152,
       "Name": "YUVTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float4>"
     }
   ]
 }

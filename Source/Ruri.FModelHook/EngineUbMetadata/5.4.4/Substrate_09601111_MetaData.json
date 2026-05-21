@@ -169,37 +169,43 @@
       "Index": 0,
       "Offset": 48,
       "Name": "MaterialTextureArray",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 1,
       "Offset": 56,
       "Name": "TopLayerTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<SUBSTRATE_TOP_LAYER_TYPE>"
     },
     {
       "Index": 2,
       "Offset": 64,
       "Name": "OpaqueRoughRefractionTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<float3>"
     },
     {
       "Index": 3,
       "Offset": 72,
       "Name": "ClosureOffsetTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
     },
     {
       "Index": 4,
       "Offset": 80,
       "Name": "ClosureTileBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 5,
       "Offset": 88,
       "Name": "ClosureTileCountBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

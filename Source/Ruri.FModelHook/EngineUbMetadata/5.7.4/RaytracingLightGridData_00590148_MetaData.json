@@ -85,19 +85,22 @@
       "Index": 0,
       "Offset": 48,
       "Name": "SceneLights",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FRTLightingData>"
     },
     {
       "Index": 1,
       "Offset": 56,
       "Name": "LightGrid",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 2,
       "Offset": 64,
       "Name": "LightGridData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

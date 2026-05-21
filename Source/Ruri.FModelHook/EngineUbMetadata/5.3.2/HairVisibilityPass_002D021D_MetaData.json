@@ -52,19 +52,22 @@
       "Index": 0,
       "Offset": 8,
       "Name": "PPLLCounter",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture2D<uint>"
     },
     {
       "Index": 1,
       "Offset": 16,
       "Name": "PPLLNodeIndex",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture2D<uint>"
     },
     {
       "Index": 2,
       "Offset": 24,
       "Name": "PPLLNodeData",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<FPackedHairVisPPLL>"
     }
   ]
 }

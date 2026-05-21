@@ -395,61 +395,71 @@
       "Index": 0,
       "Offset": 576,
       "Name": "PositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 1,
       "Offset": 584,
       "Name": "PositionOffsetBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 592,
       "Name": "CurveBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 3,
       "Offset": 600,
       "Name": "PointToCurveBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 4,
       "Offset": 608,
       "Name": "TangentBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 5,
       "Offset": 616,
       "Name": "CurveAttributeBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 6,
       "Offset": 624,
       "Name": "PointAttributeBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 7,
       "Offset": 688,
       "Name": "PreviousPositionBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "ByteAddressBuffer"
     },
     {
       "Index": 8,
       "Offset": 696,
       "Name": "PreviousPositionOffsetBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<float4>"
     },
     {
       "Index": 9,
       "Offset": 728,
       "Name": "CullingIndexBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

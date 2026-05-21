@@ -106,25 +106,29 @@
       "Index": 0,
       "Offset": 24,
       "Name": "Common_BoneMatrices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "Common_PreviousBoneMatrices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "Common_InputWeightStream",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "Common_PreviousMorphBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     }
   ]
 }

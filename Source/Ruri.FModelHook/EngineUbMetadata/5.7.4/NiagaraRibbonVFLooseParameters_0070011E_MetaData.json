@@ -166,55 +166,64 @@
       "Index": 0,
       "Offset": 24,
       "Name": "IndexBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "SortedIndices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "TangentsAndDistances",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "MultiRibbonIndices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 4,
       "Offset": 56,
       "Name": "PackedPerRibbonDataByIndex",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 5,
       "Offset": 64,
       "Name": "NiagaraParticleDataFloat",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 6,
       "Offset": 72,
       "Name": "NiagaraParticleDataHalf",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 7,
       "Offset": 80,
       "Name": "SliceVertexData",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 8,
       "Offset": 88,
       "Name": "IndirectDrawOutput",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

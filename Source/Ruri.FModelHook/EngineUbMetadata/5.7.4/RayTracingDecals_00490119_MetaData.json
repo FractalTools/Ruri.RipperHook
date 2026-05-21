@@ -99,13 +99,15 @@
       "Index": 0,
       "Offset": 0,
       "Name": "Grid",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2DArray<uint>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "GridData",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

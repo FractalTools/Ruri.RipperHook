@@ -164,37 +164,43 @@
       "Index": 0,
       "Offset": 224,
       "Name": "IndirectLightingCacheTexture0",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 1,
       "Offset": 232,
       "Name": "IndirectLightingCacheTexture1",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 2,
       "Offset": 240,
       "Name": "IndirectLightingCacheTexture2",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture3D"
     },
     {
       "Index": 3,
       "Offset": 248,
       "Name": "IndirectLightingCacheTextureSampler0",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 4,
       "Offset": 256,
       "Name": "IndirectLightingCacheTextureSampler1",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     },
     {
       "Index": 5,
       "Offset": 264,
       "Name": "IndirectLightingCacheTextureSampler2",
-      "UbmtType": "UBMT_SAMPLER"
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
     }
   ]
 }

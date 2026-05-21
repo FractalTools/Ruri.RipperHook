@@ -104,31 +104,36 @@
       "Index": 0,
       "Offset": 24,
       "Name": "IrradianceCacheRecords",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<FIrradianceCacheRecord>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "RWHashTable",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "RWHashToIndex",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "RWIndexToHash",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     },
     {
       "Index": 4,
       "Offset": 56,
       "Name": "RecordAllocator",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     }
   ]
 }

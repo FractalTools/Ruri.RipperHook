@@ -60,13 +60,15 @@
       "Index": 0,
       "Offset": 32,
       "Name": "ScalarTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     },
     {
       "Index": 1,
       "Offset": 40,
       "Name": "Vec2Texture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     }
   ]
 }

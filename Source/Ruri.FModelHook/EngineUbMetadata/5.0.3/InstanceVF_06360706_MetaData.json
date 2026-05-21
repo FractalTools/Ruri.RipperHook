@@ -66,25 +66,29 @@
       "Index": 0,
       "Offset": 0,
       "Name": "VertexFetch_InstanceOriginBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "VertexFetch_InstanceTransformBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "VertexFetch_InstanceLightmapBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 3,
       "Offset": 24,
       "Name": "InstanceCustomDataBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     }
   ]
 }

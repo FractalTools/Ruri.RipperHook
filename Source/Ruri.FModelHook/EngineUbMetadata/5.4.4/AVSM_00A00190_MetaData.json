@@ -123,19 +123,22 @@
       "Index": 0,
       "Offset": 152,
       "Name": "LinkedListBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint2>"
     },
     {
       "Index": 1,
       "Offset": 160,
       "Name": "IndirectionBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint2>"
     },
     {
       "Index": 2,
       "Offset": 168,
       "Name": "SampleBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<uint>"
     }
   ]
 }

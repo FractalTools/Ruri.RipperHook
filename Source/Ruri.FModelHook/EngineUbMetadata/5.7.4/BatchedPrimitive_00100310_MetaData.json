@@ -29,7 +29,8 @@
       "Index": 0,
       "Offset": 0,
       "Name": "Data",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<float4>"
     }
   ]
 }

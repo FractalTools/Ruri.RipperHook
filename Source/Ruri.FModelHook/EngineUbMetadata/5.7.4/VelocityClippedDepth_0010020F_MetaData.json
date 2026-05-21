@@ -29,7 +29,8 @@
       "Index": 0,
       "Offset": 0,
       "Name": "RWVelocity",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture2D<UlongType>"
     }
   ]
 }

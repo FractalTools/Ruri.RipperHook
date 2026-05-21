@@ -89,13 +89,15 @@
       "Index": 0,
       "Offset": 0,
       "Name": "PageTableTexture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint4>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "FeedbackBuffer",
-      "UbmtType": "UBMT_UAV"
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<uint>"
     }
   ]
 }

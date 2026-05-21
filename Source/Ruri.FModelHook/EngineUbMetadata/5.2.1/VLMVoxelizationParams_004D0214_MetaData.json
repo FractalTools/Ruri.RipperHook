@@ -66,13 +66,15 @@
       "Index": 0,
       "Offset": 40,
       "Name": "VoxelizeVolume",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture3D<uint>"
     },
     {
       "Index": 1,
       "Offset": 48,
       "Name": "IndirectionTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE_UAV"
+      "UbmtType": "UBMT_RDG_TEXTURE_UAV",
+      "ShaderType": "RWTexture3D<uint4>"
     }
   ]
 }

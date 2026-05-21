@@ -640,43 +640,50 @@
       "Index": 0,
       "Offset": 0,
       "Name": "NiagaraParticleDataFloat",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 1,
       "Offset": 8,
       "Name": "NiagaraParticleDataHalf",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 2,
       "Offset": 16,
       "Name": "NiagaraParticleDataInt",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<int>"
     },
     {
       "Index": 3,
       "Offset": 32,
       "Name": "SortedIndices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<int>"
     },
     {
       "Index": 4,
       "Offset": 336,
       "Name": "VertexFetch_TexCoordBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float2>"
     },
     {
       "Index": 5,
       "Offset": 344,
       "Name": "VertexFetch_PackedTangentsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     },
     {
       "Index": 6,
       "Offset": 352,
       "Name": "VertexFetch_ColorComponentsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float4>"
     }
   ]
 }

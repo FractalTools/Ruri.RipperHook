@@ -29,7 +29,8 @@
       "Index": 0,
       "Offset": 0,
       "Name": "HitStatsOutput",
-      "UbmtType": "UBMT_RDG_BUFFER_UAV"
+      "UbmtType": "UBMT_RDG_BUFFER_UAV",
+      "ShaderType": "RWStructuredBuffer<FRayTracingHitStatsEntry>"
     }
   ]
 }

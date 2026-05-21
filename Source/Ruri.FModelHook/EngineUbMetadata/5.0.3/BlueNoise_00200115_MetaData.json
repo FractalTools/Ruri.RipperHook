@@ -42,7 +42,8 @@
       "Index": 0,
       "Offset": 16,
       "Name": "Texture",
-      "UbmtType": "UBMT_TEXTURE"
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
     }
   ]
 }

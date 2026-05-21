@@ -124,31 +124,36 @@
       "Index": 0,
       "Offset": 24,
       "Name": "CutoutGeometry",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float2>"
     },
     {
       "Index": 1,
       "Offset": 32,
       "Name": "NiagaraParticleDataFloat",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 2,
       "Offset": 40,
       "Name": "NiagaraParticleDataHalf",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 3,
       "Offset": 48,
       "Name": "SortedIndices",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<int>"
     },
     {
       "Index": 4,
       "Offset": 56,
       "Name": "IndirectArgsBuffer",
-      "UbmtType": "UBMT_SRV"
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<uint>"
     }
   ]
 }

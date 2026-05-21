@@ -359,43 +359,50 @@
       "Index": 0,
       "Offset": 160,
       "Name": "PageIndexBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 1,
       "Offset": 168,
       "Name": "PageIndexOccupancyBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint2>"
     },
     {
       "Index": 2,
       "Offset": 176,
       "Name": "PageIndexCoordBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
     },
     {
       "Index": 3,
       "Offset": 184,
       "Name": "NodeDescBuffer",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FPackedVirtualVoxelNodeDesc>"
     },
     {
       "Index": 4,
       "Offset": 192,
       "Name": "CurrGPUMinVoxelSize",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 5,
       "Offset": 200,
       "Name": "NextGPUMinVoxelSize",
-      "UbmtType": "UBMT_RDG_BUFFER_SRV"
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<float>"
     },
     {
       "Index": 6,
       "Offset": 208,
       "Name": "PageTexture",
-      "UbmtType": "UBMT_RDG_TEXTURE"
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D<uint>"
     }
   ]
 }
