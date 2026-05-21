@@ -833,25 +833,9 @@ internal static class Pass200_EmitShaderLabFiles
         //    via word-boundary replace.
         if (result.Contains(" : register(", StringComparison.Ordinal))
         {
-            // Match the canonical anonymous-binding declaration forms.
-            // Capture groups:
-            //   1 — the declared HLSL type token, including angle-bracket
-            //       generics: `Texture2D<float4>`, `RWTexture2D<float4>`,
-            //       `ByteAddressBuffer`, `RWByteAddressBuffer`,
-            //       `Buffer<float4>`, `Texture3D<uint4>`, ...
-            //   2 — the anonymous identifier (T<N>, U<N>, or _<digits>)
-            //   3 — slot prefix (t/u/s/b)
-            //   4 — slot index (decimal)
-            //
-            // Rename priority:
-            //   A. Type-uniqueness via EngineTypeUniquenessIndex — when the
-            //      engine UB metadata has EXACTLY ONE resource matching the
-            //      cooked binding's (UbmtType, HLSL type) pair, rename to
-            //      `<UB>_<ResourceName>` (real plaintext name).
-            //   B. Class-hash + slot fallback: `<class>_T<N>` (T/U form keeps
-            //      its original suffix; SSA-id form gets `<class>_<slotPrefix
-            //      .upper><slotIdx>` so the identifier is slot-deterministic).
-            Dictionary<string, string> rename = new(StringComparer.Ordinal);
+            // PASS 1: scan for all anonymous declarations and gather them.
+            // Each entry: (ident, hlslType, ubmtKind, slotPrefix, slotIdx).
+            List<(string Ident, string HlslType, string UbmtKind, string SlotPrefix, string SlotIdx)> anons = new();
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
                 @"^([A-Za-z][A-Za-z0-9_]*(?:<[^>]+>)?)\s+([TU]\d+|_\d+)\s*:\s*register\(([tusb])(\d+)",
@@ -861,30 +845,92 @@ internal static class Pass200_EmitShaderLabFiles
                 string ident = m.Groups[2].Value;
                 string slotPrefix = m.Groups[3].Value;
                 string slotIdx = m.Groups[4].Value;
-                if (rename.ContainsKey(ident)) continue;
-
-                // (A) Type-uniqueness lookup. Map HLSL declaration types to
-                //     the engine's UBMT classification:
-                //       Texture<Dim>                        -> UBMT_TEXTURE
-                //       RWTexture<Dim>                      -> UBMT_UAV
-                //       ByteAddressBuffer / Buffer<...> SRV -> UBMT_SRV
-                //       RWByteAddressBuffer / RW SRV/UAV    -> UBMT_UAV
-                //       SamplerState / SamplerComparisonState -> UBMT_SAMPLER
                 string ubmtKind = ClassifyUbmtFromHlslType(hlslType, slotPrefix);
-                if (!string.IsNullOrEmpty(ubmtKind)
-                    && EngineTypeUniquenessIndex.TryResolveUnique(ubmtKind, hlslType, out string ubName, out string resName))
+                anons.Add((ident, hlslType, ubmtKind, slotPrefix, slotIdx));
+            }
+
+            // PASS 2: figure out which engine UBs this shader uses by
+            // parsing `cbuffer type_<UB> :` declarations. The set is
+            // case-insensitive — fed to the count-matching resolver below.
+            HashSet<string> shaderUsedUbs = new(StringComparer.Ordinal);
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                result,
+                @"^cbuffer\s+type_([A-Za-z_][A-Za-z0-9_]*)\s*:",
+                System.Text.RegularExpressions.RegexOptions.Multiline))
+            {
+                shaderUsedUbs.Add(m.Groups[1].Value.ToLowerInvariant());
+            }
+
+            // PASS 3: per (ubmtKind, hlslType) group, try count-matching
+            // against engine UB metadata. If exactly one used UB matches
+            // and its resource count == anonymous count, assign names in
+            // declaration order. This recovers e.g. View's 8 Texture3D
+            // <float4> Volumetric* resources at MainGrid PS's t1..t8.
+            Dictionary<(string, string), List<int>> anonsByType = new();
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (string.IsNullOrEmpty(anons[i].UbmtKind)) continue;
+                var key = (anons[i].UbmtKind, anons[i].HlslType);
+                if (!anonsByType.TryGetValue(key, out List<int>? list))
                 {
-                    rename[ident] = $"{ubName}_{resName}";
+                    list = new List<int>();
+                    anonsByType[key] = list;
+                }
+                list.Add(i);
+            }
+            Dictionary<int, string> rename = new();
+            HashSet<int> claimedByOrdered = new();
+            foreach (KeyValuePair<(string UbmtKind, string HlslType), List<int>> grp in anonsByType)
+            {
+                IReadOnlyList<string>? ordered = EngineTypeUniquenessIndex.TryResolveOrderedByUbContext(
+                    grp.Key.UbmtKind, grp.Key.HlslType, shaderUsedUbs, grp.Value.Count, out string ownerUb);
+                if (ordered == null || ordered.Count != grp.Value.Count) continue;
+                // Slot-sorted assignment: anonymous slots are visited in
+                // register-slot order so anon[0] (lowest slot) gets
+                // ordered[0]. Use slotIdx as the sort key.
+                List<int> bySlot = new(grp.Value);
+                bySlot.Sort((a, b) => int.Parse(anons[a].SlotIdx).CompareTo(int.Parse(anons[b].SlotIdx)));
+                for (int i = 0; i < bySlot.Count; i++)
+                {
+                    int idx = bySlot[i];
+                    rename[idx] = $"{ownerUb}_{ordered[i]}";
+                    claimedByOrdered.Add(idx);
+                }
+            }
+
+            // PASS 4: for anons not claimed by count-matching, try the
+            // global type-uniqueness (one engine candidate of that type
+            // across the entire engine), then fall back to hash-tagged.
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (claimedByOrdered.Contains(i)) continue;
+                var a = anons[i];
+                if (!string.IsNullOrEmpty(a.UbmtKind)
+                    && EngineTypeUniquenessIndex.TryResolveUnique(a.UbmtKind, a.HlslType, out string ubName, out string resName))
+                {
+                    rename[i] = $"{ubName}_{resName}";
                     continue;
                 }
-
-                // (B) Fallback rename with class-hash discriminator.
-                string suffix = ident.StartsWith("_", StringComparison.Ordinal)
-                    ? $"{slotPrefix.ToUpperInvariant()}{slotIdx}"
-                    : ident;
-                rename[ident] = $"{discriminator}_{suffix}";
+                string suffix = a.Ident.StartsWith("_", StringComparison.Ordinal)
+                    ? $"{a.SlotPrefix.ToUpperInvariant()}{a.SlotIdx}"
+                    : a.Ident;
+                rename[i] = $"{discriminator}_{suffix}";
             }
-            foreach (KeyValuePair<string, string> kv in rename)
+
+            // PASS 5: apply the rename map. We have to dedupe by ORIGINAL
+            // identifier (different anon entries can share an identifier
+            // when SPIRV-Cross emitted dedup'd `_<id>_1` etc. — same SSA
+            // id, multiple declarations). Use the first rename for each
+            // identifier; word-boundary replace covers references.
+            Dictionary<string, string> identToFinal = new(StringComparer.Ordinal);
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (!identToFinal.ContainsKey(anons[i].Ident))
+                {
+                    identToFinal[anons[i].Ident] = rename[i];
+                }
+            }
+            foreach (KeyValuePair<string, string> kv in identToFinal)
             {
                 result = System.Text.RegularExpressions.Regex.Replace(
                     result,
