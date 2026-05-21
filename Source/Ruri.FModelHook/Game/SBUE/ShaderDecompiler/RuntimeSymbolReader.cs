@@ -238,6 +238,12 @@ internal static class ShaderResourceTableSymbolizer
                     break;
             }
         }
+
+        // Material gap-fill moved into MaterialTextureNameInferrer —
+        // material texture names are added there at decompile time, not
+        // here at metadata load time. Running gap-fill in EnrichSymbolData
+        // would always see an empty Material_Texture2D_N set because
+        // MaterialTextureNameInferrer hasn't fired yet.
     }
 
     private static void DumpSrt(FShaderResourceTable srt, IReadOnlyList<string>? uniformBufferNames)

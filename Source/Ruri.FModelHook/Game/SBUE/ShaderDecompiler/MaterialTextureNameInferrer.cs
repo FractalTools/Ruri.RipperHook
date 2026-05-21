@@ -175,7 +175,69 @@ internal static class MaterialTextureNameInferrer
             appended++;
         }
 
+        // After the sampler-name inference fills in the Material_Texture2D_N
+        // texture entries, gap-fill any missing N values between consecutive
+        // SRT-resolved/inferred Material_Texture2D_N slots. UE's Material UB
+        // resource list interleaves (texture, sampler, texture, sampler, …),
+        // so consecutive USED textures take consecutive t-slots and their
+        // resource indices differ by 2 — but the materialLayout names them
+        // with 1-stride suffixes. When (slotDelta == suffixDelta > 1), the
+        // gap slots get Material_Texture2D_<a_N + step>.
+        appended += FillMaterialTextureGaps(symbols);
         return appended;
+    }
+
+    // Find consecutive Material_Texture2D_N entries in symbols.TextureParameters
+    // where (slotDelta == suffixDelta > 1) and synthesise the missing
+    // N values for the intermediate slots. Returns the number of entries
+    // added. Pure metadata mutation — no SPIR-V awareness needed.
+    private static int FillMaterialTextureGaps(SerializedProgramData symbols)
+    {
+        List<(int Slot, int N)> materials = new();
+        foreach (TextureParameter t in symbols.TextureParameters)
+        {
+            if (string.IsNullOrEmpty(t.Name)) continue;
+            if (!t.Name.StartsWith("Material_Texture2D_", StringComparison.Ordinal)) continue;
+            string tail = t.Name.Substring("Material_Texture2D_".Length);
+            if (int.TryParse(tail, out int n))
+            {
+                materials.Add((Slot: t.Index, N: n));
+            }
+        }
+        if (materials.Count < 2) return 0;
+        materials.Sort((a, b) => a.Slot.CompareTo(b.Slot));
+
+        HashSet<int> claimedSlots = new();
+        foreach (TextureParameter t in symbols.TextureParameters) claimedSlots.Add(t.Index);
+
+        int added = 0;
+        for (int i = 0; i + 1 < materials.Count; i++)
+        {
+            (int aSlot, int aN) = materials[i];
+            (int bSlot, int bN) = materials[i + 1];
+            int slotDelta = bSlot - aSlot;
+            int nDelta = bN - aN;
+            if (slotDelta <= 1 || nDelta <= 1 || slotDelta != nDelta) continue;
+
+            for (int step = 1; step < slotDelta; step++)
+            {
+                int fillSlot = aSlot + step;
+                int fillN = aN + step;
+                if (claimedSlots.Contains(fillSlot)) continue;
+                symbols.TextureParameters.Add(new TextureParameter
+                {
+                    Name = $"Material_Texture2D_{fillN}",
+                    NameIndex = -1,
+                    Index = fillSlot,
+                    SamplerIndex = -1,
+                    MultiSampled = false,
+                    Dim = 2,
+                });
+                claimedSlots.Add(fillSlot);
+                added++;
+            }
+        }
+        return added;
     }
 
     private static string? DeriveTextureNameFromSamplerName(string samplerName)
