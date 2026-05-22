@@ -34,35 +34,94 @@ internal static class RuntimeSymbolReader
         // match is keyed on (UBName, ResourceTableLayoutHashes[i]) so we
         // never name across a layout-shape boundary (different engine
         // version, modded UB, etc.). See `UE_SYMBOL_SOURCES.md` §6.
+        //
+        // When the cook stripped the UB name (SPIRV-Cross / dxil-spirv
+        // generate `CB<N>UBO` placeholders for unnamed cbuffers), the
+        // ResourceTableLayoutHashes entry still carries the canonical
+        // 32-bit XOR fold — and the engine UB metadata index is keyed on
+        // that exact hash. Fall back to a hash-only reverse lookup; if
+        // exactly ONE seed has that hash we have an unambiguous source-
+        // truth match. UB index → resolved name is also recorded in
+        // resolvedUbNamesByIndex so the rest of the pipeline (SRT decoder,
+        // BufferBindingParameters) sees the real name.
+        // RURI_UB_DEBUG=1 — diagnostic dump of UB-name + layout-hash table
+        // once per shader to stderr. Use with RURI_SHADER_INDEX_FILTER to
+        // scope to a single shader; otherwise output is overwhelming on
+        // archives with thousands of shaders.
+        bool ubDebug = Environment.GetEnvironmentVariable("RURI_UB_DEBUG") == "1";
+
+        Dictionary<int, string> resolvedUbNamesByIndex = new();
         if (engineUbRegistry != null && engineUbRegistry.FileCount > 0
             && metadata.SRT.ResourceTableLayoutHashes is { Count: > 0 } hashes)
         {
+            if (ubDebug)
+            {
+                Console.Error.WriteLine($"[UB] shader has {metadata.UniformBufferNames.Count} UB names, {hashes.Count} layout hashes:");
+                for (int j = 0; j < metadata.UniformBufferNames.Count; j++)
+                {
+                    uint hj = j < hashes.Count ? hashes[j] : 0u;
+                    string ubj = metadata.UniformBufferNames[j];
+                    bool canon = IsCanonicalUniformBufferName(ubj);
+                    EngineUbMetadata? revLookup = (hj != 0u) ? engineUbRegistry.LookupByHashOnly(hj) : null;
+                    Console.Error.WriteLine($"[UB]   [{j}] name='{ubj}' canonical={canon} hash=0x{hj:X8} hash-only-resolved={revLookup?.Name ?? "<none>"}");
+                }
+            }
+
             HashSet<string> alreadyAdded = new(StringComparer.Ordinal);
             for (int i = 0; i < metadata.UniformBufferNames.Count && i < hashes.Count; i++)
             {
                 string ubName = metadata.UniformBufferNames[i];
-                if (!IsCanonicalUniformBufferName(ubName)) continue;
-                if (!alreadyAdded.Add(ubName)) continue;
-                EngineUbMetadata? meta = engineUbRegistry.Lookup(ubName, hashes[i]);
+                uint h = hashes[i];
+                EngineUbMetadata? meta = null;
+                if (IsCanonicalUniformBufferName(ubName))
+                {
+                    meta = engineUbRegistry.Lookup(ubName, h);
+                }
+                else if (h != 0u)
+                {
+                    // Cook stripped the name; hash survives → reverse-lookup.
+                    meta = engineUbRegistry.LookupByHashOnly(h);
+                    if (meta != null)
+                    {
+                        ubName = meta.Name;
+                        resolvedUbNamesByIndex[i] = meta.Name;
+                    }
+                }
                 if (meta == null)
                 {
-                    if (logMiss != null)
+                    if (logMiss != null && IsCanonicalUniformBufferName(ubName))
                     {
-                        uint missHash = hashes[i];
                         bool firstTime;
-                        lock (s_loggedMissesLock) { firstTime = s_loggedMisses.Add((ubName, missHash)); }
+                        lock (s_loggedMissesLock) { firstTime = s_loggedMisses.Add((ubName, h)); }
                         if (firstTime)
                         {
                             string known = engineUbRegistry.HasAnyForName(ubName, out IReadOnlyList<uint> knownHashes)
-                                ? string.Join(",", knownHashes.Select(h => $"0x{h:X8}"))
+                                ? string.Join(",", knownHashes.Select(hh => $"0x{hh:X8}"))
                                 : "<empty>";
-                            logMiss($"[engineUb] shader sees {ubName} hash=0x{missHash:X8}, registry has [{known}]");
+                            logMiss($"[engineUb] shader sees {ubName} hash=0x{h:X8}, registry has [{known}]");
                         }
                     }
                     continue;
                 }
+                if (!alreadyAdded.Add(ubName)) continue;
                 symbols.ConstantBufferParameters.Add(EngineUbMetadataTranslator.ToConstantBufferParameter(meta));
             }
+        }
+
+        // Apply any hash-only resolutions back to UniformBufferNames so the
+        // SRT decoder (which uses the names array to label records) and the
+        // BufferBindingParameters loop below see the recovered name. This
+        // mutation is local to the metadata reference held by the caller —
+        // intentional: the runtime symbol path is the one true source for
+        // names downstream, and the cook's stripped placeholder is useless.
+        if (resolvedUbNamesByIndex.Count > 0)
+        {
+            List<string> patched = new(metadata.UniformBufferNames);
+            foreach (var kv in resolvedUbNamesByIndex)
+            {
+                if (kv.Key >= 0 && kv.Key < patched.Count) patched[kv.Key] = kv.Value;
+            }
+            metadata.UniformBufferNames = patched;
         }
 
         for (int i = 0; i < metadata.UniformBufferNames.Count; i++)

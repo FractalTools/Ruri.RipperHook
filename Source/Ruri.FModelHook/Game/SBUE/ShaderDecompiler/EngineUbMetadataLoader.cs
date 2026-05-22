@@ -385,6 +385,28 @@ internal sealed class EngineUbMetadataRegistry
         return _byNameAndHash.TryGetValue((ubName, layoutHash), out EngineUbMetadata? meta) ? meta : null;
     }
 
+    // Hash-only reverse lookup. When the cook stripped the UB name (leaving
+    // SPIRV-Cross / dxil-spirv generated `CB<N>UBO` placeholders), the
+    // ResourceTableLayoutHashes entry survives — and engine UB layout hashes
+    // are documented as collision-resistant 32-bit XOR folds keyed on the
+    // exact (cb size, binding flags, resource type sequence) tuple.
+    // If exactly ONE seed has the given hash across the entire engine
+    // metadata set, that's an unambiguous match — caller can synthesize the
+    // missing name. Returns null when zero OR multiple seeds collide on
+    // the hash. (For >1, caller falls back to anonymous placeholders rather
+    // than guessing — strictly source-truth.)
+    public EngineUbMetadata? LookupByHashOnly(uint layoutHash)
+    {
+        EngineUbMetadata? hit = null;
+        foreach (var kvp in _byNameAndHash)
+        {
+            if (kvp.Key.Hash != layoutHash) continue;
+            if (hit != null) return null; // collision — refuse to guess
+            hit = kvp.Value;
+        }
+        return hit;
+    }
+
     // For diagnostics: returns true iff at least one file matches `ubName`
     // (any hash). Used by the symbolizer to log "shape-drift" warnings:
     // we have metadata for `View` but the cook's hash doesn't match any

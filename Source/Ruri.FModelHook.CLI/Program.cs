@@ -136,13 +136,34 @@ public static class Program
             // public access shim directly to avoid booting HookConfig).
             bool splitVariants = ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
 
+            // Diagnostic gate: `RURI_SHADER_INDEX_FILTER=1234,5678` limits the
+            // pipeline to those shader indices only. Skips the multi-minute
+            // full-archive walk so hot-iteration on a target shader is fast.
+            // When the env var is absent the pipeline behaves identically to
+            // before (full archive). Whitespace-tolerant; ignores non-int.
+            HashSet<int>? indexFilter = null;
+            string? envFilter = Environment.GetEnvironmentVariable("RURI_SHADER_INDEX_FILTER");
+            if (!string.IsNullOrWhiteSpace(envFilter))
+            {
+                indexFilter = new HashSet<int>();
+                foreach (string tok in envFilter.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (int.TryParse(tok.Trim(), out int idx)) indexFilter.Add(idx);
+                }
+                HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: RURI_SHADER_INDEX_FILTER active, {indexFilter.Count} index(es).");
+            }
+
             DecompileSummary summary = DecompilePipeline.Run(new LibraryDecompileOptions
             {
                 LibraryPath = libraryPath,
                 OutputDirectory = outDir,
                 UnifiedMetadataPath = unifiedPath,
-                RecreateOutputDirectory = true,
+                // Don't wipe existing output when a filter is active —
+                // diagnostic re-runs target a single shader, full archive
+                // results from prior runs stay intact.
+                RecreateOutputDirectory = indexFilter == null,
                 SplitVariantsToHlslFiles = splitVariants,
+                ShaderIndexFilter = indexFilter,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });

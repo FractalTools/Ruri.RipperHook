@@ -214,7 +214,7 @@ internal static class Pass200_EmitShaderLabFiles
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            string source = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash);
+            string source = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata);
             foreach (string line in SplitLines(source))
             {
                 sb.AppendLine(line);
@@ -531,7 +531,7 @@ internal static class Pass200_EmitShaderLabFiles
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            string renamed = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash);
+            string renamed = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata);
             string adapted = AdaptHlslForUnity(renamed);
             foreach (string line in SplitLines(adapted))
             {
@@ -777,7 +777,7 @@ internal static class Pass200_EmitShaderLabFiles
     // all). This pass is intentionally a single string-replace, never
     // touching shader structure — the rewriter remains the only piece
     // that mutates SPIR-V.
-    private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash)
+    private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
         // Best discriminator (in priority order):
@@ -849,9 +849,19 @@ internal static class Pass200_EmitShaderLabFiles
                 anons.Add((ident, hlslType, ubmtKind, slotPrefix, slotIdx));
             }
 
-            // PASS 2: figure out which engine UBs this shader uses by
-            // parsing `cbuffer type_<UB> :` declarations. The set is
-            // case-insensitive — fed to the count-matching resolver below.
+            // PASS 2: figure out which engine UBs this shader uses.
+            // Source A — explicit `cbuffer type_<UB> :` declarations
+            //   (UBs that contribute constants to the shader).
+            // Source B — symbol metadata's BufferBindingParameters list
+            //   (UBs the cooked shader REFERENCES, including ones with
+            //   only textures/samplers/SRVs — e.g. LightmapResourceCluster
+            //   has 4 textures + 5 samplers but zero constants, so it
+            //   never appears as a cbuffer in HLSL yet still owns slots
+            //   t10..t14 in TLightMapDensity shaders). Without this
+            //   source, prefix-subset rename can't see the UB and the
+            //   anonymous slots stay anonymous.
+            // The set is case-insensitive — fed to the count-matching
+            // resolver below.
             HashSet<string> shaderUsedUbs = new(StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
@@ -859,6 +869,14 @@ internal static class Pass200_EmitShaderLabFiles
                 System.Text.RegularExpressions.RegexOptions.Multiline))
             {
                 shaderUsedUbs.Add(m.Groups[1].Value.ToLowerInvariant());
+            }
+            if (symbolMetadata != null)
+            {
+                foreach (BufferBindingParameter b in symbolMetadata.BufferBindingParameters)
+                {
+                    if (string.IsNullOrWhiteSpace(b.Name)) continue;
+                    shaderUsedUbs.Add(b.Name!.ToLowerInvariant());
+                }
             }
 
             // PASS 3: per (ubmtKind, hlslType) group, try count-matching
