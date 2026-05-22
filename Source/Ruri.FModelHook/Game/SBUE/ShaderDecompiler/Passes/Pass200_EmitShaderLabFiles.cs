@@ -849,19 +849,21 @@ internal static class Pass200_EmitShaderLabFiles
                 anons.Add((ident, hlslType, ubmtKind, slotPrefix, slotIdx));
             }
 
-            // PASS 2: figure out which engine UBs this shader uses.
-            // Source A — explicit `cbuffer type_<UB> :` declarations
-            //   (UBs that contribute constants to the shader).
-            // Source B — symbol metadata's BufferBindingParameters list
-            //   (UBs the cooked shader REFERENCES, including ones with
-            //   only textures/samplers/SRVs — e.g. LightmapResourceCluster
-            //   has 4 textures + 5 samplers but zero constants, so it
-            //   never appears as a cbuffer in HLSL yet still owns slots
-            //   t10..t14 in TLightMapDensity shaders). Without this
-            //   source, prefix-subset rename can't see the UB and the
-            //   anonymous slots stay anonymous.
-            // The set is case-insensitive — fed to the count-matching
-            // resolver below.
+            // PASS 2: figure out which engine UBs this shader uses AS
+            // CBUFFERS. Only `cbuffer type_<UB> :` declarations qualify —
+            // those are per-shader-bound, and the cook emits resources in
+            // source-declaration order, so prefix-subset rename is safe
+            // (the first N anonymous slots correspond to the first N
+            // resources of the right type in the UB's declaration).
+            //
+            // STATIC UBs (OpaqueBasePass, Nanite, etc.) that the shader
+            // uses WITHOUT declaring as a cbuffer are intentionally
+            // EXCLUDED from this set — their textures are bound via
+            // global static slots in a non-prefix subset, so prefix-subset
+            // would assign wrong names. Those slots are routed through
+            // ApplyUsagePatternMatches (PASS 3.5) instead, which reads the
+            // shader code's Sample call patterns to identify specific
+            // bindings (DBufferA/B/C, etc.) from source truth.
             HashSet<string> shaderUsedUbs = new(StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
                 result,
@@ -869,14 +871,6 @@ internal static class Pass200_EmitShaderLabFiles
                 System.Text.RegularExpressions.RegexOptions.Multiline))
             {
                 shaderUsedUbs.Add(m.Groups[1].Value.ToLowerInvariant());
-            }
-            if (symbolMetadata != null)
-            {
-                foreach (BufferBindingParameter b in symbolMetadata.BufferBindingParameters)
-                {
-                    if (string.IsNullOrWhiteSpace(b.Name)) continue;
-                    shaderUsedUbs.Add(b.Name!.ToLowerInvariant());
-                }
             }
 
             // PASS 3: per (ubmtKind, hlslType, slot-contiguous-region)
@@ -953,6 +947,16 @@ internal static class Pass200_EmitShaderLabFiles
                 }
             }
 
+            // PASS 3.5: usage-pattern based recovery for STATIC UB
+            // resources the cooker binds out-of-order (DBuffer textures
+            // etc.). When the shader source itself reveals what a slot is
+            // used for — e.g. 3 consecutive Texture2D's sampled at the
+            // screen-space UV `gl_FragCoord.xy * View_BufferSizeAndInvSize`
+            // gated by `View_ShowDecalsMask` — these are unambiguously
+            // OpaqueBasePass.DBufferA/B/C in that order. The pattern is
+            // distinctive enough that this is source-truth, not guessing.
+            ApplyUsagePatternMatches(result, anons, rename, claimedByOrdered);
+
             // PASS 4: for anons not claimed by count-matching, try the
             // global type-uniqueness (one engine candidate of that type
             // across the entire engine), then fall back to hash-tagged.
@@ -983,6 +987,13 @@ internal static class Pass200_EmitShaderLabFiles
                 if (!identToFinal.ContainsKey(anons[i].Ident))
                 {
                     identToFinal[anons[i].Ident] = rename[i];
+                }
+            }
+            if (Environment.GetEnvironmentVariable("RURI_UB_DEBUG") == "1")
+            {
+                foreach (KeyValuePair<string, string> kv in identToFinal)
+                {
+                    Console.Error.WriteLine($"[Pass200][applyRename] '{kv.Key}' -> '{kv.Value}'");
                 }
             }
             foreach (KeyValuePair<string, string> kv in identToFinal)
@@ -1029,6 +1040,164 @@ internal static class Pass200_EmitShaderLabFiles
         }
 
         return result;
+    }
+
+    // Usage-pattern recovery for anonymous textures the cooker bound from
+    // STATIC UBs (where prefix-subset can't safely guess which subset of
+    // a UB's many resources is in use). Reads the HLSL body, finds the
+    // Sample / SampleLevel / SampleBias call sites for each anonymous
+    // identifier, and matches each call's (sampler, UV expression,
+    // surrounding math) against well-known UE built-in patterns.
+    //
+    // Strictly source-truth: a match requires a distinctive co-occurrence
+    // pattern that the shader source itself reveals. No defaulting,
+    // no guessing — when no pattern matches, the slot stays anonymous.
+    //
+    // Patterns currently recognised:
+    //   - DBufferATexture / DBufferBTexture / DBufferCTexture
+    //     Triple of Texture2D's sampled at the screen-space UV
+    //     `(gl_FragCoord.xy * View_BufferSizeAndInvSize.zw)` gated by
+    //     `View_ShowDecalsMask` and the per-primitive decal-receive bit
+    //     `View_PrimitiveSceneData.Load(...) & 8u`. Engine source:
+    //     `Engine/Shaders/Private/DBufferDecalShared.ush` —
+    //     this triple of bindings is unique to OpaqueBasePass decal use.
+    //
+    //   - LandscapeParameters.NormalmapTexture
+    //     Sampled at landscape UV (TEXCOORD_1.zw), result's .z/.w
+    //     channels processed by `mad(*, 2.0f, -1.0f)` then
+    //     `sqrt(max(1 - dot(xy, xy), 0))` — classic BC5/ATI2 packed
+    //     normal reconstruction. Engine source:
+    //     `Engine/Shaders/Private/LandscapeCommon.ush`.
+    private static void ApplyUsagePatternMatches(
+        string hlsl,
+        List<(string Ident, string HlslType, string UbmtKind, string SlotPrefix, string SlotIdx)> anons,
+        Dictionary<int, string> rename,
+        HashSet<int> claimed)
+    {
+        // Build identifier -> first-Sample-callsite snippet map.
+        Dictionary<string, string> sampleCallByIdent = new(StringComparer.Ordinal);
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+            hlsl,
+            @"([TU]\d+|_\d+)\.Sample(?:Level|Bias|Grad|Cmp|CmpLevelZero)?\((?<args>[^;]+?)\)"))
+        {
+            string id = m.Groups[1].Value;
+            if (!sampleCallByIdent.ContainsKey(id))
+                sampleCallByIdent[id] = m.Value;
+        }
+
+        // DBuffer triple detection. Find anons whose Sample's UV uses
+        // `gl_FragCoord.* * View_BufferSizeAndInvSize.*` — those are screen-
+        // space-tiled. When THREE consecutive (by t-slot) anons share that
+        // UV pattern AND the shader references `View_ShowDecalsMask` AND
+        // `View_PrimitiveSceneData.Load(...) & 8u`, the triple is
+        // unambiguously DBufferA/B/C.
+        bool decalsGate = hlsl.Contains("View_ShowDecalsMask", StringComparison.Ordinal)
+            && System.Text.RegularExpressions.Regex.IsMatch(
+                hlsl,
+                @"View_PrimitiveSceneData\.Load<uint>\([^)]+\)\s*&\s*8u");
+        if (decalsGate)
+        {
+            // Pair each anon (by index in `anons`) with whether its Sample
+            // call uses the screen-space DBuffer UV.
+            List<(int AnonIdx, int Slot)> dbufCandidates = new();
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (claimed.Contains(i)) continue;
+                var a = anons[i];
+                if (a.SlotPrefix != "t") continue;
+                if (!a.HlslType.StartsWith("Texture2D", StringComparison.Ordinal)) continue;
+                if (!sampleCallByIdent.TryGetValue(a.Ident, out string? callSite)) continue;
+                // UV form: `float2(_NNN, _NNN)` where each operand traces
+                // back to `gl_FragCoord.x * View_BufferSizeAndInvSize.z`
+                // and `gl_FragCoord.y * View_BufferSizeAndInvSize.w`. The
+                // SPIRV-Cross emitter assigns those products to local
+                // floats first, so the Sample call's args reference those
+                // locals — find the assignment lines in the shader body.
+                if (!IsSampleUvFromScreenSpace(hlsl, callSite)) continue;
+                if (int.TryParse(a.SlotIdx, out int slot))
+                    dbufCandidates.Add((i, slot));
+            }
+            // DBufferA/B/C are bound at THREE consecutive t-slots. Sort by
+            // slot ascending and look for a run of EXACTLY 3 contiguous.
+            dbufCandidates.Sort((x, y) => x.Slot.CompareTo(y.Slot));
+            for (int j = 0; j + 2 < dbufCandidates.Count + 1 && j + 2 < dbufCandidates.Count; j++)
+            {
+                if (dbufCandidates[j + 1].Slot == dbufCandidates[j].Slot + 1
+                    && dbufCandidates[j + 2].Slot == dbufCandidates[j].Slot + 2)
+                {
+                    string[] dbufNames = { "DBufferATexture", "DBufferBTexture", "DBufferCTexture" };
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int idx = dbufCandidates[j + k].AnonIdx;
+                        rename[idx] = $"OpaqueBasePass_{dbufNames[k]}";
+                        claimed.Add(idx);
+                    }
+                    break; // one triple per shader (DBuffer is bound once)
+                }
+            }
+        }
+
+        // LandscapeParameters.NormalmapTexture: a Texture2D whose Sample
+        // result's .z/.w channels are biased by `mad(*, 2.0f, -1.0f)` and
+        // followed by a sqrt(1 - dot(xy,xy)) reconstruction. The .zw
+        // (alpha + blue) encoding is specific to UE's landscape
+        // heightmap+normal-packed format. Look at LandscapeCommon.ush.
+        for (int i = 0; i < anons.Count; i++)
+        {
+            if (claimed.Contains(i)) continue;
+            var a = anons[i];
+            if (a.SlotPrefix != "t") continue;
+            if (!a.HlslType.StartsWith("Texture2D", StringComparison.Ordinal)) continue;
+            if (!sampleCallByIdent.TryGetValue(a.Ident, out string? callSite)) continue;
+            // Find the local variable assigned the sample result, e.g.
+            // `float4 _136 = T13.Sample(...)`. Then check whether
+            // `_136.z` and `_136.w` appear inside `mad(_136.z, 2.0f, -1.0f)`
+            // etc. in the next ~30 lines.
+            System.Text.RegularExpressions.Match assignMatch = System.Text.RegularExpressions.Regex.Match(
+                hlsl,
+                @"float4\s+(_\d+)\s*=\s*" + System.Text.RegularExpressions.Regex.Escape(callSite));
+            if (!assignMatch.Success) continue;
+            string local = assignMatch.Groups[1].Value;
+            int searchStart = assignMatch.Index + assignMatch.Length;
+            int searchEnd = Math.Min(hlsl.Length, searchStart + 2000);
+            string window = hlsl.Substring(searchStart, searchEnd - searchStart);
+            bool zwBias = System.Text.RegularExpressions.Regex.IsMatch(
+                window, @"mad\(" + System.Text.RegularExpressions.Regex.Escape(local) + @"\.z,\s*2\.0f,\s*-1\.0f\)")
+                && System.Text.RegularExpressions.Regex.IsMatch(
+                window, @"mad\(" + System.Text.RegularExpressions.Regex.Escape(local) + @"\.w,\s*2\.0f,\s*-1\.0f\)");
+            if (!zwBias) continue;
+            rename[i] = "LandscapeParameters_NormalmapTexture";
+            claimed.Add(i);
+        }
+    }
+
+    // Resolve whether a Sample call's UV arguments trace back to the
+    // screen-space DBuffer UV pattern
+    // `(gl_FragCoord.xy * View_BufferSizeAndInvSize.zw)`. The SPIRV-Cross
+    // emitter materialises the multiplies into local floats; we follow
+    // the chain by looking for `float _NNN = gl_FragCoord.x *
+    // View_BufferSizeAndInvSize.z` (and y/.w) earlier in the body.
+    private static bool IsSampleUvFromScreenSpace(string hlsl, string sampleCall)
+    {
+        // Extract the second argument (UV) — Sample(sampler, uv [, ...]).
+        // The simplest robust extraction: pull all `_\d+` operands from
+        // the Sample call args, then check that ALL of them have an
+        // assignment to `gl_FragCoord.[xy] * View_BufferSizeAndInvSize.[zw]`
+        // earlier in the body.
+        System.Text.RegularExpressions.MatchCollection idMatches = System.Text.RegularExpressions.Regex.Matches(sampleCall, @"_\d+");
+        if (idMatches.Count < 2) return false;
+        int matchedUvComponents = 0;
+        foreach (System.Text.RegularExpressions.Match idM in idMatches)
+        {
+            string id = idM.Value;
+            if (System.Text.RegularExpressions.Regex.IsMatch(
+                hlsl,
+                @"float\s+" + System.Text.RegularExpressions.Regex.Escape(id) + @"\s*=\s*gl_FragCoord\.[xy]\s*\*\s*View_BufferSizeAndInvSize\.[zw]"))
+            {
+                matchedUvComponents++;
+            }
+        }
+        return matchedUvComponents >= 2; // both u and v
     }
 
     // Classify an HLSL declaration type token (e.g. `Texture2D<float4>`,
