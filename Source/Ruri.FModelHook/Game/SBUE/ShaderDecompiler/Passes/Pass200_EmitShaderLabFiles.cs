@@ -1074,11 +1074,16 @@ internal static class Pass200_EmitShaderLabFiles
         Dictionary<int, string> rename,
         HashSet<int> claimed)
     {
-        // Build identifier -> first-Sample-callsite snippet map.
+        // Build identifier -> full-statement-line map. Capture the WHOLE
+        // statement (up to the next `;`) rather than trying to balance
+        // parens — a non-greedy `[^;]+?\)` truncates at the first inner
+        // close-paren of `float2(...)` and loses tail arguments like
+        // `View_MaterialTextureMipBias` that pattern-matchers downstream
+        // rely on.
         Dictionary<string, string> sampleCallByIdent = new(StringComparer.Ordinal);
         foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
             hlsl,
-            @"([TU]\d+|_\d+)\.Sample(?:Level|Bias|Grad|Cmp|CmpLevelZero)?\((?<args>[^;]+?)\)"))
+            @"([TU]\d+|_\d+)\.Sample(?:Level|Bias|Grad|Cmp|CmpLevelZero)?\([^;]+;"))
         {
             string id = m.Groups[1].Value;
             if (!sampleCallByIdent.ContainsKey(id))
@@ -1180,6 +1185,55 @@ internal static class Pass200_EmitShaderLabFiles
                 @"dot\([^;]*" + System.Text.RegularExpressions.Regex.Escape(local) + @"[^;]*Material_LayerMask")) continue;
             rename[i] = "Landscape_WeightmapTexture";
             claimed.Add(i);
+        }
+
+        // Material extra Texture2D continuation: a Texture2D whose Sample
+        // call uses `View_MaterialTextureMipBias` AND has its UV computed
+        // from world-tile transforms (`View_ViewTilePosition` + Material
+        // or MaterialCollection scale parameters). The `MaterialTextureMipBias`
+        // is the canonical UE signal for ALL Material UB texture samples —
+        // engine source `Common.ush` `Texture2DSampleBias_Material` always
+        // passes `View.MaterialTextureMipBias`. Combined with material-
+        // driven UV math, this is unambiguously a Material UB texture
+        // that the MaterialUniformBufferLayout reader missed (either the
+        // material's UniformTextureParameters[0] count is short of the
+        // cooker's actual binding count, or the texture lives in a
+        // non-Standard2D bucket the reader doesn't enumerate).
+        //
+        // Numbering continues from the highest existing
+        // `Material_Texture2D_N` slot in ascending t-slot order. Source-
+        // truth signal: only fire when the sample uses MaterialTextureMipBias
+        // — refuses to extend the sequence for unrelated anonymous slots.
+        int maxMaterialN = 0;
+        System.Text.RegularExpressions.MatchCollection materialMatches =
+            System.Text.RegularExpressions.Regex.Matches(
+                hlsl,
+                @"Material_Texture2D_(\d+)\s*:\s*register");
+        foreach (System.Text.RegularExpressions.Match mm in materialMatches)
+        {
+            if (int.TryParse(mm.Groups[1].Value, out int n) && n > maxMaterialN) maxMaterialN = n;
+        }
+        if (maxMaterialN > 0)
+        {
+            List<(int AnonIdx, int Slot)> candidates = new();
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (claimed.Contains(i)) continue;
+                var a = anons[i];
+                if (a.SlotPrefix != "t") continue;
+                if (!a.HlslType.StartsWith("Texture2D", StringComparison.Ordinal)) continue;
+                if (!sampleCallByIdent.TryGetValue(a.Ident, out string? callSite)) continue;
+                if (!callSite.Contains("View_MaterialTextureMipBias", StringComparison.Ordinal)) continue;
+                if (int.TryParse(a.SlotIdx, out int slot)) candidates.Add((i, slot));
+            }
+            candidates.Sort((x, y) => x.Slot.CompareTo(y.Slot));
+            int nextN = maxMaterialN + 1;
+            foreach (var c in candidates)
+            {
+                rename[c.AnonIdx] = $"Material_Texture2D_{nextN}";
+                claimed.Add(c.AnonIdx);
+                nextN++;
+            }
         }
 
         // LandscapeParameters.NormalmapTexture: a Texture2D whose Sample
