@@ -1137,6 +1137,51 @@ internal static class Pass200_EmitShaderLabFiles
             }
         }
 
+        // Landscape per-component WeightmapTexture: a Texture2D whose
+        // Sample result is dot-producted with one or more `Material_LayerMask_*`
+        // vec4 parameters. The material's LayerMask parameters encode which
+        // RGBA channel of the weightmap stores each landscape layer's
+        // per-pixel weight. UE landscape rendering binds these textures
+        // as loose shader parameters via `FLandscapeBatchElementParams::
+        // WeightmapTextures` — they don't live in any UB metadata seed,
+        // but the shader's dot(sampleRGBA, Material_LayerMask_*) calls
+        // are a distinctive co-occurrence pattern.
+        for (int i = 0; i < anons.Count; i++)
+        {
+            if (claimed.Contains(i)) continue;
+            var a = anons[i];
+            if (a.SlotPrefix != "t") continue;
+            if (!a.HlslType.StartsWith("Texture2D", StringComparison.Ordinal)) continue;
+            if (!sampleCallByIdent.TryGetValue(a.Ident, out string? callSite)) continue;
+            System.Text.RegularExpressions.Match assignMatch = System.Text.RegularExpressions.Regex.Match(
+                hlsl,
+                @"float4\s+(_\d+)\s*=\s*" + System.Text.RegularExpressions.Regex.Escape(callSite));
+            if (!assignMatch.Success) continue;
+            string local = assignMatch.Groups[1].Value;
+            int searchStart = assignMatch.Index + assignMatch.Length;
+            int searchEnd = Math.Min(hlsl.Length, searchStart + 2000);
+            string window = hlsl.Substring(searchStart, searchEnd - searchStart);
+            // Look for `dot(... <local>.<chan> ..., Material_LayerMask_*)`
+            // — at minimum TWO distinct LayerMask references near this
+            // local's use, to distinguish from one-off material samples.
+            System.Text.RegularExpressions.MatchCollection layerMaskMatches =
+                System.Text.RegularExpressions.Regex.Matches(
+                    window,
+                    @"Material_LayerMask_[A-Za-z0-9_]+");
+            if (layerMaskMatches.Count < 2) continue;
+            // Also verify the sample local appears in the dot context — to
+            // exclude false positives where LayerMask is used elsewhere
+            // unrelated to this texture. `[^;]` allows nested parens
+            // (`dot(float4(_354.yzw, …), float4(Material_LayerMask_…))`)
+            // to live inside one statement; `[^)]` would clip at the
+            // inner float4's close-paren.
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+                window,
+                @"dot\([^;]*" + System.Text.RegularExpressions.Regex.Escape(local) + @"[^;]*Material_LayerMask")) continue;
+            rename[i] = "Landscape_WeightmapTexture";
+            claimed.Add(i);
+        }
+
         // LandscapeParameters.NormalmapTexture: a Texture2D whose Sample
         // result's .z/.w channels are biased by `mad(*, 2.0f, -1.0f)` and
         // followed by a sqrt(1 - dot(xy,xy)) reconstruction. The .zw
