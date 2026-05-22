@@ -328,22 +328,36 @@ internal static class MaterialConstantBufferReader
         return disambiguated;
     }
 
-    // Sanitize to a HLSL-safe identifier: keep [A-Za-z0-9_], collapse
-    // everything else (spaces, dots, hyphens) to underscores. Mirrors the
-    // emit-side rule so dedup decisions made here line up with what the
-    // shader source eventually contains. Leading-digit guard prefixes with
-    // '_' to keep the identifier valid.
+    // Sanitize to a HLSL-safe identifier MATCHING spirv-cross's emit-side
+    // rule: non-alphanumeric → `_`, collapse runs of `_`, trim trailing
+    // `_`. CRITICAL for non-Latin author names (CJK, Cyrillic, etc.):
+    // raw "AO对自发光的遮蔽强度" produces "AO_________" before collapse;
+    // raw "AO强度" produces "AO__". Both collapse to "AO_" in HLSL,
+    // colliding — and any dedup keyed on the un-collapsed form misses
+    // this. By collapsing+trimming here, dedup sees the same key that
+    // ends up in the shader source.
     private static string SanitizeHlslIdent(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return string.Empty;
-        Span<char> buf = stackalloc char[raw.Length];
-        int n = 0;
+        var sb = new System.Text.StringBuilder(raw.Length);
+        bool lastUnderscore = false;
         foreach (char c in raw)
         {
-            buf[n++] = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ? c : '_';
+            bool isAlnum = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+            if (isAlnum) { sb.Append(c); lastUnderscore = false; }
+            else if (!lastUnderscore) { sb.Append('_'); lastUnderscore = true; }
         }
-        if (n == 0) return string.Empty;
-        return (buf[0] >= '0' && buf[0] <= '9') ? "_" + new string(buf[..n]) : new string(buf[..n]);
+        // Trim leading AND trailing `_`. spirv-cross's HLSL emit also
+        // collapses underscore runs across the cbuffer-variable prefix
+        // boundary (`Material_` + `_AO` → `Material_AO`); trimming both
+        // sides aligns dedup with the actual emitted form.
+        int start = 0;
+        while (start < sb.Length && sb[start] == '_') start++;
+        int end = sb.Length;
+        while (end > start && sb[end - 1] == '_') end--;
+        if (end == start) return string.Empty;
+        string body = sb.ToString(start, end - start);
+        return (body[0] >= '0' && body[0] <= '9') ? "_" + body : body;
     }
 
     private static void AddVectorMember(List<VectorParameter> destination, string name, int byteOffset, int rows, ShaderParamType type)
