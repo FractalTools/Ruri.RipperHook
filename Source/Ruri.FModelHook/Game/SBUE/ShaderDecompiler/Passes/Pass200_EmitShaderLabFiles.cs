@@ -780,36 +780,28 @@ internal static class Pass200_EmitShaderLabFiles
     private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
-        // Best discriminator (in priority order):
-        //   1. ShaderTypeName - real C++ class name from the seed registry
-        //   2. ShaderHash[0:8] - when the class hash didn't resolve to a name
-        //      (custom game shaders not in engine source); the cook still
-        //      ships a unique-per-shader SHA1 prefix that's stable across
-        //      runs and matches the suffix already in the filename.
-        // Anything else means we have nothing better than the SPIRV-Cross
-        // default - leave the source untouched.
-        string discriminator;
-        if (!string.IsNullOrWhiteSpace(shaderTypeName))
-        {
-            discriminator = SanitizeIdent(shaderTypeName);
-        }
-        else if (!string.IsNullOrWhiteSpace(shaderHash) && shaderHash.Length >= 8)
-        {
-            discriminator = "h" + SanitizeIdent(shaderHash[..8]);
-        }
-        else
-        {
-            return source;
-        }
-        if (string.IsNullOrEmpty(discriminator)) return source;
+        // Discriminator priority:
+        //   ShaderTypeName — real C++ class name from the seed registry.
+        // NO hash fallback: a shader-hash discriminator carries no semantic
+        // information (it identifies a permutation, which is already in the
+        // filename). When the ShaderType doesn't resolve (Material-class
+        // shaders, custom game shader types missing from the engine seed
+        // registry), `_Globals_m0` is LEFT AS-IS. The cbuffer block is
+        // already named `type_Globals` and spirv-cross only emits one such
+        // member per shader, so the canonical default token stays uniquely
+        // identifiable per-file without being polluted with hash noise.
+        string discriminator = string.IsNullOrWhiteSpace(shaderTypeName)
+            ? string.Empty
+            : SanitizeIdent(shaderTypeName);
 
         string result = source;
 
         // 1. Rename the SPIRV-Cross default $Globals member when the
-        //    runtime didn't successfully reconcile it. Plain string-
-        //    replace is safe — the SPIRV-Cross convention emits a single
-        //    token `_Globals_m0` with no name collisions.
-        if (result.Contains("_Globals_m0", StringComparison.Ordinal))
+        //    runtime didn't successfully reconcile it AND we have a real
+        //    class discriminator. Plain string-replace is safe — the
+        //    SPIRV-Cross convention emits a single token `_Globals_m0` per
+        //    shader with no name collisions.
+        if (!string.IsNullOrEmpty(discriminator) && result.Contains("_Globals_m0", StringComparison.Ordinal))
         {
             result = result.Replace("_Globals_m0", $"_loose_{discriminator}", StringComparison.Ordinal);
         }
@@ -973,7 +965,10 @@ internal static class Pass200_EmitShaderLabFiles
                 string suffix = a.Ident.StartsWith("_", StringComparison.Ordinal)
                     ? $"{a.SlotPrefix.ToUpperInvariant()}{a.SlotIdx}"
                     : a.Ident;
-                rename[i] = $"{discriminator}_{suffix}";
+                // No discriminator → keep the original anonymous identifier
+                // (T<N> / U<N> / _<N>). Better than an empty-prefix
+                // `_<suffix>` that's harder to grep and looks broken.
+                rename[i] = string.IsNullOrEmpty(discriminator) ? a.Ident : $"{discriminator}_{suffix}";
             }
 
             // PASS 5: apply the rename map. We have to dedupe by ORIGINAL

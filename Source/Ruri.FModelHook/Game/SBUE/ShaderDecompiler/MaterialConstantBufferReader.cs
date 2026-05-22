@@ -309,13 +309,41 @@ internal static class MaterialConstantBufferReader
 
     private static string RegisterUniqueName(HashSet<string> seenNames, string candidate, int byteOffset)
     {
-        if (seenNames.Add(candidate))
-        {
-            return candidate;
-        }
-        string disambiguated = $"{candidate}_at_{byteOffset}";
+        // CRITICAL: sanitize FIRST, then dedupe. Two raw parameter names like
+        // "AO " (trailing space) and "AO" both render to "AO_" in HLSL after
+        // spirv-cross's identifier sanitisation. If we dedupe on the RAW
+        // string the two entries pass the HashSet (different keys), but the
+        // emitted HLSL has duplicate `Material_AO_` declarations and fails
+        // to compile. Dedupe must operate on the post-sanitised form to
+        // match the cbuffer member text that actually reaches the consumer.
+        string sanitized = SanitizeHlslIdent(candidate);
+        // An empty author name (or sanitisation collapsed it to "") would
+        // emit as `Material_` — an illegal HLSL identifier (trailing _).
+        // Substitute a byte-offset-based stable placeholder so the slot is
+        // distinct and pronounceable.
+        if (string.IsNullOrEmpty(sanitized)) sanitized = $"f_{byteOffset}";
+        if (seenNames.Add(sanitized)) return sanitized;
+        string disambiguated = $"{sanitized}_at_{byteOffset}";
         seenNames.Add(disambiguated);
         return disambiguated;
+    }
+
+    // Sanitize to a HLSL-safe identifier: keep [A-Za-z0-9_], collapse
+    // everything else (spaces, dots, hyphens) to underscores. Mirrors the
+    // emit-side rule so dedup decisions made here line up with what the
+    // shader source eventually contains. Leading-digit guard prefixes with
+    // '_' to keep the identifier valid.
+    private static string SanitizeHlslIdent(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        Span<char> buf = stackalloc char[raw.Length];
+        int n = 0;
+        foreach (char c in raw)
+        {
+            buf[n++] = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ? c : '_';
+        }
+        if (n == 0) return string.Empty;
+        return (buf[0] >= '0' && buf[0] <= '9') ? "_" + new string(buf[..n]) : new string(buf[..n]);
     }
 
     private static void AddVectorMember(List<VectorParameter> destination, string name, int byteOffset, int rows, ShaderParamType type)
