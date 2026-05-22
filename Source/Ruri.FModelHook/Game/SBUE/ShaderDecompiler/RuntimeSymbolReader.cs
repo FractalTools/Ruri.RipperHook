@@ -75,6 +75,18 @@ internal static class RuntimeSymbolReader
                 EngineUbMetadata? meta = null;
                 if (IsCanonicalUniformBufferName(ubName))
                 {
+                    // Exact (name, hash) match against a seed. NAME-ONLY
+                    // fallback was attempted (Stage TODO) but produced
+                    // BROKEN output: when the cook's hash doesn't match a
+                    // seed, the chosen vanilla seed's layout disagrees with
+                    // the cook's actual layout at NON-PREFIX offsets, and
+                    // the SymbolRewriter collapses the entire cbuffer to
+                    // empty struct braces (worse than `_loose[N]`). A safe
+                    // tolerant fallback needs to (a) know the cook's actual
+                    // cb size at this layer to bound the seed by size and
+                    // (b) verify member-offset compatibility against the
+                    // cook's `LooseParameterBuffers` slot list before
+                    // committing. Defer that to a follow-up pass.
                     meta = engineUbRegistry.Lookup(ubName, h);
                 }
                 else if (h != 0u)

@@ -407,6 +407,41 @@ internal sealed class EngineUbMetadataRegistry
         return hit;
     }
 
+    // Name-only fallback. When the cook's UB hash doesn't match any seed for
+    // the same UB name (modded engine, custom UE fork, or game-specific
+    // additions), pick the seed whose `ConstantBufferSize` is the LARGEST
+    // that still fits within `cookCbSize` bytes (so applying the seed's
+    // members won't overflow the cook's actual buffer). UE rarely re-shuffles
+    // existing UB member offsets — game-side mods almost always APPEND new
+    // fields — so applying a strict prefix of the latest matching vanilla
+    // seed is the safe recovery: every named member sits at the correct
+    // offset, and the modded tail naturally gets `_TODO_missing_seed_field`
+    // via LayoutBuilder's tail-fill.
+    //
+    // Returns null when no seed exists for `ubName`, or when all candidate
+    // seeds are larger than the cook's actual buffer (would overflow).
+    // `cookCbSize` = (cook's flat array register count) * 16, derivable from
+    // the SPIR-V flat `_m0[N]` array OR from the cooked
+    // ParameterMapInfo.UniformBuffers entry's size.
+    public EngineUbMetadata? LookupByNameWithSizeCap(string ubName, int cookCbSize)
+    {
+        if (string.IsNullOrEmpty(ubName) || cookCbSize <= 0) return null;
+        EngineUbMetadata? best = null;
+        int bestSize = -1;
+        foreach (var kvp in _byNameAndHash)
+        {
+            if (!string.Equals(kvp.Key.Name, ubName, StringComparison.Ordinal)) continue;
+            int seedSize = kvp.Value.ConstantBufferSize;
+            if (seedSize <= 0 || seedSize > cookCbSize) continue;
+            if (seedSize > bestSize)
+            {
+                best = kvp.Value;
+                bestSize = seedSize;
+            }
+        }
+        return best;
+    }
+
     // For diagnostics: returns true iff at least one file matches `ubName`
     // (any hash). Used by the symbolizer to log "shape-drift" warnings:
     // we have metadata for `View` but the cook's hash doesn't match any
