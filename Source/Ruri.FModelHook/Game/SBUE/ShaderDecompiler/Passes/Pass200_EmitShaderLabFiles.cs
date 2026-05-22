@@ -879,11 +879,19 @@ internal static class Pass200_EmitShaderLabFiles
                 }
             }
 
-            // PASS 3: per (ubmtKind, hlslType) group, try count-matching
-            // against engine UB metadata. If exactly one used UB matches
-            // and its resource count == anonymous count, assign names in
-            // declaration order. This recovers e.g. View's 8 Texture3D
-            // <float4> Volumetric* resources at MainGrid PS's t1..t8.
+            // PASS 3: per (ubmtKind, hlslType, slot-contiguous-region)
+            // group, try count-matching against engine UB metadata.
+            // If exactly one used UB matches and its resource count ==
+            // anonymous count, assign names in declaration order.
+            //
+            // SLOT-GAP SPLIT: the cooker allocates t-registers per-UB in
+            // declaration order, so a UB's textures land at *contiguous*
+            // t-slots. When a same-type group has a slot gap (e.g.
+            // t10-t14 contiguous, then t21-t22 contiguous, with named
+            // Material_Texture2D_N slots in between at t15-t20), those
+            // two clusters belong to DIFFERENT UBs. Splitting at the gap
+            // turns a 7-anon group "no UB has 7" miss into two separate
+            // sub-group matches.
             Dictionary<(string, string), List<int>> anonsByType = new();
             for (int i = 0; i < anons.Count; i++)
             {
@@ -900,19 +908,48 @@ internal static class Pass200_EmitShaderLabFiles
             HashSet<int> claimedByOrdered = new();
             foreach (KeyValuePair<(string UbmtKind, string HlslType), List<int>> grp in anonsByType)
             {
-                IReadOnlyList<string>? ordered = EngineTypeUniquenessIndex.TryResolveOrderedByUbContext(
-                    grp.Key.UbmtKind, grp.Key.HlslType, shaderUsedUbs, grp.Value.Count, out string ownerUb);
-                if (ordered == null || ordered.Count != grp.Value.Count) continue;
-                // Slot-sorted assignment: anonymous slots are visited in
-                // register-slot order so anon[0] (lowest slot) gets
-                // ordered[0]. Use slotIdx as the sort key.
+                // Sort anons in this (UbmtKind, HlslType) group by t-slot
+                // ascending, then split into contiguous runs. A run breaks
+                // when the next anon's slot is more than 1 above the
+                // previous anon's slot — i.e. some other binding sits
+                // between them (could be a resolved named texture, or a
+                // different-type anon, doesn't matter).
                 List<int> bySlot = new(grp.Value);
                 bySlot.Sort((a, b) => int.Parse(anons[a].SlotIdx).CompareTo(int.Parse(anons[b].SlotIdx)));
-                for (int i = 0; i < bySlot.Count; i++)
+                List<List<int>> runs = new();
+                List<int> currentRun = new();
+                int prevSlot = int.MinValue;
+                foreach (int idx in bySlot)
                 {
-                    int idx = bySlot[i];
-                    rename[idx] = $"{ownerUb}_{ordered[i]}";
-                    claimedByOrdered.Add(idx);
+                    int s = int.Parse(anons[idx].SlotIdx);
+                    if (currentRun.Count > 0 && s > prevSlot + 1)
+                    {
+                        runs.Add(currentRun);
+                        currentRun = new List<int>();
+                    }
+                    currentRun.Add(idx);
+                    prevSlot = s;
+                }
+                if (currentRun.Count > 0) runs.Add(currentRun);
+
+                foreach (List<int> run in runs)
+                {
+                    IReadOnlyList<string>? ordered = EngineTypeUniquenessIndex.TryResolveOrderedByUbContext(
+                        grp.Key.Item1, grp.Key.Item2, shaderUsedUbs, run.Count, out string ownerUb);
+                    if (Environment.GetEnvironmentVariable("RURI_UB_DEBUG") == "1")
+                    {
+                        int firstSlot = int.Parse(anons[run[0]].SlotIdx);
+                        int lastSlot = int.Parse(anons[run[^1]].SlotIdx);
+                        string usedUbsCsv = string.Join(",", shaderUsedUbs);
+                        Console.Error.WriteLine($"[Pass200][rename] type=({grp.Key.Item1}|{grp.Key.Item2}) run=t{firstSlot}..t{lastSlot} count={run.Count} usedUbs=[{usedUbsCsv}] -> ownerUb={ownerUb} ordered={(ordered == null ? "<null>" : string.Join(",", ordered))}");
+                    }
+                    if (ordered == null || ordered.Count != run.Count) continue;
+                    for (int i = 0; i < run.Count; i++)
+                    {
+                        int idx = run[i];
+                        rename[idx] = $"{ownerUb}_{ordered[i]}";
+                        claimedByOrdered.Add(idx);
+                    }
                 }
             }
 
