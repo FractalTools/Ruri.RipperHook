@@ -10,15 +10,9 @@ partial class MainForm
 	private ToolStripMenuItem fileToolStripMenuItem = null!;
 	private ToolStripMenuItem loadFileToolStripMenuItem = null!;
 	private ToolStripMenuItem loadFolderToolStripMenuItem = null!;
-	private ToolStripMenuItem loadPathsFromTextToolStripMenuItem = null!;
 	private ToolStripMenuItem appendFileToolStripMenuItem = null!;
 	private ToolStripMenuItem appendFolderToolStripMenuItem = null!;
 	private ToolStripSeparator fileToolStripSeparator1 = null!;
-	private ToolStripMenuItem loadCabMapToolStripMenuItem = null!;
-	private ToolStripMenuItem loadCabsToolStripMenuItem = null!;
-	private ToolStripMenuItem buildCabMapAndAssetMapToolStripMenuItem = null!;
-	private ToolStripSeparator fileToolStripSeparator2 = null!;
-	private ToolStripMenuItem optionsToolStripMenuItem = null!;
 	private ToolStripMenuItem resetToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFileToolStripMenuItem = null!;
@@ -96,15 +90,9 @@ partial class MainForm
 		fileToolStripMenuItem = new ToolStripMenuItem();
 		loadFileToolStripMenuItem = new ToolStripMenuItem();
 		loadFolderToolStripMenuItem = new ToolStripMenuItem();
-		loadPathsFromTextToolStripMenuItem = new ToolStripMenuItem();
 		appendFileToolStripMenuItem = new ToolStripMenuItem();
 		appendFolderToolStripMenuItem = new ToolStripMenuItem();
 		fileToolStripSeparator1 = new ToolStripSeparator();
-		loadCabMapToolStripMenuItem = new ToolStripMenuItem();
-		loadCabsToolStripMenuItem = new ToolStripMenuItem();
-		buildCabMapAndAssetMapToolStripMenuItem = new ToolStripMenuItem();
-		fileToolStripSeparator2 = new ToolStripSeparator();
-		optionsToolStripMenuItem = new ToolStripMenuItem();
 		resetToolStripMenuItem = new ToolStripMenuItem();
 		directExportToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFileToolStripMenuItem = new ToolStripMenuItem();
@@ -179,32 +167,22 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, optionsToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
-		fileToolStripMenuItem.DropDownItems.AddRange([loadFileToolStripMenuItem, loadFolderToolStripMenuItem, loadPathsFromTextToolStripMenuItem, appendFileToolStripMenuItem, appendFolderToolStripMenuItem, fileToolStripSeparator1, loadCabsToolStripMenuItem, buildCabMapAndAssetMapToolStripMenuItem, fileToolStripSeparator2, resetToolStripMenuItem]);
+		fileToolStripMenuItem.DropDownItems.AddRange([loadFileToolStripMenuItem, loadFolderToolStripMenuItem, appendFileToolStripMenuItem, appendFolderToolStripMenuItem, fileToolStripSeparator1, resetToolStripMenuItem]);
 		fileToolStripMenuItem.Text = "File";
 		loadFileToolStripMenuItem.Text = "Load files";
 		loadFileToolStripMenuItem.Click += loadFile_Click;
 		loadFolderToolStripMenuItem.Text = "Load folder";
 		loadFolderToolStripMenuItem.Click += loadFolderToolStripMenuItem_Click;
-		loadPathsFromTextToolStripMenuItem.Text = "Load paths from text";
-		loadPathsFromTextToolStripMenuItem.Click += loadPathsFromTextToolStripMenuItem_Click;
 		appendFileToolStripMenuItem.Text = "Append files";
 		appendFileToolStripMenuItem.Click += appendFileToolStripMenuItem_Click;
 		appendFolderToolStripMenuItem.Text = "Append folder";
 		appendFolderToolStripMenuItem.Click += appendFolderToolStripMenuItem_Click;
-		loadCabsToolStripMenuItem.Text = "Load CABs from CABMap";
-		loadCabsToolStripMenuItem.Click += loadCabsToolStripMenuItem_Click;
-		buildCabMapAndAssetMapToolStripMenuItem.Text = "Build CABMap and AssetMap";
-		buildCabMapAndAssetMapToolStripMenuItem.Click += buildCabMapAndAssetMapToolStripMenuItem_Click;
 		resetToolStripMenuItem.Text = "Reset";
 		resetToolStripMenuItem.Click += resetToolStripMenuItem_Click;
-		optionsToolStripMenuItem.DropDownItems.AddRange([loadCabMapToolStripMenuItem]);
-		optionsToolStripMenuItem.Text = "Options";
-		loadCabMapToolStripMenuItem.Text = "Load CABMap";
-		loadCabMapToolStripMenuItem.Click += loadCabMapToolStripMenuItem_Click;
 		// Top-level button: load an input + export directly, no asset list / scene tree.
 		// Equivalent to the headless AR_ExportDirectly hook, but UI-triggered. Splits into
 		// file-vs-folder so single-bundle spot tests share the same path-derivation logic

@@ -74,7 +74,6 @@ public partial class MainForm
 		// not a side activity layered on top of the current session.
 		ResetLoadedSession();
 		_adapter.Reset();
-		_assetMapWorkflow.Clear();
 		ResetForm();
 
 		string loadLabel = inputPaths.Count == 1 ? inputPaths[0] : $"{inputPaths.Count} paths";

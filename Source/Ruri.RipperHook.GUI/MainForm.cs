@@ -38,7 +38,6 @@ public partial class MainForm : Form
 	private HookConfig _hookConfig;
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
-	private readonly AssetMapWorkflowService _assetMapWorkflow = new();
 	private IReadOnlyList<RipperAssetEntry> _filteredAssets = [];
 	private List<TreeNode> _sceneRoots = [];
 	private string[] _lastLoadedPaths = [];
@@ -145,37 +144,6 @@ public partial class MainForm : Form
 		await LoadPathsAsync([dialog.SelectedPath], LoadSessionKind.Folder, replaceCurrent: true);
 	}
 
-	private async void loadPathsFromTextToolStripMenuItem_Click(object? sender, EventArgs e)
-	{
-		using OpenFileDialog dialog = new()
-		{
-			Multiselect = false,
-			CheckFileExists = true,
-			Filter = "Text files|*.txt|All files|*.*",
-			Title = "Load paths from text file"
-		};
-
-		if (dialog.ShowDialog(this) != DialogResult.OK)
-		{
-			return;
-		}
-
-		string fileName = dialog.FileName;
-		string[] paths = await Task.Run(() => File.ReadAllLines(fileName)
-			.Select(static line => line.Trim())
-			.Where(static line => !string.IsNullOrWhiteSpace(line))
-			.Distinct(StringComparer.OrdinalIgnoreCase)
-			.ToArray());
-
-		if (paths.Length == 0)
-		{
-			MessageBox.Show(this, "The text file does not contain any paths.", "Load paths", MessageBoxButtons.OK, MessageBoxIcon.Information);
-			return;
-		}
-
-		await LoadPathsAsync(paths, LoadSessionKind.MixedPaths, replaceCurrent: true);
-	}
-
 	private async void appendFileToolStripMenuItem_Click(object? sender, EventArgs e)
 	{
 		using OpenFileDialog dialog = new()
@@ -202,113 +170,6 @@ public partial class MainForm : Form
 		}
 
 		await LoadPathsAsync([dialog.SelectedPath], LoadSessionKind.Folder, replaceCurrent: false);
-	}
-
-	private async void loadCabMapToolStripMenuItem_Click(object? sender, EventArgs e)
-	{
-		using OpenFileDialog dialog = new()
-		{
-			Multiselect = false,
-			CheckFileExists = true,
-			Filter = "CABMap files|*.bin|All files|*.*",
-			Title = "Load CABMap"
-		};
-
-		if (dialog.ShowDialog(this) != DialogResult.OK)
-		{
-			return;
-		}
-
-		ToggleUi(false);
-		SetStatus("Loading CABMap...");
-		try
-		{
-			CabMapLoadResult result = await Task.Run(() => _assetMapWorkflow.LoadCabMap(dialog.FileName));
-			SetStatus($"Loaded CABMap: {result.CabCount} CAB entries.");
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show(this, ex.ToString(), "Load CABMap failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			SetStatus("Load CABMap failed.");
-		}
-		finally
-		{
-			ToggleUi(true);
-		}
-	}
-
-	private async void loadCabsToolStripMenuItem_Click(object? sender, EventArgs e)
-	{
-		if (!_assetMapWorkflow.HasCabMap)
-		{
-			MessageBox.Show(this, "Load a CABMap first from Options > Load CABMap.", "Load CABs", MessageBoxButtons.OK, MessageBoxIcon.Information);
-			return;
-		}
-
-		using OpenFileDialog dialog = new()
-		{
-			Multiselect = true,
-			CheckFileExists = false,
-			Filter = "All files|*.*",
-			Title = "Select CAB names or files"
-		};
-
-		if (dialog.ShowDialog(this) != DialogResult.OK)
-		{
-			return;
-		}
-
-		string[] cabNames = dialog.FileNames.Select(Path.GetFileName).Where(static name => !string.IsNullOrWhiteSpace(name)).Cast<string>().ToArray();
-		CabResolutionResult resolution = _assetMapWorkflow.ResolveCabFiles(cabNames);
-		if (resolution.Files.Length == 0)
-		{
-			string missing = resolution.MissingCabs.Length == 0 ? "No matching files were found in the loaded CABMap." : $"Missing CABs: {string.Join(", ", resolution.MissingCabs)}";
-			MessageBox.Show(this, missing, "Load CABs", MessageBoxButtons.OK, MessageBoxIcon.Information);
-			return;
-		}
-
-		await LoadPathsAsync(resolution.Files, LoadSessionKind.CabMap, replaceCurrent: true);
-	}
-
-	private async void buildCabMapAndAssetMapToolStripMenuItem_Click(object? sender, EventArgs e)
-	{
-		using FolderBrowserDialog rootFolderDialog = new();
-		if (rootFolderDialog.ShowDialog(this) != DialogResult.OK)
-		{
-			return;
-		}
-
-		using SaveFileDialog saveDialog = new()
-		{
-			Filter = "AssetMap files|*.map|JSON files|*.json|All files|*.*",
-			Title = "Save AssetMap",
-			FileName = Path.GetFileName(rootFolderDialog.SelectedPath) + ".map",
-			OverwritePrompt = true
-		};
-
-		if (saveDialog.ShowDialog(this) != DialogResult.OK)
-		{
-			return;
-		}
-
-		ToggleUi(false);
-		SetStatus("Building CABMap + AssetMap...");
-		try
-		{
-			GameType gameType = GetSelectedGameType();
-			MapBuildResult result = await Task.Run(() => _assetMapWorkflow.BuildCabAndAssetMap(rootFolderDialog.SelectedPath, saveDialog.FileName, gameType));
-			SetStatus($"Built CABMap + AssetMap from {result.FilesScanned} files.");
-			MessageBox.Show(this, $"AssetMap: {result.AssetMapPath}{Environment.NewLine}CABMap: {result.CabMapPath}{Environment.NewLine}Assets: {result.AssetCount}{Environment.NewLine}CABs: {result.CabCount}", "Build CABMap + AssetMap", MessageBoxButtons.OK, MessageBoxIcon.Information);
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show(this, ex.ToString(), "Build CABMap + AssetMap failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			SetStatus("Build CABMap + AssetMap failed.");
-		}
-		finally
-		{
-			ToggleUi(true);
-		}
 	}
 
 	private async Task LoadPathsAsync(IReadOnlyList<string> paths, LoadSessionKind sessionKind, bool replaceCurrent)
@@ -344,7 +205,6 @@ public partial class MainForm : Form
 	{
 		ResetLoadedSession();
 		_adapter.Reset();
-		_assetMapWorkflow.Clear();
 		ResetForm();
 	}
 
@@ -724,8 +584,7 @@ public partial class MainForm : Form
 		RebuildFilters();
 		ApplyFilter();
 		RebuildSceneTree();
-		string suffix = _assetMapWorkflow.HasCabMap ? $" | CABMap: {_assetMapWorkflow.CabMapCount}" : string.Empty;
-		Text = $"RuriAssetRipper - {_adapter.Assets.Count} assets{suffix}";
+		Text = $"RuriAssetRipper - {_adapter.Assets.Count} assets";
 	}
 
 	private void RememberLoadSession(string[] paths, LoadSessionKind sessionKind)
@@ -1921,6 +1780,5 @@ public partial class MainForm : Form
 		Files,
 		Folder,
 		MixedPaths,
-		CabMap,
 	}
 }

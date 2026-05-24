@@ -21,13 +21,9 @@ public partial class MainForm
 		await LoadPathsAsync(nextPaths, LoadSessionKind.MixedPaths, replaceCurrent: true);
 	}
 
-	internal void ShowCabMapRequiredDialog()
+	internal GameType GetSelectedGameTypeForAssetBrowser()
 	{
-		MessageBox.Show(this,
-			"CAB export requires a CABMap. Load a matching .bin file before exporting from the Asset Browser.",
-			"CABMap Not Found",
-			MessageBoxButtons.OK,
-			MessageBoxIcon.Warning);
+		return GetSelectedGameType();
 	}
 
 	private void EnsureAssetBrowserMenu()
@@ -37,10 +33,8 @@ public partial class MainForm
 			return;
 		}
 
-		ToolStripSeparator separator = new() { Name = "assetBrowserSeparator" };
 		ToolStripMenuItem openAssetBrowserMenuItem = new("Open Asset Browser") { Name = "openAssetBrowserMenuItem" };
 		openAssetBrowserMenuItem.Click += openAssetBrowserMenuItem_Click;
-		fileToolStripMenuItem.DropDownItems.Insert(Math.Max(0, fileToolStripMenuItem.DropDownItems.Count - 1), separator);
 		fileToolStripMenuItem.DropDownItems.Insert(Math.Max(0, fileToolStripMenuItem.DropDownItems.Count - 1), openAssetBrowserMenuItem);
 	}
 

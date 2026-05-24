@@ -9,6 +9,7 @@ internal sealed class AssetBrowser : Form
 
 	private readonly MainForm _parent;
 	private readonly AssetMapBrowserService _service = new();
+	private readonly AssetMapWorkflowService _workflow = new();
 	private readonly List<AssetMapEntry> _assetEntries = [];
 	private readonly Dictionary<string, string> _filters = FilterFields.ToDictionary(static x => x, static _ => string.Empty, StringComparer.OrdinalIgnoreCase);
 	private readonly ClickAwayFilter _clickAwayFilter;
@@ -20,6 +21,7 @@ internal sealed class AssetBrowser : Form
 	private readonly ToolStripMenuItem _miscMenu = new("Misc.");
 	private readonly ToolStripMenuItem _loadAssetMapMenuItem = new("Load AssetMap");
 	private readonly ToolStripMenuItem _loadCabMapMenuItem = new("Load CABMap");
+	private readonly ToolStripMenuItem _buildCabMapAndAssetMapMenuItem = new("Build CABMap and AssetMap");
 	private readonly ToolStripMenuItem _resetMenuItem = new("Reset");
 	private readonly ToolStripMenuItem _loadSelectedMenuItem = new("Load selected");
 	private readonly ToolStripMenuItem _appendSelectedMenuItem = new("Load selected (append)");
@@ -67,13 +69,14 @@ internal sealed class AssetBrowser : Form
 	private void InitializeLayout()
 	{
 		_menuStrip.Items.AddRange([_fileMenu, _optionsMenu, _assetMenu, _miscMenu]);
-		_fileMenu.DropDownItems.AddRange([_loadAssetMapMenuItem, _loadCabMapMenuItem, new ToolStripSeparator(), _resetMenuItem]);
+		_fileMenu.DropDownItems.AddRange([_loadAssetMapMenuItem, _loadCabMapMenuItem, _buildCabMapAndAssetMapMenuItem, new ToolStripSeparator(), _resetMenuItem]);
 		_assetMenu.DropDownItems.AddRange([_loadSelectedMenuItem, _appendSelectedMenuItem, new ToolStripSeparator(), _exportCabMenuItem]);
 		_optionsMenu.DropDownItems.Add(_fastLoadMenuItem);
 		_miscMenu.DropDownItems.AddRange([_convertAssetMapToJsonMenuItem, new ToolStripSeparator(), _clearSearchHistoryMenuItem]);
 
 		_loadAssetMapMenuItem.Click += loadAssetMap_Click;
 		_loadCabMapMenuItem.Click += loadCabMap_Click;
+		_buildCabMapAndAssetMapMenuItem.Click += buildCabMapAndAssetMap_Click;
 		_resetMenuItem.Click += reset_Click;
 		_loadSelectedMenuItem.Click += loadSelected_Click;
 		_appendSelectedMenuItem.Click += appendSelected_Click;
@@ -201,7 +204,9 @@ internal sealed class AssetBrowser : Form
 		try
 		{
 			_loadCabMapMenuItem.Enabled = false;
-			await Task.Run(() => _service.CabMap.Load(dialog.FileName));
+			CabMapLoadResult result = await Task.Run(() => _workflow.LoadCabMap(dialog.FileName));
+			await Task.Run(() => _service.CabMap.Load(result.Path));
+			_statusLabel.Text = $"Loaded CABMap with {result.CabCount} entries.";
 			UpdateStatusBar();
 		}
 		catch (Exception ex)
@@ -214,8 +219,52 @@ internal sealed class AssetBrowser : Form
 		}
 	}
 
+	private async void buildCabMapAndAssetMap_Click(object? sender, EventArgs e)
+	{
+		using FolderBrowserDialog rootFolderDialog = new();
+		if (rootFolderDialog.ShowDialog(this) != DialogResult.OK)
+		{
+			return;
+		}
+
+		using SaveFileDialog saveDialog = new()
+		{
+			Filter = "AssetMap files|*.map|JSON files|*.json|All files|*.*",
+			Title = "Save AssetMap",
+			FileName = Path.GetFileName(rootFolderDialog.SelectedPath) + ".map",
+			OverwritePrompt = true
+		};
+
+		if (saveDialog.ShowDialog(this) != DialogResult.OK)
+		{
+			return;
+		}
+
+		try
+		{
+			SetMenuEnabled(false);
+			_statusLabel.Text = "Building CABMap + AssetMap...";
+			GameType gameType = _parent.GetSelectedGameTypeForAssetBrowser();
+			MapBuildResult result = await Task.Run(() => _workflow.BuildCabAndAssetMap(rootFolderDialog.SelectedPath, saveDialog.FileName, gameType));
+			await Task.Run(() => _service.CabMap.Load(result.CabMapPath));
+			_statusLabel.Text = $"Built CABMap + AssetMap from {result.FilesScanned} files.";
+			UpdateStatusBar();
+			MessageBox.Show(this, $"AssetMap: {result.AssetMapPath}{Environment.NewLine}CABMap: {result.CabMapPath}{Environment.NewLine}Assets: {result.AssetCount}{Environment.NewLine}CABs: {result.CabCount}", "Build CABMap + AssetMap", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(this, ex.ToString(), "Build CABMap + AssetMap failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+			_statusLabel.Text = "Build CABMap + AssetMap failed";
+		}
+		finally
+		{
+			SetMenuEnabled(true);
+		}
+	}
+
 	private void reset_Click(object? sender, EventArgs e)
 	{
+		_workflow.Clear();
 		_service.Clear();
 		foreach (TextBox textBox in new[] { _nameTextBox, _containerTextBox, _sourceTextBox, _pathTextBox, _typeTextBox })
 		{
@@ -273,7 +322,11 @@ internal sealed class AssetBrowser : Form
 
 		if (!_service.CabMap.HasCabMap)
 		{
-			_parent.ShowCabMapRequiredDialog();
+			MessageBox.Show(this,
+				"CAB export requires a CABMap. Load a matching .bin file before exporting from the Asset Browser.",
+				"CABMap Not Found",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
 			return;
 		}
 
@@ -675,6 +728,19 @@ internal sealed class AssetBrowser : Form
 		_statusLabel.Text = _assetEntries.Count == _totalCount
 			? $"{_totalCount:N0} assets | {cabState}"
 			: $"{_assetEntries.Count:N0} / {_totalCount:N0} assets | {cabState}";
+	}
+
+	private void SetMenuEnabled(bool enabled)
+	{
+		_loadAssetMapMenuItem.Enabled = enabled;
+		_loadCabMapMenuItem.Enabled = enabled;
+		_buildCabMapAndAssetMapMenuItem.Enabled = enabled;
+		_resetMenuItem.Enabled = enabled;
+		_loadSelectedMenuItem.Enabled = enabled;
+		_appendSelectedMenuItem.Enabled = enabled;
+		_exportCabMenuItem.Enabled = enabled;
+		_convertAssetMapToJsonMenuItem.Enabled = enabled;
+		_clearSearchHistoryMenuItem.Enabled = enabled;
 	}
 
 	private void AssetBrowser_FormClosing(object? sender, FormClosingEventArgs e)
