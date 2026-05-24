@@ -3,6 +3,7 @@ namespace Ruri.RipperHook;
 public enum GameType
 {
     Unknown = 0,
+    Arknights,
     EndField,
     GirlsFrontline2,
     Houkai,
@@ -10,6 +11,7 @@ public enum GameType
     PunishingGrayRaven,
     AzurPromilia,
     ExAstris,
+	
     AR_ShaderDecompiler,
     AR_SkipStreamingAssetsCopy,
     AR_StaticMeshSeparation,
