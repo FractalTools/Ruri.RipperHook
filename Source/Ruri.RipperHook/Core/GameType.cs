@@ -19,4 +19,5 @@ public enum GameType
     AR_SkipProcessingAnimation,
     AR_ExportDirectly,
     AR_AnimationExport,
+    AR_PrefabOutlining,
 }

@@ -98,7 +98,8 @@ public class ExportHandlerHook : CommonHook, IHookModule
 
         //Static mesh separation goes here
         yield return new LightingDataProcessor(); //Needs to be after static mesh separation
-        yield return new PrefabProcessor();
+        // 全限定: 避免和 PrefabOutlining 还原回来的 AssetRipper.Processing.PrefabProcessor 重名冲突.
+        yield return new AssetRipper.Processing.Prefabs.PrefabProcessor();
         yield return new SpriteProcessor();
         yield return new ScriptableObjectProcessor(); // update: 新版本新增了 ScriptableObject 处理器
     }
