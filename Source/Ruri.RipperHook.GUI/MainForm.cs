@@ -29,9 +29,7 @@ public partial class MainForm : Form
 	private enum ExportFormat
 	{
 		Converted,
-		Json,
 		Yaml,
-		Raw,
 	}
 
 	private readonly string _configPath;
@@ -39,6 +37,8 @@ public partial class MainForm : Form
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private IReadOnlyList<RipperAssetEntry> _filteredAssets = [];
+	private int _sortColumn = -1;
+	private bool _sortAscending = true;
 	private List<TreeNode> _sceneRoots = [];
 	private string[] _lastLoadedPaths = [];
 	private LoadSessionKind _lastLoadSessionKind;
@@ -53,7 +53,6 @@ public partial class MainForm : Form
 	private readonly bool[] _textureChannels = [true, true, true, true];
 	private const int MaxImmediatePreviewCharacters = 262144;
 	private const int MaxImmediateYamlCharacters = 262144;
-	private const int MaxImmediateHexCharacters = 262144;
 	private int _shaderProgram;
 	private int _colorShaderProgram;
 	private int _texturedShaderProgram;
@@ -93,7 +92,6 @@ public partial class MainForm : Form
 	private AssetItem? _currentPreviewItem;
 	private string? _pendingYamlText;
 	private bool _yamlLoadedForCurrentSelection;
-	private bool _hexLoadedForCurrentSelection;
 	private int _previewRequestVersion;
 	private bool _previewLoadedForCurrentSelection;
 	private Matrix4 _modelMatrix = Matrix4.Identity;
@@ -242,7 +240,6 @@ public partial class MainForm : Form
 			_currentPreviewItem = null;
 			_pendingYamlText = null;
 			_yamlLoadedForCurrentSelection = false;
-			_hexLoadedForCurrentSelection = false;
 			_previewLoadedForCurrentSelection = false;
 			_previewRequestVersion++;
 			ClearMeshPreview();
@@ -254,7 +251,6 @@ public partial class MainForm : Form
 			textPreviewBox.Clear();
 			audioPanel.Visible = false;
 			yamlTextBox.Text = "YAML is disabled while multiple assets are selected.";
-			hexTextBox.Text = "Hex is disabled while multiple assets are selected.";
 			assetInfoLabel.Text = $"{assetListView.SelectedItems.Count} assets selected. Preview is disabled for multi-select.";
 			return;
 		}
@@ -262,12 +258,10 @@ public partial class MainForm : Form
 		AssetItem item = (AssetItem)assetListView.SelectedItems[0];
 		_currentPreviewItem = item;
 		_yamlLoadedForCurrentSelection = false;
-		_hexLoadedForCurrentSelection = false;
 		_previewLoadedForCurrentSelection = false;
 		_pendingYamlText = null;
 		_previewRequestVersion++;
 		yamlTextBox.Text = tabControl2.SelectedTab == tabPage5 ? "Loading YAML..." : "Select the YAML tab to load structured text.";
-		hexTextBox.Text = tabControl2.SelectedTab == tabPage6 ? "Loading Hex..." : "Select the Hex tab to load raw bytes.";
 		if (item.TreeNode is not null && sceneTreeView.SelectedNode != item.TreeNode)
 		{
 			sceneTreeView.SelectedNode = item.TreeNode;
@@ -280,10 +274,6 @@ public partial class MainForm : Form
 		if (tabControl2.SelectedTab == tabPage5)
 		{
 			LoadYamlForCurrentSelectionAsync();
-		}
-		else if (tabControl2.SelectedTab == tabPage6)
-		{
-			LoadHexForCurrentSelectionAsync();
 		}
 	}
 
@@ -346,21 +336,6 @@ public partial class MainForm : Form
 		ExportAssets(ExportScope.Filtered, ExportFormat.Converted);
 	}
 
-	private void exportAllJsonAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.All, ExportFormat.Json);
-	}
-
-	private void exportSelectedJsonAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.Selected, ExportFormat.Json);
-	}
-
-	private void exportFilteredJsonAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.Filtered, ExportFormat.Json);
-	}
-
 	private void exportAllYamlAssetsMenuItem_Click(object? sender, EventArgs e)
 	{
 		ExportAssets(ExportScope.All, ExportFormat.Yaml);
@@ -374,21 +349,6 @@ public partial class MainForm : Form
 	private void exportFilteredYamlAssetsMenuItem_Click(object? sender, EventArgs e)
 	{
 		ExportAssets(ExportScope.Filtered, ExportFormat.Yaml);
-	}
-
-	private void exportAllRawAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.All, ExportFormat.Raw);
-	}
-
-	private void exportSelectedRawAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.Selected, ExportFormat.Raw);
-	}
-
-	private void exportFilteredRawAssetsMenuItem_Click(object? sender, EventArgs e)
-	{
-		ExportAssets(ExportScope.Filtered, ExportFormat.Raw);
 	}
 
 	private void ExportAssets(ExportScope scope, ExportFormat format)
@@ -414,17 +374,9 @@ public partial class MainForm : Form
 					int exportedCount = _adapter.ExportAssets(entries, dialog.SelectedPath);
 					SetStatus($"Exported {exportedCount} export item(s) from {entries.Count} asset(s) to {dialog.SelectedPath}");
 					break;
-				case ExportFormat.Json:
-					_adapter.ExportJson(entries, dialog.SelectedPath);
-					SetStatus($"Export JSON completed: {entries.Count} assets.");
-					break;
 				case ExportFormat.Yaml:
 					_adapter.ExportYaml(entries, dialog.SelectedPath);
 					SetStatus($"Export YAML completed: {entries.Count} assets.");
-					break;
-				case ExportFormat.Raw:
-					_adapter.ExportRaw(entries, dialog.SelectedPath);
-					SetStatus($"Export raw completed: {entries.Count} assets.");
 					break;
 			}
 		}
@@ -471,10 +423,6 @@ public partial class MainForm : Form
 		{
 			LoadYamlForCurrentSelectionAsync();
 		}
-		else if (tabControl2.SelectedTab == tabPage6 && !_hexLoadedForCurrentSelection)
-		{
-			LoadHexForCurrentSelectionAsync();
-		}
 	}
 
 	private void RebuildFilters()
@@ -493,7 +441,7 @@ public partial class MainForm : Form
 	private void ApplyFilter()
 	{
 		string type = typeFilterComboBox.SelectedItem as string ?? "All";
-		_filteredAssets = _adapter.Filter(listSearch.Text, type);
+		_filteredAssets = SortAssets(_adapter.Filter(listSearch.Text, type));
 		Dictionary<string, AssetItem> itemsByObjectKey = [];
 		assetListView.BeginUpdate();
 		assetListView.Items.Clear();
@@ -503,11 +451,73 @@ public partial class MainForm : Form
 			assetListView.Items.Add(item);
 			itemsByObjectKey[GetObjectKey(asset)] = item;
 		}
+		UpdateSortIndicator();
 		assetListView.EndUpdate();
 		_sceneRoots = _adapter.BuildSceneTree(itemsByObjectKey).ToList();
 		ApplyTreeFilter();
 		SetStatus($"Showing {_filteredAssets.Count} / {_adapter.Assets.Count} assets.");
 		ShowEmptyPreview();
+	}
+
+	private IReadOnlyList<RipperAssetEntry> SortAssets(IReadOnlyList<RipperAssetEntry> assets)
+	{
+		if (_sortColumn < 0 || assets.Count <= 1)
+		{
+			return assets;
+		}
+
+		IComparer<RipperAssetEntry> comparer = _sortColumn switch
+		{
+			0 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)),
+			1 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.Container, b.Container, StringComparison.OrdinalIgnoreCase)),
+			2 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.TypeString, b.TypeString, StringComparison.OrdinalIgnoreCase)),
+			3 => Comparer<RipperAssetEntry>.Create(static (a, b) => a.PathId.CompareTo(b.PathId)),
+			4 => Comparer<RipperAssetEntry>.Create(static (a, b) => a.Size.CompareTo(b.Size)),
+			_ => Comparer<RipperAssetEntry>.Create(static (_, _) => 0),
+		};
+
+		List<RipperAssetEntry> sorted = [.. assets];
+		sorted.Sort(comparer);
+		if (!_sortAscending)
+		{
+			sorted.Reverse();
+		}
+		return sorted;
+	}
+
+	private void assetListView_ColumnClick(object? sender, ColumnClickEventArgs e)
+	{
+		// 三态循环: 升 → 降 → 不排序 (回到 adapter 给的原始顺序). 不同列就重新从升序开始.
+		if (e.Column == _sortColumn)
+		{
+			if (_sortAscending)
+			{
+				_sortAscending = false;
+			}
+			else
+			{
+				_sortColumn = -1;
+				_sortAscending = true;
+			}
+		}
+		else
+		{
+			_sortColumn = e.Column;
+			_sortAscending = true;
+		}
+		ApplyFilter();
+	}
+
+	private void UpdateSortIndicator()
+	{
+		for (int i = 0; i < assetListView.Columns.Count; i++)
+		{
+			ColumnHeader col = assetListView.Columns[i];
+			string baseText = col.Text.TrimEnd(' ', '▲', '▼');
+			col.Text = i == _sortColumn
+				? baseText + " " + (_sortAscending ? '▲' : '▼')
+				: baseText;
+		}
 	}
 
 	private void RebuildSceneTree()
@@ -643,7 +653,6 @@ public partial class MainForm : Form
 		_currentPreviewItem = null;
 		_pendingYamlText = null;
 		_yamlLoadedForCurrentSelection = false;
-		_hexLoadedForCurrentSelection = false;
 		_previewLoadedForCurrentSelection = false;
 		_previewRequestVersion++;
 		imagePreviewBox.Image?.Dispose();
@@ -654,7 +663,6 @@ public partial class MainForm : Form
 		textPreviewBox.Clear();
 		audioPanel.Visible = false;
 		yamlTextBox.Clear();
-		hexTextBox.Clear();
 		assetInfoLabel.Text = _adapter.IsLoaded ? "Select an asset to preview." : "No asset loaded.";
 	}
 
@@ -689,11 +697,9 @@ public partial class MainForm : Form
 				}
 				break;
 			case PreviewKind.Text:
-			case PreviewKind.Json:
 			case PreviewKind.Yaml:
-			case PreviewKind.Raw:
 				textPreviewBox.Visible = true;
-				textPreviewBox.Text = CreatePreviewText(preview.TextContent, MaxImmediatePreviewCharacters, "Preview text truncated for responsiveness. Export or use RawDump for the full content.");
+				textPreviewBox.Text = CreatePreviewText(preview.TextContent, MaxImmediatePreviewCharacters, "Preview text truncated for responsiveness.");
 				break;
 			case PreviewKind.Audio:
 				audioPanel.Visible = true;
@@ -784,43 +790,6 @@ public partial class MainForm : Form
 			}
 
 			yamlTextBox.Text = ex.ToString();
-		}
-	}
-
-	private async void LoadHexForCurrentSelectionAsync()
-	{
-		if (_hexLoadedForCurrentSelection || assetListView.SelectedItems.Count != 1)
-		{
-			return;
-		}
-
-		AssetItem? item = _currentPreviewItem;
-		if (item is null)
-		{
-			hexTextBox.Clear();
-			return;
-		}
-
-		hexTextBox.Text = "Loading Hex...";
-		try
-		{
-			byte[] bytes = await Task.Run(() => _adapter.GetRawBytes(item.Entry));
-			if (!ReferenceEquals(item, _currentPreviewItem))
-			{
-				return;
-			}
-
-			_hexLoadedForCurrentSelection = true;
-			hexTextBox.Text = RuriAssetRipperAdapter.FormatHexView(bytes, MaxImmediateHexCharacters / 5);
-		}
-		catch (Exception ex)
-		{
-			if (!ReferenceEquals(item, _currentPreviewItem))
-			{
-				return;
-			}
-
-			hexTextBox.Text = ex.ToString();
 		}
 	}
 
@@ -1587,10 +1556,24 @@ public partial class MainForm : Form
 		RefreshHookTreeChecks();
 	}
 
+	private void hookTreeView_BeforeCheck(object? sender, TreeViewCancelEventArgs e)
+	{
+		// 根节点 (游戏名) 只是 "下面有没有被勾上" 的视觉指示器, 不允许用户点 —— 否则同游戏多版本会被一锅端勾上, 多版本 hook 同时装 = 没意义.
+		// 编程性赋值 (RefreshHookTreeChecks 把 gameNode.Checked 同步到子节点状态) e.Action 是 Unknown, 必须放行.
+		if (_suppressHookTreeEvents || e.Action == TreeViewAction.Unknown)
+		{
+			return;
+		}
+		if (e.Node?.Parent is null)
+		{
+			e.Cancel = true;
+		}
+	}
+
 	private void hookTreeView_AfterCheck(object? sender, TreeViewEventArgs e)
 	{
 		TreeNode? node = e.Node;
-		if (_suppressHookTreeEvents || e.Action == TreeViewAction.Unknown || node is null)
+		if (_suppressHookTreeEvents || e.Action == TreeViewAction.Unknown || node?.Parent is null)
 		{
 			return;
 		}
@@ -1598,14 +1581,7 @@ public partial class MainForm : Form
 		_suppressHookTreeEvents = true;
 		try
 		{
-			if (node.Parent is null)
-			{
-				foreach (TreeNode child in node.Nodes)
-				{
-					child.Checked = node.Checked;
-				}
-			}
-			else if (node.Checked)
+			if (node.Checked)
 			{
 				foreach (TreeNode sibling in node.Parent.Nodes)
 				{
