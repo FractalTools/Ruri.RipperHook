@@ -164,7 +164,8 @@ internal sealed class RuriAssetRipperAdapter
 		}
 
 		using MemoryStream stream = new();
-		WriteRawBytes(entry.Asset, stream);
+		using AssetWriter writer = new(stream, entry.Asset.Collection);
+		entry.Asset.Write(writer, entry.Asset.Collection.Flags);
 		return stream.ToArray();
 	}
 
@@ -233,7 +234,7 @@ internal sealed class RuriAssetRipperAdapter
 					container,
 					asset.ClassName,
 					asset.PathID,
-					GetRawByteLength(asset),
+					EstimateSize(asset),
 					collection.Name));
 			}
 		}
@@ -241,22 +242,15 @@ internal sealed class RuriAssetRipperAdapter
 		return result;
 	}
 
-	private static long GetRawByteLength(IUnityObjectBase asset)
+	private static long EstimateSize(IUnityObjectBase asset)
 	{
-		if (asset is RawDataObject raw)
+		return asset switch
 		{
-			return raw.RawData.LongLength;
-		}
-
-		using MemoryStream stream = new();
-		WriteRawBytes(asset, stream);
-		return stream.Length;
-	}
-
-	private static void WriteRawBytes(IUnityObjectBase asset, Stream destination)
-	{
-		using AssetWriter writer = new(destination, asset.Collection);
-		asset.Write(writer, asset.Collection.Flags);
+			ITexture2D texture => texture.GetImageData().Length,
+			ITextAsset textAsset => textAsset.Script_C49.Data.Length,
+			IFont font => font.FontData.LongLength,
+			_ => 0,
+		};
 	}
 
 	private static string GetInfoText(RipperAssetEntry entry)
