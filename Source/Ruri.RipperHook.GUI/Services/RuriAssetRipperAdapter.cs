@@ -1,7 +1,6 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
-using AssetRipper.Assets.IO.Writing;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.Modules.Audio;
@@ -95,41 +94,17 @@ internal sealed class RuriAssetRipperAdapter
 
 	public PreviewData GetPreview(RipperAssetEntry entry)
 	{
+		// 只对有专属可视化的类型走自定义预览; 其他类型只显示基础信息, 不再退化到 JSON/YAML 文本.
 		IUnityObjectBase asset = entry.Asset;
-		switch ((ClassIDType)asset.ClassID)
-		{
-			case ClassIDType.Texture2D:
-			case ClassIDType.Texture2DArray:
-			case ClassIDType.Texture3D:
-			case ClassIDType.Sprite:
-			case ClassIDType.TerrainData:
-				if (TryGetImage(asset, out byte[]? pngBytes))
-				{
-					return PreviewData.Image(pngBytes!, GetPreviewInfoText(entry, asset));
-				}
-				return PreviewData.Info(GetPreviewInfoText(entry, asset) + Environment.NewLine + "Preview type: image" + Environment.NewLine + "Image preview unavailable for this asset instance.");
 
-			case ClassIDType.Mesh:
-			case ClassIDType.MeshFilter:
-			case ClassIDType.MeshRenderer:
-			case ClassIDType.SkinnedMeshRenderer:
-			case ClassIDType.GameObject:
-			case ClassIDType.Animator:
-				if (TryGetMeshPreview(asset, out MeshPreviewPayload? meshPreview))
-				{
-					return PreviewData.Mesh(meshPreview!, GetMeshInfoText(entry, meshPreview!));
-				}
-				return PreviewData.Info(GetInfoText(entry) + Environment.NewLine + "Preview type: mesh" + Environment.NewLine + "Mesh preview unavailable for this asset instance.");
+		if (TryGetImage(asset, out byte[]? pngBytes))
+		{
+			return PreviewData.Image(pngBytes!, GetPreviewInfoText(entry, asset));
 		}
 
-		if (TryGetImage(asset, out byte[]? fallbackImageBytes))
+		if (TryGetMeshPreview(asset, out MeshPreviewPayload? meshPreview))
 		{
-			return PreviewData.Image(fallbackImageBytes!, GetPreviewInfoText(entry, asset));
-		}
-
-		if (TryGetMeshPreview(asset, out MeshPreviewPayload? fallbackMeshPreview))
-		{
-			return PreviewData.Mesh(fallbackMeshPreview!, GetMeshInfoText(entry, fallbackMeshPreview!));
+			return PreviewData.Mesh(meshPreview!, GetMeshInfoText(entry, meshPreview!));
 		}
 
 		if (TryGetAudio(asset, out byte[]? audioBytes, out string? audioExtension))
@@ -143,31 +118,10 @@ internal sealed class RuriAssetRipperAdapter
 			return PreviewData.Text(text, GetPreviewInfoText(entry, asset));
 		}
 
-		string json = SerializeJson(asset);
-		if (!string.IsNullOrWhiteSpace(json))
-		{
-			return PreviewData.Json(json, GetPreviewInfoText(entry, asset));
-		}
-
 		return PreviewData.Info(GetPreviewInfoText(entry, asset));
 	}
 
-	public string GetJson(RipperAssetEntry entry) => SerializeJson(entry.Asset);
-
 	public string GetYaml(RipperAssetEntry entry) => NormalizeForTextBox(SerializeYaml(entry.Asset));
-
-	public byte[] GetRawBytes(RipperAssetEntry entry)
-	{
-		if (entry.Asset is RawDataObject raw)
-		{
-			return raw.RawData;
-		}
-
-		using MemoryStream stream = new();
-		using AssetWriter writer = new(stream, entry.Asset.Collection);
-		entry.Asset.Write(writer, entry.Asset.Collection.Flags);
-		return stream.ToArray();
-	}
 
 	public IReadOnlyList<TreeNode> BuildSceneTree(Dictionary<string, AssetItem> assetItemsByObjectKey)
 	{
@@ -244,13 +198,9 @@ internal sealed class RuriAssetRipperAdapter
 
 	private static long EstimateSize(IUnityObjectBase asset)
 	{
-		return asset switch
-		{
-			ITexture2D texture => texture.GetImageData().Length,
-			ITextAsset textAsset => textAsset.Script_C49.Data.Length,
-			IFont font => font.FontData.LongLength,
-			_ => 0,
-		};
+		// raw ObjectData 在 SerializedFile 释放后就拿不到了, 这里用 YAML 序列化结果的 UTF-8 字节长度作为 size,
+		// 对所有 source-generated 类都稳定 >0 (任何 asset 至少有 name + pptr).
+		return Encoding.UTF8.GetByteCount(SerializeYaml(asset));
 	}
 
 	private static string GetInfoText(RipperAssetEntry entry)
@@ -457,16 +407,6 @@ internal sealed class RuriAssetRipperAdapter
 		};
 	}
 
-	public void ExportJson(IEnumerable<RipperAssetEntry> entries, string directory)
-	{
-		Directory.CreateDirectory(directory);
-		foreach (RipperAssetEntry entry in entries)
-		{
-			string fileNameBase = SanitizeFileName(string.IsNullOrWhiteSpace(entry.Name) ? entry.TypeString : entry.Name);
-			File.WriteAllText(Path.Combine(directory, fileNameBase + ".json"), SerializeJson(entry.Asset));
-		}
-	}
-
 	public void ExportYaml(IEnumerable<RipperAssetEntry> entries, string directory)
 	{
 		Directory.CreateDirectory(directory);
@@ -474,20 +414,6 @@ internal sealed class RuriAssetRipperAdapter
 		{
 			string fileNameBase = SanitizeFileName(string.IsNullOrWhiteSpace(entry.Name) ? entry.TypeString : entry.Name);
 			File.WriteAllText(Path.Combine(directory, fileNameBase + ".asset"), SerializeYaml(entry.Asset));
-		}
-	}
-
-	public void ExportRaw(IEnumerable<RipperAssetEntry> entries, string directory)
-	{
-		Directory.CreateDirectory(directory);
-		foreach (RipperAssetEntry entry in entries)
-		{
-			if (entry.Asset is not RawDataObject raw)
-			{
-				continue;
-			}
-			string fileNameBase = SanitizeFileName(string.IsNullOrWhiteSpace(entry.Name) ? entry.TypeString : entry.Name);
-			File.WriteAllBytes(Path.Combine(directory, fileNameBase + ".dat"), raw.RawData);
 		}
 	}
 
@@ -500,13 +426,6 @@ internal sealed class RuriAssetRipperAdapter
 			value = value.Replace(c, '_');
 		}
 		return value;
-	}
-
-	private static string SerializeJson(IUnityObjectBase asset)
-	{
-		using StringWriter stringWriter = new();
-		asset.WalkStandard(new DefaultJsonWalker(stringWriter));
-		return stringWriter.ToString();
 	}
 
 	private static string SerializeYaml(IUnityObjectBase asset)
@@ -523,40 +442,6 @@ internal sealed class RuriAssetRipperAdapter
 	private static string NormalizeForTextBox(string text)
 	{
 		return text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", Environment.NewLine, StringComparison.Ordinal);
-	}
-
-	public static string FormatHexView(byte[] data, int maxBytes = int.MaxValue)
-	{
-		int length = Math.Min(data.Length, maxBytes);
-		StringBuilder builder = new();
-		for (int i = 0; i < length; i += 16)
-		{
-			int lineLength = Math.Min(16, length - i);
-			builder.Append(i.ToString("X8"));
-			builder.Append(": ");
-			for (int j = 0; j < lineLength; j++)
-			{
-				builder.Append(data[i + j].ToString("X2"));
-				builder.Append(' ');
-			}
-			if (lineLength < 16)
-			{
-				builder.Append(' ', (16 - lineLength) * 3);
-			}
-			builder.Append(" | ");
-			for (int j = 0; j < lineLength; j++)
-			{
-				byte value = data[i + j];
-				builder.Append(value is >= 32 and <= 126 ? (char)value : '.');
-			}
-			builder.AppendLine();
-		}
-		if (data.Length > length)
-		{
-			builder.AppendLine();
-			builder.AppendLine($"... truncated, showing first {length:N0} of {data.Length:N0} bytes.");
-		}
-		return builder.ToString();
 	}
 
 	private static string GetTextureDetailsText(ITexture2D texture)
