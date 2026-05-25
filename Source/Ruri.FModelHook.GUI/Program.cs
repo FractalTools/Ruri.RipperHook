@@ -54,6 +54,11 @@ public static class Program
         // [RetargetMethod] detour declared on HookMenuBootstrap.
         new HookMenuBootstrap().Initialize();
 
+        // FModel's App.OnStartup configures Serilog with Console+File in Debug,
+        // File-only in Release. Our host is Exe (console attached), so we need
+        // a postfix on OnStartup to re-attach the Console sink in Release too.
+        new ConsoleLogSinkHook().Initialize();
+
         ApplyEnabledHooks(config, configPath, args);
         LaunchFModel();
     }

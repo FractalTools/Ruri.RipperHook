@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Windows.Forms;
+using AssetRipper.Import.Logging;
 using Ruri.Hook.Config;
 using Ruri.RipperHook;
 using Ruri.ShaderTools;
@@ -17,6 +18,12 @@ internal static class Program
     public static int Main(string[] args)
     {
         Bootstrap.InstallAssemblyResolver();
+
+        // AssetRipper 的 Logger 是个全局 static 类, 不挂 sink 的话 Logger.Info/Warning/Error 全部直接黑洞.
+        // CLI 在 HeadlessRunner 里挂了 StderrLogger+FileLogger, GUI 之前漏了, 导致加载文件时控制台一片空白 ——
+        // 只有用 Console.WriteLine 直接写的 hook 提示能透出来. 这里挂上 ConsoleLogger 就把 import/process/export
+        // 所有 Logger.Info(...) 都打到 Exe 自带的 console.
+        Logger.Add(new ConsoleLogger());
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
