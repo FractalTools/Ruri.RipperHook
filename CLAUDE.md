@@ -19,3 +19,10 @@ When updating documentation, summaries, or external-facing descriptions, do not 
 | Engine-wide hook install | Per-engine cross-version setup goes in the *Common* hook class's `InitAttributeHook`, not per-version. EndField installs its shader-binding post-processor in `EndFieldCommon_Hook.InitAttributeHook`; `EndFieldShaderBindingHook.Install()` is idempotent so re-entry is harmless across the 5 versions. |
 | Test loop output | Always export to `TestLoopOutput/` at the workspace root. The CLI auto-clears that directory each run — do not stage extra folders. Kill any stale `Ruri.RipperHook.CLI.exe` before launching a new run. |
 | Iteration timeouts | Long-running runs go via `run_in_background` + `Monitor` until-loop. Don't chain short sleeps to bypass the deadlock guard; pick one budget that fails the run loudly when exceeded. |
+| **Never build `Ruri.SourceGenerated`** | It's a `<Reference HintPath>` to a prebuilt DLL (regenerated only by `Ruri.AssemblyDumper` pipeline). Building the slnx triggers it and burns minutes. Use `dotnet build Source/Ruri.<X>/Ruri.<X>.csproj -c Debug --nologo` for everything else. |
+
+---
+
+## 2. Framework reference
+
+Hooks, AR pipeline, path handling, source-generated lookup, custom processor injection, logger sinks → **[FRAMEWORK.md](FRAMEWORK.md)**. Read that before writing or debugging hook code, not this file.
