@@ -17,20 +17,59 @@ public class BundleFileBlockReaderHook : CommonHook, IHookModule
     
     public delegate void BlockCompressionDelegate(FileStreamNode entry, Stream mStream, StorageBlock block, SmartStream cachedBlockStream, CompressionType compressType, int m_cachedBlockIndex);
 
+    /// <summary>
+    /// Optional per-game policy for creating the entry's output stream.
+    /// When null, falls back to AR's private CreateStream (byte[] for small entries,
+    /// MemoryStream for medium, temp file for >= 50MB).
+    /// </summary>
+    public delegate SmartStream EntryStreamFactoryDelegate(FileStreamNode entry);
+
     // Static callback used by the hooked method
     public static BlockCompressionDelegate CustomBlockCompression;
-    
+    public static EntryStreamFactoryDelegate? CustomEntryStreamFactory;
+
     private readonly BlockCompressionDelegate _moduleCallback;
+    private readonly EntryStreamFactoryDelegate? _entryStreamFactory;
 
     public BundleFileBlockReaderHook(BlockCompressionDelegate callback)
+        : this(callback, null) { }
+
+    public BundleFileBlockReaderHook(BlockCompressionDelegate callback, EntryStreamFactoryDelegate? entryStreamFactory)
     {
         _moduleCallback = callback;
+        _entryStreamFactory = entryStreamFactory;
     }
 
     public void OnApply()
     {
         CustomBlockCompression = _moduleCallback;
+        CustomEntryStreamFactory = _entryStreamFactory;
     }
+
+    /// <summary>
+    /// Predefined entry-stream factory for container-format games (VFS / WMW / BLK
+    /// decrypt paths) where the chunk produces hundreds of thousands of entries.
+    /// Without this, every entry's data lives in a byte[] retained by the
+    /// ResourceFile / GameBundle graph for the entire export lifetime — the managed
+    /// heap saturates and OOMs even with a huge pagefile (managed heap is not
+    /// eligible for pagefile-backed swap-out, unlike OS file cache).
+    ///
+    /// Spills entries that would land in the Large Object Heap (>= 85KB) to a
+    /// DeleteOnClose temp file so the OS page cache owns residency; sub-LOH entries
+    /// stay as byte[] (Gen0/Gen1 reclaimable, no temp-file overhead, no FileStream
+    /// handle).
+    ///
+    /// Pass to the constructor's second arg from the game's <c>InitAttributeHook</c>:
+    /// <code>
+    /// RegisterModule(new BundleFileBlockReaderHook(
+    ///     CustomBlockCompression,
+    ///     BundleFileBlockReaderHook.SpillLargeEntriesToTemp));
+    /// </code>
+    /// </summary>
+    public static SmartStream SpillLargeEntriesToTemp(FileStreamNode entry)
+        => entry.Size >= 85_000
+            ? SmartStream.CreateTemp()
+            : SmartStream.CreateMemory(new byte[entry.Size]);
 
     [RetargetMethod(TYPE, nameof(ReadEntry))]
     public SmartStream ReadEntry(FileStreamNode entry)
@@ -59,7 +98,13 @@ public class BundleFileBlockReaderHook : CommonHook, IHookModule
         }
         long entryOffsetInsideBlock = entry.Offset - blockDecompressedOffset;
 
-        using SmartStream entryStream = (SmartStream)CreateStream.Invoke(this, new object[] { entry.Size });
+        // Default: AR's private CreateStream (byte[] for small entries, MemoryStream
+        // for medium, temp file for >= 50MB). Games that produce huge numbers of
+        // entries (VFS / WMW / BLK decrypt paths) can opt into SpillLargeEntriesToTemp
+        // by passing it as the constructor's entryStreamFactory argument.
+        using SmartStream entryStream = CustomEntryStreamFactory != null
+            ? CustomEntryStreamFactory(entry)
+            : (SmartStream)CreateStream.Invoke(this, new object[] { entry.Size });
         long left = entry.Size;
         m_stream.Position = m_dataOffset + blockCompressedOffset;
 
