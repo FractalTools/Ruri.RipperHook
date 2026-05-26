@@ -1,105 +1,107 @@
 # Ruri-RipperHook
 
-Ruri-RipperHook 是一个通用式 AOP 数据处理与导出增强框架，用于为现有工具链补充更好的读取、导出、转换与 shader 处理能力。它通过运行时 Hook、方法重定向、读取流程接管和结构适配，在不重写上游解析器的前提下扩展既有工作流。
+一个基于 AOP 的 Hook 框架,用于在不修改上游源码的前提下扩展现有 Unity / UE 数据处理工具链(AssetRipper、FModel 等)的读取、导出、转换与 shader 处理能力。
 
-从当前代码结构看，这个仓库同时覆盖通用 Hook 基础设施、AssetRipper 侧增强、FModel / UE 侧增强、GUI / CLI 工作流和 AssemblyDumper 生成链路，并不是单一面向某一个上游工具的补丁集合。
-
-当前的终极目标是把 Unity 数据作为统一的中间表示层：将 FModel / UE 侧的数据逐步转换为等价的 Unity YAML 或等价 Unity 数据结构，再传输给 AssetRipper 侧工作流继续处理。这样 Unity 侧现有的浏览、导出、组织和后处理能力就可以复用到更多来源的数据上。Shader 链路已经在朝这个方向推进，是当前最明确的先行落点之一。
+最终目标是把异构来源的数据统一收敛成 Unity 数据表示(YAML / Unity 对象语义),交给 AssetRipper 已有的浏览、导出、后处理流程继续消费。Shader 链路是这条路线上当前最明确的先行落点。
 
 ## 项目定位
 
-这是一个通用式 AOP 扩展框架，重点不在“自己重写一整套解析器”，而在“给现有工具链增加更好的读取、导出、转换和反编译能力”，并逐步把不同来源的数据统一收敛到同一套处理模型中。
+Ruri-RipperHook **不是**:
+- 一个 AssetRipper 的 fork
+- 一组针对特定数据格式的散装补丁
+- 一个面向零基础用户的一键解包工具
 
-它的工作方式大致是：
-- 在现有程序或目标流程中注入 Hook。
-- 通过 AOP 风格的切面拦截关键方法、构造、读取流程和导出流程。
-- 在不大规模重写上游逻辑的前提下替换关键节点行为。
-- 把特定数据格式、资源封装、序列化差异和 shader 处理需求适配到统一框架中。
-- 把异构工具链输出逐步转换为统一的 Unity 数据表示，交给后续统一流程处理。
+Ruri-RipperHook **是**:
+- 一个独立于上游工具的 AOP 扩展层 —— 上游代码作为只读 submodule 冻结,所有差异化行为通过运行时方法 Hook 注入
+- 一套基于 attribute 的 Hook 注册框架(`Ruri.Hook`),覆盖方法重定向、构造接管、IL 重写、引用计数与生命周期管理
+- 一条把 FModel / UE 等异源工具链产出向 Unity 数据模型靠拢的转换通路
 
-这意味着它既可以作为现有工具链的行为修正层，也可以作为统一数据流和高质量导出流程的承载层。
+这种拆分的工程意义:上游升级时不需要 rebase 补丁集,新增数据来源不需要 fork 新工具,跨工具链共通的导出 / shader / 网格处理逻辑只在 Ruri 侧实现一次。
 
-## 核心思路
+## 工作机制
 
-Ruri-RipperHook 的设计核心是“通用切面 + 场景特化模块”：
+所有扩展都是从一个继承 `RipperHookCommon` 的类开始的,通过 `[RipperHook(...)]` 标注其适用范围,内部成员通过 attribute 描述要 hook 的目标方法:
 
-- 通用层提供 Hook 注册、方法重定向、反射包装、运行时调度和可复用的数据处理管线。
-- AssetRipper 侧模块负责读取、导出、shader 处理、静态网格拆分和流程裁剪等能力。
-- FModel / UE 侧模块负责 shader bytecode 导出、统一 metadata 生成、进程内反编译，以及向 Unity 侧统一数据表示靠拢的前置转换工作。
-- 具体项目层只描述真正有差异的部分，例如块结构、头部格式、流式资源、虚拟文件系统、类型结构差异或 shader 绑定信息。
-- 版本层尽量只覆盖发生变化的节点，避免重复实现。
+```csharp
+[RipperHook(...)]
+public class MyHook : RipperHookCommon
+{
+    [RetargetMethod(typeof(TargetClass), nameof(TargetClass.TargetMethod),
+                    isBefore: true, isReturn: false)]
+    static void Patch(TargetClass self, /* original args */)
+    {
+        // prefix-continue logic
+    }
 
-统一方向上，框架希望逐步形成这样的链路：
+    [RetargetMethodCtorFunc(typeof(SomeSettings))]
+    static bool MutateDefaults(ILContext il) { /* IL rewrite */ return true; }
+}
+```
 
-- 上游工具负责拿到原始数据和上下文。
-- 中间层负责把不同来源的数据整理成统一的结构描述。
-- 条件成熟时，将外部数据转换为等价的 Unity YAML 或等价 Unity 对象语义。
-- 最终复用 AssetRipper 侧已有的浏览、导出、后处理和 shader 工作流。
+启动期 `Bootstrap.ApplyHooks(config)` 会发现所有匹配当前配置的 Hook 类,调用其 `Initialize()`,完成 attribute 扫描与方法重定向注册。整个生命周期由 `Ruri.Hook` 维护,业务代码不直接持有 MonoMod 句柄。
 
-这种拆分方式的好处是：
-- 新项目或新数据链路接入成本更低。
-- 同类格式处理逻辑、导出逻辑和 shader 管线可以在多个模块之间复用。
-- 当上游工具升级后，只需要修正少数切面，而不是整体重写。
-- 一次性的补丁逻辑可以沉淀为长期可维护的模块。
+详细的 attribute 语义、AssetRipper 内部数据流、路径处理、自定义 processor 注入等,见 [FRAMEWORK.md](FRAMEWORK.md)。
 
 ## 仓库结构
 
-这个仓库主要由几部分组成：
-
-- `Ruri.Hook`: 通用 Hook 基础设施，提供 `HookManager`、特性标记和运行时注册能力。
-- `Ruri.RipperHook`: AssetRipper 增强层，覆盖读取、导出、shader、网格处理和统一数据落地后的后续处理工作流。
-- `Ruri.FModelHook`: FModel / UE 增强层，当前重点在 shader bytecode 导出、metadata 汇总、进程内反编译，以及向 Unity 统一表示转换所需的前置数据整理。
-- `Ruri.AssemblyDumper`: 用于生成和组织结构定义与类读取辅助代码。
-- `Ruri.RipperHook.GUI` / `Ruri.RipperHook.CLI`: 图形界面和命令行入口。
+| 路径 | 职责 |
+|---|---|
+| `Source/Ruri.Hook` | AOP 框架本体。Attribute 定义、Hook 注册、方法重定向、反射工具 |
+| `Source/Ruri.RipperHook` | AssetRipper 主增强层。读取、导出、网格拆分、prefab 处理、路径修复等通用 Hook |
+| `Source/Ruri.RipperHook.GUI` | 图形界面入口(AssetRipper 流程) |
+| `Source/Ruri.RipperHook.CLI` | 命令行入口,headless 导出与 Hook 列表查询 |
+| `Source/Ruri.FModelHook` | FModel / UE 侧增强,shader bytecode 导出与统一 metadata 整理 |
+| `Source/Ruri.FModelHook.GUI` | FModel 流程的图形界面入口 |
+| `Source/Ruri.ShaderDecompiler` | DX11 shader 反编译实现 |
+| `Source/Ruri.AssemblyDumper` | AssetRipper 结构定义与 Read 代码的生成链路 |
+| `Source/Ruri.SourceGenerated` | AssemblyDumper 产物,以 `HintPath` 形式被 Ruri.RipperHook 引用 |
+| `AssetRipper/`, `FModel/`, `Tpk/` | 上游 submodule,**只读冻结**,差异通过 Hook 注入而非直接修改 |
 
 ## 主要能力
 
-- 运行时 AOP Hook 与方法重定向。
-- 读取、导出、转换流程接管。
-- AssetRipper、FModel、AssemblyDumper 等工具链行为扩展。
-- 更细粒度的导出控制，例如直接导出、跳过冗余流程、静态网格拆分、BundledAssets 导出模式增强。
-- 特殊 Block / VFS / 流式资源格式的数据接入与自定义读取。
-- 结构差异和版本差异的读取流程修补与适配。
-- 更好的 shader 数据支持，包括 metadata 补全、符号组织和反编译链路扩展。
-- 面向 Unity 统一数据模型的跨工具链收敛能力。
-- Unity 与 UE / FModel 两类工具栈的统一扩展方式。
+- **运行时 AOP**:Attribute 驱动的方法重定向,支持前置 / 后置 / 完全替换 / 构造拦截 / 完整 IL 重写
+- **导出流程接管**:可插入自定义 `IAssetProcessor`、覆写 `ExportCollection` 的产物路径与命名、跳过冗余处理阶段
+- **结构与格式适配**:对 Unity Bundle / SerializedFile / VFS / 流式资源等的解析点提供 Hook 切入位
+- **Shader 链路**:metadata 补全、绑定信息组织、bytecode 反编译,以及朝 Unity shader 表示形态的转换
+- **跨工具链统一**:FModel / UE 侧的数据按需转换为 Unity YAML 或等价对象语义,复用 AssetRipper 后续工作流
+- **AssemblyDumper 集成**:从 metadata 生成结构定义,产物可被 AR 流程作为类型来源
+- **GUI / CLI 双入口**:同一份 Hook 实现,GUI 用于交互式调试,CLI 用于批处理 / 脚本化导出 / 列表查询
 
 ## 适用场景
 
-- 为现有资源导出工具补齐缺失能力。
-- 提升复杂资源格式下的数据读取成功率。
-- 构建更稳定、更细粒度的导出流程。
-- 为 shader 数据建立更完整的提取、映射和反编译支持链路。
-- 修补上游工具在特定版本、特定格式、特定流程上的兼容性问题。
-- 将零散流程补丁整理为可组合、可复用的工程化模块。
+- 给已有解包工具链补齐读取或导出短板,而不想直接 fork
+- 把零散的导出流程修补整理为可组合、可复用的模块
+- 在多个工具之间共用一套 shader / 网格 / prefab 处理逻辑
+- 需要在上游频繁升级的同时维护稳定的差异化行为
 
 ## 使用说明
 
-- 把 `Ruri.RipperHook` 作为启动项目并完成编译。
-- 某些 Hook 偶发失效时，通常与增量 Hot Reload 残留状态有关，重新触发一次编译即可恢复。
-- 这是偏工程化的扩展框架，不是面向完全零基础用户的一键工具。更适合已经理解上游工具链、数据结构和导出目标的人继续扩展。
+| 操作 | 命令 / 路径 |
+|---|---|
+| 编译单个 Ruri 项目 | `dotnet build Source/Ruri.RipperHook/Ruri.RipperHook.csproj -c Debug --nologo` |
+| GUI 入口 | `Ruri.RipperHook.GUI.exe` |
+| CLI 入口 | `Ruri.RipperHook.CLI.exe` |
+| 列出可用 Hook | `Ruri.RipperHook.CLI.exe --list-hooks` |
+| Headless 导出 | `Ruri.RipperHook.CLI.exe --hook <Id> --load <path> --export <dir>` |
 
-## Feature
+**不要直接 build 整个 slnx** —— `Ruri.SourceGenerated` 是 `HintPath` 引用的预编译 DLL,只由 `Ruri.AssemblyDumper` pipeline 重新生成,误 build 会消耗大量时间。
 
-- AssemblyDumper support
-- Free Shader Decompile (DX11)
-- Generic AOP-style export and data processing workflow
-- AssetRipper enhancement pipeline
-- FModel / UE shader export and decompile workflow
-- Long-term Unity data unification pipeline
-- Extensible hook pipeline for project-specific data handling
+Hot Reload 状态下偶发的 Hook 失效一般来自增量残留,重新触发编译可恢复。
 
 ## Todo
 
-- 把 UE / FModel 侧的Prefab Model Material Shader之类主要数据直接转换为Unity YAML数据导出。
-- ~~需要优化Block格式的AB包解析(WMW/VFS/BLK等) 内存拆分读取容易过于碎片化导致内存无法分配~~ 我发现这是AR作者去年9月的提交导致的问题 他抽象了文件中间层LocalFileSystem导致现在不会使用虚拟内存加载 问他也不理我说明他不想管这个问题 在此之前是可以用虚拟内存解决的
-- 更小的AssemblyDumper生成 目前有太多代码实际上不需要生成 最小能优化到1mb以下的dll 只需要里面的定义和Read就够了
-- AssemblyDumper生成工作流简化
-- 如果不同游戏版本依赖同样的加密 新版本应该直接依赖旧版本 任何相同的代码都不应该出现2次
+- 把 UE / FModel 侧的 Prefab / Model / Material / Shader 等主要数据转换为 Unity YAML 数据导出
+- 进一步缩小 `Ruri.AssemblyDumper` 生成的 DLL 体积 —— 当前生成内容超出实际所需,只需要类型定义与 Read 路径(目标 < 1 MB)
+- `Ruri.AssemblyDumper` 的生成工作流简化
+- 不同游戏版本若依赖同一加密,新版本应直接依赖旧版本,避免代码重复
 
-## Special Thanks to
+## 已解决的工程问题
 
-- **ds5678**: Original author.
-- **AnimeStudio**: For anything.
-- **nesrak1**: USCSandbox author.
-- **Razmoth**: For anything.
+- **大目录导出 OOM(已修复)**:在数万级 Bundle 文件目录(20 GB+)导出时,即使系统拥有 256 GB 虚拟内存也会触发 `OutOfMemoryException`。根因是 AssetRipper 上游 PR #1954 在 `BundleFileBlockReader` 中引入的零拷贝 `CreatePartial` 路径让每个 Bundle 的 `FileStream` 句柄被 `RandomAccessStream` 强引用,无法在导出生命周期内释放,几万个内核 `FILE_OBJECT` 撑爆 Windows paged pool —— 而 paged pool 不走 user-mode page file,所以加再多虚拟内存都无效。本地通过禁用该快速路径绕过,bundle 句柄随每个 ab 处理完后正常关闭。
+
+## Special Thanks
+
+- **ds5678** — AssetRipper original author
+- **AnimeStudio**
+- **nesrak1** — USCSandbox author
+- **Razmoth**
