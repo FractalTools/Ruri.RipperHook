@@ -1,0 +1,97 @@
+name: Build Hooks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: build-hooks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build-fmodelhook:
+    name: Build FModelHook
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Update required submodules
+        shell: pwsh
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 4 -- "FModel" "Source/Ruri.ShaderDecompiler"
+          git submodule status --recursive
+
+      - name: Show .NET info
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Build FModelHook GUI
+        shell: pwsh
+        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1
+
+      - name: Upload FModelHook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModelHook-${{ env.BUILD_CONFIGURATION }}
+          path: FModel/FModel/bin/Release/net8.0-windows/win-x64/**
+          if-no-files-found: error
+
+  build-pure-ripperhook:
+    name: Build Pure RipperHook
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Update required submodules
+        shell: pwsh
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 4 -- "AssetRipper" "Tpk" "Source/Ruri.ShaderDecompiler"
+          git submodule status --recursive
+
+      - name: Show .NET info
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Build Pure RipperHook
+        working-directory: Source/Ruri.RipperHook.GUI
+        shell: cmd
+        run: PureRelease.bat
+
+      - name: Upload Pure RipperHook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RipperHook-PureRelease
+          path: AssetRipper/Source/0Bins/AssetRipper/Release/**
+          if-no-files-found: error
