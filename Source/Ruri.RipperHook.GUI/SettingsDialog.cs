@@ -4,7 +4,9 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using AssetRipper.Export.Configuration;
+using AssetRipper.GUI.Localizations;
 using AssetRipper.GUI.Web;
+using AssetRipper.GUI.Web.Pages.Settings.DropDown;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Primitives;
 using AssetRipper.Processing.Configuration;
@@ -64,7 +66,7 @@ internal sealed class SettingsDialog : Form
                 Dock = DockStyle.Top,
                 Height = 28,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Text = "Files are loaded — hook changes only take effect after reloading.",
+                Text = Localization.SettingsCanOnlyBeChangedBeforeLoadingFiles,
                 ForeColor = Color.DarkRed,
             };
             Controls.Add(notice);
@@ -113,7 +115,7 @@ internal sealed class SettingsDialog : Form
         page.Controls.Add(table);
 
         AddSectionHeader(table, "Streaming assets");
-        AddCheckBox(table, "Skip StreamingAssets at load (don't include them as content source)",
+        AddCheckBox(table, Localization.SkipStreamingAssets,
             cfg.ImportSettings.IgnoreStreamingAssets,
             v => cfg.ImportSettings.IgnoreStreamingAssets = v);
         AddArHookCheckbox(table, "AR_SkipStreamingAssetsCopy_");
@@ -124,27 +126,27 @@ internal sealed class SettingsDialog : Form
         AddArHookCheckbox(table, "AR_StaticMeshSeparation_");
 
         AddSectionHeader(table, "Assemblies");
-        AddCheckBox(table, "Remove nullable attributes",
+        AddCheckBox(table, Localization.RemoveNullableAttributes,
             cfg.ProcessingSettings.RemoveNullableAttributes,
             v => cfg.ProcessingSettings.RemoveNullableAttributes = v);
-        AddCheckBox(table, "Publicize assemblies",
+        AddCheckBox(table, Localization.PublicizeAssemblies,
             cfg.ProcessingSettings.PublicizeAssemblies,
             v => cfg.ProcessingSettings.PublicizeAssemblies = v);
-        AddEnumDropDown<ScriptContentLevel>(table, "Script content level",
+        AddDropDown(table, ScriptContentLevelDropDownSetting.Instance,
             cfg.ImportSettings.ScriptContentLevel,
             v => cfg.ImportSettings.ScriptContentLevel = v);
 
         AddSectionHeader(table, "Project");
-        AddEnumDropDown<BundledAssetsExportMode>(table, "Bundled assets export mode",
+        AddDropDown(table, BundledAssetsExportModeDropDownSetting.Instance,
             cfg.ProcessingSettings.BundledAssetsExportMode,
             v => cfg.ProcessingSettings.BundledAssetsExportMode = v);
-        AddTextBox(table, "Default Unity version",
+        AddTextBox(table, Localization.DefaultVersion,
             cfg.ImportSettings.DefaultVersion.ToString(),
             s => cfg.ImportSettings.DefaultVersion = TryParseUnityVersion(s));
-        AddTextBox(table, "Target Unity version (experimental)",
+        AddTextBox(table, Localization.TargetVersionForVersionChanging,
             cfg.ImportSettings.TargetVersion.ToString(),
             s => cfg.ImportSettings.TargetVersion = TryParseUnityVersion(s));
-        AddCheckBox(table, "Enable asset deduplication (experimental)",
+        AddCheckBox(table, Localization.EnableAssetDeduplication,
             cfg.ProcessingSettings.EnableAssetDeduplication,
             v => cfg.ProcessingSettings.EnableAssetDeduplication = v);
 
@@ -154,24 +156,24 @@ internal sealed class SettingsDialog : Form
     // ------ Export tab ------
     private TabPage BuildExportTab(FullConfiguration cfg)
     {
-        TabPage page = new("Export");
+        TabPage page = new(Localization.MenuExport);
         TableLayoutPanel table = NewTabTable();
         page.Controls.Add(table);
 
         AddSectionHeader(table, "Media formats");
-        AddEnumDropDown<AudioExportFormat>(table, "Audio export format",
+        AddDropDown(table, AudioExportFormatDropDownSetting.Instance,
             cfg.ExportSettings.AudioExportFormat, v => cfg.ExportSettings.AudioExportFormat = v);
-        AddEnumDropDown<ImageExportFormat>(table, "Image export format",
+        AddDropDown(table, ImageExportFormatDropDownSetting.Instance,
             cfg.ExportSettings.ImageExportFormat, v => cfg.ExportSettings.ImageExportFormat = v);
-        AddEnumDropDown<LightmapTextureExportFormat>(table, "Lightmap texture export format",
+        AddDropDown(table, LightmapTextureExportFormatDropDownSetting.Instance,
             cfg.ExportSettings.LightmapTextureExportFormat, v => cfg.ExportSettings.LightmapTextureExportFormat = v);
-        AddEnumDropDown<SpriteExportMode>(table, "Sprite export mode",
+        AddDropDown(table, SpriteExportModeDropDownSetting.Instance,
             cfg.ExportSettings.SpriteExportMode, v => cfg.ExportSettings.SpriteExportMode = v);
-        AddEnumDropDown<TextExportMode>(table, "Text export mode",
+        AddDropDown(table, TextExportModeDropDownSetting.Instance,
             cfg.ExportSettings.TextExportMode, v => cfg.ExportSettings.TextExportMode = v);
 
         AddSectionHeader(table, "Shaders");
-        AddEnumDropDown<ShaderExportMode>(table, "Shader export mode",
+        AddDropDown(table, ShaderExportModeDropDownSetting.Instance,
             cfg.ExportSettings.ShaderExportMode, v => cfg.ExportSettings.ShaderExportMode = v);
 
         // Ruri shader hook checkbox directly under the dropdown — its sub-options reveal only while checked.
@@ -216,15 +218,15 @@ internal sealed class SettingsDialog : Form
         AddRawControl(table, subOptions);
 
         AddSectionHeader(table, "Scripts");
-        AddEnumDropDown<ScriptLanguageVersion>(table, "Script language version",
+        AddDropDown(table, ScriptLanguageVersionDropDownSetting.Instance,
             cfg.ExportSettings.ScriptLanguageVersion, v => cfg.ExportSettings.ScriptLanguageVersion = v);
-        AddEnumDropDown<ScriptExportMode>(table, "Script export mode",
+        AddDropDown(table, ScriptExportModeDropDownSetting.Instance,
             cfg.ExportSettings.ScriptExportMode, v => cfg.ExportSettings.ScriptExportMode = v);
-        AddCheckBox(table, "Script types fully qualified",
+        AddCheckBox(table, Localization.ScriptsUseFullyQualifiedTypeNames,
             cfg.ExportSettings.ScriptTypesFullyQualified, v => cfg.ExportSettings.ScriptTypesFullyQualified = v);
 
         AddSectionHeader(table, "Other");
-        AddCheckBox(table, "Export unreadable assets",
+        AddCheckBox(table, Localization.ExportUnreadableAssets,
             cfg.ExportSettings.ExportUnreadableAssets, v => cfg.ExportSettings.ExportUnreadableAssets = v);
 
         return page;
@@ -322,18 +324,26 @@ internal sealed class SettingsDialog : Form
         _applyActions.Add(() => onApply(tb.Text));
     }
 
-    private void AddEnumDropDown<T>(TableLayoutPanel table, string label, T initial, Action<T> onApply) where T : struct, Enum
+    // Drives label + per-option display from AR's DropDownSetting singletons so the existing
+    // localized strings carry over without us maintaining a parallel translation table.
+    private void AddDropDown<T>(TableLayoutPanel table, DropDownSetting<T> setting, T initial, Action<T> onApply) where T : struct, Enum
     {
-        Label lab = new() { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 10, 12, 6) };
+        Label lab = new() { Text = setting.Title, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 10, 12, 6) };
         ComboBox cb = new()
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             Anchor = AnchorStyles.Left | AnchorStyles.Right,
             Width = 280,
             Margin = new Padding(0, 6, 0, 6),
+            DisplayMember = nameof(DropDownItem<T>.DisplayName),
         };
-        foreach (T value in Enum.GetValues<T>()) cb.Items.Add(value);
-        cb.SelectedItem = initial;
+        DropDownItem<T> selectedItem = default;
+        foreach (DropDownItem<T> item in setting.GetValues())
+        {
+            cb.Items.Add(item);
+            if (EqualityComparer<T>.Default.Equals(item.Value, initial)) selectedItem = item;
+        }
+        cb.SelectedItem = selectedItem;
         int row = table.RowCount;
         table.RowCount = row + 1;
         table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -341,7 +351,7 @@ internal sealed class SettingsDialog : Form
         table.Controls.Add(cb, 1, row);
         _applyActions.Add(() =>
         {
-            if (cb.SelectedItem is T v) onApply(v);
+            if (cb.SelectedItem is DropDownItem<T> picked) onApply(picked.Value);
         });
     }
 
