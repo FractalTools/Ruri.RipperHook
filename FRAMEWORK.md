@@ -117,7 +117,23 @@ where `MyDelegate(FullConfiguration s) => /* yield return */`.
 
 ---
 
-## 7. Restored-from-old-AR code danger list
+## 7. AR_* hook vs native setting policy
+
+**Rule**: AR_* hook IDs are reserved for *extensions over what AR natively supports*. If a feature already exists as a native `ProcessingSettings` / `ExportSettings` / `ImportSettings` property with a sensible default, **don't ship a parallel AR_* hook** — the duplication just confuses configuration.
+
+- AR_* hooks that survive as hook implementations: `AR_SkipStreamingAssetsCopy`, `AR_SkipProcessingAnimation`, `AR_ShaderDecompiler` (custom decompiler), `AR_PrefabOutlining` (restored deleted processor), `AR_StaticMeshSeparation` (restored deleted processor).
+- AR_* hooks **deleted because the native setting + default is enough**: `AR_BundledAssetsExportMode` (`ProcessingSettings.BundledAssetsExportMode` defaults to `DirectExport` already).
+
+**GUI surfacing**:
+- Game hooks (Arknights, EndField, GirlsFrontline2, …) → Hooks tree (mutually exclusive per game, picks one version).
+- AR_* hooks → Settings dialog "Features" group. Toggled by checkbox, stored in the same `HookConfig.EnabledHooks` set, just hidden from the tree.
+- First-run defaults (e.g. `AR_SkipStreamingAssetsCopy_` on): seeded in `Ruri.RipperHook.GUI/Program.cs:Main` gated on `!File.Exists(configPath)`. After the user saves once via Settings the choice is theirs forever.
+
+**When adding a new AR_* hook**: before writing code, grep `AssetRipper.Processing.Configuration.ProcessingSettings` / `AssetRipper.Export.Configuration.ExportSettings` / `AssetRipper.Import.Configuration.ImportSettings` for an equivalent property. If one exists with the desired default, just flip the default via `[RetargetMethodCtorFunc]` on the settings class (see how `BundledAssetsExportMode` *used* to do it) — or, better, expose it as a Settings dialog control and call it done. Reserve a new hook ID only for behaviour AR has no native knob for.
+
+---
+
+## 8. Restored-from-old-AR code danger list
 
 When user restores deleted AR APIs (e.g. PrefabOutlining):
 - Removed extension methods to substitute:
@@ -129,7 +145,7 @@ When user restores deleted AR APIs (e.g. PrefabOutlining):
 
 ---
 
-## 8. Logger sinks
+## 9. Logger sinks
 
 `AssetRipper.Import.Logging.Logger` is a global static with `List<ILogger>` sinks — does **nothing** if no sink is `Logger.Add`'d.
 - `Ruri.RipperHook.CLI/Cli/HeadlessRunner.cs:165` wires `StderrLogger` + `FileLogger`. Working.
