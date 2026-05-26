@@ -14,6 +14,7 @@ using Ruri.Hook.Attributes;
 using Ruri.Hook.Config;
 using Ruri.RipperHook.Attributes;
 using System.Media;
+using System.Runtime.InteropServices;
 
 namespace Ruri.RipperHook.GUI;
 
@@ -38,6 +39,7 @@ public partial class MainForm : Form
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private IReadOnlyList<RipperAssetEntry> _filteredAssets = [];
 	private bool _suppressHookTreeEvents;
+	private Font? _hookTreeBoldFont;
 	private int _sortColumn = -1;
 	private bool _sortAscending = true;
 	private List<TreeNode> _sceneRoots = [];
@@ -1624,6 +1626,9 @@ public partial class MainForm : Form
 			.OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
 			.ToDictionary(static g => g.Key, static g => g.OrderBy(h => h.Attribute.Version, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
 
+		// Force HWND so HideRootCheckBox's TVM_SETITEM call has a real handle to target.
+		_ = hookTreeView.Handle;
+
 		hookTreeView.BeginUpdate();
 		hookTreeView.Nodes.Clear();
 		foreach ((string gameName, List<(Type Type, GameHookAttribute Attribute)> hooks) in grouped)
@@ -1641,15 +1646,78 @@ public partial class MainForm : Form
 				gameNode.Nodes.Add(versionNode);
 			}
 			hookTreeView.Nodes.Add(gameNode);
+			// 游戏节点纯粹是分组标签 —— 一个游戏只能装一个版本, 根节点摆个 checkbox 会让用户以为可以一键全勾.
+			// WinForms 的 TreeView.CheckBoxes 是 all-or-nothing, 只能走 Win32 把根节点的 state image 清成 0.
+			HideRootCheckBox(gameNode);
 		}
 		hookTreeView.EndUpdate();
 		RefreshHookTreeChecks();
 	}
 
+	private const int TV_FIRST = 0x1100;
+	private const int TVM_SETITEM = TV_FIRST + 63;
+	private const int TVIF_STATE = 0x8;
+	private const int TVIS_STATEIMAGEMASK = 0xF000;
+
+	[StructLayout(LayoutKind.Sequential, Pack = 8, CharSet = CharSet.Auto)]
+	private struct TVITEM
+	{
+		public int mask;
+		public IntPtr hItem;
+		public int state;
+		public int stateMask;
+		[MarshalAs(UnmanagedType.LPTStr)] public string? lpszText;
+		public int cchTextMax;
+		public int iImage;
+		public int iSelectedImage;
+		public int cChildren;
+		public IntPtr lParam;
+	}
+
+	[DllImport("user32.dll", CharSet = CharSet.Auto)]
+	private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, ref TVITEM lParam);
+
+	private static void HideRootCheckBox(TreeNode node)
+	{
+		TreeView? owner = node.TreeView;
+		if (owner is null || !owner.IsHandleCreated)
+		{
+			return;
+		}
+		TVITEM tvi = new()
+		{
+			hItem = node.Handle,
+			mask = TVIF_STATE,
+			stateMask = TVIS_STATEIMAGEMASK,
+			state = 0,
+		};
+		SendMessage(owner.Handle, (uint)TVM_SETITEM, IntPtr.Zero, ref tvi);
+	}
+
+	private void UpdateGameNodeAppearance(TreeNode gameNode)
+	{
+		// 不能动 gameNode.Checked —— 一旦赋值, Win32 会把 state image 重新画出来, 之前藏掉的 checkbox 就回来了.
+		// 改用 bold + 自动展开 来表示 "这个游戏有版本被启用了".
+		bool anyActive = gameNode.Nodes.Cast<TreeNode>().Any(static n => n.Checked);
+		if (anyActive)
+		{
+			_hookTreeBoldFont ??= new Font(hookTreeView.Font, FontStyle.Bold);
+			gameNode.NodeFont = _hookTreeBoldFont;
+			if (!gameNode.IsExpanded)
+			{
+				gameNode.Expand();
+			}
+		}
+		else
+		{
+			gameNode.NodeFont = null;
+		}
+	}
+
 	private void hookTreeView_BeforeCheck(object? sender, TreeViewCancelEventArgs e)
 	{
-		// 根节点 (游戏名) 只是 "下面有没有被勾上" 的视觉指示器, 不允许用户点 —— 否则同游戏多版本会被一锅端勾上, 多版本 hook 同时装 = 没意义.
-		// 编程性赋值 (RefreshHookTreeChecks 把 gameNode.Checked 同步到子节点状态) e.Action 是 Unknown, 必须放行.
+		// 根节点 (游戏名) 的 checkbox 已经被 HideRootCheckBox 藏掉, 鼠标点不到 —— 但键盘空格还能切, 拦一道防止状态变化把藏掉的 state image 重新画出来.
+		// 编程性赋值 e.Action == Unknown 必须放行.
 		if (_suppressHookTreeEvents || e.Action == TreeViewAction.Unknown)
 		{
 			return;
@@ -1673,6 +1741,7 @@ public partial class MainForm : Form
 		{
 			if (node.Checked)
 			{
+				// 同游戏下版本互斥, 勾上一个就把同级的清掉.
 				foreach (TreeNode sibling in node.Parent.Nodes)
 				{
 					if (!ReferenceEquals(sibling, node))
@@ -1680,12 +1749,8 @@ public partial class MainForm : Form
 						sibling.Checked = false;
 					}
 				}
-				node.Parent.Checked = true;
 			}
-			else
-			{
-				node.Parent.Checked = node.Parent.Nodes.Cast<TreeNode>().Any(static n => n.Checked);
-			}
+			UpdateGameNodeAppearance(node.Parent);
 		}
 		finally
 		{
@@ -1707,16 +1772,14 @@ public partial class MainForm : Form
 		{
 			foreach (TreeNode gameNode in hookTreeView.Nodes)
 			{
-				bool anyChecked = false;
 				foreach (TreeNode versionNode in gameNode.Nodes)
 				{
 					if (versionNode.Tag is string id)
 					{
 						versionNode.Checked = _hookConfig.EnabledHooks.Contains(id);
-						anyChecked |= versionNode.Checked;
 					}
 				}
-				gameNode.Checked = anyChecked;
+				UpdateGameNodeAppearance(gameNode);
 			}
 		}
 		finally
