@@ -177,7 +177,7 @@ internal sealed class SettingsDialog : Form
         // Ruri shader hook checkbox directly under the dropdown — its sub-options reveal only while checked.
         CheckBox ruriShaderHook = new()
         {
-            Text = "Use Ruri custom DXBC → HLSL decompiler (overrides AR's Dummy text exporter)",
+            Text = "Use RuriShaderDecompiler (overrides AR's Dummy text exporter)",
             AutoSize = true,
             Checked = _stagedHooks.Contains("AR_ShaderDecompiler_"),
             Margin = new Padding(0, 6, 0, 0),

@@ -16,7 +16,5 @@ public enum GameType
     AR_SkipStreamingAssetsCopy,
     AR_StaticMeshSeparation,
     AR_SkipProcessingAnimation,
-    AR_ExportDirectly,
-    AR_AnimationExport,
     AR_PrefabOutlining,
 }
