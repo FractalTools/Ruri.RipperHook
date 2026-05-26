@@ -48,7 +48,7 @@ jobs:
 
       - name: Build FModelHook GUI
         shell: pwsh
-        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1
+        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1 --configfile "AssetRipper\nuget.config"
 
       - name: Upload FModelHook artifact
         uses: actions/upload-artifact@v4
@@ -77,8 +77,12 @@ jobs:
         shell: pwsh
         run: |
           git submodule sync --recursive
-          git submodule update --init --recursive --jobs 4 -- "AssetRipper" "Tpk" "Source/Ruri.ShaderDecompiler"
+          git submodule update --init --recursive --jobs 4 -- "AssetRipper" "Tpk" "FModel" "Source/Ruri.ShaderDecompiler"
           git submodule status --recursive
+
+      - name: Copy AssetRipper NuGet config to repo root
+        shell: pwsh
+        run: Copy-Item -LiteralPath "AssetRipper\nuget.config" -Destination "nuget.config" -Force
 
       - name: Show .NET info
         shell: pwsh
@@ -87,7 +91,7 @@ jobs:
       - name: Build Pure RipperHook
         working-directory: Source/Ruri.RipperHook.GUI
         shell: cmd
-        run: PureRelease.bat
+        run: dotnet build -c Release -p:PureRelease=true --configfile ..\..\AssetRipper\nuget.config
 
       - name: Upload Pure RipperHook artifact
         uses: actions/upload-artifact@v4

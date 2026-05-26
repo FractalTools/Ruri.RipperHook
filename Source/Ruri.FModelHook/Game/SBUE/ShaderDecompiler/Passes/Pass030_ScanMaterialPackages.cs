@@ -876,8 +876,8 @@ internal static class Pass030_ScanMaterialPackages
             ResourceIndex = shader.ResourceIndex,
             NumInstructions = shader.NumInstructions,
             SortKey = shader.SortKey,
-            TypeHash = ResolveIndexedTypeHash(shader.Type, pointerTable?.Types),
-            VertexFactoryTypeHash = ResolveIndexedTypeHash(shader.VFType, pointerTable?.VFTypes),
+            TypeHash = ResolveIndexedTypeHash(shader.Type),
+            VertexFactoryTypeHash = ResolveIndexedTypeHash(shader.VFType),
             UniformBufferParameterStructHashes = shader.UniformBufferParameterStructs?.Select(x => x.Hash.ToString("X16")).ToList() ?? new List<string>(),
             UniformBufferParameterStructs = shader.UniformBufferParameterStructs?.Select(x => new UnifiedHashName
             {
@@ -899,18 +899,9 @@ internal static class Pass030_ScanMaterialPackages
         };
     }
 
-    private static string ResolveIndexedTypeHash(ulong packedIndexedPtr, FHashedName[]? table)
+    private static string ResolveIndexedTypeHash(FHashedName hashedName)
     {
-        if ((packedIndexedPtr & 1UL) != 0 && table != null)
-        {
-            ulong index = packedIndexedPtr >> 1;
-            if (index < (ulong)table.Length)
-            {
-                return table[(int)index].Hash.ToString("X16");
-            }
-        }
-
-        return packedIndexedPtr != 0 ? packedIndexedPtr.ToString("X16") : string.Empty;
+        return hashedName.Hash != 0 ? hashedName.Hash.ToString("X16") : string.Empty;
     }
 
     private static UnifiedShaderBindings BuildShaderBindings(FShaderParameterBindings bindings)
@@ -927,7 +918,7 @@ internal static class Pass030_ScanMaterialPackages
             ResourceParameters = bindings.ResourceParameters?.Select(parameter => new UnifiedResourceBindingParameter
             {
                 ByteOffset = parameter.ByteOffset,
-                BaseIndex = parameter.BaseIndex,
+                BaseIndex = checked((byte)parameter.BaseIndex),
                 BaseType = parameter.BaseType.ToString()
             }).ToList() ?? new List<UnifiedResourceBindingParameter>(),
             BindlessResourceParameters = bindings.BindlessResourceParameters?.Select(parameter => new UnifiedBindlessResourceParameter
