@@ -29,7 +29,17 @@ internal static class Program
         Application.SetCompatibleTextRenderingDefault(false);
 
         var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ConfigFileName);
+        bool isFirstRun = !File.Exists(configPath);
         var config = HookConfig.Load(configPath);
+
+        if (isFirstRun)
+        {
+            // First-launch defaults for AR_* feature toggles. SkipStreamingAssetsCopy is on so the
+            // exporter doesn't duplicate the original StreamingAssets tree next to converted output.
+            // After the first Settings save the file exists and we respect whatever the user picked.
+            config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
+            config.Save(configPath);
+        }
 
         // Module settings load BEFORE hooks fire so any hook-side static
         // accessor (ShaderDecompilerSettingsAccess.Current) sees the
@@ -54,5 +64,12 @@ internal static class Program
             live.SetModuleSettings(ShaderDecompilerSettings.ModuleKey, updated);
             live.Save(configPath);
         });
+
+        // AR native settings live in our unified JSON (RuriRipperHook.json) instead of AR's own
+        // SerializedSettings file. Apply the persisted snapshot onto GameFileLoader.Settings on
+        // startup so user choices survive across sessions without depending on AR's
+        // ExportSettings.SaveSettingsToDisk flag.
+        SettingsDialog.ArSettingsSnapshot? snapshot = config.GetModuleSettings<SettingsDialog.ArSettingsSnapshot>(SettingsDialog.ArSettingsModuleKey);
+        snapshot?.ApplyTo(AssetRipper.GUI.Web.GameFileLoader.Settings);
     }
 }

@@ -37,12 +37,12 @@ public partial class MainForm : Form
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private IReadOnlyList<RipperAssetEntry> _filteredAssets = [];
+	private bool _suppressHookTreeEvents;
 	private int _sortColumn = -1;
 	private bool _sortAscending = true;
 	private List<TreeNode> _sceneRoots = [];
 	private string[] _lastLoadedPaths = [];
 	private LoadSessionKind _lastLoadSessionKind;
-	private bool _suppressHookTreeEvents;
 	private SoundPlayer? _soundPlayer;
 	private MemoryStream? _audioStream;
 	private bool _glControlLoaded;
@@ -105,11 +105,6 @@ public partial class MainForm : Form
 		_configPath = configPath;
 		InitializeComponent();
 		InitializeHookMenu();
-		// Append the generic per-module Hooks menu (Shader Decompiler
-		// settings + future modules). Lives outside the designer so adding
-		// a new module is a one-line edit in HooksMenuBuilder.Append
-		// rather than a touch on the designer file.
-		Components.HooksMenuBuilder.Append(menuStrip1, this, _configPath);
 		ResetForm();
 		UpdateHookStatus();
 	}
@@ -204,6 +199,27 @@ public partial class MainForm : Form
 		ResetLoadedSession();
 		_adapter.Reset();
 		ResetForm();
+	}
+
+	private async void settingsToolStripMenuItem_Click(object? sender, EventArgs e)
+	{
+		HashSet<string> before = new(_hookConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase);
+		using SettingsDialog dialog = new(_hookConfig, _configPath);
+		if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+		// Settings dialog已经把 JSON 写盘. AR_* feature 开关动了的话需要重新装 hook;
+		// 纯 native AR 设置 (Audio/Image/Export 那些) 已经直接改了 GameFileLoader.Settings, 不需要重装.
+		bool hookSetChanged = !before.SetEquals(_hookConfig.EnabledHooks);
+		if (hookSetChanged)
+		{
+			await ApplyHookConfigurationAsync(_hookConfig, reloadCurrentPaths: false);
+			RefreshHookTreeChecks();
+		}
+		else
+		{
+			UpdateHookStatus();
+			SetStatus("Settings saved.");
+		}
 	}
 
 	private async void reloadHooksButton_Click(object? sender, EventArgs e)
@@ -1526,10 +1542,84 @@ public partial class MainForm : Form
 		toolStripStatusLabel1.Text = text;
 	}
 
+
+	private async Task ApplyHookConfigurationAsync(HookConfig newConfig, bool reloadCurrentPaths)
+	{
+		ToggleUi(false);
+		try
+		{
+			string previousHooks = _hookConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
+			string nextHooks = newConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", newConfig.EnabledHooks.OrderBy(static x => x));
+			string[] removedHooks = _hookConfig.EnabledHooks.Except(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
+			string[] addedHooks = newConfig.EnabledHooks.Except(_hookConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
+			_adapter.Reset();
+			if (removedHooks.Length > 0)
+			{
+				Console.WriteLine();
+				Console.WriteLine($"[RuriHook] Unloading hook(s): {string.Join(", ", removedHooks)}");
+			}
+			if (addedHooks.Length > 0)
+			{
+				Console.WriteLine();
+				Console.WriteLine($"[RuriHook] Loading hook(s): {string.Join(", ", addedHooks)}");
+			}
+			_hookConfig = new HookConfig
+			{
+				EnabledHooks = new HashSet<string>(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase)
+			};
+			_hookConfig.Save(_configPath);
+			Bootstrap.ApplyHooks(_hookConfig);
+			ResetForm();
+			UpdateHookStatus();
+			string currentHooks = _hookConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
+			if (removedHooks.Length > 0)
+			{
+				Console.WriteLine($"[RuriHook] Unloaded hook(s): {string.Join(", ", removedHooks)}");
+			}
+			if (addedHooks.Length > 0)
+			{
+				Console.WriteLine($"[RuriHook] Loaded hook(s): {string.Join(", ", addedHooks)}");
+			}
+
+			if (reloadCurrentPaths && _lastLoadedPaths.Length > 0)
+			{
+				await LoadPathsAsync(_lastLoadedPaths, _lastLoadSessionKind == LoadSessionKind.None ? LoadSessionKind.Files : _lastLoadSessionKind, replaceCurrent: true);
+				SetStatus($"Hooks switched: {previousHooks} -> {currentHooks}. Reloaded {_lastLoadedPaths.Length} path(s).");
+			}
+			else
+			{
+				SetStatus($"Hooks switched: {previousHooks} -> {nextHooks}. Click Reload Files to apply to current paths.");
+			}
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(this, ex.ToString(), "Apply hooks failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+			UpdateHookStatus();
+		}
+		finally
+		{
+			ToggleUi(true);
+		}
+	}
+
+	private void UpdateHookStatus()
+	{
+		string enabled = _hookConfig.EnabledHooks.Count == 0
+			? "none"
+			: string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
+		hookSummaryLabel.Text = _hookConfig.EnabledHooks.Count == 0
+			? "No hooks enabled. Toggle a version node to load a hook."
+			: $"Enabled hooks: {enabled}";
+		SetStatus($"Ready | Hooks: {enabled}");
+	}
+
 	private void InitializeHookMenu()
 	{
+		// AR_* hooks live in Settings → Features as toggleable feature flags. The tree only shows
+		// game-specific hooks (Arknights, EndField, …), one version per game.
 		_availableHooks = Hook.RuriHook.GetAvailableHooks();
 		Dictionary<string, List<(Type Type, GameHookAttribute Attribute)>> grouped = _availableHooks
+			.Where(static h => !h.Attribute.GameName.StartsWith("AR_", StringComparison.OrdinalIgnoreCase))
 			.GroupBy(static h => h.Attribute.GameName)
 			.OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
 			.ToDictionary(static g => g.Key, static g => g.OrderBy(h => h.Attribute.Version, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
@@ -1610,96 +1700,40 @@ public partial class MainForm : Form
 		_ = ApplyHookConfigurationAsync(config, reloadCurrentPaths: false);
 	}
 
-	private async Task ApplyHookConfigurationAsync(HookConfig newConfig, bool reloadCurrentPaths)
+	private void RefreshHookTreeChecks()
 	{
-		ToggleUi(false);
+		_suppressHookTreeEvents = true;
 		try
 		{
-			string previousHooks = _hookConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
-			string nextHooks = newConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", newConfig.EnabledHooks.OrderBy(static x => x));
-			string[] removedHooks = _hookConfig.EnabledHooks.Except(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
-			string[] addedHooks = newConfig.EnabledHooks.Except(_hookConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase).OrderBy(static x => x).ToArray();
-			_adapter.Reset();
-			if (removedHooks.Length > 0)
+			foreach (TreeNode gameNode in hookTreeView.Nodes)
 			{
-				Console.WriteLine();
-				Console.WriteLine($"[RuriHook] Unloading hook(s): {string.Join(", ", removedHooks)}");
+				bool anyChecked = false;
+				foreach (TreeNode versionNode in gameNode.Nodes)
+				{
+					if (versionNode.Tag is string id)
+					{
+						versionNode.Checked = _hookConfig.EnabledHooks.Contains(id);
+						anyChecked |= versionNode.Checked;
+					}
+				}
+				gameNode.Checked = anyChecked;
 			}
-			if (addedHooks.Length > 0)
-			{
-				Console.WriteLine();
-				Console.WriteLine($"[RuriHook] Loading hook(s): {string.Join(", ", addedHooks)}");
-			}
-			_hookConfig = new HookConfig
-			{
-				EnabledHooks = new HashSet<string>(newConfig.EnabledHooks, StringComparer.OrdinalIgnoreCase)
-			};
-			_hookConfig.Save(_configPath);
-			Bootstrap.ApplyHooks(_hookConfig);
-			ResetForm();
-			UpdateHookStatus();
-			string currentHooks = _hookConfig.EnabledHooks.Count == 0 ? "none" : string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
-			if (removedHooks.Length > 0)
-			{
-				Console.WriteLine($"[RuriHook] Unloaded hook(s): {string.Join(", ", removedHooks)}");
-			}
-			if (addedHooks.Length > 0)
-			{
-				Console.WriteLine($"[RuriHook] Loaded hook(s): {string.Join(", ", addedHooks)}");
-			}
-
-			if (reloadCurrentPaths && _lastLoadedPaths.Length > 0)
-			{
-				await LoadPathsAsync(_lastLoadedPaths, _lastLoadSessionKind == LoadSessionKind.None ? LoadSessionKind.Files : _lastLoadSessionKind, replaceCurrent: true);
-				SetStatus($"Hooks switched: {previousHooks} -> {currentHooks}. Reloaded {_lastLoadedPaths.Length} path(s).");
-			}
-			else
-			{
-				SetStatus($"Hooks switched: {previousHooks} -> {nextHooks}. Click Reload Files to apply to current paths.");
-			}
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show(this, ex.ToString(), "Apply hooks failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			UpdateHookStatus();
 		}
 		finally
 		{
-			ToggleUi(true);
-		}
-	}
-
-	private void UpdateHookStatus()
-	{
-		string enabled = _hookConfig.EnabledHooks.Count == 0
-			? "none"
-			: string.Join(", ", _hookConfig.EnabledHooks.OrderBy(static x => x));
-		hookSummaryLabel.Text = _hookConfig.EnabledHooks.Count == 0
-			? "No hooks enabled. Toggle a version node to load a hook."
-			: $"Enabled hooks: {enabled}";
-		SetStatus($"Ready | Hooks: {enabled}");
-	}
-
-	private void RefreshHookTreeChecks()
-	{
-		foreach (TreeNode gameNode in hookTreeView.Nodes)
-		{
-			bool anyChecked = false;
-			foreach (TreeNode versionNode in gameNode.Nodes)
-			{
-				if (versionNode.Tag is string id)
-				{
-					versionNode.Checked = _hookConfig.EnabledHooks.Contains(id);
-					anyChecked |= versionNode.Checked;
-				}
-			}
-			gameNode.Checked = anyChecked;
+			_suppressHookTreeEvents = false;
 		}
 	}
 
 	private HookConfig BuildHookConfigFromTree()
 	{
+		// Tree only carries game hook entries. AR_* feature toggles live in _hookConfig already
+		// (managed by SettingsDialog) — preserve them when committing tree edits.
 		HookConfig config = new();
+		foreach (string arHook in _hookConfig.EnabledHooks.Where(h => h.StartsWith("AR_", StringComparison.OrdinalIgnoreCase)))
+		{
+			config.EnabledHooks.Add(arHook);
+		}
 		foreach (TreeNode gameNode in hookTreeView.Nodes)
 		{
 			foreach (TreeNode versionNode in gameNode.Nodes)
@@ -1713,33 +1747,6 @@ public partial class MainForm : Form
 		return config;
 	}
 
-	private async Task UnloadHooksAsync()
-	{
-		if (_hookConfig.EnabledHooks.Count == 0)
-		{
-			SetStatus("No hooks are currently loaded.");
-			return;
-		}
-		_suppressHookTreeEvents = true;
-		try
-		{
-			foreach (TreeNode gameNode in hookTreeView.Nodes)
-			{
-				gameNode.Checked = false;
-				foreach (TreeNode versionNode in gameNode.Nodes)
-				{
-					versionNode.Checked = false;
-				}
-			}
-		}
-		finally
-		{
-			_suppressHookTreeEvents = false;
-		}
-		await ApplyHookConfigurationAsync(new HookConfig(), reloadCurrentPaths: false);
-		SetStatus("All hooks unloaded. Click Reload Files to reopen current paths without hooks.");
-	}
-
 	private async Task ReloadCurrentFilesAsync()
 	{
 		if (_lastLoadedPaths.Length == 0)
@@ -1747,7 +1754,8 @@ public partial class MainForm : Form
 			SetStatus("No files are currently loaded.");
 			return;
 		}
-		await ApplyHookConfigurationAsync(BuildHookConfigFromTree(), reloadCurrentPaths: true);
+		// Re-apply with the current persisted hook set. No tree to read from since hooks live in the Settings dialog.
+		await ApplyHookConfigurationAsync(_hookConfig, reloadCurrentPaths: true);
 	}
 
 	private enum LoadSessionKind

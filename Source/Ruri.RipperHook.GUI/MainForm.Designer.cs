@@ -8,6 +8,7 @@ partial class MainForm
 	private System.ComponentModel.IContainer? components = null;
 	private MenuStrip menuStrip1 = null!;
 	private ToolStripMenuItem fileToolStripMenuItem = null!;
+	private ToolStripMenuItem settingsToolStripMenuItem = null!;
 	private ToolStripMenuItem loadFileToolStripMenuItem = null!;
 	private ToolStripMenuItem loadFolderToolStripMenuItem = null!;
 	private ToolStripMenuItem appendFileToolStripMenuItem = null!;
@@ -78,6 +79,7 @@ partial class MainForm
 		components = new System.ComponentModel.Container();
 		menuStrip1 = new MenuStrip();
 		fileToolStripMenuItem = new ToolStripMenuItem();
+		settingsToolStripMenuItem = new ToolStripMenuItem();
 		loadFileToolStripMenuItem = new ToolStripMenuItem();
 		loadFolderToolStripMenuItem = new ToolStripMenuItem();
 		appendFileToolStripMenuItem = new ToolStripMenuItem();
@@ -147,7 +149,7 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
@@ -163,6 +165,8 @@ partial class MainForm
 		appendFolderToolStripMenuItem.Click += appendFolderToolStripMenuItem_Click;
 		resetToolStripMenuItem.Text = "Reset";
 		resetToolStripMenuItem.Click += resetToolStripMenuItem_Click;
+		settingsToolStripMenuItem.Text = "Settings";
+		settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
 		// Top-level button: load an input + export directly, no asset list / scene tree.
 		// Equivalent to the headless AR_ExportDirectly hook, but UI-triggered. Splits into
 		// file-vs-folder so single-bundle spot tests share the same path-derivation logic
