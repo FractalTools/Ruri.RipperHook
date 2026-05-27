@@ -1640,7 +1640,7 @@ public partial class MainForm : Form
 				string versionText = string.IsNullOrWhiteSpace(attr.Version) ? "Default" : attr.Version;
 				if (!string.IsNullOrWhiteSpace(attr.BaseEngineVersion))
 				{
-					versionText += $" [{attr.BaseEngineVersion}]";
+					versionText += $" [Based on {attr.BaseEngineVersion}]";
 				}
 				TreeNode versionNode = new(versionText) { Tag = hookId };
 				gameNode.Nodes.Add(versionNode);
