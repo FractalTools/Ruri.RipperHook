@@ -48,7 +48,10 @@ jobs:
 
       - name: Build FModelHook GUI
         shell: pwsh
-        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1 --configfile "AssetRipper\nuget.config"
+        # NuGet sources come from the repo-root nuget.config (nuget.org + SamboyDev).
+        # No --configfile here: AssetRipper submodule isn't initialized in this job,
+        # so AssetRipper\nuget.config wouldn't exist anyway.
+        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1
 
       - name: Upload FModelHook artifact
         uses: actions/upload-artifact@v4
@@ -80,10 +83,6 @@ jobs:
           git submodule update --init --recursive --jobs 4 -- "AssetRipper" "Tpk" "FModel" "Source/Ruri.ShaderDecompiler"
           git submodule status --recursive
 
-      - name: Copy AssetRipper NuGet config to repo root
-        shell: pwsh
-        run: Copy-Item -LiteralPath "AssetRipper\nuget.config" -Destination "nuget.config" -Force
-
       - name: Show .NET info
         shell: pwsh
         run: dotnet --info
@@ -91,7 +90,11 @@ jobs:
       - name: Build Pure RipperHook
         working-directory: Source/Ruri.RipperHook.GUI
         shell: cmd
-        run: dotnet build -c Release -p:PureRelease=true --configfile ..\..\AssetRipper\nuget.config
+        # NuGet sources come from the repo-root nuget.config (nuget.org + SamboyDev).
+        # AssetRipper\nuget.config only declares SamboyDev and silently shadows nuget.org
+        # when passed via --configfile, causing NU1101 for public packages like
+        # K4os.Compression.LZ4 / SharpCompress / Microsoft.NET.ILLink.Tasks.
+        run: dotnet build -c Release -p:PureRelease=true
 
       - name: Upload Pure RipperHook artifact
         uses: actions/upload-artifact@v4
