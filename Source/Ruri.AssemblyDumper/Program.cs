@@ -46,6 +46,10 @@ internal static class Program
                 {
                     return RunHook();
                 }
+                if (mode == "diag")
+                {
+                    return RunDiag(DefaultTypeTreeJsonDirectory);
+                }
             }
 
             if (args.Length > 1)
@@ -116,6 +120,27 @@ internal static class Program
 
         string finalDll = Path.Combine(repoRoot, "Source", "Ruri.RipperHook", "Libraries", "Ruri.SourceGenerated.dll");
         Console.WriteLine($"[Build] Done. Deployed: {finalDll}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Fast iteration mode: build the tpk and run all AR passes (000-941) only — no Save / decompile
+    /// / rebuild. Used to validate the TypeTree version set + hook removal in ~40s instead of minutes.
+    /// </summary>
+    private static int RunDiag(string typeTreeJsonDirectory)
+    {
+        string repoRoot = LocateRepoRoot();
+        string runDir = AppContext.BaseDirectory;
+        string tpkPath = Path.Combine(runDir, "type_tree.tpk");
+        string resolved = ResolveTypeTreeJsonDirectory(typeTreeJsonDirectory);
+
+        EnsureRequiredArtifacts(runDir, repoRoot);
+        TypeTreeTpkBuilder.WriteFromJsonDirectory(resolved, tpkPath);
+
+        Directory.SetCurrentDirectory(runDir);
+        new ArAssemblyDumperHook().Initialize();
+        PassRunner.RunAllExceptSave(tpkPath);
+        Console.WriteLine("[Diag] All passes completed (no save/decompile).");
         return 0;
     }
 
