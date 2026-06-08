@@ -6,7 +6,7 @@
     <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net8.0-windows\win-x64\</OutputPath>
     <IntermediateOutputPath>..\..\FModel\FModel\obj\Ruri.FModelHook\$(Configuration)\</IntermediateOutputPath>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Ruri.FModelHook</AssemblyName>
@@ -22,7 +22,7 @@
   <ItemGroup>
     <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
   </ItemGroup>
 
   <!-- Engine UB seed metadata. One JSON per <UBName>_<LayoutHash:08x>
@@ -41,10 +41,7 @@
   </ItemGroup>
 
   <Target Name="CopyEngineUbMetadataIfMissing" AfterTargets="Build">
-    <Copy SourceFiles="@(_EngineUbMetadataSeed)"
-          DestinationFiles="@(_EngineUbMetadataSeed->'$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')"
-          Condition="!Exists('$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_EngineUbMetadataSeed)" DestinationFiles="@(_EngineUbMetadataSeed->'$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')" Condition="!Exists('$(OutputPath)EngineUbMetadata\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

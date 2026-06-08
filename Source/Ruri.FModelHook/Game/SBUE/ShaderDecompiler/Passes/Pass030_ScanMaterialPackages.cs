@@ -956,14 +956,14 @@ internal static class Pass030_ScanMaterialPackages
                 BaseIndex = parameter.BaseIndex,
                 Size = parameter.Size,
                 BufferIndex = parameter is FShaderResourceParameterInfo resource ? resource.BufferIndex : (byte)0,
-                Type = parameter is FShaderResourceParameterInfo typed ? typed.Type : (byte)0
+                Type = parameter is FShaderResourceParameterInfo typed ? (byte)typed.Type : (byte)0
             }).ToList() ?? new List<UnifiedShaderResourceParameterInfo>(),
             SRVs = parameterMapInfo.SRVs?.Select(parameter => new UnifiedShaderResourceParameterInfo
             {
                 BaseIndex = parameter.BaseIndex,
                 Size = parameter.Size,
                 BufferIndex = parameter is FShaderResourceParameterInfo resource ? resource.BufferIndex : (byte)0,
-                Type = parameter is FShaderResourceParameterInfo typed ? typed.Type : (byte)0
+                Type = parameter is FShaderResourceParameterInfo typed ? (byte)typed.Type : (byte)0
             }).ToList() ?? new List<UnifiedShaderResourceParameterInfo>(),
             LooseParameterBuffers = parameterMapInfo.LooseParameterBuffers?.Select(buffer => new UnifiedShaderLooseParameterBufferInfo
             {
