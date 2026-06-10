@@ -42,7 +42,9 @@ internal sealed class Il2CppAsmCommentTransform : IAstTransform
             Statement first = body.Statements.First();
             foreach (string line in asm.Split('\n'))
             {
-                body.InsertChildBefore(first, new Comment(" " + line.TrimEnd('\r'), CommentType.SingleLine), Roles.Comment);
+                string text = line.TrimEnd('\r', '\t', ' ');
+                if (text.Length == 0) continue; // 跳过反汇编尾部的空行
+                body.InsertChildBefore(first, new Comment(" " + text, CommentType.SingleLine), Roles.Comment);
             }
         }
     }
