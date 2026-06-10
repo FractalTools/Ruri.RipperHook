@@ -43,19 +43,33 @@ internal static class Il2CppAsmAnnotator
         return sb.ToString();
     }
 
-    /// <summary>单行替换。X86 列表渲染器逐指令调用。</summary>
-    public static string AnnotateLine(ApplicationAnalysisContext app, string line)
+    /// <summary>
+    /// 单行替换。X86 列表渲染器逐指令调用，可传入 <paramref name="overrides"/>（本方法专属的地址→符号，
+    /// 如 il2cpp 元数据初始化惯用法识别出的 method_init_flag / method_init_token）。
+    /// </summary>
+    public static string AnnotateLine(ApplicationAnalysisContext app, string line, IReadOnlyDictionary<ulong, string> overrides = null)
     {
         EnsureMaps(app);
-        return HexToken.Replace(line, m => ReplaceToken(line, m));
+        return HexToken.Replace(line, m => ReplaceToken(line, m, overrides));
     }
 
-    private static string ReplaceToken(string line, Match m)
+    /// <summary>关键函数（il2cpp 运行时函数）名→地址反查；找不到返回 0。</summary>
+    public static ulong KeyFunctionAddress(ApplicationAnalysisContext app, string nameContains)
+    {
+        EnsureMaps(app);
+        foreach (KeyValuePair<ulong, string> kv in _keyFunctions)
+        {
+            if (kv.Value.Contains(nameContains)) return kv.Key;
+        }
+        return 0;
+    }
+
+    private static string ReplaceToken(string line, Match m, IReadOnlyDictionary<ulong, string> overrides)
     {
         string hex = m.Groups["a"].Success ? m.Groups["a"].Value : m.Groups["b"].Value;
         if (!ulong.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong addr)) return m.Value;
         if (addr < 0x10000) return m.Value; // 小立即数 / 寄存器相对偏移 / 8 位寄存器名 (ah/bh…)
-        return Resolve(addr, IsInBrackets(line, m.Index)) ?? m.Value;
+        return Resolve(addr, IsInBrackets(line, m.Index), overrides) ?? m.Value;
     }
 
     private static bool IsInBrackets(string line, int idx)
@@ -69,8 +83,11 @@ internal static class Il2CppAsmAnnotator
         return depth > 0;
     }
 
-    private static string Resolve(ulong addr, bool inBrackets)
+    private static string Resolve(ulong addr, bool inBrackets, IReadOnlyDictionary<ulong, string> overrides)
     {
+        // 本方法专属覆盖（惯用法识别出的 init flag / token）优先。
+        if (overrides != null && overrides.TryGetValue(addr, out string ov))
+            return ov;
         if (_app.MethodsByAddress.TryGetValue(addr, out List<MethodAnalysisContext> methods) && methods.Count > 0)
             return methods[0].FullName;
         if (_keyFunctions.TryGetValue(addr, out string keyFunc))
@@ -83,10 +100,10 @@ internal static class Il2CppAsmAnnotator
         if (global != null)
             return global;
 
-        // 未命中元数据：数据引用保持原样（once-init 标志、RGCTX 等无符号信息）。
+        // 未命中元数据：数据引用 → 通用全局符号 g_（无名 codegen 全局，元数据里没有它的名字）；
+        // 代码目标：方法体内分支 → loc_，区域外无名运行时函数 → sub_。
         if (inBrackets)
-            return null;
-        // 代码目标：方法体内分支 → loc_；区域外无名运行时函数 → sub_。
+            return "g_" + addr.ToString("X");
         return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
     }
 
