@@ -17,4 +17,5 @@ public enum GameType
     AR_StaticMeshSeparation,
     AR_SkipProcessingAnimation,
     AR_PrefabOutlining,
+    AR_Il2CppMethodDump,
 }

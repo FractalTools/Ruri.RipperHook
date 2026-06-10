@@ -30,6 +30,8 @@
 		<PackageReference Include="AsmResolver.DotNet" Version="6.0.0-beta.5" />
 		<PackageReference Include="AsmResolver.PE.File" Version="6.0.0-beta.5" />
 		<PackageReference Include="AssetRipper.Checksum" Version="1.1.0" />
+		<!-- IL2CPP native-method disassembly (AR_Il2CppMethodDump). Same version AssetRipper.Import pulls. -->
+		<PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.1" />
 		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
 		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
 			<PrivateAssets>all</PrivateAssets>

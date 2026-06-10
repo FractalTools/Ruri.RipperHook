@@ -35,6 +35,8 @@ internal sealed class SettingsDialog : Form
             "Deduplicate identical GameObject structures into shared prefabs. Subsumes AR's native EnablePrefabOutlining setting — that bool alone does nothing in current AR; this hook ships the actual processor."),
         ("AR_StaticMeshSeparation_", "Separate static-batched meshes",
             "Reverse Unity's static-batch combine so each instance gets its own mesh. Useful on baked/VRChat scenes. Subsumes AR's native EnableStaticMeshSeparation (same situation — bool only, no processor)."),
+        ("AR_Il2CppMethodDump_", "Dump IL2CPP native method disassembly",
+            "For IL2CPP games only: parse each method's GameAssembly function pointer (via the Cpp2IL library AssetRipper depends on) and disassemble its native method body. Writes per-assembly .asm files + a MethodPointers.csv index to AuxiliaryFiles/Il2CppMethodDump. No effect on Mono games. Heavy — adds a full native disassembly pass over GameAssembly.dll."),
     ];
 
     public SettingsDialog(HookConfig config, string configPath)
@@ -135,6 +137,7 @@ internal sealed class SettingsDialog : Form
         AddDropDown(table, ScriptContentLevelDropDownSetting.Instance,
             cfg.ImportSettings.ScriptContentLevel,
             v => cfg.ImportSettings.ScriptContentLevel = v);
+        AddArHookCheckbox(table, "AR_Il2CppMethodDump_");
 
         AddSectionHeader(table, "Project");
         AddDropDown(table, BundledAssetsExportModeDropDownSetting.Instance,
