@@ -28,6 +28,7 @@ internal static class Il2CppAsmAnnotator
 
     private static ApplicationAnalysisContext _app;
     private static Dictionary<ulong, string> _keyFunctions;
+    private static Dictionary<ulong, string> _exports; // PE 导出表 VA→名（权威）
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
 
@@ -90,6 +91,8 @@ internal static class Il2CppAsmAnnotator
             return ov;
         if (_app.MethodsByAddress.TryGetValue(addr, out List<MethodAnalysisContext> methods) && methods.Count > 0)
             return methods[0].FullName;
+        if (_exports.TryGetValue(addr, out string export)) // PE 导出表：权威符号
+            return export;
         if (_keyFunctions.TryGetValue(addr, out string keyFunc))
             return keyFunc;
         if (!_globalCache.TryGetValue(addr, out string global))
@@ -161,6 +164,28 @@ internal static class Il2CppAsmAnnotator
         }
         catch { }
         _keyFunctions = map;
+
+        // PE 导出函数表（权威符号源）：VA→名。经反射调用（方法在 PE 专属类型上，非 PE 二进制则优雅降级为空）。
+        Dictionary<ulong, string> exports = new();
+        try
+        {
+            object binary = LibCpp2IlMain.Binary;
+            System.Type binaryType = binary.GetType();
+            binaryType.GetMethod("LoadPeExportTable")?.Invoke(binary, null);
+            if (binaryType.GetMethod("GetExportedFunctions")?.Invoke(binary, null) is System.Collections.IEnumerable seq)
+            {
+                foreach (object entry in seq)
+                {
+                    if (entry is KeyValuePair<string, ulong> kv && kv.Value != 0 && !exports.ContainsKey(kv.Value))
+                    {
+                        exports[kv.Value] = kv.Key;
+                    }
+                }
+            }
+        }
+        catch { }
+        _exports = exports;
+
         _sortedMethodStarts = app.MethodsByAddress.Keys.Where(k => k != 0).OrderBy(k => k).ToArray();
         _globalCache.Clear();
         _app = app;
