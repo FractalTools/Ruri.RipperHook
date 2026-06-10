@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Cpp2IL.Core.InstructionSets;
 using Cpp2IL.Core.Model.Contexts;
 using ICSharpCode.Decompiler.TypeSystem;
 using Cpp2IlApi = Cpp2IL.Core.Cpp2IlApi;
@@ -78,8 +79,10 @@ internal static class Il2CppAsmLookup
             MethodAnalysisContext ctx = list[0];
             try
             {
-                string asm = app.InstructionSet.PrintAssembly(ctx);
-                asm = Il2CppAsmAnnotator.Annotate(app, asm); // 裸地址 → 符号注释
+                // x86：自解码出每条指令地址 → loc_ 标签块；其它指令集走扁平 PrintAssembly + 符号注释。
+                string asm = app.InstructionSet is X86InstructionSet
+                    ? Il2CppX86Listing.Render(app, ctx)
+                    : Il2CppAsmAnnotator.Annotate(app, app.InstructionSet.PrintAssembly(ctx));
                 return $"VA=0x{ctx.UnderlyingPointer:X}  RVA=0x{ctx.Rva:X}\n{asm}";
             }
             catch
