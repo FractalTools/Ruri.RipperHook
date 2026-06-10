@@ -31,17 +31,23 @@ internal static class Il2CppAsmAnnotator
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
 
+    /// <summary>整段反汇编：逐行替换地址为符号。给 ARM 等走 PrintAssembly 的回退路径用。</summary>
     public static string Annotate(ApplicationAnalysisContext app, string asmText)
     {
         EnsureMaps(app);
         StringBuilder sb = new(asmText.Length + 32);
         foreach (string rawLine in asmText.Split('\n'))
         {
-            string line = rawLine.TrimEnd('\r');
-            sb.Append(HexToken.Replace(line, m => ReplaceToken(line, m)));
-            sb.Append('\n');
+            sb.Append(AnnotateLine(app, rawLine.TrimEnd('\r'))).Append('\n');
         }
         return sb.ToString();
+    }
+
+    /// <summary>单行替换。X86 列表渲染器逐指令调用。</summary>
+    public static string AnnotateLine(ApplicationAnalysisContext app, string line)
+    {
+        EnsureMaps(app);
+        return HexToken.Replace(line, m => ReplaceToken(line, m));
     }
 
     private static string ReplaceToken(string line, Match m)

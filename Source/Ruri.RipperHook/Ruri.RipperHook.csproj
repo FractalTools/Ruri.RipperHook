@@ -33,6 +33,8 @@
 		<!-- IL2CPP native-method disassembly (AR_Il2CppMethodDump). Same versions AssetRipper.Import / .Export pull. -->
 		<PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.1" />
 		<PackageReference Include="AssetRipper.ICSharpCode.Decompiler" Version="10.1.0.8388" />
+		<!-- Real Iced (x86 decode for the loc_ listing). Aliased: MonoMod.Iced (via MonoMod.RuntimeDetour) also exposes Iced.Intel. -->
+		<PackageReference Include="Iced" Version="1.21.0" Aliases="icedreal" />
 		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
 		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
 			<PrivateAssets>all</PrivateAssets>
