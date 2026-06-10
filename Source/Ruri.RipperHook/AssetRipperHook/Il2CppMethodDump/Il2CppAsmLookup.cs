@@ -79,6 +79,7 @@ internal static class Il2CppAsmLookup
             try
             {
                 string asm = app.InstructionSet.PrintAssembly(ctx);
+                asm = Il2CppAsmAnnotator.Annotate(app, asm); // 裸地址 → 符号注释
                 return $"VA=0x{ctx.UnderlyingPointer:X}  RVA=0x{ctx.Rva:X}\n{asm}";
             }
             catch
