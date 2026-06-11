@@ -40,11 +40,6 @@ internal static class Program
             config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
             config.Save(configPath);
         }
-
-        // GLB 导出始终带上蒙皮 + 动画(AR 原生 GLB 只有静态网格)。每次启动强制启用,
-        // 这样既有配置(没存过这个开关)也能即时生效。
-        config.EnabledHooks.Add("AR_GlbAnimExport_");
-
         // Module settings load BEFORE hooks fire so any hook-side static
         // accessor (ShaderDecompilerSettingsAccess.Current) sees the
         // persisted value at first read.
