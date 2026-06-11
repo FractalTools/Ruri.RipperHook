@@ -6,6 +6,50 @@ When updating documentation, summaries, or external-facing descriptions, do not 
 
 ---
 
+## 0. Engineering doctrine — top-tier or nothing
+
+The universal core of the Ruri optimization contract, specialized to this repo. §1 is the mechanical "what not to touch"; §0 is the quality bar everything must clear: **every feature is implemented with the best-known algorithm, and always designed as an extension point in a globally-optimal framework.** If a change must deviate from this — or you find the doctrine itself is wrong — fix this section first, then write the code.
+
+### A. Attitude — no degradation, ever
+
+- **Top-tier algorithm, always.** Build at the current best-known solution for the problem. No "good enough for now" placeholder you plan to upgrade later. Hit a bad design → propose the better one and refactor; don't pile onto it.
+- **Never simplify a specified design.** Complexity is not a license to cut scope. If the target is genuinely large, stage it as explicit phased TODOs — but each landed phase ships full-strength, no compromise version.
+- **Lossless refactor.** Propose a warranted refactor immediately; the new code must be behaviour-equivalent and **must not regress performance**. Equivalence by construction, not by hope.
+- **Don't litigate effort.** Default to the no-compromise build; don't ask scope/effort tradeoff questions.
+
+### B. 1:1 port discipline — overrides everything else while porting
+
+> A published, correct, runnable reference is ground truth. A faithful 1:1 port of it is correct *by construction*.
+
+- **The only design is the reference's.** "Port from X" forbids simplify / invent / compromise / "working version first". Copy the algorithm, data structures, concurrency model, bit widths, branch boundaries, constants, and magic numbers line-for-line.
+- **Read the real source first** — never port from memory or a paraphrase. Go method-by-method, field-by-field, `if`-by-`if`, loop-by-loop; `<` vs `<=` is load-bearing, copy it exactly.
+- **Host-language synonym substitution is not deviation.** Re-expressing an idiom in the host object model (AssetStudio `AnimationClip` → AssetRipper `IAnimationClip`; a native SWIG call → its C# binding equivalent) is expected; the *logic* — control flow, ordering, constants, bit offsets — stays byte-identical. Only genuine I/O adaptation (how data is fed in/out) may change, annotated with the source `file:line`.
+- **No oracle tests for a faithful port.** A zero-logic-change replica of a verified reference cannot hold an algorithm bug; confirm it compiles and runs. Test only the parts that *intentionally* deviate once the user later asks for new behaviour.
+- **No "spirit-port".** Either it is 1:1, or it is an explicit unimplemented TODO — never a quietly simplified stand-in. Report as "1:1 ported, source = `file:line`" so it is git-blame auditable.
+
+### C. Extensibility — design the framework, not the case
+
+- **Build the extension point, not the special case.** Every feature is one member of a family; design for the family. New game / format / exporter support must drop in without editing shared code.
+- **No hardcoded branches in shared paths.** `if (game == X)` / `if (format == Y)` buried in shared code is a design smell. Dispatch through data — a registry, a delegate list, an attribute-discovered handler. This is §1's AOP-only rule generalized; the canonical seams here are `ExportHandlerHook.CustomAssetProcessors` and `RegisterModule(...)` (FRAMEWORK.md §6). Adding a case = adding a registration, never editing the dispatcher.
+- **Zero-variant dispatch.** One data-branched path beats N compile-time-forked copies — fewer copies, fewer places a fix gets forgotten.
+- **Frozen upstream is sacred.** Behaviour over AssetRipper / submodules is added by hooks/modules only (§1), never by editing the frozen tree. Don't-touch and design-for-extension are the same coin.
+
+### D. Code style — language-agnostic core (this repo writes English)
+
+- **No abbreviations** in names — full words (`Animator` not `Anim`, `Skeleton` not `Skel`).
+- **One cohesive unit per file** — don't stack unrelated classes/enums in one file (a type plus its tightly-bound helper/enum counts as one unit).
+- **No single-line stacking** — don't crush multi-field structs or multi-statement bodies onto one line; reserve `=>` for genuinely trivial one-shots.
+- **Match the surrounding file** — comments and logs follow the file's existing language (this repo = English; commit style per §1). Fix non-conforming names in code you already touch; don't bulk-rewrite for style alone.
+- **Logs go through the project logger** with an explicit category (FRAMEWORK.md §9), not ad-hoc `Console.WriteLine`.
+
+### E. Performance kernel
+
+- **Measure, don't guess.** Optimize from real timing / profiler data, never from intuition or a hand-rolled per-call sampler.
+- **Zero waste in hot loops.** No avoidable allocation / LINQ / string formatting on a per-item hot path; cache and reuse. Parallelize independent work, serialize only what shares non-thread-safe state (e.g. the per-decompile lock in FRAMEWORK.md §11).
+- **Optimize spikes, not averages.** A p99 stall outweighs a good mean.
+
+---
+
 ## 1. Hard rules (do not violate)
 
 | Rule | Detail |
