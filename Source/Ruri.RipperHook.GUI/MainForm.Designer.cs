@@ -18,8 +18,10 @@ partial class MainForm
 	private ToolStripMenuItem directExportToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFileToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFolderToolStripMenuItem = null!;
-	private ToolStripMenuItem codeExportToolStripMenuItem = null!;
-	private ToolStripMenuItem codeExportFromFolderToolStripMenuItem = null!;
+	private ToolStripMenuItem disassemblyExportToolStripMenuItem = null!;
+	private ToolStripMenuItem disassemblyExportFromFolderToolStripMenuItem = null!;
+	private ToolStripMenuItem shaderExportToolStripMenuItem = null!;
+	private ToolStripMenuItem shaderExportFromFolderToolStripMenuItem = null!;
 	private ToolStripMenuItem exportToolStripMenuItem = null!;
 	private ToolStripMenuItem exportAllAssetsMenuItem = null!;
 	private ToolStripMenuItem exportAllConvertedAssetsMenuItem = null!;
@@ -91,8 +93,10 @@ partial class MainForm
 		directExportToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFileToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
-		codeExportToolStripMenuItem = new ToolStripMenuItem();
-		codeExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
+		disassemblyExportToolStripMenuItem = new ToolStripMenuItem();
+		disassemblyExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
+		shaderExportToolStripMenuItem = new ToolStripMenuItem();
+		shaderExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
 		exportToolStripMenuItem = new ToolStripMenuItem();
 		exportAllAssetsMenuItem = new ToolStripMenuItem();
 		exportAllConvertedAssetsMenuItem = new ToolStripMenuItem();
@@ -153,7 +157,7 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, codeExportToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, disassemblyExportToolStripMenuItem, shaderExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
@@ -183,13 +187,19 @@ partial class MainForm
 		directExportFromFileToolStripMenuItem.Click += directExportFromFileToolStripMenuItem_Click;
 		directExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFolder;
 		directExportFromFolderToolStripMenuItem.Click += directExportFromFolderToolStripMenuItem_Click;
-		// Code-only export: forces ScriptContentLevel=Level2, IgnoreStreamingAssets, and enables
-		// AR_Il2CppMethodDump (native asm) + AR_CodeOnlyExport (filters export to scripts only),
-		// then lets you pick an arbitrary output dir. See MainForm.CodeExport.cs.
-		codeExportToolStripMenuItem.Text = RuriLocalization.MenuCodeExport;
-		codeExportToolStripMenuItem.DropDownItems.AddRange([codeExportFromFolderToolStripMenuItem]);
-		codeExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuCodeExportFromFolder;
-		codeExportFromFolderToolStripMenuItem.Click += codeExportFromFolderToolStripMenuItem_Click;
+		// Export Disassembly: forces ScriptContentLevel=Level2 + IgnoreStreamingAssets, enables
+		// AR_Il2CppMethodDump (native asm) + AR_DisassemblyExporter (scripts-only + decompile-all).
+		// See MainForm.DisassemblyExport.cs.
+		disassemblyExportToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExport;
+		disassemblyExportToolStripMenuItem.DropDownItems.AddRange([disassemblyExportFromFolderToolStripMenuItem]);
+		disassemblyExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExportFromFolder;
+		disassemblyExportFromFolderToolStripMenuItem.Click += disassemblyExportFromFolderToolStripMenuItem_Click;
+		// Export All Shaders: enables AR_ShaderDecompiler (real shader decompiler) + AR_ShaderOnlyExport
+		// (shaders-only filter), forces ShaderExportMode=Decompile. See MainForm.ShaderExport.cs.
+		shaderExportToolStripMenuItem.Text = RuriLocalization.MenuShaderExport;
+		shaderExportToolStripMenuItem.DropDownItems.AddRange([shaderExportFromFolderToolStripMenuItem]);
+		shaderExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuShaderExportFromFolder;
+		shaderExportFromFolderToolStripMenuItem.Click += shaderExportFromFolderToolStripMenuItem_Click;
 		exportToolStripMenuItem.DropDownItems.AddRange([exportAllAssetsMenuItem, exportSelectedAssetsMenuItem, exportFilteredAssetsMenuItem]);
 		exportToolStripMenuItem.Text = "Export";
 		exportAllAssetsMenuItem.DropDownItems.AddRange([exportAllConvertedAssetsMenuItem, exportAllYamlAssetsMenuItem]);

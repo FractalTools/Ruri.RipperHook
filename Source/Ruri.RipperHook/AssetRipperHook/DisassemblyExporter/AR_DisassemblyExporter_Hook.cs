@@ -10,10 +10,8 @@ using Ruri.RipperHook.Attributes;
 namespace Ruri.RipperHook.AR;
 
 /// <summary>
-/// 仅导出代码（忽略一切 asset 资产）。启用后，工程导出阶段只保留脚本反编译集合
-/// （<see cref="ScriptExportCollectionBase"/>，即 IL2CPP/Mono 反编译出的 Assets/Scripts/.../*.cs，
-/// 配合 <see cref="AR_Il2CppMethodDump_Hook"/> 还会带原生汇编注释），其余所有资产集合
-/// （贴图、网格、材质、音频、MonoBehaviour 的 YAML 等）一律跳过。
+/// 反汇编导出：只导出代码（忽略一切 asset 资产），并把所有程序集都反编译成带原生汇编注释的 .cs。
+/// 配合 <see cref="AR_Il2CppMethodDump_Hook"/>，每个方法体内会注入对应的 x86/ARM 反汇编。
 ///
 /// 实现方式（两处 before-Ret IL 注入，和能用的 DecompilerHook 同一套路）：
 /// ① 钩 <c>ProjectExporter.CreateCollections</c>，把返回的集合列表过滤成“只剩脚本集合”，于是 Export
@@ -23,8 +21,8 @@ namespace Ruri.RipperHook.AR;
 ///    于是每个游戏程序集都反编译成带汇编的 .cs；框架引用程序集仍保持 Skip。
 /// hook 未启用时不安装、零影响；启用时所有导出都只出代码、且全部反编译。
 /// </summary>
-[RipperHook(GameType.AR_CodeOnlyExport)]
-public partial class AR_CodeOnlyExport_Hook : RipperHookCommon
+[RipperHook(GameType.AR_DisassemblyExporter)]
+public partial class AR_DisassemblyExporter_Hook : RipperHookCommon
 {
     [RetargetMethodFunc(typeof(ProjectExporter), "CreateCollections")]
     public static bool ProjectExporter_CreateCollections(ILContext il)
@@ -40,7 +38,7 @@ public partial class AR_CodeOnlyExport_Hook : RipperHookCommon
             injected++;
         }
 
-        Console.WriteLine($"    [+] AR_CodeOnlyExport: injected scripts-only filter at {injected} return site(s)");
+        Console.WriteLine($"    [+] AR_DisassemblyExporter: injected scripts-only filter at {injected} return site(s)");
         return injected > 0;
     }
 
@@ -58,7 +56,7 @@ public partial class AR_CodeOnlyExport_Hook : RipperHookCommon
             injected++;
         }
 
-        Console.WriteLine($"    [+] AR_CodeOnlyExport: forced decompile-all at {injected} GetExportType return site(s)");
+        Console.WriteLine($"    [+] AR_DisassemblyExporter: forced decompile-all at {injected} GetExportType return site(s)");
         return injected > 0;
     }
 
@@ -71,7 +69,7 @@ public partial class AR_CodeOnlyExport_Hook : RipperHookCommon
         }
 
         List<IExportCollection> scriptsOnly = collections.Where(static c => c is ScriptExportCollectionBase).ToList();
-        Console.WriteLine($"    [+] AR_CodeOnlyExport: {collections.Count} collections -> kept {scriptsOnly.Count} script collection(s), all assets skipped");
+        Console.WriteLine($"    [+] AR_DisassemblyExporter: {collections.Count} collections -> kept {scriptsOnly.Count} script collection(s), all assets skipped");
         return scriptsOnly;
     }
 

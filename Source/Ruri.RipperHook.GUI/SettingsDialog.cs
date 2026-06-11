@@ -37,8 +37,10 @@ internal sealed class SettingsDialog : Form
             "Reverse Unity's static-batch combine so each instance gets its own mesh. Useful on baked/VRChat scenes. Subsumes AR's native EnableStaticMeshSeparation (same situation — bool only, no processor)."),
         ("AR_Il2CppMethodDump_", "Inline IL2CPP native method disassembly into scripts",
             "For IL2CPP games only: parse each method's GameAssembly function pointer (via the Cpp2IL library AssetRipper depends on) and disassemble its native body, then inject that assembly as // comments inside the matching method body of the decompiled C# scripts (Assets/Scripts/.../*.cs). No effect on Mono games."),
-        ("AR_CodeOnlyExport_", "Export code only (skip all assets)",
-            "Filter the project export down to the script-decompilation collections only — the whole IL2CPP/Mono codebase is decompiled to Assets/Scripts/.../*.cs, while every asset (textures, meshes, materials, audio, MonoBehaviour YAML, scenes, project settings) is skipped. The GUI's \"Export Code Only\" menu turns this on automatically; enabling it here makes every export code-only."),
+        ("AR_DisassemblyExporter_", "Export disassembly only (all code, skip all assets)",
+            "Filter the project export down to the script-decompilation collections only, and force every game assembly to be decompiled (nothing left as a DLL in Plugins/) — the whole IL2CPP/Mono codebase becomes Assets/Scripts/.../*.cs, while every asset (textures, meshes, materials, audio, MonoBehaviour YAML, scenes, project settings) is skipped. The GUI's \"Export Disassembly\" menu turns this on automatically; enabling it here makes every export code-only."),
+        ("AR_ShaderOnlyExport_", "Export shaders only (skip everything else)",
+            "Filter the project export down to Shader / ComputeShader collections only; every other asset and all scripts are skipped. Pair with the shader decompiler for readable shader code. The GUI's \"Export All Shaders\" menu turns this on automatically."),
     ];
 
     public SettingsDialog(HookConfig config, string configPath)

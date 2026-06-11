@@ -18,5 +18,6 @@ public enum GameType
     AR_SkipProcessingAnimation,
     AR_PrefabOutlining,
     AR_Il2CppMethodDump,
-    AR_CodeOnlyExport,
+    AR_DisassemblyExporter,
+    AR_ShaderOnlyExport,
 }
