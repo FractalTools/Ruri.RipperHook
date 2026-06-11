@@ -18,6 +18,8 @@ partial class MainForm
 	private ToolStripMenuItem directExportToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFileToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFolderToolStripMenuItem = null!;
+	private ToolStripMenuItem codeExportToolStripMenuItem = null!;
+	private ToolStripMenuItem codeExportFromFolderToolStripMenuItem = null!;
 	private ToolStripMenuItem exportToolStripMenuItem = null!;
 	private ToolStripMenuItem exportAllAssetsMenuItem = null!;
 	private ToolStripMenuItem exportAllConvertedAssetsMenuItem = null!;
@@ -89,6 +91,8 @@ partial class MainForm
 		directExportToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFileToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
+		codeExportToolStripMenuItem = new ToolStripMenuItem();
+		codeExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
 		exportToolStripMenuItem = new ToolStripMenuItem();
 		exportAllAssetsMenuItem = new ToolStripMenuItem();
 		exportAllConvertedAssetsMenuItem = new ToolStripMenuItem();
@@ -149,7 +153,7 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, codeExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
@@ -170,13 +174,22 @@ partial class MainForm
 		// Top-level button: load an input + export directly, no asset list / scene tree.
 		// Equivalent to the headless AR_ExportDirectly hook, but UI-triggered. Splits into
 		// file-vs-folder so single-bundle spot tests share the same path-derivation logic
-		// as whole-game exports.
-		directExportToolStripMenuItem.Text = "Direct Export";
+		// as whole-game exports. (Renamed "Direct Export" -> Quick Export; see RuriLocalization.)
+		// The "Export Code Only" sibling decompiles the whole IL2CPP codebase and skips all assets.
+		// All user-facing labels go through RuriLocalization (no hardcoded plaintext).
+		directExportToolStripMenuItem.Text = RuriLocalization.MenuQuickExport;
 		directExportToolStripMenuItem.DropDownItems.AddRange([directExportFromFileToolStripMenuItem, directExportFromFolderToolStripMenuItem]);
-		directExportFromFileToolStripMenuItem.Text = "From file(s)...";
+		directExportFromFileToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFile;
 		directExportFromFileToolStripMenuItem.Click += directExportFromFileToolStripMenuItem_Click;
-		directExportFromFolderToolStripMenuItem.Text = "From folder...";
+		directExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFolder;
 		directExportFromFolderToolStripMenuItem.Click += directExportFromFolderToolStripMenuItem_Click;
+		// Code-only export: forces ScriptContentLevel=Level2, IgnoreStreamingAssets, and enables
+		// AR_Il2CppMethodDump (native asm) + AR_CodeOnlyExport (filters export to scripts only),
+		// then lets you pick an arbitrary output dir. See MainForm.CodeExport.cs.
+		codeExportToolStripMenuItem.Text = RuriLocalization.MenuCodeExport;
+		codeExportToolStripMenuItem.DropDownItems.AddRange([codeExportFromFolderToolStripMenuItem]);
+		codeExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuCodeExportFromFolder;
+		codeExportFromFolderToolStripMenuItem.Click += codeExportFromFolderToolStripMenuItem_Click;
 		exportToolStripMenuItem.DropDownItems.AddRange([exportAllAssetsMenuItem, exportSelectedAssetsMenuItem, exportFilteredAssetsMenuItem]);
 		exportToolStripMenuItem.Text = "Export";
 		exportAllAssetsMenuItem.DropDownItems.AddRange([exportAllConvertedAssetsMenuItem, exportAllYamlAssetsMenuItem]);

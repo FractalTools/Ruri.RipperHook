@@ -37,6 +37,8 @@ internal sealed class SettingsDialog : Form
             "Reverse Unity's static-batch combine so each instance gets its own mesh. Useful on baked/VRChat scenes. Subsumes AR's native EnableStaticMeshSeparation (same situation — bool only, no processor)."),
         ("AR_Il2CppMethodDump_", "Inline IL2CPP native method disassembly into scripts",
             "For IL2CPP games only: parse each method's GameAssembly function pointer (via the Cpp2IL library AssetRipper depends on) and disassemble its native body, then inject that assembly as // comments inside the matching method body of the decompiled C# scripts (Assets/Scripts/.../*.cs). No effect on Mono games."),
+        ("AR_CodeOnlyExport_", "Export code only (skip all assets)",
+            "Filter the project export down to the script-decompilation collections only — the whole IL2CPP/Mono codebase is decompiled to Assets/Scripts/.../*.cs, while every asset (textures, meshes, materials, audio, MonoBehaviour YAML, scenes, project settings) is skipped. The GUI's \"Export Code Only\" menu turns this on automatically; enabling it here makes every export code-only."),
     ];
 
     public SettingsDialog(HookConfig config, string configPath)
