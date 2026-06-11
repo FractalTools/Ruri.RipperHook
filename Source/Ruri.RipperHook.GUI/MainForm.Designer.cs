@@ -15,13 +15,16 @@ partial class MainForm
 	private ToolStripMenuItem appendFolderToolStripMenuItem = null!;
 	private ToolStripSeparator fileToolStripSeparator1 = null!;
 	private ToolStripMenuItem resetToolStripMenuItem = null!;
+	private ToolStripSeparator fileCabMapSeparator = null!;
+	private ToolStripMenuItem loadCabMapToolStripMenuItem = null!;
+	private ToolStripMenuItem buildCabMapToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFileToolStripMenuItem = null!;
 	private ToolStripMenuItem directExportFromFolderToolStripMenuItem = null!;
-	private ToolStripMenuItem disassemblyExportToolStripMenuItem = null!;
+	private ToolStripSeparator quickExportSeparator = null!;
 	private ToolStripMenuItem disassemblyExportFromFolderToolStripMenuItem = null!;
-	private ToolStripMenuItem shaderExportToolStripMenuItem = null!;
 	private ToolStripMenuItem shaderExportFromFolderToolStripMenuItem = null!;
+	private ToolStripMenuItem byTypeExportToolStripMenuItem = null!;
 	private ToolStripMenuItem exportToolStripMenuItem = null!;
 	private ToolStripMenuItem exportAllAssetsMenuItem = null!;
 	private ToolStripMenuItem exportAllConvertedAssetsMenuItem = null!;
@@ -36,6 +39,8 @@ partial class MainForm
 	private ToolStripMenuItem contextExportSelectedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedConvertedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedYamlAssetsMenuItem = null!;
+	private ToolStripSeparator contextExportSeparator = null!;
+	private ToolStripMenuItem contextExportWithDepsMenuItem = null!;
 	private SplitContainer splitContainer1 = null!;
 	private TabControl tabControl1 = null!;
 	private TabPage tabPage1 = null!;
@@ -90,13 +95,16 @@ partial class MainForm
 		appendFolderToolStripMenuItem = new ToolStripMenuItem();
 		fileToolStripSeparator1 = new ToolStripSeparator();
 		resetToolStripMenuItem = new ToolStripMenuItem();
+		fileCabMapSeparator = new ToolStripSeparator();
+		loadCabMapToolStripMenuItem = new ToolStripMenuItem();
+		buildCabMapToolStripMenuItem = new ToolStripMenuItem();
 		directExportToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFileToolStripMenuItem = new ToolStripMenuItem();
 		directExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
-		disassemblyExportToolStripMenuItem = new ToolStripMenuItem();
+		quickExportSeparator = new ToolStripSeparator();
 		disassemblyExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
-		shaderExportToolStripMenuItem = new ToolStripMenuItem();
 		shaderExportFromFolderToolStripMenuItem = new ToolStripMenuItem();
+		byTypeExportToolStripMenuItem = new ToolStripMenuItem();
 		exportToolStripMenuItem = new ToolStripMenuItem();
 		exportAllAssetsMenuItem = new ToolStripMenuItem();
 		exportAllConvertedAssetsMenuItem = new ToolStripMenuItem();
@@ -111,6 +119,8 @@ partial class MainForm
 		contextExportSelectedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedConvertedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedYamlAssetsMenuItem = new ToolStripMenuItem();
+		contextExportSeparator = new ToolStripSeparator();
+		contextExportWithDepsMenuItem = new ToolStripMenuItem();
 		splitContainer1 = new SplitContainer();
 		tabControl1 = new TabControl();
 		tabPage1 = new TabPage();
@@ -157,12 +167,17 @@ partial class MainForm
 		audioPanel.SuspendLayout();
 		statusStrip1.SuspendLayout();
 		SuspendLayout();
-		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, disassemblyExportToolStripMenuItem, shaderExportToolStripMenuItem, exportToolStripMenuItem]);
+		menuStrip1.Items.AddRange([fileToolStripMenuItem, settingsToolStripMenuItem, directExportToolStripMenuItem, exportToolStripMenuItem]);
 		menuStrip1.Location = new System.Drawing.Point(0, 0);
 		menuStrip1.Name = "menuStrip1";
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
-		fileToolStripMenuItem.DropDownItems.AddRange([loadFileToolStripMenuItem, loadFolderToolStripMenuItem, appendFileToolStripMenuItem, appendFolderToolStripMenuItem, fileToolStripSeparator1, resetToolStripMenuItem]);
+		fileToolStripMenuItem.DropDownItems.AddRange([loadFileToolStripMenuItem, loadFolderToolStripMenuItem, appendFileToolStripMenuItem, appendFolderToolStripMenuItem, fileToolStripSeparator1, resetToolStripMenuItem, fileCabMapSeparator, loadCabMapToolStripMenuItem, buildCabMapToolStripMenuItem]);
 		fileToolStripMenuItem.Text = "File";
+		// CABMap: load a dependency/type index (like the Asset Browser), enabling map-aware exports.
+		loadCabMapToolStripMenuItem.Text = RuriLocalization.MenuLoadCabMap;
+		loadCabMapToolStripMenuItem.Click += loadCabMapToolStripMenuItem_Click;
+		buildCabMapToolStripMenuItem.Text = RuriLocalization.MenuBuildCabMap;
+		buildCabMapToolStripMenuItem.Click += buildCabMapToolStripMenuItem_Click;
 		loadFileToolStripMenuItem.Text = "Load files";
 		loadFileToolStripMenuItem.Click += loadFile_Click;
 		loadFolderToolStripMenuItem.Text = "Load folder";
@@ -181,25 +196,24 @@ partial class MainForm
 		// as whole-game exports. (Renamed "Direct Export" -> Quick Export; see RuriLocalization.)
 		// The "Export Code Only" sibling decompiles the whole IL2CPP codebase and skips all assets.
 		// All user-facing labels go through RuriLocalization (no hardcoded plaintext).
+		// Quick Export holds every export flavour: From file/folder (the old Direct Export), plus the
+		// heavier game-export features. Disassembly/Shader/By-Type are flattened in here (not separate
+		// top-level menus). The two map-aware ones are enabled only when a CABMap is loaded — see
+		// MainForm.cs UpdateCabMapState(). All labels via RuriLocalization (no hardcoded plaintext).
 		directExportToolStripMenuItem.Text = RuriLocalization.MenuQuickExport;
-		directExportToolStripMenuItem.DropDownItems.AddRange([directExportFromFileToolStripMenuItem, directExportFromFolderToolStripMenuItem]);
+		directExportToolStripMenuItem.DropDownItems.AddRange([directExportFromFileToolStripMenuItem, directExportFromFolderToolStripMenuItem, quickExportSeparator, disassemblyExportFromFolderToolStripMenuItem, shaderExportFromFolderToolStripMenuItem, byTypeExportToolStripMenuItem]);
 		directExportFromFileToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFile;
 		directExportFromFileToolStripMenuItem.Click += directExportFromFileToolStripMenuItem_Click;
 		directExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFolder;
 		directExportFromFolderToolStripMenuItem.Click += directExportFromFolderToolStripMenuItem_Click;
-		// Export Disassembly: forces ScriptContentLevel=Level2 + IgnoreStreamingAssets, enables
-		// AR_Il2CppMethodDump (native asm) + AR_DisassemblyExporter (scripts-only + decompile-all).
-		// See MainForm.DisassemblyExport.cs.
-		disassemblyExportToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExport;
-		disassemblyExportToolStripMenuItem.DropDownItems.AddRange([disassemblyExportFromFolderToolStripMenuItem]);
-		disassemblyExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExportFromFolder;
+		// Export Disassembly: all code + IL2CPP asm, skip assets (no map needed). MainForm.DisassemblyExport.cs.
+		disassemblyExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExport;
 		disassemblyExportFromFolderToolStripMenuItem.Click += disassemblyExportFromFolderToolStripMenuItem_Click;
-		// Export All Shaders: enables AR_ShaderDecompiler (real shader decompiler) + AR_ShaderOnlyExport
-		// (shaders-only filter), forces ShaderExportMode=Decompile. See MainForm.ShaderExport.cs.
-		shaderExportToolStripMenuItem.Text = RuriLocalization.MenuShaderExport;
-		shaderExportToolStripMenuItem.DropDownItems.AddRange([shaderExportFromFolderToolStripMenuItem]);
-		shaderExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuShaderExportFromFolder;
+		// Export All Shaders + Export by Type: map-aware (load only the bundles with that type + deps).
+		shaderExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuShaderExport;
 		shaderExportFromFolderToolStripMenuItem.Click += shaderExportFromFolderToolStripMenuItem_Click;
+		byTypeExportToolStripMenuItem.Text = RuriLocalization.MenuByTypeExport;
+		byTypeExportToolStripMenuItem.Click += byTypeExportToolStripMenuItem_Click;
 		exportToolStripMenuItem.DropDownItems.AddRange([exportAllAssetsMenuItem, exportSelectedAssetsMenuItem, exportFilteredAssetsMenuItem]);
 		exportToolStripMenuItem.Text = "Export";
 		exportAllAssetsMenuItem.DropDownItems.AddRange([exportAllConvertedAssetsMenuItem, exportAllYamlAssetsMenuItem]);
@@ -223,13 +237,16 @@ partial class MainForm
 		exportFilteredYamlAssetsMenuItem.Text = "YAML";
 		exportFilteredYamlAssetsMenuItem.Click += exportFilteredYamlAssetsMenuItem_Click;
 		exportFilteredAssetsMenuItem.Click += exportFilteredAssetsMenuItem_Click;
-		assetListContextMenuStrip.Items.AddRange([contextExportSelectedAssetsMenuItem]);
+		assetListContextMenuStrip.Items.AddRange([contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
 		contextExportSelectedAssetsMenuItem.DropDownItems.AddRange([contextExportSelectedConvertedAssetsMenuItem, contextExportSelectedYamlAssetsMenuItem]);
 		contextExportSelectedAssetsMenuItem.Text = "Export selected";
 		contextExportSelectedConvertedAssetsMenuItem.Text = "Converted";
 		contextExportSelectedConvertedAssetsMenuItem.Click += exportSelectedAssetsMenuItem_Click;
 		contextExportSelectedYamlAssetsMenuItem.Text = "YAML";
 		contextExportSelectedYamlAssetsMenuItem.Click += exportSelectedYamlAssetsMenuItem_Click;
+		// Map-aware: export the selected asset's whole bundle + transitive deps so nothing is lost.
+		contextExportWithDepsMenuItem.Text = RuriLocalization.ContextExportWithDeps;
+		contextExportWithDepsMenuItem.Click += contextExportWithDepsMenuItem_Click;
 		splitContainer1.Dock = DockStyle.Fill;
 		splitContainer1.Location = new System.Drawing.Point(0, 24);
 		splitContainer1.Name = "splitContainer1";

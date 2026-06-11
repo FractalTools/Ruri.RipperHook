@@ -109,6 +109,7 @@ public partial class MainForm : Form
 		InitializeHookMenu();
 		ResetForm();
 		UpdateHookStatus();
+		UpdateCabMapState(); // map-aware menu items start disabled until a CABMap is loaded
 	}
 
 	private async void loadFile_Click(object? sender, EventArgs e)
@@ -601,7 +602,7 @@ public partial class MainForm : Form
 		typeFilterComboBox.Items.Clear();
 		typeFilterComboBox.Items.Add("All");
 		typeFilterComboBox.SelectedIndex = 0;
-		Text = "RuriAssetRipper";
+		RefreshTitle();
 		ShowEmptyPreview();
 		RefreshHookTreeChecks();
 		UpdateHookStatus();
@@ -612,7 +613,7 @@ public partial class MainForm : Form
 		RebuildFilters();
 		ApplyFilter();
 		RebuildSceneTree();
-		Text = $"RuriAssetRipper - {_adapter.Assets.Count} assets";
+		RefreshTitle();
 	}
 
 	private void RememberLoadSession(string[] paths, LoadSessionKind sessionKind)

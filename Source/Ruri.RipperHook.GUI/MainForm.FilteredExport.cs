@@ -50,6 +50,23 @@ public partial class MainForm
 		return true;
 	}
 
+	// Single output-folder picker (for map-driven exports whose input comes from the loaded map).
+	private bool TryPickOutputFolder(out string outputFolder)
+	{
+		outputFolder = string.Empty;
+		using FolderBrowserDialog dialog = new()
+		{
+			Description = RuriLocalization.ExportSelectOutputFolder,
+			UseDescriptionForTitle = true,
+		};
+		if (dialog.ShowDialog(this) != DialogResult.OK)
+		{
+			return false;
+		}
+		outputFolder = dialog.SelectedPath;
+		return true;
+	}
+
 	/// <param name="extraHooks">Feature hook ids to enable for this export only (restored afterwards).</param>
 	/// <param name="applyOverrides">Mutate GameFileLoader.Settings before load (e.g. ScriptContentLevel).</param>
 	/// <param name="restoreOverrides">Undo <paramref name="applyOverrides"/> in the finally block.</param>

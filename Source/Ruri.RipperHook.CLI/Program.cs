@@ -72,7 +72,12 @@ internal static class Program
         {
             config.EnabledHooks.Add(NormalizeHookId(id));
         }
-        if (opts.Hooks.Length > 0)
+        // --load-types implies the export should be filtered to those same types.
+        if (opts.LoadTypes.Length > 0)
+        {
+            config.EnabledHooks.Add("AR_TypeFilterExport_");
+        }
+        if (opts.Hooks.Length > 0 || opts.LoadTypes.Length > 0)
         {
             Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
         }

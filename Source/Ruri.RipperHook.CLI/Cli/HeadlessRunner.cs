@@ -25,6 +25,17 @@ internal static class HeadlessRunner
     {
         ConfigureLogging(options);
 
+        // --load-types also drives the export-side type filter (AR_TypeFilterExport, auto-enabled in Program).
+        if (options.LoadTypes.Length > 0)
+        {
+            HashSet<int> exportTypeIds = ResolveTypes(options.LoadTypes);
+            Ruri.RipperHook.AR.AR_TypeFilterExport_Hook.TargetClassIds.Clear();
+            foreach (int id in exportTypeIds)
+            {
+                Ruri.RipperHook.AR.AR_TypeFilterExport_Hook.TargetClassIds.Add(id);
+            }
+        }
+
         // Type-driven loading (--cab-map + --load-types) gets its file set from the map, so --load is optional then.
         bool typeDriven = options.CabMapPath is { Length: > 0 } && options.LoadTypes.Length > 0;
 

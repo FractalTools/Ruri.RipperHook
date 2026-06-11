@@ -205,4 +205,213 @@ internal static class RuriLocalization
         "zh-Hant" => "匯出著色器失敗。",
         _ => "Shader export failed.",
     };
+
+    // ── CABMap (File menu) + title bar ──────────────────────────────
+    public static string MenuLoadCabMap => Lang switch
+    {
+        "zh-Hans" => "加载依赖图(CABMap)…",
+        "zh-Hant" => "載入相依圖(CABMap)…",
+        _ => "Load CABMap...",
+    };
+
+    public static string MenuBuildCabMap => Lang switch
+    {
+        "zh-Hans" => "构建依赖图(CABMap)…",
+        "zh-Hant" => "建立相依圖(CABMap)…",
+        _ => "Build CABMap...",
+    };
+
+    /// <summary>{0} = CAB count.</summary>
+    public static string TitleMapLoaded => Lang switch
+    {
+        "zh-Hans" => "已加载 map（{0} 个 CAB）",
+        "zh-Hant" => "已載入 map（{0} 個 CAB）",
+        _ => "map loaded ({0} CABs)",
+    };
+
+    public static string TitleMapNone => Lang switch
+    {
+        "zh-Hans" => "未加载 map",
+        "zh-Hant" => "未載入 map",
+        _ => "no map loaded",
+    };
+
+    /// <summary>{0} = CAB count, {1} = path.</summary>
+    public static string CabMapLoaded => Lang switch
+    {
+        "zh-Hans" => "已加载依赖图：{0} 个 CAB（{1}）",
+        "zh-Hant" => "已載入相依圖：{0} 個 CAB（{1}）",
+        _ => "CABMap loaded: {0} CABs ({1})",
+    };
+
+    public static string CabMapBuildSelectGameFolder => Lang switch
+    {
+        "zh-Hans" => "选择要构建依赖图的游戏数据目录（如 <名称>_Data）",
+        "zh-Hant" => "選擇要建立相依圖的遊戲資料目錄（如 <名稱>_Data）",
+        _ => "Select the game data folder to index (e.g. <name>_Data)",
+    };
+
+    /// <summary>{0} = folder.</summary>
+    public static string CabMapBuilding => Lang switch
+    {
+        "zh-Hans" => "正在构建依赖图：{0}（逐文件扫描，请稍候）…",
+        "zh-Hant" => "正在建立相依圖：{0}（逐檔掃描，請稍候）…",
+        _ => "Building CABMap over {0} (scanning one file at a time)...",
+    };
+
+    /// <summary>{0} = CAB count, {1} = path.</summary>
+    public static string CabMapBuilt => Lang switch
+    {
+        "zh-Hans" => "依赖图构建完成：{0} 个 CAB（{1}）",
+        "zh-Hant" => "相依圖建立完成：{0} 個 CAB（{1}）",
+        _ => "CABMap built: {0} CABs ({1})",
+    };
+
+    public static string CabMapBuildFailed => Lang switch
+    {
+        "zh-Hans" => "构建依赖图失败。",
+        "zh-Hant" => "建立相依圖失敗。",
+        _ => "Building CABMap failed.",
+    };
+
+    // ── 按类型导出 ──────────────────────────────────────────────────
+    public static string MenuByTypeExport => Lang switch
+    {
+        "zh-Hans" => "按类型导出…（需先加载 map）",
+        "zh-Hant" => "依類型匯出…（需先載入 map）",
+        _ => "Export by Type... (needs a CABMap)",
+    };
+
+    public static string ByTypePickHint => Lang switch
+    {
+        "zh-Hans" => "勾选要批量导出的资产类型：",
+        "zh-Hant" => "勾選要批次匯出的資產類型：",
+        _ => "Tick the asset types to batch-export:",
+    };
+
+    public static string ByTypeExportCaption => Lang switch
+    {
+        "zh-Hans" => "按类型导出",
+        "zh-Hant" => "依類型匯出",
+        _ => "Export by Type",
+    };
+
+    public static string ByTypeExportPreparing => Lang switch
+    {
+        "zh-Hans" => "按类型导出：准备中（按 map 精准加载目标 bundle）…",
+        "zh-Hant" => "依類型匯出：準備中（依 map 精準載入目標 bundle）…",
+        _ => "Export by type: preparing (loading only matching bundles via the map)...",
+    };
+
+    /// <summary>{0} = load label.</summary>
+    public static string ByTypeExportLoading => Lang switch
+    {
+        "zh-Hans" => "按类型导出：加载 {0} 个 bundle…",
+        "zh-Hant" => "依類型匯出：載入 {0} 個 bundle…",
+        _ => "Export by type: loading {0} bundle(s)...",
+    };
+
+    /// <summary>{0} = output path.</summary>
+    public static string ByTypeExportExporting => Lang switch
+    {
+        "zh-Hans" => "按类型导出：导出到 {0} …",
+        "zh-Hant" => "依類型匯出：匯出到 {0} …",
+        _ => "Export by type: exporting to {0}...",
+    };
+
+    /// <summary>{0} = output path.</summary>
+    public static string ByTypeExportDone => Lang switch
+    {
+        "zh-Hans" => "按类型导出完成：{0}",
+        "zh-Hant" => "依類型匯出完成：{0}",
+        _ => "Export by type finished: {0}",
+    };
+
+    public static string ByTypeExportFailedCaption => Lang switch
+    {
+        "zh-Hans" => "按类型导出失败",
+        "zh-Hant" => "依類型匯出失敗",
+        _ => "Export by type failed",
+    };
+
+    public static string ByTypeExportFailedStatus => Lang switch
+    {
+        "zh-Hans" => "按类型导出失败。",
+        "zh-Hant" => "依類型匯出失敗。",
+        _ => "Export by type failed.",
+    };
+
+    public static string NoBundlesForTypes => Lang switch
+    {
+        "zh-Hans" => "依赖图里没有包含所选类型的 bundle。",
+        "zh-Hant" => "相依圖裡沒有包含所選類型的 bundle。",
+        _ => "The CABMap has no bundles containing the selected type(s).",
+    };
+
+    // ── 右键：连同依赖一起导出 ──────────────────────────────────────
+    public static string ContextExportWithDeps => Lang switch
+    {
+        "zh-Hans" => "导出（含全部依赖）…",
+        "zh-Hant" => "匯出（含全部相依）…",
+        _ => "Export (with all dependencies)...",
+    };
+
+    public static string WithDepsCaption => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出",
+        "zh-Hant" => "連同相依匯出",
+        _ => "Export with dependencies",
+    };
+
+    public static string WithDepsNoSource => Lang switch
+    {
+        "zh-Hans" => "选中资产在依赖图里找不到来源 bundle（map 是否对应当前游戏？）。",
+        "zh-Hant" => "選取資產在相依圖裡找不到來源 bundle（map 是否對應目前遊戲？）。",
+        _ => "No source bundle for the selected asset(s) in the CABMap (is the map for this game?).",
+    };
+
+    public static string WithDepsPreparing => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出：准备中…",
+        "zh-Hant" => "連同相依匯出：準備中…",
+        _ => "Export with dependencies: preparing...",
+    };
+
+    /// <summary>{0} = load label.</summary>
+    public static string WithDepsLoading => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出：加载 {0} 个 bundle…",
+        "zh-Hant" => "連同相依匯出：載入 {0} 個 bundle…",
+        _ => "Export with dependencies: loading {0} bundle(s)...",
+    };
+
+    /// <summary>{0} = output path.</summary>
+    public static string WithDepsExporting => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出：导出到 {0} …",
+        "zh-Hant" => "連同相依匯出：匯出到 {0} …",
+        _ => "Export with dependencies: exporting to {0}...",
+    };
+
+    /// <summary>{0} = output path.</summary>
+    public static string WithDepsDone => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出完成：{0}",
+        "zh-Hant" => "連同相依匯出完成：{0}",
+        _ => "Export with dependencies finished: {0}",
+    };
+
+    public static string WithDepsFailedCaption => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出失败",
+        "zh-Hant" => "連同相依匯出失敗",
+        _ => "Export with dependencies failed",
+    };
+
+    public static string WithDepsFailedStatus => Lang switch
+    {
+        "zh-Hans" => "连同依赖导出失败。",
+        "zh-Hant" => "連同相依匯出失敗。",
+        _ => "Export with dependencies failed.",
+    };
 }

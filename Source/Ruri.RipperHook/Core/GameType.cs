@@ -19,5 +19,5 @@ public enum GameType
     AR_PrefabOutlining,
     AR_Il2CppMethodDump,
     AR_DisassemblyExporter,
-    AR_ShaderOnlyExport,
+    AR_TypeFilterExport,
 }
