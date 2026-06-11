@@ -25,14 +25,17 @@ internal static class HeadlessRunner
     {
         ConfigureLogging(options);
 
-        if (options.LoadPaths.Length == 0)
+        // Type-driven loading (--cab-map + --load-types) gets its file set from the map, so --load is optional then.
+        bool typeDriven = options.CabMapPath is { Length: > 0 } && options.LoadTypes.Length > 0;
+
+        if (options.LoadPaths.Length == 0 && !typeDriven)
         {
-            EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "Missing --load");
+            EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "Missing --load (or use --cab-map with --load-types)");
             return 1;
         }
 
         string[] paths = ResolveLoadPaths(options.LoadPaths);
-        if (paths.Length == 0)
+        if (paths.Length == 0 && !typeDriven)
         {
             EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"Path not found: {string.Join(", ", options.LoadPaths)}");
             return 1;
@@ -48,8 +51,19 @@ internal static class HeadlessRunner
             try
             {
                 (string baseFolder, var entries) = CabMap.Load(cabMapPath);
-                string[] expanded = CabMap.ResolveDeps(baseFolder, entries, paths);
-                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
+                HashSet<string> resolved = new(CabMap.ResolveDeps(baseFolder, entries, paths), StringComparer.OrdinalIgnoreCase);
+                if (options.LoadTypes.Length > 0)
+                {
+                    HashSet<int> typeIds = ResolveTypes(options.LoadTypes);
+                    if (typeIds.Count == 0)
+                    {
+                        EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"No --load-types resolved (got: {string.Join(",", options.LoadTypes)})");
+                        return 1;
+                    }
+                    foreach (string f in CabMap.ResolveByTypes(baseFolder, entries, typeIds)) resolved.Add(f);
+                }
+                string[] expanded = resolved.ToArray();
+                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) + {options.LoadTypes.Length} type(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
                 paths = expanded;
             }
             catch (Exception ex)
@@ -57,6 +71,12 @@ internal static class HeadlessRunner
                 EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"Cannot load CABMap '{cabMapPath}': {ex.GetType().Name}: {ex.Message}");
                 return 1;
             }
+        }
+
+        if (paths.Length == 0)
+        {
+            EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "Nothing to load (no files matched --load / --load-types).");
+            return 1;
         }
 
         HashSet<int> allowedClassIds = ResolveTypes(options.Types);

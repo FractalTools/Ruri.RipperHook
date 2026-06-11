@@ -55,9 +55,10 @@ internal static class Program
             return CabMap.Build(opts.LoadPaths[0], buildOut);
         }
 
-        if (opts.LoadPaths.Length == 0)
+        bool typeDriven = opts.CabMapPath is { Length: > 0 } && opts.LoadTypes.Length > 0;
+        if (opts.LoadPaths.Length == 0 && !typeDriven)
         {
-            Console.Error.WriteLine("[Ruri.CLI] --load is required for headless mode. Use the GUI executable for the AssetRipper Web UI, or pass --list-hooks to query hook ids.");
+            Console.Error.WriteLine("[Ruri.CLI] --load is required for headless mode (or --cab-map with --load-types). Use the GUI executable for the AssetRipper Web UI, or pass --list-hooks to query hook ids.");
             return 1;
         }
 

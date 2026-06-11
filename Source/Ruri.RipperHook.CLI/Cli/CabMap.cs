@@ -1,4 +1,4 @@
-using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets;
 using AssetRipper.GUI.Web;
 using AssetRipper.Import.Logging;
 using System.Text;
@@ -6,18 +6,24 @@ using System.Text;
 namespace Ruri.RipperHook.CLI;
 
 /// <summary>
-/// Minimal CABMap (CAB name → relative file path + dependencies) so the CLI can resolve a
-/// chk's full transitive dependency set without scanning the whole game folder at load time.
-/// File format is identical to the GUI's Asset Browser CABMap (BinaryWriter — base-folder
-/// string, count, then { cab; relativePath; long offset; depCount; deps[] }), so CLI-built
-/// .bin files load in the GUI and vice versa.
+/// CABMap (CAB name → relative file path + dependencies + the ClassIDs it contains) so the CLI can
+/// resolve, without loading the whole game into memory, exactly which on-disk files to hand AR for a
+/// given target. Build it ONCE over the whole game folder (one file at a time, low peak memory), then:
+///   * <see cref="ResolveDeps"/> — transitive dependency closure of some seed files (the old behaviour),
+///   * <see cref="ResolveByTypes"/> — every CAB that actually contains an asset of a wanted ClassID,
+///     plus their transitive dependencies. This is the "build map then precisely filter" path: e.g.
+///     export only shaders by loading just the shader-bearing bundles instead of the entire game.
 ///
-/// We don't ship the AssetMap (.map MessagePack) sibling here — the CLI only needs the CABMap
-/// to chase dependencies for `--load`. The GUI keeps owning the asset-name search side.
+/// Format: a magic+version header, then base-folder, count, then per CAB
+/// { cab; relativePath; long offset; depCount; deps[]; classIdCount; classIds[] }.
+/// <see cref="Load"/> also still reads the older headerless format (no ClassIDs) the GUI Asset Browser
+/// writes — those just resolve to an empty type set.
 /// </summary>
 internal static class CabMap
 {
-    internal sealed record Entry(string RelativePath, long Offset, List<string> Dependencies);
+    private const uint Magic = 0x52434D32; // "RCM2"
+
+    internal sealed record Entry(string RelativePath, long Offset, List<string> Dependencies, List<int> ClassIds);
 
     public static int Build(string rootFolder, string outPath)
     {
@@ -56,7 +62,12 @@ internal static class CabMap
                         .Select(static d => d.Name)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
-                    entries[cabName] = new Entry(relativeFilePath, 0, deps);
+                    HashSet<int> classIds = new();
+                    foreach (IUnityObjectBase asset in collection)
+                    {
+                        classIds.Add((int)asset.ClassID);
+                    }
+                    entries[cabName] = new Entry(relativeFilePath, 0, deps, classIds.ToList());
                 }
             }
             catch (Exception ex)
@@ -81,6 +92,16 @@ internal static class CabMap
         using FileStream stream = File.OpenRead(path);
         using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
 
+        bool typed = stream.Length >= 4 && reader.ReadUInt32() == Magic;
+        if (typed)
+        {
+            reader.ReadInt32(); // version, reserved
+        }
+        else
+        {
+            stream.Position = 0; // headerless legacy format: rewind and read base string directly
+        }
+
         string storedBase = reader.ReadString();
         string baseFolder = Path.GetFullPath(Path.Combine(mapDir, storedBase));
 
@@ -94,36 +115,33 @@ internal static class CabMap
             int depCount = reader.ReadInt32();
             List<string> deps = new(depCount);
             for (int j = 0; j < depCount; j++) deps.Add(reader.ReadString());
-            entries[cab] = new Entry(relativePath, offset, deps);
+
+            List<int> classIds;
+            if (typed)
+            {
+                int classCount = reader.ReadInt32();
+                classIds = new List<int>(classCount);
+                for (int j = 0; j < classCount; j++) classIds.Add(reader.ReadInt32());
+            }
+            else
+            {
+                classIds = [];
+            }
+            entries[cab] = new Entry(relativePath, offset, deps, classIds);
         }
         return (baseFolder, entries);
     }
 
     /// <summary>
-    /// Walk the dep graph from each starting file. A "starting file" is given as an on-disk
-    /// path; we find the CAB(s) that originate there by matching <see cref="Entry.RelativePath"/>,
-    /// then BFS through their dependency CABs. Returns the union of every on-disk file the
-    /// transitive closure points to (always including the starting files themselves so AR sees
-    /// the seed even when it's not registered as a CAB host).
+    /// Transitive dependency closure of the given seed files (the original behaviour). Always includes
+    /// the seed files themselves so AR sees the seed even when it isn't registered as a CAB host.
     /// </summary>
     public static string[] ResolveDeps(string baseFolder, Dictionary<string, Entry> entries, IEnumerable<string> startFiles)
     {
-        // Reverse index: relativePath → CAB names that live there.
-        Dictionary<string, List<string>> pathToCabs = new(StringComparer.OrdinalIgnoreCase);
-        foreach ((string cab, Entry e) in entries)
-        {
-            if (!pathToCabs.TryGetValue(e.RelativePath, out var list))
-            {
-                list = [];
-                pathToCabs[e.RelativePath] = list;
-            }
-            list.Add(cab);
-        }
+        Dictionary<string, List<string>> pathToCabs = BuildPathIndex(entries);
 
         HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> visitedCabs = new(StringComparer.OrdinalIgnoreCase);
-        Queue<string> queue = new();
-
+        Queue<string> seeds = new();
         foreach (string raw in startFiles)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
@@ -135,10 +153,55 @@ internal static class CabMap
                 : Path.GetRelativePath(baseFolder, fullPath);
             if (pathToCabs.TryGetValue(relative, out var cabs))
             {
-                foreach (string cab in cabs) queue.Enqueue(cab);
+                foreach (string cab in cabs) seeds.Enqueue(cab);
             }
         }
 
+        Bfs(baseFolder, entries, seeds, resultFiles);
+        return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>
+    /// Every on-disk file that hosts a CAB containing an asset of one of <paramref name="targetClassIds"/>,
+    /// plus the transitive dependencies of those CABs. The "precise filter" path — load just these.
+    /// </summary>
+    public static string[] ResolveByTypes(string baseFolder, Dictionary<string, Entry> entries, IReadOnlySet<int> targetClassIds)
+    {
+        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
+        Queue<string> seeds = new();
+        int seedCabs = 0;
+        foreach ((string cab, Entry e) in entries)
+        {
+            if (e.ClassIds.Any(targetClassIds.Contains))
+            {
+                seeds.Enqueue(cab);
+                seedCabs++;
+            }
+        }
+
+        Bfs(baseFolder, entries, seeds, resultFiles);
+        Console.Error.WriteLine($"[CabMap] type filter: {seedCabs} CABs host the target type(s) → {resultFiles.Count} file(s) (with dependencies)");
+        return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static Dictionary<string, List<string>> BuildPathIndex(Dictionary<string, Entry> entries)
+    {
+        Dictionary<string, List<string>> pathToCabs = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string cab, Entry e) in entries)
+        {
+            if (!pathToCabs.TryGetValue(e.RelativePath, out var list))
+            {
+                list = [];
+                pathToCabs[e.RelativePath] = list;
+            }
+            list.Add(cab);
+        }
+        return pathToCabs;
+    }
+
+    private static void Bfs(string baseFolder, Dictionary<string, Entry> entries, Queue<string> queue, HashSet<string> resultFiles)
+    {
+        HashSet<string> visitedCabs = new(StringComparer.OrdinalIgnoreCase);
         while (queue.Count > 0)
         {
             string cab = queue.Dequeue();
@@ -153,8 +216,6 @@ internal static class CabMap
 
             foreach (string dep in entry.Dependencies) queue.Enqueue(dep);
         }
-
-        return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static void Save(string outPath, string baseFolder, IReadOnlyDictionary<string, Entry> entries)
@@ -165,6 +226,8 @@ internal static class CabMap
 
         using FileStream stream = File.Create(outPath);
         using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
+        writer.Write(Magic);
+        writer.Write(2); // version
         writer.Write(relativeBase);
         writer.Write(entries.Count);
         foreach ((string cab, Entry e) in entries.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
@@ -174,6 +237,8 @@ internal static class CabMap
             writer.Write(e.Offset);
             writer.Write(e.Dependencies.Count);
             foreach (string d in e.Dependencies) writer.Write(d);
+            writer.Write(e.ClassIds.Count);
+            foreach (int c in e.ClassIds) writer.Write(c);
         }
     }
 }

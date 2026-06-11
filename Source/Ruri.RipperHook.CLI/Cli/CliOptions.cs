@@ -35,6 +35,14 @@ internal sealed class CliOptions
     /// AnimatorController (its BlendTrees / clip refs live in sibling chks).
     /// </summary>
     public string? CabMapPath { get; init; }
+
+    /// <summary>
+    /// With <see cref="CabMapPath"/>, load ONLY the bundles that contain an asset of one of these
+    /// ClassID names (plus their transitive dependencies), instead of the whole game. The
+    /// "build map then precisely filter" path — e.g. <c>--load-types Shader ComputeShader</c> to
+    /// export shaders without loading every chk into memory. May be used without <c>--load</c>.
+    /// </summary>
+    public string[] LoadTypes { get; init; } = [];
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -51,6 +59,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<bool> FailFast { get; }
     public Option<string?> BuildCabMap { get; }
     public Option<string?> CabMap { get; }
+    public Option<string[]> LoadTypes { get; }
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -104,6 +113,10 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         FailFast = new Option<bool>("--fail-fast", () => true, "Abort on first per-asset export failure (default true).");
         BuildCabMap = new Option<string?>("--build-cab-map", "Build a CABMap (.bin) for --load[0] and exit. Format matches the GUI Asset Browser CABMap.");
         CabMap = new Option<string?>("--cab-map", "Load a CABMap (.bin) and expand each --load entry to its transitive CAB dependencies before handing files to AR.");
+        LoadTypes = new Option<string[]>("--load-types", "With --cab-map, load only bundles containing these ClassID names (+ deps), e.g. Shader ComputeShader. Build the map first with --build-cab-map.")
+        {
+            AllowMultipleArgumentsPerToken = true,
+        };
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -124,6 +137,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             FailFast,
             BuildCabMap,
             CabMap,
+            LoadTypes,
             Passthrough,
         };
         return root;
@@ -146,6 +160,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             FailFast = pr.GetValueForOption(FailFast),
             BuildCabMapPath = pr.GetValueForOption(BuildCabMap),
             CabMapPath = pr.GetValueForOption(CabMap),
+            LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }
