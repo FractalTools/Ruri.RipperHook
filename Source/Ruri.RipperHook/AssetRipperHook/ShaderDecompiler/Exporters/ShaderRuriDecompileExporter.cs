@@ -495,6 +495,44 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             result.Add(new ShaderSymbolPass(read, symbols));
         }
 
+        // Global member union. EndField splits a constant buffer's members across passes — one pass's
+        // metadata may list ShaderVariablesGlobal's full member set while another lists only a partial
+        // subset, even though both passes' SPIR-V access the same registers. The structured rewriter drops
+        // a CB to a flat `_f_0[N]` array if ANY accessed register lacks a member (Pass050 access
+        // validation), so a partial pass that reads register 44 (_WorldSpaceCameraPos) but lacks that
+        // member stays flat. Give every pass the UNION (by byte offset) of each CB's members seen anywhere
+        // in this shader; the LayoutBuilder still trims to each pass's SPIR-V array length, so members
+        // beyond what a pass actually accesses are dropped correctly. Keyed by name — a CB name denotes one
+        // layout in a Unity shader.
+        var vectorUnion = new Dictionary<string, Dictionary<int, VectorParameter>>();
+        var matrixUnion = new Dictionary<string, Dictionary<int, MatrixParameter>>();
+        var structUnion = new Dictionary<string, Dictionary<int, StructParameter>>();
+        foreach (ShaderSymbolPass pass in result)
+        {
+            foreach (ConstantBufferParameter cb in pass.Symbols.ConstantBufferParameters)
+            {
+                if (!vectorUnion.TryGetValue(cb.Name, out Dictionary<int, VectorParameter>? vmap))
+                {
+                    vmap = new Dictionary<int, VectorParameter>();
+                    vectorUnion[cb.Name] = vmap;
+                    matrixUnion[cb.Name] = new Dictionary<int, MatrixParameter>();
+                    structUnion[cb.Name] = new Dictionary<int, StructParameter>();
+                }
+                foreach (VectorParameter v in cb.VectorParameters) vmap[v.Index] = v;
+                foreach (MatrixParameter m in cb.MatrixParameters) matrixUnion[cb.Name][m.Index] = m;
+                foreach (StructParameter s in cb.StructParameters) structUnion[cb.Name][s.Index] = s;
+            }
+        }
+        foreach (ShaderSymbolPass pass in result)
+        {
+            foreach (ConstantBufferParameter cb in pass.Symbols.ConstantBufferParameters)
+            {
+                cb.VectorParameters = vectorUnion[cb.Name].Values.OrderBy(v => v.Index).ToArray();
+                cb.MatrixParameters = matrixUnion[cb.Name].Values.OrderBy(m => m.Index).ToArray();
+                cb.StructParameters = structUnion[cb.Name].Values.OrderBy(s => s.Index).ToArray();
+            }
+        }
+
         return result;
     }
 
