@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Ruri.Hook.Core;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
@@ -164,6 +165,20 @@ internal sealed class UnifiedMaterialReader
         _materialInterfaces = materialInterfaces;
     }
 
+    // Above this on-disk size the unified file is NOT loaded into a JsonDocument
+    // for per-material symbol lookup. Rationale: this reader holds the ENTIRE
+    // parsed document in memory for the session, and `JsonDocument` is backed by
+    // a single contiguous buffer that hits .NET's ~2GB array ceiling — a cook
+    // that references every material (the master archive, 23k materials) yields a
+    // ~3GB unified that can't be materialised at all (observed "Insufficient
+    // memory", which then starved the dxil-spirv native and failed the whole
+    // decompile). Past the cap we skip the rich symbol source and let naming fall
+    // back to the per-archive `.assetinfo.json` sidecar + the lean hash bridges.
+    // Archive-scoped exports (the common case) stay well under this and get full
+    // symbols. TODO(top-tier): replace the whole-document hold with an on-disk
+    // seek index so per-material symbols load on demand regardless of cook size.
+    private const long MaxInMemoryUnifiedBytes = 1024L * 1024 * 1024; // 1 GiB
+
     public static UnifiedMaterialReader? LoadFromFile(string unifiedMetadataPath)
     {
         if (string.IsNullOrWhiteSpace(unifiedMetadataPath) || !File.Exists(unifiedMetadataPath))
@@ -171,9 +186,20 @@ internal sealed class UnifiedMaterialReader
             return null;
         }
 
+        long length = new FileInfo(unifiedMetadataPath).Length;
+        if (length > MaxInMemoryUnifiedBytes)
+        {
+            HookLogger.LogWarning($"[UnifiedMaterialReader] Unified metadata is {length / (1024 * 1024)} MB (> {MaxInMemoryUnifiedBytes / (1024 * 1024)} MB cap) — skipping the in-memory symbol source to avoid the 2GB JsonDocument limit. Material NAMES still resolve from sidecars; per-material rich symbols are unavailable for this all-materials cache. Export a narrower archive set for full symbols.");
+            return null;
+        }
+
         try
         {
-            JsonDocument document = JsonDocument.Parse(File.ReadAllText(unifiedMetadataPath));
+            // Stream the bytes (UTF-8) straight into JsonDocument instead of
+            // File.ReadAllText — the latter builds a UTF-16 string first and
+            // throws past ~1GB of text well before the file hits the cap above.
+            using FileStream stream = File.OpenRead(unifiedMetadataPath);
+            JsonDocument document = JsonDocument.Parse(stream);
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("MaterialInterfaces", out JsonElement mi) || mi.ValueKind != JsonValueKind.Object)
             {

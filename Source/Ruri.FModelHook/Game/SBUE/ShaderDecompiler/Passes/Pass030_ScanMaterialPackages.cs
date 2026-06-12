@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Ruri.Hook.Core;
@@ -39,7 +40,7 @@ internal static class Pass030_ScanMaterialPackages
 {
     public static void DoPass(ExportPipelineState state)
     {
-        AbstractVfsFileProvider? provider = state.Vm?.Provider;
+        AbstractVfsFileProvider? provider = state.Provider;
         if (provider == null) return;
 
         BuildMaterialContexts(state, provider);
@@ -75,46 +76,69 @@ internal static class Pass030_ScanMaterialPackages
 
         if (archiveHashes.Count > 0 && packageHashIndex.Count > 0)
         {
-            int candidates = 0;
-            int reused = 0;
-            int loaded = 0;
-            int extracted = 0;
-            int loadFailures = 0;
-
+            // 1. Collect the intersecting candidates (cheap; the hash-set
+            //    membership test is the only per-package work here).
+            var candidateList = new List<KeyValuePair<string, List<string>>>();
             foreach (KeyValuePair<string, List<string>> kvp in packageHashIndex)
             {
-                string packagePath = kvp.Key;
-                List<string> packageHashes = kvp.Value;
-                if (!HashesIntersect(packageHashes, archiveHashes)) continue;
-                candidates++;
+                if (HashesIntersect(kvp.Value, archiveHashes)) candidateList.Add(kvp);
+            }
+            int candidates = candidateList.Count;
 
-                if (cache.TryGetValue(packagePath, out UnifiedMaterialMetadata? cached))
-                {
-                    reused++;
-                    if (cached != null) output.MaterialInterfaces[packagePath] = cached;
-                    continue;
-                }
+            long reused = 0;
+            long loaded = 0;
+            long extracted = 0;
+            long loadFailures = 0;
 
-                UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
-                if (metadata != null)
+            // 2. Load + extract the cache-misses in PARALLEL. Each
+            //    provider.LoadPackage is AES-decrypt + zstd/oodle-decompress +
+            //    full deserialize — IO + crypto bound, identical to Pass 035's
+            //    walk, so it parallelises the same way and the same ~8-way cap
+            //    saturates the disk/crypto without thrashing. The cache is a
+            //    ConcurrentDictionary so worker writes are safe; output is
+            //    merged single-threaded afterwards.
+            int parallelism = Math.Min(8, Math.Max(2, Environment.ProcessorCount / 2));
+            System.Threading.Tasks.Parallel.ForEach(
+                candidateList,
+                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parallelism },
+                kvp =>
                 {
+                    string packagePath = kvp.Key;
+                    if (cache.ContainsKey(packagePath)) { System.Threading.Interlocked.Increment(ref reused); return; }
+
+                    UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, out bool loadedOk, out bool failed);
+                    if (loadedOk) System.Threading.Interlocked.Increment(ref loaded);
+                    if (failed) System.Threading.Interlocked.Increment(ref loadFailures);
+
                     // Copy the IoStore-derived shader-map hashes onto the
                     // material so the unified file is self-contained.
-                    // PackageShaderMapHashes is the AUTHORITATIVE bridge
-                    // for IoStore cooks (modern UE5) — without this copy
-                    // the consumer can't link back from a shader-archive
-                    // hash to a material when LoadedShaderMaps is empty.
-                    metadata.PackageShaderMapHashes = new List<string>(packageHashes);
-                }
-                cache[packagePath] = metadata;
-                if (metadata != null)
+                    // PackageShaderMapHashes is the AUTHORITATIVE bridge for
+                    // IoStore cooks (modern UE5) — without this copy the
+                    // consumer can't link back from a shader-archive hash to a
+                    // material when LoadedShaderMaps is empty.
+                    if (metadata != null)
+                    {
+                        metadata.PackageShaderMapHashes = new List<string>(kvp.Value);
+                        System.Threading.Interlocked.Increment(ref extracted);
+                    }
+                    cache[packagePath] = metadata;
+                });
+
+            // 3. Merge into the cumulative output single-threaded — both
+            //    freshly-extracted and (Pass 005) cache-seeded non-null entries.
+            //    `produced` gates the full-scan fallback so a fully cache-warmed
+            //    scan (extracted==0 but everything reused) does NOT re-walk.
+            int produced = 0;
+            foreach (KeyValuePair<string, List<string>> kvp in candidateList)
+            {
+                if (cache.TryGetValue(kvp.Key, out UnifiedMaterialMetadata? m) && m != null)
                 {
-                    output.MaterialInterfaces[packagePath] = metadata;
-                    extracted++;
+                    output.MaterialInterfaces[kvp.Key] = m;
+                    produced++;
                 }
             }
 
-            log($"    Material scan (hash-scoped): archive-hashes={archiveHashes.Count}, candidates={candidates}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+            log($"    Material scan (hash-scoped): archive-hashes={archiveHashes.Count}, candidates={candidates}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, produced={produced}, skipped-on-error={loadFailures}.");
 
             // Hash-scoped scan produced zero materials despite having
             // both archive hashes and a package-hash index — likely a
@@ -124,10 +148,11 @@ internal static class Pass030_ScanMaterialPackages
             // unified file isn't shipped with `MaterialInterfaces: {}`
             // — that leaves every per-material reader empty and every
             // Material CB anonymous downstream (root cause documented
-            // per UE_SYMBOL_SOURCES.md).
-            if (extracted == 0)
+            // per UE_SYMBOL_SOURCES.md). NOTE: gate on `produced` (extracted +
+            // cache-reused) so a fully cache-warmed scan doesn't re-walk.
+            if (produced == 0 && candidates > 0)
             {
-                log($"    Material scan (hash-scoped): extracted ZERO materials (candidates={candidates}) — falling back to full provider scan.");
+                log($"    Material scan (hash-scoped): produced ZERO materials (candidates={candidates}) — falling back to full provider scan.");
                 FullProviderScan(provider, output, cache, log);
             }
             return;
@@ -139,41 +164,46 @@ internal static class Pass030_ScanMaterialPackages
         FullProviderScan(provider, output, cache, log);
     }
 
-    private static void FullProviderScan(AbstractVfsFileProvider provider, UnifiedShaderMetadataRoot output, Dictionary<string, UnifiedMaterialMetadata?> cache, Action<string> log)
+    private static void FullProviderScan(AbstractVfsFileProvider provider, UnifiedShaderMetadataRoot output, ConcurrentDictionary<string, UnifiedMaterialMetadata?> cache, Action<string> log)
     {
-        int considered = 0;
-        int reused = 0;
-        int loaded = 0;
-        int loadFailures = 0;
-        int extracted = 0;
+        // Pre-filter to the material-candidate list so the parallel partition
+        // sizes correctly and the considered-count is exact.
+        var candidates = provider.Files.Values.Where(IsMaterialCandidate).ToList();
 
-        foreach (var file in provider.Files.Values)
+        long reused = 0;
+        long loaded = 0;
+        long loadFailures = 0;
+        long extracted = 0;
+
+        int parallelism = Math.Min(8, Math.Max(2, Environment.ProcessorCount / 2));
+        System.Threading.Tasks.Parallel.ForEach(
+            candidates,
+            new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parallelism },
+            file =>
+            {
+                string packagePath = file.PathWithoutExtension;
+                if (cache.ContainsKey(packagePath)) { System.Threading.Interlocked.Increment(ref reused); return; }
+
+                UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, out bool loadedOk, out bool failed);
+                if (loadedOk) System.Threading.Interlocked.Increment(ref loaded);
+                if (failed) System.Threading.Interlocked.Increment(ref loadFailures);
+                if (metadata != null)
+                {
+                    if (output.PackageShaderMapHashes.TryGetValue(packagePath, out List<string>? hashes))
+                        metadata.PackageShaderMapHashes = new List<string>(hashes);
+                    System.Threading.Interlocked.Increment(ref extracted);
+                }
+                cache[packagePath] = metadata;
+            });
+
+        foreach (var file in candidates)
         {
-            if (!IsMaterialCandidate(file)) continue;
-            considered++;
-
             string packagePath = file.PathWithoutExtension;
-            if (cache.TryGetValue(packagePath, out UnifiedMaterialMetadata? cached))
-            {
-                reused++;
-                if (cached != null) output.MaterialInterfaces[packagePath] = cached;
-                continue;
-            }
-
-            UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, ref loaded, ref loadFailures);
-            if (metadata != null && output.PackageShaderMapHashes.TryGetValue(packagePath, out List<string>? hashes))
-            {
-                metadata.PackageShaderMapHashes = new List<string>(hashes);
-            }
-            cache[packagePath] = metadata;
-            if (metadata != null)
-            {
-                output.MaterialInterfaces[packagePath] = metadata;
-                extracted++;
-            }
+            if (cache.TryGetValue(packagePath, out UnifiedMaterialMetadata? m) && m != null)
+                output.MaterialInterfaces[packagePath] = m;
         }
 
-        log($"    Material scan (full): candidates={considered}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
+        log($"    Material scan (full): candidates={candidates.Count}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, skipped-on-error={loadFailures}.");
     }
 
     // Shared loader: load the package, route to the right metadata
@@ -189,19 +219,22 @@ internal static class Pass030_ScanMaterialPackages
     // package name (instead of "UnknownMaterial") downstream.
     //
     // Returns null on any failure (already logged through HookLogger).
-    // The mutated counters are by-ref so the caller can record stats
-    // per scan mode.
-    private static UnifiedMaterialMetadata? LoadAndExtractByPath(AbstractVfsFileProvider provider, string packagePath, ref int loaded, ref int loadFailures)
+    // Outcome is reported via out flags (not ref counters) so the method is
+    // safe to call from the parallel scan workers — the caller does the
+    // Interlocked accounting.
+    private static UnifiedMaterialMetadata? LoadAndExtractByPath(AbstractVfsFileProvider provider, string packagePath, out bool loadedOk, out bool failed)
     {
+        loadedOk = false;
+        failed = false;
         CUE4Parse.UE4.Assets.IPackage? package;
         try
         {
             package = provider.LoadPackage(packagePath);
-            loaded++;
+            loadedOk = true;
         }
         catch (Exception ex)
         {
-            loadFailures++;
+            failed = true;
             HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] Skipped {packagePath}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
@@ -244,7 +277,7 @@ internal static class Pass030_ScanMaterialPackages
         }
         catch (Exception ex)
         {
-            loadFailures++;
+            failed = true;
             HookLogger.LogWarning($"[Pass030_ScanMaterialPackages] Extract failed for {packagePath}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
@@ -407,23 +440,34 @@ internal static class Pass030_ScanMaterialPackages
                     CookedShaderMapIdHash = shaderMap.ShaderMapId.CookedShaderMapIdHash?.ToString(),
                     ShaderContentHash = shaderMap.Content is FMaterialShaderMapContent materialShaderMapContent
                         ? materialShaderMapContent.ShaderContentHash.ToString()
-                        : null
+                        : null,
+                    // The library key: ResourceHash for bShareCode (external/IoStore)
+                    // cooks, or Code.ResourceHash when the bytecode is inlined.
+                    // This is what actually matches the archive's ShaderMapHashes.
+                    ResourceHash = shaderMap.ResourceHash?.ToString() ?? shaderMap.Code?.ResourceHash.ToString(),
                 };
 
-                if (shaderMap.PointerTable is FShaderMapPointerTable pointerTable)
-                {
-                    shaderMapMetadata.ShaderMapPointerTable = BuildPointerTable(pointerTable);
-                }
+                // ShaderMapPointerTable (type/VF hashes) is not emitted — no
+                // decompile-side reader consumes it; only the on-disk archive's
+                // own pointer table is used downstream.
 
-                if (shaderMap.FrozenArchive != null)
-                {
-                    shaderMapMetadata.MemoryImageResult = BuildFrozenArchive(shaderMap.FrozenArchive);
-                }
+                // NOTE: `MemoryImageResult` (FrozenObjectBase64 + frozen
+                // ScriptNames/MinimalNames/VTables) is INTENTIONALLY not
+                // populated. It is write-only — no decompile-side reader ever
+                // consumes it — but the base64 of the raw shader-map memory
+                // image is the single largest per-material payload. On the
+                // master cook (22k+ materials) holding it spiked RSS to 13GB+
+                // and bloated UnifiedShaderMetadata.json (which the warm-cache
+                // Pass 005 must then re-read). Dropping it is a pure memory +
+                // disk + warm-start win with zero symbol loss. (If a future
+                // reader needs the frozen image, re-add via BuildFrozenArchive.)
 
                 if (shaderMap.Content is FMaterialShaderMapContent materialContent)
                 {
                     shaderMapMetadata.MaterialShaderMapContent = BuildShaderContent(materialContent, shaderMap.PointerTable as FShaderMapPointerTable);
                 }
+                // (BuildShaderContent ignores the pointer table now — kept in the
+                // signature only to avoid touching the call site's null-cast.)
 
                 metadata.LoadedShaderMaps.Add(shaderMapMetadata);
             }
@@ -557,107 +601,49 @@ internal static class Pass030_ScanMaterialPackages
         return result;
     }
 
-    private static UnifiedFrozenArchive BuildFrozenArchive(FMemoryImageResult frozenArchive)
-    {
-        var result = new UnifiedFrozenArchive();
+    // BuildFrozenArchive was removed: its only caller (the MemoryImageResult
+    // population in ExtractMaterialContext) is gone because that payload is
+    // write-only / never read by any decompile-side consumer, and the base64
+    // memory image was the dominant per-material memory + disk cost. The DTO
+    // types (UnifiedFrozenArchive/Name/VTable) remain in the schema for
+    // backward-compatible deserialize of older files; re-add this builder if a
+    // future reader genuinely needs the frozen image.
 
-        result.FrozenObjectBase64 = Convert.ToBase64String(frozenArchive.FrozenObject ?? Array.Empty<byte>());
-
-        if (frozenArchive.ScriptNames != null)
-        {
-            result.ScriptNames = frozenArchive.ScriptNames.Select(name => new UnifiedFrozenName
-            {
-                Name = name.Name.Text,
-                Patches = name.Patches?.Select(patch => patch.Offset).ToList() ?? new List<int>()
-            }).ToList();
-        }
-
-        if (frozenArchive.MinimalNames != null)
-        {
-            result.MinimalNames = frozenArchive.MinimalNames.Select(name => new UnifiedFrozenName
-            {
-                Name = name.Name.Text,
-                Patches = name.Patches?.Select(patch => patch.Offset).ToList() ?? new List<int>()
-            }).ToList();
-        }
-
-        if (frozenArchive.VTables != null)
-        {
-            result.VTables = frozenArchive.VTables.Select(vtable => new UnifiedFrozenVTable
-            {
-                TypeNameHash = vtable.TypeNameHash.ToString("X16"),
-                Patches = vtable.Patches?.Select(patch => new UnifiedFrozenVTablePatch
-                {
-                    Offset = patch.Offset,
-                    VTableOffset = patch.VTableOffset
-                }).ToList() ?? new List<UnifiedFrozenVTablePatch>()
-            }).ToList();
-        }
-
-        return result;
-    }
-
+    // Only the two fields any decompile-side reader actually consumes are
+    // emitted: `UniformExpressionSet` (material parameter names / preshader
+    // data) and `Shaders[]` (Pass 165 joins it by ARRAY ORDER to attach each
+    // shader's ParameterMapInfo — see BuildShader, which now emits only that).
+    // The dropped arrays (`ShaderTypeHashes`, `ShaderPermutations`,
+    // `ShaderPipelines`, `OrderedMeshShaderMaps`) plus the per-shader binding
+    // detail were the dominant size of the unified file — on the master cook
+    // (23k materials, each with 100s of shaders) they ballooned it to 11GB+,
+    // which made the warm-cache read (Pass 005) and the decompile-side read
+    // (Pass 140/160) pathologically slow. None of them is read anywhere
+    // downstream. ShaderPipelines/OrderedMeshShaderMaps shaders are NOT folded
+    // into `Shaders[]` because Pass165 joins against the on-disk shader-map's
+    // primary Shaders[] order only.
     private static UnifiedShaderContent BuildShaderContent(FMaterialShaderMapContent content, FShaderMapPointerTable? pointerTable)
     {
-        var result = new UnifiedShaderContent();
-
-        result.UniformExpressionSet = BuildUniformExpressionSet(content.MaterialCompilationOutput?.UniformExpressionSet);
-
-        if (content.ShaderTypes != null)
+        // ONLY `UniformExpressionSet` is emitted — it carries the material
+        // parameter names + preshader data that the .shader `Properties` block
+        // needs. `Shaders[]` (per-shader `ParameterMapInfo`) was ALSO dropped:
+        // on the master cook (23k materials × 100s of shaders) it was the bulk
+        // of the unified file, pushing it to 3GB+ — and any unified that large
+        // is UNUSABLE downstream, because the decompile-side readers
+        // (`UnifiedMaterialReader.LoadFromFile`, Pass 140) materialise the whole
+        // document and a >2GB JSON exceeds .NET's single-string / JsonDocument
+        // limits (observed: "Insufficient memory", then dxil-spirv -4 from the
+        // starved native heap). The cost is that Pass 165's $Globals byte-offset
+        // join goes quiet, so loose `$Globals` members fall back to the
+        // anonymous `_Globals_m0[N]` form — a contained symbol-QUALITY
+        // regression, not a material-LINKAGE one. TODO(top-tier): restore it by
+        // writing per-shader ParameterMapInfo into the per-archive
+        // `.stableinfo.json` sidecar (Pass 165 already joins per-archive), which
+        // keeps the cross-library unified file lean.
+        return new UnifiedShaderContent
         {
-            result.ShaderTypeHashes = content.ShaderTypes.Select(type => type.Hash.ToString("X16")).ToList();
-        }
-
-        if (content.ShaderPermutations != null)
-        {
-            result.ShaderPermutations = content.ShaderPermutations.ToList();
-        }
-
-        if (content.Shaders != null)
-        {
-            result.Shaders = content.Shaders.Select(shader => BuildShader(shader, pointerTable)).ToList();
-        }
-
-        if (content.ShaderPipelines != null)
-        {
-            result.ShaderPipelines = content.ShaderPipelines.Select(pipeline => BuildShaderPipeline(pipeline, pointerTable)).ToList();
-        }
-
-        if (content.OrderedMeshShaderMaps != null)
-        {
-            result.OrderedMeshShaderMaps = content.OrderedMeshShaderMaps.Select(meshMap =>
-            {
-                var mesh = new UnifiedOrderedMeshShaderMap
-                {
-                    VertexFactoryType = new UnifiedHashName
-                    {
-                        Hash = meshMap.VertexFactoryTypeName.Hash.ToString("X16")
-                    }
-                };
-
-                if (meshMap.ShaderTypes != null)
-                {
-                    mesh.ShaderTypes = meshMap.ShaderTypes.Select(type => new UnifiedHashName
-                    {
-                        Hash = type.Hash.ToString("X16")
-                    }).ToList();
-                }
-
-                if (meshMap.ShaderPermutations != null)
-                {
-                    mesh.ShaderPermutations = meshMap.ShaderPermutations.ToList();
-                }
-
-                if (meshMap.Shaders != null)
-                {
-                    mesh.Shaders = meshMap.Shaders.Where(shader => shader != null).Select(shader => BuildShader(shader, pointerTable)).ToList();
-                }
-
-                return mesh;
-            }).ToList();
-        }
-
-        return result;
+            UniformExpressionSet = BuildUniformExpressionSet(content.MaterialCompilationOutput?.UniformExpressionSet),
+        };
     }
 
     private static UnifiedUniformExpressionSet? BuildUniformExpressionSet(FUniformExpressionSet? uniformExpressionSet)
@@ -869,33 +855,16 @@ internal static class Pass030_ScanMaterialPackages
         };
     }
 
-    private static UnifiedShader BuildShader(FShader shader, FShaderMapPointerTable? pointerTable)
+    // Slimmed: only `ParameterMapInfo` is emitted (the one field Pass 165
+    // reads — it joins by array order, so the per-shader index/hash/binding
+    // detail is unnecessary). Dropping `Bindings` + the hashes off every
+    // shader is the bulk of the unified-file size reduction. `pointerTable` is
+    // no longer needed (it only fed the dropped type-hash resolution).
+    private static UnifiedShader BuildShader(FShader shader)
     {
         return new UnifiedShader
         {
-            ResourceIndex = shader.ResourceIndex,
-            NumInstructions = shader.NumInstructions,
-            SortKey = shader.SortKey,
-            TypeHash = ResolveIndexedTypeHash(shader.Type),
-            VertexFactoryTypeHash = ResolveIndexedTypeHash(shader.VFType),
-            UniformBufferParameterStructHashes = shader.UniformBufferParameterStructs?.Select(x => x.Hash.ToString("X16")).ToList() ?? new List<string>(),
-            UniformBufferParameterStructs = shader.UniformBufferParameterStructs?.Select(x => new UnifiedHashName
-            {
-                Hash = x.Hash.ToString("X16")
-            }).ToList() ?? new List<UnifiedHashName>(),
-            UniformBufferParameterBaseIndices = shader.UniformBufferParameters?.Select(x => x.BaseIndex).ToList() ?? new List<ushort>(),
-            Bindings = BuildShaderBindings(shader.Bindings),
             ParameterMapInfo = BuildShaderParameterMapInfo(shader.ParameterMapInfo)
-        };
-    }
-
-    private static UnifiedShaderPipeline BuildShaderPipeline(FShaderPipeline pipeline, FShaderMapPointerTable? pointerTable)
-    {
-        return new UnifiedShaderPipeline
-        {
-            TypeHash = pipeline.TypeName.Hash.ToString("X16"),
-            Shaders = pipeline.Shaders?.Where(shader => shader != null).Select(shader => BuildShader(shader, pointerTable)).ToList() ?? new List<UnifiedShader>(),
-            PermutationIds = pipeline.PermutationIds?.ToList() ?? new List<int>()
         };
     }
 

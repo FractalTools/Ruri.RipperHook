@@ -4,20 +4,16 @@ using System.Collections.Generic;
 namespace Ruri.FModelHook.CLI;
 
 // Minimal CLI option bag — parsed by hand so the CLI can boot without
-// dragging in System.CommandLine / argparse-style packages. The flag set
-// mirrors the auto-export hook's already-recognised CLI args; everything
-// else (game directory, AES keys, mappings, Oodle path) is read from the
-// user's persisted FModel UserSettings so a CLI run sees exactly what the
-// GUI saw last time.
+// dragging in System.CommandLine / argparse-style packages. Shader export is
+// fully headless: game directory, AES keys, mappings and EGame version all come
+// from the --game-config AppSettings snapshot (HeadlessGameConfig); the export
+// level is controlled entirely by the flags here (--split-variants / --export-only
+// / --skip-global / --archive-filter).
 internal sealed class CliOptions
 {
-    public bool ShaderOnly { get; set; }
     public bool SkipGlobal { get; set; }
-    public bool ShowWindow { get; set; }     // default: hide the WPF main window
-    public bool KeepAlive { get; set; }      // default: shutdown app once auto-export done
     public bool ListHooks { get; set; }
     public bool Help { get; set; }
-    public int  ReadyTimeoutSec { get; set; } = 600;
     public bool? SplitVariants { get; set; } // null = leave persisted setting alone
     public List<string> Hooks { get; } = new();
     // Decompile-only debug mode. When set, the CLI skips launching FModel
@@ -27,15 +23,44 @@ internal sealed class CliOptions
     // without re-running the export side, which for the master 6.8 GB
     // archive takes 10-15 minutes per iteration.
     public string? DecompileOnly { get; set; }
-    // Path to an FModel UserSettings JSON snapshot to install over the
-    // live `%AppData%/FModel/AppSettings(_Debug).json` BEFORE the WPF
-    // host boots. Necessary when re-targeting a different game between
-    // CLI runs: FModel's ApplicationViewModel ctor opens a blocking
-    // modal DirectorySelector if `PerDirectory[GameDirectory]` isn't
-    // already present — invisible in headless mode and blocks forever.
-    // Supply the user's per-game snapshot (e.g. AppSettings_OniValleyDemo.json)
-    // and the CLI copies it into place before app.Run() is called.
+    // Path to an FModel AppSettings(_Debug).json snapshot. The headless mount
+    // reads EVERYTHING from it directly — GameDirectory, EGame version, ALL AES
+    // main+dynamic keys, the mappings endpoint, Raw/OutputDirectory — via
+    // HeadlessGameConfig. No %AppData% install, no FModel host. This is the
+    // primary input; if omitted the CLI falls back to the live
+    // %AppData%/FModel/AppSettings(_Debug).json.
     public string? GameConfig { get; set; }
+
+    // Accepted for back-compat only — headless is now the DEFAULT (and only)
+    // shader-export mode, so this flag is a no-op. A plain `--game-config <json>`
+    // runs the headless pipeline; there is no WPF/auto-export path to opt out of.
+    public bool Headless { get; set; }
+    // Comma/space/semicolon-separated archive-name tokens (substring match).
+    // When set, only matching .ushaderbytecode archives are exported — lets a
+    // self-test target one small archive instead of the multi-GB master.
+    public string? ArchiveFilter { get; set; }
+    // Headless: build the cache + sidecars + .ushaderlib but SKIP decompile.
+    // The master archive's 261k-shader decompile is a multi-hour job; this
+    // populates the full material cache fast so `--decompile-only` can iterate.
+    public bool ExportOnly { get; set; }
+
+    // Settings-free direct GLB scene export. When set, the CLI skips FModel boot
+    // entirely (like --decompile-only) and constructs a CUE4Parse
+    // DefaultFileProvider straight from the flags below, then exports each
+    // matching .umap as a self-contained .glb scene (World Partition included).
+    // This is both the headless self-test path and a scriptable batch exporter
+    // that needs no %AppData% FModel config.
+    public bool ExportMapDirect { get; set; }
+    // Print every .umap the provider can see (after mounting) and exit. Use to
+    // discover map package paths before picking a --map filter.
+    public bool ListMaps { get; set; }
+    public string? GameDir { get; set; }       // folder containing the Paks (or the game root)
+    public string? MappingsPath { get; set; }  // local .usmap
+    public string? UeVersion { get; set; }     // EGame enum name, e.g. GAME_UE5_1
+    public List<string> MapFilters { get; } = new(); // --map <substring> (repeatable)
+    public string? ExportOut { get; set; }     // output directory for the .glb + materials
+    public string? Aes { get; set; }           // optional AES main key (0x...)
+    public bool WithMaterials { get; set; }    // opt in to material + texture sidecar export (default: geometry + material names only)
 
     public static CliOptions Parse(string[] args)
     {
@@ -53,31 +78,14 @@ internal sealed class CliOptions
                 case "--list-hooks":
                     opts.ListHooks = true;
                     break;
-                case "--shader-only":
-                    opts.ShaderOnly = true;
-                    break;
                 case "--skip-global":
                     opts.SkipGlobal = true;
-                    break;
-                case "--show-window":
-                    opts.ShowWindow = true;
-                    break;
-                case "--keep-alive":
-                case "--no-quit":
-                    opts.KeepAlive = true;
                     break;
                 case "--split-variants":
                     opts.SplitVariants = true;
                     break;
                 case "--no-split-variants":
                     opts.SplitVariants = false;
-                    break;
-                case "--ready-timeout-sec":
-                    if (i + 1 < args.Length && int.TryParse(args[i + 1], out int v))
-                    {
-                        opts.ReadyTimeoutSec = Math.Max(10, v);
-                        i++;
-                    }
                     break;
                 case "--hook":
                     if (i + 1 < args.Length)
@@ -100,6 +108,42 @@ internal sealed class CliOptions
                         i++;
                     }
                     break;
+                case "--headless":
+                    opts.Headless = true;
+                    break;
+                case "--archive-filter":
+                    if (i + 1 < args.Length) { opts.ArchiveFilter = args[i + 1]; i++; }
+                    break;
+                case "--export-only":
+                    opts.ExportOnly = true;
+                    break;
+                case "--export-map-direct":
+                    opts.ExportMapDirect = true;
+                    break;
+                case "--list-maps":
+                    opts.ListMaps = true;
+                    break;
+                case "--game-dir":
+                    if (i + 1 < args.Length) { opts.GameDir = args[i + 1]; i++; }
+                    break;
+                case "--mappings":
+                    if (i + 1 < args.Length) { opts.MappingsPath = args[i + 1]; i++; }
+                    break;
+                case "--ue-version":
+                    if (i + 1 < args.Length) { opts.UeVersion = args[i + 1]; i++; }
+                    break;
+                case "--map":
+                    if (i + 1 < args.Length) { opts.MapFilters.Add(args[i + 1]); i++; }
+                    break;
+                case "--export-out":
+                    if (i + 1 < args.Length) { opts.ExportOut = args[i + 1]; i++; }
+                    break;
+                case "--aes":
+                    if (i + 1 < args.Length) { opts.Aes = args[i + 1]; i++; }
+                    break;
+                case "--with-materials":
+                    opts.WithMaterials = true;
+                    break;
                 default:
                     // Pass-through: forwarded to the hook-side ParseCliArgs so
                     // any future flags it grows are auto-consumed without a
@@ -114,37 +158,45 @@ internal sealed class CliOptions
     {
         "Ruri.FModelHook.CLI - headless driver for the FModel ShaderDecompiler hook.",
         "",
-        "Usage:",
-        "  Ruri.FModelHook.CLI.exe [--shader-only] [--skip-global] [--show-window]",
-        "                          [--keep-alive] [--ready-timeout-sec <int>]",
-        "                          [--split-variants | --no-split-variants]",
+        "Usage (headless shader export — the default and only shader mode):",
+        "  Ruri.FModelHook.CLI.exe --game-config <AppSettings.json>",
+        "                          [--skip-global] [--archive-filter <tok,...>]",
+        "                          [--split-variants | --no-split-variants] [--export-only]",
         "                          [--hook <id> ...] [--list-hooks]",
         "",
-        "Options:",
-        "  --shader-only         Auto-export shader bytecode libraries only (skip materials).",
+        "Shader export (export level is set entirely by these flags):",
+        "  --game-config PATH    FModel AppSettings(_Debug).json snapshot — the headless",
+        "                        mount reads GameDirectory, EGame version, ALL AES keys",
+        "                        and mappings straight from it. Falls back to the live",
+        "                        %AppData%/FModel/AppSettings(_Debug).json if omitted.",
+        "  --archive-filter TOK  Only export .ushaderbytecode archives whose name contains",
+        "                        TOK (comma/space/semicolon list; substring match).",
         "  --skip-global         Skip the engine-internal Global shader archive.",
-        "  --show-window         Show FModel's main window (default: hidden).",
-        "  --keep-alive          Don't quit once auto-export finishes (default: quit).",
-        "  --ready-timeout-sec N Wait up to N seconds for the provider to mount (default 600).",
-        "  --split-variants      Force splitting variants into separate .hlsl files.",
-        "  --no-split-variants   Force keeping variants in the .shader file.",
-        "  --hook <id>           Enable a specific hook id (repeatable). Default: enable",
-        "                        every discovered hook (matches GUI default).",
-        "  --decompile-only PATH Skip FModel boot; just run DecompilePipeline against",
-        "                        an existing <basename>.ushaderlib (sidecars must sit",
-        "                        next to it). Useful for re-iterating decompile-side",
-        "                        fixes without re-exporting the archive.",
-        "  --game-config PATH    Install a UserSettings JSON snapshot over the live",
-        "                        %AppData%/FModel/AppSettings(_Debug).json BEFORE booting",
-        "                        FModel. Required when re-targeting a different game",
-        "                        between CLI runs: FModel pops a blocking modal if",
-        "                        PerDirectory[GameDirectory] is missing, and that modal",
-        "                        is invisible in headless mode (hangs forever).",
+        "  --split-variants      Emit EVERY per-stage variant as a sibling .hlsl file.",
+        "  --no-split-variants   Keep only the primary variant inline in the .shader (default).",
+        "  --export-only         Build cache + sidecars + .ushaderlib but SKIP decompile.",
+        "  --decompile-only PATH Skip the export side; just run DecompilePipeline against an",
+        "                        existing <basename>.ushaderlib (sidecars must sit next to it).",
+        "  --hook <id>           Enable a specific hook id (repeatable). Default: all discovered.",
         "  --list-hooks          Print discovered hook ids and exit.",
+        "",
+        "GLB scene export (settings-free, skips FModel boot):",
+        "  --export-map-direct   Export .umap maps as .glb scenes (World Partition aware).",
+        "  --game-dir PATH       Folder containing the game's Paks (or the game root).",
+        "  --mappings PATH       Local .usmap mappings file.",
+        "  --ue-version NAME     CUE4Parse EGame enum name, e.g. GAME_UE5_1 (required).",
+        "  --map SUBSTR          Only export maps whose package path contains SUBSTR",
+        "                        (repeatable). Omit to require --list-maps instead.",
+        "  --export-out DIR      Output directory for the .glb + materials/textures.",
+        "  --aes 0x...           Optional AES main key if the paks are encrypted.",
+        "  --with-materials      Also export material JSON + decoded texture PNGs (default:",
+        "                        geometry + material names only — bulk texture decode is",
+        "                        intermittently crash-prone on large worlds).",
+        "  --list-maps           With --export-map-direct: print every .umap and exit.",
         "  -h, --help            Print this help and exit.",
         "",
-        "Game directory, AES keys, mappings, and Oodle path are read from the same",
-        "FModel UserSettings the GUI uses (RawDataDirectory, GameDirectory, etc.).",
-        "Run the GUI once to configure them before headless usage.",
+        "All shader-export inputs (game dir, AES main+dynamic keys, mappings, EGame",
+        "version, Raw/OutputDirectory) are read from the --game-config AppSettings",
+        "snapshot — no GUI run or %AppData% setup required.",
     });
 }

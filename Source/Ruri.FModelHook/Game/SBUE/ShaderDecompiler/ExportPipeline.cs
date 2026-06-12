@@ -18,7 +18,12 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // for any archive after the first). Caching gates on ExportPipelineState
 // prevent the expensive cross-library passes from rerunning.
 //
-// Export pipeline (FModel-hook side; needs vm.Provider):
+// Export pipeline (driver-agnostic; needs state.Provider — set by either the
+// FModel ExportData hook OR the headless CLI mount):
+//   Pass 005  Warm the material + Niagara caches from a prior run's
+//             UnifiedShaderMetadata.json (black-hole cache; gated once per
+//             session, format+game-version guarded) so already-pulled symbols
+//             are never re-pulled — the fix for "每次导出都很慢".
 //   Pass 010  Save IoStore archive as flat FSerializedShaderArchive  (runs from hook BEFORE Run)
 //             also stashes the archive's shader-map hashes on state for Pass 030 scoping
 //   Pass 020  Extract IoStore shader-map hashes -> Root.PackageShaderMapHashes (cached)
@@ -43,6 +48,7 @@ internal static class ExportPipeline
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
 
+        using (new TimingCookie(state, "Pass 005: Warm material cache from disk"))     Pass005_WarmMaterialCacheFromDisk.DoPass(state);
         using (new TimingCookie(state, "Pass 020: Extract IoStore shader-map hashes")) Pass020_ExtractIoStoreShaderMapHashes.DoPass(state);
         using (new TimingCookie(state, "Pass 030: Scan material packages"))            Pass030_ScanMaterialPackages.DoPass(state);
         using (new TimingCookie(state, "Pass 035: Extract Niagara shader-map bridge")) Pass035_ExtractNiagaraShaderMapBridge.DoPass(state);

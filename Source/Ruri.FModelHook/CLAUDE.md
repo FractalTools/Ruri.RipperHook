@@ -185,7 +185,7 @@ exportCol.Export(container, "C:/out/UnityProject", LocalFileSystem.Instance);
 
 ### FModel GUI Hook(已验证不改 FModel 源码)
 
-参考现有 `Game/SBUE/AutoExport/UE_ShaderDecompiler_AutoExport_Hook.cs` 的 hook 模式。新建 `Game/<Game>/UnityExport/UE_UnityYamlExport_Hook.cs`:
+参考现有 `GlbSceneExport/UE_GlbSceneExport_Hook.cs` 的 hook 模式(同样 detour `MainWindow.OnLoaded` 注入菜单项 + 全局 `ContextMenu.OpenedEvent` 监听)。新建 `Game/<Game>/UnityExport/UE_UnityYamlExport_Hook.cs`:
 
 - **Hook A**(注入菜单项)`[RetargetMethod(typeof(MainWindow), "OnLoaded", isBefore: true, isReturn: false)]` prefix-continue,在内部 `EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.OpenedEvent, OnContextMenuOpened)` 全局监听菜单打开,动态 `menu.Items.Add(new MenuItem { Header = "Export → Unity YAML", Click = OnClick })`。
 - **Hook B**(点击处理)`OnClick` 里:

@@ -70,7 +70,7 @@ internal static class Pass035_ExtractNiagaraShaderMapBridge
         // we don't want it re-running per shader-archive export.
         if (state.NiagaraBridgeExtracted) return;
 
-        AbstractVfsFileProvider? provider = state.Vm?.Provider;
+        AbstractVfsFileProvider? provider = state.Provider;
         if (provider == null) return;
 
         // Pre-filter to the candidate list so we know the upfront work
@@ -203,6 +203,9 @@ internal static class Pass035_ExtractNiagaraShaderMapBridge
         }
 
         state.NiagaraBridgeExtracted = true;
+        // Persisted completion marker so the warm-cache pass can trust this
+        // bridge on the next run and skip the whole-provider re-walk.
+        state.Root.NiagaraBridgeComplete = true;
         state.Log($"    Niagara bridge: candidates={considered}, loaded={loaded}, with-scripts={withScripts}, hashes-added={hashesAdded}, total-bridge-keys={bridge.Count}, skipped-on-error={loadFailures}, took {sw.Elapsed.TotalSeconds:F1}s.");
     }
 

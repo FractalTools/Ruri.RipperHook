@@ -29,7 +29,7 @@ internal static class Pass020_ExtractIoStoreShaderMapHashes
     {
         if (state.IoStoreHashesExtracted) return;
 
-        var provider = state.Vm?.Provider;
+        var provider = state.Provider;
         if (provider == null) return;
 
         var readers = provider.MountedVfs.Concat(provider.UnloadedVfs);

@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Newtonsoft.Json;
+using NewtonsoftJsonSerializer = Newtonsoft.Json.JsonSerializer;
+using JsonTextReader = Newtonsoft.Json.JsonTextReader;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
@@ -50,10 +53,27 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             return;
         }
 
+        // The unified file is read by STREAMING (JsonTextReader), never via
+        // File.ReadAllText — a cook that references every material (the master,
+        // 23k materials) produces a ~3GB file whose UTF-16 string blows the
+        // ~1GB string ceiling and aborts the load. Past `MaxFullReadBytes` the
+        // heavy `MaterialInterfaces` block (the per-material symbols + inline
+        // hash bridge) is SKIPPED; the authoritative `PackageShaderMapHashes`
+        // container-header bridge + the Niagara bridge are top-level and small,
+        // so naming still resolves for IoStore cooks. (Per-material rich symbols
+        // for an all-materials cache are surfaced by UnifiedMaterialReader,
+        // which has the same cap — export a narrower archive set for them.)
+        long length = new FileInfo(unifiedPath).Length;
+        bool lean = length > MaxFullReadBytes;
+        if (lean)
+        {
+            state.Log($"    UnifiedShaderMetadata.json: {length / (1024 * 1024)} MB (> {MaxFullReadBytes / (1024 * 1024)} MB) — lean read: package + Niagara hash bridges only, per-material inline bridge skipped.");
+        }
+
         UnifiedRoot? root;
         try
         {
-            root = JsonSerializer.Deserialize<UnifiedRoot>(File.ReadAllText(unifiedPath), JsonOptions);
+            root = ReadUnifiedRootStreaming(unifiedPath, includeMaterialInterfaces: !lean);
         }
         catch (Exception ex)
         {
@@ -128,6 +148,10 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                     {
                         if (!string.IsNullOrWhiteSpace(sm?.CookedShaderMapIdHash)) AddHash(state.HashToMaterialsFromUnified, sm!.CookedShaderMapIdHash!, materialPath);
                         if (!string.IsNullOrWhiteSpace(sm?.ShaderContentHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ShaderContentHash!, materialPath);
+                        // ResourceHash IS the archive's ShaderMapHash for IoStore cooks —
+                        // the authoritative inline bridge that catches shader-maps the
+                        // container header didn't associate to a package.
+                        if (!string.IsNullOrWhiteSpace(sm?.ResourceHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ResourceHash!, materialPath);
                     }
                 }
 
@@ -151,6 +175,56 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         }
 
         state.Log($"    UnifiedShaderMetadata.json: hash-to-materials index size={state.HashToMaterialsFromUnified.Count}.");
+    }
+
+    // Above this the per-material `MaterialInterfaces` block is skipped (see the
+    // DoPass comment). Matches UnifiedMaterialReader's cap so the two readers
+    // make the same full-vs-lean decision.
+    private const long MaxFullReadBytes = 1024L * 1024 * 1024; // 1 GiB
+
+    // Streaming reader: walks the top-level object once, materialising only the
+    // properties the index needs. `PackageShaderMapHashes` + `NiagaraShaderMapHashes`
+    // are always read (small, top-level, the authoritative IoStore bridges);
+    // `MaterialInterfaces` (the multi-GB bulk) is read only when the file is
+    // small enough, else skipped. Never builds a whole-file string, so it is
+    // immune to the ~1GB string / 2GB array limits that File.ReadAllText hits.
+    private static UnifiedRoot ReadUnifiedRootStreaming(string path, bool includeMaterialInterfaces)
+    {
+        var root = new UnifiedRoot();
+        NewtonsoftJsonSerializer serializer = NewtonsoftJsonSerializer.CreateDefault();
+
+        using FileStream stream = File.OpenRead(path);
+        using var textReader = new StreamReader(stream);
+        using var reader = new JsonTextReader(textReader);
+
+        if (!reader.Read() || reader.TokenType != Newtonsoft.Json.JsonToken.StartObject) return root;
+        while (reader.Read() && reader.TokenType == Newtonsoft.Json.JsonToken.PropertyName)
+        {
+            string prop = (string)reader.Value!;
+            if (!reader.Read()) break;
+            switch (prop)
+            {
+                case nameof(UnifiedRoot.GameVersionEnum):
+                    root.GameVersionEnum = reader.Value?.ToString();
+                    break;
+                case nameof(UnifiedRoot.PackageShaderMapHashes):
+                    root.PackageShaderMapHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader);
+                    break;
+                case nameof(UnifiedRoot.NiagaraShaderMapHashes):
+                    root.NiagaraShaderMapHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader);
+                    break;
+                case nameof(UnifiedRoot.MaterialInterfaces):
+                    if (includeMaterialInterfaces)
+                        root.MaterialInterfaces = serializer.Deserialize<Dictionary<string, UnifiedMaterialEntry>>(reader);
+                    else
+                        reader.Skip();
+                    break;
+                default:
+                    reader.Skip(); // ShaderCodeArchives, CacheFormatVersion, NiagaraBridgeComplete — unused here
+                    break;
+            }
+        }
+        return root;
     }
 
     private static void AddHash(Dictionary<string, HashSet<string>> result, string hash, string materialPath)
@@ -211,6 +285,9 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         public string? ShaderPlatform { get; set; }
         public string? CookedShaderMapIdHash { get; set; }
         public string? ShaderContentHash { get; set; }
+        // FShaderMapBase.ResourceHash — the library key that matches the
+        // archive's ShaderMapHashes for IoStore cooks (see Pass 030).
+        public string? ResourceHash { get; set; }
     }
 }
 

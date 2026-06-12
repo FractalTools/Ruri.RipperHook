@@ -135,7 +135,6 @@ public static class Program
         // Touching the type forces metadata + assembly load.
         _ = typeof(Ruri.FModelHook.GameType);
         _ = typeof(Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook);
-        _ = typeof(Ruri.FModelHook.Game.SBUE.AutoExport.UE_ShaderDecompiler_AutoExport_Hook);
 
         // Belt-and-braces: explicit Assembly.Load by name. No-op if
         // already loaded; surfaces a logged failure if the DLL is

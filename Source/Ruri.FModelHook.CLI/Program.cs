@@ -1,10 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
-using System.Windows;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.FileProvider;
+using CUE4Parse.MappingsProvider;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.Engine;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse_Conversion;
+using CUE4Parse_Conversion.Meshes;
+using Ruri.FModelHook.Game.SBUE.Headless;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
+using Ruri.FModelHook.GlbSceneExport;
 using Ruri.Hook;
 using Ruri.Hook.Config;
 using Ruri.Hook.Core;
@@ -12,21 +22,19 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.CLI;
 
-// Headless console entry. The CLI essentially forces the same
-// hook-driven auto-export flow that Ruri.FModelHook.GUI exposes, but:
-//   * No Hooks menu, no settings dialog (stripped from the bootstrap).
-//   * FModel's MainWindow is hidden by default (configurable via
-//     --show-window).
-//   * Auto-export is *always on* — the user invoked the CLI, that IS the
-//     intent, no need for a separate `--auto-export-cook` flag.
+// Headless console entry. The CLI mounts a CUE4Parse provider directly
+// from a --game-config AppSettings snapshot and runs the shader
+// export+decompile pipeline with NO FModel WPF host — no Hooks menu, no
+// settings dialog, no MainWindow, no dispatcher. (The old auto-export
+// path that booted FModel and drove it through a MainWindow.OnLoaded
+// detour has been removed; headless is the only mode.)
 //
-// All native dependencies (CUE4Parse-Natives, Oodle, dxbc2dxil &
-// friends) live in the shared FModel bin output folder which this CLI
-// also publishes into; running from there is the supported invocation.
+// All native dependencies (CUE4Parse-Natives, Oodle, the NuGet
+// dxil-spirv / spirv-cross runtimes) live in the shared FModel bin
+// output folder which this CLI also publishes into; running from there
+// is the supported invocation.
 public static class Program
 {
-    private const string ConfigFileName = "RuriFModelHook.json";
-
     [STAThread]
     public static int Main(string[] args)
     {
@@ -57,42 +65,27 @@ public static class Program
             return RunDecompileOnly(opts.DecompileOnly!);
         }
 
-        // FModel-side UserSettings preflight. Either install a user-provided
-        // snapshot (--game-config) or validate that the live AppSettings has
-        // a PerDirectory entry matching the current GameDirectory. Without
-        // this, FModel opens an invisible modal DirectorySelector dialog
-        // that blocks the WPF dispatcher forever — the original "exits
-        // after 10 startup lines" symptom that prompted this CLI fix.
-        if (!EnsureGameConfig(opts))
+        // Settings-free GLB scene export. Skips FModel boot entirely and drives
+        // CUE4Parse directly, so it needs no %AppData% FModel config — handy for
+        // scripted batch export and as the headless self-test for the GLB scene
+        // exporter (World Partition aware).
+        if (opts.ExportMapDirect || opts.ListMaps)
         {
-            return 2;
+            return RunExportMapDirect(opts);
         }
 
-        // Persisted config drives every other module setting (e.g. shader
-        // decompiler split-variants); CLI flags can only ADD to the enabled
-        // hook set, not subtract from it (matches the GUI flow).
-        string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ConfigFileName);
-        HookConfig config = HookConfig.Load(configPath);
-        WireModuleSettings(config, configPath, opts);
-
-        ApplyEnabledHooks(config, opts);
-
-        // The auto-export hook reads its toggles from Environment.GetCommandLineArgs(),
-        // not from this CliOptions bag — that hook is shared with the GUI which
-        // exposes the same flags via the same arg set. Synthesise the args the
-        // hook expects and append them to the process command line via
-        // Environment so the hook sees them when its Initialize() fires.
-        InjectHookArgs(opts);
-
-        try
-        {
-            return LaunchFModel(opts);
-        }
-        catch (Exception ex)
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] FModel crashed: {ex}");
-            return 1;
-        }
+        // Headless shader export+decompile. Builds a CUE4Parse provider straight
+        // from the --game-config AppSettings (all AES dynamic keys + mappings +
+        // version) and runs the full export+decompile pipeline with NO FModel
+        // WPF host. This is the "直接 CLI + 配置好的设置直接反编译" path the user
+        // asked for — no GUI, no dispatcher, no hidden-window mapping race.
+        // Headless shader export + decompile is the one and only shader path:
+        // build a CUE4Parse provider straight from the --game-config AppSettings
+        // (every AES dynamic key + mappings + EGame version) and run the full
+        // export+decompile pipeline with NO FModel WPF host. The old no-flag
+        // fallback that booted FModel and drove the auto-export hook is gone;
+        // `--headless` is implied now, so a plain `--game-config <json>` works.
+        return RunHeadlessShaderExport(opts);
     }
 
     // Decompile-only debug runner. Resolves UnifiedShaderMetadata.json by
@@ -177,6 +170,207 @@ public static class Program
         }
     }
 
+    // Settings-free direct GLB scene export: build a CUE4Parse provider from
+    // explicit flags, then export each matching .umap as a .glb scene with full
+    // World Partition aggregation. Mirrors --decompile-only in that it never
+    // boots FModel's WPF host.
+    // Headless shader export+decompile. Reads ALL AES dynamic keys + mappings
+    // + EGame version from the --game-config AppSettings (InfinityNikki carries
+    // 100+ dynamic keys, so the single-key --aes flag of --export-map-direct is
+    // not enough), mounts a CUE4Parse provider directly, and runs the full
+    // per-archive pipeline. No FModel WPF host, no dispatcher.
+    private static int RunHeadlessShaderExport(CliOptions opts)
+    {
+        string? configPath = opts.GameConfig;
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+#if DEBUG
+            configPath = Path.Combine(appData, "FModel", "AppSettings_Debug.json");
+#else
+            configPath = Path.Combine(appData, "FModel", "AppSettings.json");
+#endif
+        }
+        if (!File.Exists(configPath))
+        {
+            HookLogger.LogFailure($"[Headless] --game-config not found: {configPath}. Pass --game-config <AppSettings.json>.");
+            return 2;
+        }
+
+        HeadlessGameConfig cfg;
+        try
+        {
+            cfg = HeadlessGameConfig.Load(configPath);
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[Headless] Failed to parse config {configPath}: {ex.Message}");
+            return 2;
+        }
+
+        // Archive filter: --archive-filter flag wins, else RURI_ARCHIVE_NAME_FILTER env var.
+        string? filterRaw = !string.IsNullOrWhiteSpace(opts.ArchiveFilter)
+            ? opts.ArchiveFilter
+            : Environment.GetEnvironmentVariable("RURI_ARCHIVE_NAME_FILTER");
+        List<string>? filter = null;
+        if (!string.IsNullOrWhiteSpace(filterRaw))
+        {
+            filter = filterRaw!.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            HookLogger.Log($"[Headless] Archive filter: [{string.Join(", ", filter)}]");
+        }
+
+        // Honour --split-variants / --no-split-variants in headless mode too; fall back to the
+        // persisted setting when neither was passed. (The flag was previously wired only into the
+        // WPF/auto-export path, so the headless runner silently ignored it and always emitted
+        // single-variant — every stage's non-primary permutations were decompiled but elided.)
+        bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+        HookLogger.Log($"[Headless] Config: game='{cfg.GameDirectory}' version={cfg.UeVersion} keys={1 + cfg.DynamicKeys.Count} rawData='{cfg.RawDataDirectory}' splitVariants={splitVariants}");
+
+        try
+        {
+            HeadlessShaderExportRunner.RunResult result = HeadlessShaderExportRunner.Run(new HeadlessShaderExportRunner.Options
+            {
+                Config = cfg,
+                ArchiveNameFilter = filter,
+                SkipGlobal = opts.SkipGlobal,
+                SplitVariants = splitVariants,
+                SkipDecompile = opts.ExportOnly,
+                Log = HookLogger.Log,
+                LogError = HookLogger.LogFailure,
+            });
+            HookLogger.LogSuccess($"[Headless] Done. project={result.ProjectName} archives={result.ArchivesProcessed} materials={result.MaterialInterfaces} mappings={result.MappingsLoaded}");
+            return result.MappingsLoaded ? 0 : 3;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[Headless] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
+            return 1;
+        }
+    }
+
+    private static int RunExportMapDirect(CliOptions opts)
+    {
+        if (string.IsNullOrWhiteSpace(opts.GameDir) || !Directory.Exists(opts.GameDir))
+        {
+            HookLogger.LogFailure($"[GlbScene] --game-dir missing or not found: {opts.GameDir}");
+            return 2;
+        }
+        if (string.IsNullOrWhiteSpace(opts.UeVersion) || !Enum.TryParse<EGame>(opts.UeVersion, ignoreCase: true, out var game))
+        {
+            HookLogger.LogFailure($"[GlbScene] --ue-version invalid or missing (e.g. GAME_UE5_1). Got: '{opts.UeVersion}'");
+            return 2;
+        }
+        if (!opts.ListMaps && opts.MapFilters.Count == 0)
+        {
+            HookLogger.LogFailure("[GlbScene] No --map filter given. Use --list-maps to discover map paths, or pass --map <substring>.");
+            return 2;
+        }
+
+        try
+        {
+            var versions = new VersionContainer(game);
+            var provider = new DefaultFileProvider(opts.GameDir!, SearchOption.AllDirectories, isCaseInsensitive: true, versions: versions);
+            provider.Initialize();
+
+            string aesHex = string.IsNullOrWhiteSpace(opts.Aes)
+                ? "0x0000000000000000000000000000000000000000000000000000000000000000"
+                : opts.Aes!;
+            try
+            {
+                provider.SubmitKey(new FGuid(), new FAesKey(aesHex));
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[GlbScene] SubmitKey failed (continuing — paks may be unencrypted): {ex.Message}");
+            }
+            provider.PostMount();
+
+            if (!string.IsNullOrWhiteSpace(opts.MappingsPath))
+            {
+                if (!File.Exists(opts.MappingsPath))
+                {
+                    HookLogger.LogFailure($"[GlbScene] --mappings not found: {opts.MappingsPath}");
+                    return 2;
+                }
+                provider.MappingsContainer = new FileUsmapTypeMappingsProvider(opts.MappingsPath!);
+            }
+
+            try
+            {
+                provider.LoadVirtualPaths();
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[GlbScene] LoadVirtualPaths failed (continuing): {ex.Message}");
+            }
+
+            HookLogger.Log($"[GlbScene] Provider mounted. game={game} files={provider.Files.Count} mappings={(provider.MappingsContainer != null)}");
+
+            var umaps = provider.Files.Keys
+                .Where(key => key.EndsWith(".umap", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (opts.ListMaps)
+            {
+                HookLogger.Log($"[GlbScene] {umaps.Count} .umap package(s):");
+                foreach (var key in umaps)
+                {
+                    Console.WriteLine("  " + key);
+                }
+                return 0;
+            }
+
+            var selected = umaps
+                .Where(key => opts.MapFilters.Any(filter => key.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (selected.Count == 0)
+            {
+                HookLogger.LogFailure($"[GlbScene] No .umap matched --map filter(s): {string.Join(", ", opts.MapFilters)}");
+                return 2;
+            }
+
+            // Geometry + material names by default; texture sidecar decode is
+            // opt-in via --with-materials (it can intermittently hard-crash on
+            // large worlds — a race in CUE4Parse's parallel native decode).
+            var options = new ExporterOptions { MeshFormat = EMeshFormat.Gltf2, ExportMaterials = opts.WithMaterials };
+            string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
+                ? Path.Combine(AppContext.BaseDirectory, "GlbSceneExport")
+                : opts.ExportOut!;
+            Directory.CreateDirectory(outputDirectory);
+
+            int exported = 0;
+            foreach (var key in selected)
+            {
+                try
+                {
+                    var package = provider.LoadPackage(provider.Files[key]);
+                    UWorld? world = package.GetExports().OfType<UWorld>().FirstOrDefault();
+                    if (world == null)
+                    {
+                        HookLogger.LogFailure($"[GlbScene] '{key}' has no UWorld export; skipped.");
+                        continue;
+                    }
+
+                    var exporter = new WorldGlbExporter(provider, options, HookLogger.Log, HookLogger.LogFailure);
+                    if (exporter.Export(world, key, outputDirectory, CancellationToken.None)) exported++;
+                }
+                catch (Exception ex)
+                {
+                    HookLogger.LogFailure($"[GlbScene] '{key}' failed: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            HookLogger.Log($"[GlbScene] Direct export finished. {exported}/{selected.Count} map(s) exported -> {outputDirectory}");
+            return exported > 0 ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[GlbScene] Direct export crashed: {ex}");
+            return 1;
+        }
+    }
+
     private static int RunListHooks()
     {
         var hooks = RuriHook.GetAvailableHooks();
@@ -192,296 +386,6 @@ public static class Program
         return 0;
     }
 
-    private static void ApplyEnabledHooks(HookConfig config, CliOptions opts)
-    {
-        if (opts.Hooks.Count > 0)
-        {
-            HookConfig explicitConfig = new();
-            foreach (string id in opts.Hooks)
-            {
-                explicitConfig.EnabledHooks.Add(id);
-            }
-            EnsureAutoExportHookEnabled(explicitConfig);
-            HookLogger.Log($"[Ruri.FModelHook.CLI] CLI hooks: {string.Join(", ", explicitConfig.EnabledHooks)}");
-            RuriHook.ApplyHooks(explicitConfig);
-            return;
-        }
-
-        if (config.EnabledHooks.Count == 0)
-        {
-            // Match the GUI's first-run behaviour: auto-enable everything so
-            // a fresh user gets a working CLI without needing to touch
-            // RuriFModelHook.json by hand.
-            foreach (var (_, attr) in RuriHook.GetAvailableHooks())
-            {
-                config.EnabledHooks.Add($"{attr.GameName}_{attr.Version}");
-            }
-            HookLogger.Log($"[Ruri.FModelHook.CLI] No persisted config — auto-enabled {config.EnabledHooks.Count} hooks.");
-        }
-        else
-        {
-            // CRITICAL: always force the AutoExport hook into the enabled set
-            // for CLI mode. The persisted config from a GUI session typically
-            // only enables the interactive `UE_ShaderDecompiler_` hook (because
-            // GUI users export by clicking, not by auto-driving). Without
-            // `UE_ShaderDecompiler_AutoExport_` in the set, the hook's
-            // `Initialize()` never runs and the `MainWindow.OnLoaded` detour
-            // is never installed — so the CLI boots, shows the FModel main
-            // window mounted, and then... sits there forever doing nothing.
-            // This is the entire point of the CLI; force-enable unconditionally
-            // and merge the result back into the user's persisted set so the
-            // next run sees it too (avoids the silent-hang surprise on retry).
-            int before = config.EnabledHooks.Count;
-            EnsureAutoExportHookEnabled(config);
-            if (config.EnabledHooks.Count != before)
-            {
-                HookLogger.Log($"[Ruri.FModelHook.CLI] Auto-added missing AutoExport hook to enabled set; CLI mode requires it.");
-            }
-            HookLogger.Log($"[Ruri.FModelHook.CLI] Enabled hooks: {string.Join(", ", config.EnabledHooks)}");
-        }
-        RuriHook.ApplyHooks(config);
-    }
-
-    // The AutoExport hook is the load-bearing piece for CLI mode — its
-    // `MainWindow.OnLoaded` detour is what flips the host from
-    // "interactive WPF app waiting for user clicks" into
-    // "headless export driver". This helper picks the right hook id by
-    // walking the discovered hook list (instead of hardcoding the
-    // `GameName_Version` string) so a future rename in the hook
-    // assembly doesn't silently break CLI mode again.
-    private static void EnsureAutoExportHookEnabled(HookConfig target)
-    {
-        foreach (var (type, attr) in RuriHook.GetAvailableHooks())
-        {
-            if (!type.Name.Contains("AutoExport", StringComparison.OrdinalIgnoreCase)) continue;
-            string id = $"{attr.GameName}_{attr.Version}";
-            target.EnabledHooks.Add(id);
-        }
-    }
-
-    private static void WireModuleSettings(HookConfig config, string configPath, CliOptions opts)
-    {
-        ShaderDecompilerSettings shader = config.GetModuleSettings<ShaderDecompilerSettings>(ShaderDecompilerSettings.ModuleKey) ?? new ShaderDecompilerSettings();
-
-        // CRITICAL for headless mode: the in-process ExportData hook puts up
-        // a YES/NO `AdonisUI.MessageBox` when mappings aren't detected as
-        // loaded into `Provider.MappingsContainer`. In CLI mode the WPF
-        // dispatcher IS up (we use `app.Run()` to keep it alive for the
-        // hook's `MainWindow.OnLoaded` detour), but the main window is
-        // hidden — so the dialog renders into a hidden window and returns
-        // a default-cancelled `None`/`No` result the moment WPF's modal
-        // pump sees no foreground click. Result: every shader export
-        // bails with "Skipped: user cancelled (no mappings loaded)".
-        //
-        // Force `WarnIfNoMappings = false` for CLI mode so the hook takes
-        // its already-implemented "user opted out of the prompt" path
-        // (silent proceed). The user invoked the CLI on purpose; if they
-        // wanted the dialog they'd be running the GUI exe.
-        //
-        // Edge case: when --show-window IS passed AND --keep-alive is also
-        // passed (i.e. the user is debugging the hook interactively from
-        // the CLI), respect the persisted setting so dialogs DO appear —
-        // the only no-window case where the dialog is a footgun is the
-        // default headless mode.
-        bool forceSuppress = !opts.ShowWindow;
-
-        if (opts.SplitVariants is bool sv && shader.SplitVariantsToHlslFiles != sv
-            || (forceSuppress && shader.WarnIfNoMappings))
-        {
-            shader = new ShaderDecompilerSettings
-            {
-                SplitVariantsToHlslFiles = opts.SplitVariants ?? shader.SplitVariantsToHlslFiles,
-                WarnIfNoMappings = forceSuppress ? false : shader.WarnIfNoMappings,
-                TryMatchBaseEngineVersion = shader.TryMatchBaseEngineVersion,
-            };
-        }
-        ShaderDecompilerSettingsAccess.Replace(shader);
-        ShaderDecompilerSettingsAccess.RegisterSaver(updated =>
-        {
-            HookConfig live = HookConfig.Load(configPath);
-            live.SetModuleSettings(ShaderDecompilerSettings.ModuleKey, updated);
-            live.Save(configPath);
-        });
-    }
-
-    // The auto-export hook (Ruri.FModelHook.Game.SBUE.AutoExport.UE_ShaderDecompiler_AutoExport_Hook)
-    // reads its flags from the process command line via Environment.GetCommandLineArgs().
-    // Synthesise the args it expects so a CLI invocation behaves like a
-    // GUI invocation that opted into auto-export.
-    //
-    // We append rather than replace so the user's actual args are still
-    // visible (--show-window etc. are CLI-only and the hook ignores them).
-    private static void InjectHookArgs(CliOptions opts)
-    {
-        var injected = new List<string> { "--auto-export-cook" };
-        if (opts.ShaderOnly) injected.Add("--shader-only");
-        if (opts.SkipGlobal) injected.Add("--skip-global");
-        if (opts.KeepAlive) injected.Add("--no-quit");
-        injected.Add("--ready-timeout-sec");
-        injected.Add(opts.ReadyTimeoutSec.ToString());
-        if (opts.SplitVariants is true) injected.Add("--split-variants");
-        if (opts.SplitVariants is false) injected.Add("--no-split-variants");
-
-        // The hook re-reads Environment.GetCommandLineArgs() inside its
-        // Initialize() method. .NET caches the result, but the cache is
-        // populated on first call, so as long as we set this BEFORE
-        // RuriHook.ApplyHooks runs the hook's Initialize, the synthesised
-        // args land. Initialize fires inside ApplyHooks → this mutation
-        // would be too late from this method. Instead, override what the
-        // CLR returns next time by re-launching with a synthesised args
-        // env var that the hook can opt into.
-        //
-        // Practical workaround: stash the synthesised flags in an env var
-        // and have the hook check it. Until that's wired (separate hook
-        // change), the CLI directly forces the auto-export by reaching
-        // into the hook's static state via the same public API the
-        // existing --split-variants flag uses.
-        Environment.SetEnvironmentVariable("RURI_FMODELHOOK_AUTOEXPORT_ARGS", string.Join(" ", injected));
-
-        // Force the hook into auto-export mode regardless of the env-var
-        // mechanism above — this is the belt-and-braces guarantee that a
-        // CLI invocation always runs the export.
-        ForceAutoExportHook(opts);
-    }
-
-    // Reaches into the AutoExport hook via reflection to set the same
-    // private fields its CLI parser would set, BEFORE the hook's
-    // Initialize() runs. Keeping it reflection-based avoids broadening
-    // the public surface of the hook for a CLI-internal needs.
-    private static void ForceAutoExportHook(CliOptions opts)
-    {
-        try
-        {
-            Type? hookType = Type.GetType("Ruri.FModelHook.Game.SBUE.AutoExport.UE_ShaderDecompiler_AutoExport_Hook, Ruri.FModelHook");
-            if (hookType == null) return;
-
-            void Set(string field, object value)
-            {
-                FieldInfo? f = hookType.GetField(field, BindingFlags.Static | BindingFlags.NonPublic);
-                f?.SetValue(null, value);
-            }
-
-            Set("_autoExportRequested", true);
-            if (opts.ShaderOnly) Set("_shaderOnly", true);
-            if (opts.SkipGlobal) Set("_skipGlobal", true);
-            // Default: quit when done (keep-alive overrides).
-            Set("_quitWhenDone", !opts.KeepAlive);
-            Set("_readyTimeoutSec", opts.ReadyTimeoutSec);
-        }
-        catch (Exception ex)
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Failed to force auto-export hook state: {ex.Message}");
-        }
-    }
-
-    // Returns true if FModel's live UserSettings is OK to launch with;
-    // returns false (with diagnostics logged) if the CLI must abort.
-    //
-    // The check we care about is the same one
-    // `FModel.ViewModels.ApplicationViewModel.AvoidEmptyGameDirectory`
-    // performs at startup:
-    //
-    //     UserSettings.PerDirectory.TryGetValue(UserSettings.GameDirectory, out _)
-    //
-    // If the live AppSettings has GameDirectory pointing somewhere but
-    // PerDirectory is missing the matching entry, FModel pops the
-    // modal DirectorySelector and hangs the headless dispatcher.
-    //
-    // When --game-config is supplied, we copy that snapshot into place
-    // (overwriting %AppData%/FModel/AppSettings(_Debug).json) before
-    // running the check; this is how the user re-targets between
-    // OniValleyDemo and InfinityNikkiGlobal.
-    private static bool EnsureGameConfig(CliOptions opts)
-    {
-        // Build the exact same path FModel.Settings.UserSettings.FilePath
-        // resolves to. We replicate it here instead of calling into FModel
-        // to keep this preflight free of WPF-host initialization.
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string fmodelDir = Path.Combine(appData, "FModel");
-#if DEBUG
-        string liveSettingsPath = Path.Combine(fmodelDir, "AppSettings_Debug.json");
-#else
-        string liveSettingsPath = Path.Combine(fmodelDir, "AppSettings.json");
-#endif
-
-        if (!string.IsNullOrWhiteSpace(opts.GameConfig))
-        {
-            if (!File.Exists(opts.GameConfig))
-            {
-                HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --game-config not found: {opts.GameConfig}");
-                return false;
-            }
-            try
-            {
-                Directory.CreateDirectory(fmodelDir);
-                // Back up the existing settings exactly once per CLI run so
-                // a user-fixed config isn't silently clobbered by an old
-                // snapshot. Keep .lastrun so the user can diff if a run
-                // misbehaves.
-                if (File.Exists(liveSettingsPath))
-                {
-                    File.Copy(liveSettingsPath, liveSettingsPath + ".lastrun.bak", overwrite: true);
-                }
-                File.Copy(opts.GameConfig, liveSettingsPath, overwrite: true);
-                HookLogger.Log($"[Ruri.FModelHook.CLI] Installed game config: {opts.GameConfig} -> {liveSettingsPath}");
-            }
-            catch (Exception ex)
-            {
-                HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Failed to install --game-config: {ex.Message}");
-                return false;
-            }
-        }
-
-        if (!File.Exists(liveSettingsPath))
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] FModel UserSettings not found at {liveSettingsPath}. Run the GUI once, or pass --game-config <snapshot>.");
-            return false;
-        }
-
-        try
-        {
-            // Minimal JSON inspection — avoid pulling Newtonsoft into the
-            // preflight path so a malformed third-party serializer doesn't
-            // cascade into the validation failure. System.Text.Json is
-            // already in this project's transitive set.
-            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(liveSettingsPath));
-            var root = doc.RootElement;
-            string? gameDir = root.TryGetProperty("GameDirectory", out var gd) ? gd.GetString() : null;
-            if (string.IsNullOrWhiteSpace(gameDir))
-            {
-                HookLogger.LogFailure("[Ruri.FModelHook.CLI] UserSettings has empty GameDirectory — FModel will pop the DirectorySelector. Aborting.");
-                return false;
-            }
-            bool hasPerDir = false;
-            if (root.TryGetProperty("PerDirectory", out var perDir) && perDir.ValueKind == System.Text.Json.JsonValueKind.Object)
-            {
-                foreach (var entry in perDir.EnumerateObject())
-                {
-                    if (string.Equals(entry.Name, gameDir, StringComparison.OrdinalIgnoreCase))
-                    {
-                        hasPerDir = true;
-                        break;
-                    }
-                }
-            }
-            if (!hasPerDir)
-            {
-                HookLogger.LogFailure(
-                    $"[Ruri.FModelHook.CLI] UserSettings.GameDirectory='{gameDir}' has no matching PerDirectory entry. " +
-                    "FModel would open the modal DirectorySelector at boot (invisible in headless mode -> infinite hang). " +
-                    "Run the GUI once with this game to populate the entry, or pass --game-config <snapshot> with the correct PerDirectory key.");
-                return false;
-            }
-            HookLogger.Log($"[Ruri.FModelHook.CLI] UserSettings preflight OK. GameDirectory='{gameDir}' (PerDirectory entry present).");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Failed to parse {liveSettingsPath}: {ex.Message}");
-            return false;
-        }
-    }
-
     private static void EnsureHookAssembliesLoaded()
     {
         // Matches the GUI's belt-and-braces approach. The typeof() pin is
@@ -490,7 +394,6 @@ public static class Program
         // an unreferenced type.
         _ = typeof(Ruri.FModelHook.GameType);
         _ = typeof(Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook);
-        _ = typeof(Ruri.FModelHook.Game.SBUE.AutoExport.UE_ShaderDecompiler_AutoExport_Hook);
         try { Assembly.Load("Ruri.FModelHook"); } catch { /* logged below if 0 hooks */ }
 
         int hookCount = RuriHook.GetAvailableHooks().Count;
@@ -501,95 +404,4 @@ public static class Program
         }
     }
 
-    // Boots FModel's WPF App. The window is hidden by default (a full
-    // headless WPF still needs a Dispatcher loop running for the
-    // hook-installed MainWindow.OnLoaded detour to fire and the
-    // auto-export to begin), and we shut it down after auto-export
-    // unless --keep-alive was passed.
-    private static int LaunchFModel(CliOptions opts)
-    {
-        HookLogger.Log("[Ruri.FModelHook.CLI] Launching FModel (headless)...");
-        var app = new FModel.App();
-        app.InitializeComponent();
-
-        // Surface any WPF-pipeline failure (XAML load, dispatcher
-        // exception, premature shutdown) so the user sees the real
-        // reason instead of a clean exit with no work done. Without
-        // these, an exception during MainWindow construction is
-        // swallowed by FModel's modal "Fatal Error" MessageBox — which
-        // in headless mode is invisible and blocks forever.
-        AppDomain.CurrentDomain.UnhandledException += (_, ev) =>
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] AppDomain unhandled: {ev.ExceptionObject}");
-        };
-        app.DispatcherUnhandledException += (_, ev) =>
-        {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] Dispatcher unhandled: {ev.Exception}");
-            ev.Handled = true; // suppress FModel's modal "Fatal Error" MessageBox in CLI mode
-        };
-
-        // Hard kill-switch for the DirectorySelector dialog. FModel's
-        // ApplicationViewModel ctor opens this modal whenever
-        // PerDirectory[GameDirectory] is missing from UserSettings —
-        // and in headless mode the modal is invisible, blocking
-        // forever. We pre-validate the config in EnsureGameConfig() so
-        // this should never trigger; the window-class hook here is a
-        // belt-and-braces fail-fast in case the preflight misses a
-        // path (e.g. user races a config edit in the middle of launch).
-        System.Windows.EventManager.RegisterClassHandler(
-            typeof(FModel.Views.DirectorySelector),
-            FrameworkElement.LoadedEvent,
-            new RoutedEventHandler((_, _) =>
-            {
-                HookLogger.LogFailure(
-                    "[Ruri.FModelHook.CLI] FATAL: FModel opened DirectorySelector — its UserSettings has no " +
-                    "PerDirectory entry for the active GameDirectory. The CLI cannot interact with the modal. " +
-                    "Either: (a) launch the GUI exe once with the target game so FModel stores the PerDirectory " +
-                    "entry, or (b) pass --game-config <path-to-AppSettings-snapshot.json> to install a known-good " +
-                    "config before launch. Aborting now.");
-                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try { Application.Current.Shutdown(2); } catch { Environment.Exit(2); }
-                }));
-            }));
-
-        // Hide the main window as soon as it materialises. We can't simply
-        // suppress it — FModel's startup wires the provider/AES dialogs
-        // off the MainWindow.OnLoaded path, which IS the trigger for the
-        // auto-export hook. Showing-then-hiding is the cheapest reliable
-        // way to keep the dispatcher alive without a visible window.
-        if (!opts.ShowWindow)
-        {
-            app.Activated += (_, _) => HideAllWindows();
-            app.Startup += (_, _) =>
-            {
-                // The MainWindow may not exist yet at Startup; defer the
-                // first hide to the next dispatcher cycle, when WPF has
-                // had a chance to instantiate it.
-                _ = app.Dispatcher.BeginInvoke(new Action(HideAllWindows), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-            };
-        }
-
-        // app.Run() returns the exit code passed to Application.Shutdown(int).
-        // Propagate it so the DirectorySelector kill-switch and the
-        // auto-export driver's normal completion surface as distinct
-        // exit codes to the shell caller.
-        return app.Run();
-    }
-
-    private static void HideAllWindows()
-    {
-        if (Application.Current == null) return;
-        foreach (Window w in Application.Current.Windows)
-        {
-            try
-            {
-                w.WindowState = WindowState.Minimized;
-                w.ShowInTaskbar = false;
-                w.Visibility = Visibility.Hidden;
-                w.Hide();
-            }
-            catch { /* harmless if a window has already closed itself */ }
-        }
-    }
 }

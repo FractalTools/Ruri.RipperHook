@@ -16,6 +16,16 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
 internal sealed class UnifiedShaderMetadataRoot
 {
+    // Black-hole cache format version. Bumped whenever the SHAPE of the
+    // extracted material/Niagara data changes (a new bridge field, a fixed
+    // extraction, etc.) so a stale cache from an older tool build is ignored
+    // by Pass 005 and re-scanned instead of silently serving incomplete
+    // symbols. The game-version guard alone can't catch this — the game is the
+    // same, only the tool changed. Bump `CurrentCacheFormatVersion` on any
+    // such change.
+    public const int CurrentCacheFormatVersion = 5;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit
+    public int CacheFormatVersion { get; set; }
+
     // FModel's `EGame` enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
     // captured at export time. Used by EngineUbMetadataLoader on the
     // decompile side to auto-select the matching `EngineUbMetadata/<EGame>/`
@@ -48,6 +58,16 @@ internal sealed class UnifiedShaderMetadataRoot
     // like X6Game_10_2537 that contain orphan Niagara compute shaders
     // unreferenced from the IoStore container header.
     public Dictionary<string, List<string>> NiagaraShaderMapHashes { get; set; } = new();
+
+    // Black-hole cache completion marker. Pass 035 is a WHOLE-PROVIDER walk
+    // (all Niagara packages, not archive-scoped) and is all-or-nothing — a
+    // partial walk would leave NiagaraShaderMapHashes incomplete. Pass 035
+    // sets this true ONLY after the full walk finishes, so the warm-cache
+    // pass (Pass 005) knows it can trust the persisted Niagara bridge and
+    // skip the multi-minute re-walk. Materials need no equivalent flag: the
+    // material cache is per-package and seeded entry-by-entry, so it's safe
+    // to reuse incrementally even from a partial prior run.
+    public bool NiagaraBridgeComplete { get; set; }
 }
 
 internal sealed class UnifiedShaderLibraryMetadata
@@ -215,6 +235,16 @@ internal sealed class UnifiedShaderMapMetadata
     public string? ShaderPlatform { get; set; }
     public string? CookedShaderMapIdHash { get; set; }
     public string? ShaderContentHash { get; set; }
+    // FShaderMapBase.ResourceHash — the SHA1-of-output-shader-hashes that the
+    // cooked material writes as its key into the shader library (UE
+    // ShaderMap.cpp: `Ar << ResourceHash` for bShareCode cooks; = the library
+    // FShaderMapResourceCode.ResourceHash). THIS is the value that matches the
+    // `.ushaderbytecode` archive's `ShaderMapHashes` array for modern IoStore
+    // cooks — unlike CookedShaderMapIdHash (derived from BaseMaterialId, a
+    // different ID space). Capturing it bridges shader-maps whose hash the
+    // IoStore container header forgot to associate to a package (e.g. extra
+    // quality/feature-level resources), which otherwise emit as UnknownMaterial.
+    public string? ResourceHash { get; set; }
     public UnifiedPointerTable? ShaderMapPointerTable { get; set; }
     public UnifiedFrozenArchive? MemoryImageResult { get; set; }
     public UnifiedShaderContent? MaterialShaderMapContent { get; set; }

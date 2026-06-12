@@ -105,7 +105,9 @@ internal static class Pass200_EmitShaderLabFiles
         {
             state.Failed++;
             string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
-            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage ?? "unknown"}]: {firstLine}");
+            byte freq = state.Library != null && member.ArchiveShaderIndex >= 0 && member.ArchiveShaderIndex < state.Library.ShaderEntries.Length
+                ? state.Library.ShaderEntries[member.ArchiveShaderIndex].Frequency : (byte)255;
+            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage ?? "unknown"} freq={ShaderFrequency.ToString(freq)}]: {firstLine}");
             return new ContainerOutputEntry
             {
                 Prep = prep,

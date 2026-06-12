@@ -30,7 +30,7 @@ namespace Ruri.FModelHook.GlbSceneExport
     // of actors cooked into the top-level .umap.
     //
     // Detours MainWindow.OnLoaded (prefix-continue) the same way HookMenuBootstrap
-    // and the AutoExport hook do; multiple OnLoaded detours coexist. The menu
+    // does; multiple OnLoaded detours coexist. The menu
     // item is injected via a global ContextMenu.OpenedEvent class handler
     // because FModel's FileContextMenu is x:Shared="False" (a fresh instance per
     // control), so there is no single menu object to hold a reference to.

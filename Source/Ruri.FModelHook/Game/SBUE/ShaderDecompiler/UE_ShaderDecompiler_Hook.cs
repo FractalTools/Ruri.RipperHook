@@ -45,11 +45,11 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         private static volatile int _mappingsWarningChoice;
 
         // Live read from the persisted `ShaderDecompilerSettings` snapshot
-        // (loaded at startup by Program.cs and mutated by the in-app
-        // Hooks settings dialog). The setter is kept for the legacy
-        // `--split-variants` CLI flag in the AutoExport hook — flipping
-        // it through this property bypasses the persistence layer, which
-        // is fine for one-off command-line invocations.
+        // (mutated by the GUI's in-app Hooks settings dialog). The setter is
+        // kept for programmatic flips of the split-variants level; flipping it
+        // through this property bypasses the persistence layer, which is fine
+        // for one-off invocations. The headless CLI drives the same setting
+        // via its `--split-variants` flag (HeadlessShaderExportRunner.Options).
         public static bool SplitVariantsToHlslFiles
         {
             get => Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
@@ -103,77 +103,27 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 }
 
                 string exportBasePath = Path.Combine(UserSettings.Default.RawDataDirectory, UserSettings.Default.KeepDirectoryStructure ? entry.PathWithoutExtension : entry.NameWithoutExtension).Replace('\\', '/');
-                bool exportedLibrary = false;
 
-                // 1. Export Shader Library (.ushaderlib) — Pass 010.
-                // Pass state so Pass010 can stash the archive's shader-map
-                // hash set on it; Pass 030 reads that to scope the scan.
-                //
-                // Streaming write path: SaveShaderLibrary takes the output
-                // path and writes the FSerializedShaderArchive v2 layout
-                // directly to a FileStream, bypassing the old "buffer
-                // everything in MemoryStream then File.WriteAllBytes" path
-                // that broke on the master archive (4GB+ peak RSS, hit
-                // MemoryStream's int.MaxValue and threw "Stream was too
-                // long"). Streaming is bounded by ~200MB of metadata +
-                // per-shader-bytes-as-they-stream-through, so peak RSS for
-                // a 4GB archive is ~200MB instead of ~6-8GB.
-                string path = exportBasePath + ".ushaderlib";
+                // Drive the shared per-archive pipeline: Pass 010 (.ushaderlib)
+                // -> export pipeline (sidecars + UnifiedShaderMetadata.json)
+                // -> in-process decompile. The cumulative cross-library state
+                // on `_exportState` persists across hook fires, so it must be
+                // serialised — `ProcessArchive` is not thread-safe and FModel
+                // can fire ExportData from its batch worker thread.
                 try
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(path));
-                    if (Pass010_SaveShaderArchive.SaveShaderLibrary(entry, path, _exportState))
+                    lock (_exportStateLock)
                     {
-                        HookLogger.LogSuccess($"[+] Exported ShaderLibrary: {path}");
-                        exportedLibrary = true;
+                        _exportState.Provider = self.Provider;
+                        _exportState.ProjectOutputRoot = Path.Combine(
+                            UserSettings.Default.RawDataDirectory,
+                            self.Provider?.ProjectName ?? "UnknownProject");
+                        ShaderArchiveExporter.ProcessArchive(_exportState, entry, exportBasePath, SplitVariantsToHlslFiles);
                     }
                 }
                 catch (Exception ex)
                 {
-                    HookLogger.LogFailure($"Failed to save .ushaderlib: {ex.Message}");
-                    try { if (File.Exists(path)) File.Delete(path); } catch { }
-                }
-
-                // 2. Run the export pipeline (Pass 020 -> Pass 090) for
-                //    this library. Cross-library state on `_exportState`
-                //    persists across hook fires so cached passes only run
-                //    once total.
-                if (exportedLibrary)
-                {
-                    try
-                    {
-                        lock (_exportStateLock)
-                        {
-                            _exportState.Vm = self;
-                            _exportState.Entry = entry;
-                            _exportState.ExportBasePath = exportBasePath;
-                            ExportPipeline.Run(_exportState);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        HookLogger.LogFailure($"[UE_ShaderDecompiler] Export pipeline failed: {ex.Message}");
-                    }
-                }
-
-                // 3. Decompile in-process (mirrors the Unity flow in
-                // ShaderRuriDecompileExporter). The unified metadata is
-                // exported once and reused; if it isn't on disk yet we
-                // fall back to sidecar-only resolution.
-                if (exportedLibrary)
-                {
-                    try
-                    {
-                        DecompileLibraryInProcess(self, exportBasePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Full stack trace + inner exceptions: master
-                        // archive's 6.8GB ushaderlib + 261k shader-map
-                        // entries can hit overflow paths in inner libs
-                        // that the bare `.Message` string doesn't pinpoint.
-                        HookLogger.LogFailure($"[UE_ShaderDecompiler] In-process decompile crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
-                    }
+                    HookLogger.LogFailure($"[UE_ShaderDecompiler] Shader archive export failed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
                 }
             }
         }
@@ -252,32 +202,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
             _mappingsWarningChoice = proceed ? 1 : 2;
             return proceed;
-        }
-
-        private static void DecompileLibraryInProcess(CUE4ParseViewModel vm, string exportBasePath)
-        {
-            string libraryPath = exportBasePath + ".ushaderlib";
-            if (!File.Exists(libraryPath))
-            {
-                return;
-            }
-
-            string projectName = vm.Provider?.ProjectName ?? "UnknownProject";
-            string unifiedMetadataPath = Path.Combine(UserSettings.Default.RawDataDirectory, projectName, "UnifiedShaderMetadata.json");
-            string outputDir = Path.Combine(Path.GetDirectoryName(exportBasePath)!, "Decompiled", Path.GetFileName(exportBasePath));
-
-            DecompileSummary summary = DecompilePipeline.Run(new LibraryDecompileOptions
-            {
-                LibraryPath = libraryPath,
-                OutputDirectory = outputDir,
-                UnifiedMetadataPath = File.Exists(unifiedMetadataPath) ? unifiedMetadataPath : null,
-                RecreateOutputDirectory = true,
-                SplitVariantsToHlslFiles = SplitVariantsToHlslFiles,
-                Log = HookLogger.Log,
-                LogError = HookLogger.LogFailure,
-            });
-
-            HookLogger.LogSuccess($"[UE_ShaderDecompiler] Decompiled {summary.Decompiled}/{summary.TotalShaders} shaders -> {outputDir}");
         }
     }
 }

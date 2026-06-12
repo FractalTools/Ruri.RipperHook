@@ -1,7 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using FModel.ViewModels;
 using CUE4Parse.FileProvider.Objects;
+using CUE4Parse.FileProvider.Vfs;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
@@ -40,10 +41,19 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 //              running between archives always see fresh data)
 internal sealed class ExportPipelineState
 {
-    // Inputs — replaced by the hook for each library hit.
-    public CUE4ParseViewModel Vm { get; set; } = null!;
+    // Inputs — set by the driver (FModel ExportData hook OR the headless CLI
+    // mount) for each library hit. The pipeline depends ONLY on the CUE4Parse
+    // provider abstraction, never on FModel's WPF view-model — that is what
+    // lets the same passes run under a headless `DefaultFileProvider` with no
+    // GUI host.
+    public AbstractVfsFileProvider Provider { get; set; } = null!;
     public GameFile Entry { get; set; } = null!;
     public string ExportBasePath { get; set; } = string.Empty;
+
+    // Directory that receives the cross-library `UnifiedShaderMetadata.json`
+    // (conventionally `<RawDataDirectory>/<ProjectName>`). Provided by the
+    // driver so Pass 080 doesn't have to reach into FModel UserSettings.
+    public string ProjectOutputRoot { get; set; } = string.Empty;
 
     // Cumulative cross-library state. Same instance lives across every
     // ExportData_Hook fire so cross-archive work (IoStore hash index +
@@ -62,12 +72,21 @@ internal sealed class ExportPipelineState
     // exports in this session. Keyed by package PathWithoutExtension. A
     // negative cache entry (null value) means we tried and failed; skip on
     // re-encounter so we don't pay the LoadPackageObject failure twice.
-    public Dictionary<string, UnifiedMaterialMetadata?> LoadedMaterialCache { get; } = new(StringComparer.OrdinalIgnoreCase);
+    // ConcurrentDictionary because Pass 030 loads + extracts candidates in
+    // parallel (full-core, like Pass 035) — the cache is written from worker
+    // threads.
+    public ConcurrentDictionary<string, UnifiedMaterialMetadata?> LoadedMaterialCache { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // Once-only gates.
     public bool IoStoreHashesExtracted { get; set; }
     public bool NiagaraBridgeExtracted { get; set; }
     public bool UnifiedMetadataWritten { get; set; }
+
+    // Black-hole cache: set once Pass 005 has tried to warm the in-memory
+    // material/Niagara caches from a prior run's UnifiedShaderMetadata.json.
+    // Gated so the (potentially 100MB+) deserialize happens at most once per
+    // session even though Pass 005 sits at the top of every archive's run.
+    public bool MaterialCacheWarmed { get; set; }
 
     // Per-library scratch — Pass 050 populates, Pass 060/070 consume.
     public ShaderAssetInfoEquivalent? AssetInfo { get; set; }
