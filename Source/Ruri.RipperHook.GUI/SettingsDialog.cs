@@ -108,7 +108,14 @@ internal sealed class SettingsDialog : Form
         foreach (string id in _stagedHooks) _config.EnabledHooks.Add(id);
         // Persist AR native settings INTO our unified JSON.
         _config.SetModuleSettings(ArSettingsModuleKey, ArSettingsSnapshot.From(cfg));
-        ShaderDecompilerSettingsAccess.Replace(_shaderDraft, persist: true);
+        // Persist the shader-decompiler settings (Split-variants, …) on the SAME
+        // config instance so the single _config.Save() below writes them too.
+        // Previously this used Replace(persist:true): its saver re-loaded the file,
+        // wrote the shader module and saved — then _config.Save() immediately
+        // overwrote the file with _config, which carried NO shader module, silently
+        // dropping the Split-variants checkbox. Set it on _config and save once.
+        _config.SetModuleSettings(ShaderDecompilerSettings.ModuleKey, _shaderDraft);
+        ShaderDecompilerSettingsAccess.Replace(_shaderDraft);
         _config.Save(_configPath);
         SerializedSettings.DeleteDefaultPath();
     }
