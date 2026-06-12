@@ -5,4 +5,5 @@ public enum GameType
     Unknown = 0,
     UE_ShaderDecompiler,
     UE_ShaderDecompiler_AutoExport,
+    UE_GlbSceneExport,
 }
