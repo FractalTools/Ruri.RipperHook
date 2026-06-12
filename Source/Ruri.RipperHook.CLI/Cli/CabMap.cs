@@ -1,6 +1,9 @@
-using AssetRipper.Assets;
-using AssetRipper.GUI.Web;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.Logging;
+using AssetRipper.IO.Files;
+using AssetRipper.IO.Files.SerializedFiles;
+using AssetRipper.IO.Files.SerializedFiles.Parser;
+using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Text;
 
 namespace Ruri.RipperHook.CLI;
@@ -43,46 +46,129 @@ internal static class CabMap
 
         Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
         int scanned = 0;
-        foreach (string file in files)
-        {
-            scanned++;
-            try
-            {
-                GameFileLoader.LoadAndProcess([file]);
-                if (!GameFileLoader.IsLoaded) continue;
 
+        // Scan mode: tell the VFS extractor to skip resource payloads (video/audio/tables/streaming),
+        // decrypting only the AssetBundles that host a CAB. Reset afterwards so normal loading is unaffected.
+        // The parallelism that matters lives *inside* the VFS extractor (one worker per inner bundle file):
+        // EndField packs ~62% of all CABs into a single .chk, so per-chunk parallelism barely helps — the
+        // per-bundle decrypt + decompress + metadata parse is what has to scale across cores.
+        GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
+        try
+        {
+            foreach (string file in files)
+            {
+                scanned++;
                 string relativeFilePath = Path.GetRelativePath(fullRoot, file);
-                foreach (var collection in GameFileLoader.GameBundle.FetchAssetCollections())
+                foreach ((string cab, List<string> deps, List<int> classIds) in ScanSerializedMetadata(file))
                 {
-                    string cabName = string.IsNullOrWhiteSpace(collection.Name)
-                        ? Path.GetFileName(file)
-                        : collection.Name;
-                    List<string> deps = collection.Dependencies
-                        .Where(static d => d is not null && !string.IsNullOrWhiteSpace(d.Name))
-                        .Select(static d => d.Name)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    HashSet<int> classIds = new();
-                    foreach (IUnityObjectBase asset in collection)
-                    {
-                        classIds.Add((int)asset.ClassID);
-                    }
-                    entries[cabName] = new Entry(relativeFilePath, 0, deps, classIds.ToList());
+                    entries[cab] = new Entry(relativeFilePath, 0, deps, classIds);
                 }
             }
-            catch (Exception ex)
-            {
-                Logger.Verbose(LogCategory.Import, $"[CabMap] Skip '{file}': {ex.GetType().Name}: {ex.Message}");
-            }
-            finally
-            {
-                GameFileLoader.Reset();
-            }
+        }
+        finally
+        {
+            GameBundleHook.ScanIncludeFile = null;
         }
 
         Save(fullOut, fullRoot, entries);
         Console.Error.WriteLine($"[CabMap] {scanned} files scanned, {entries.Count} CABs → {fullOut}");
         return 0;
+    }
+
+    /// <summary>
+    /// Read only the SerializedFile METADATA of one on-disk file — CAB name, dependency identifiers and the
+    /// ClassIDs from its type table — WITHOUT materializing a single asset or running any processor.
+    ///
+    /// EndField (and the other VFS games) wrap their SerializedFiles in encrypted, content-addressed chunk
+    /// containers (a <c>.chk</c> indexed by a sibling <c>&lt;dir&gt;.blc</c> manifest); a bare
+    /// <see cref="SchemeReader.LoadFile"/> only ever sees an opaque ResourceFile. The active game hook
+    /// installs <see cref="GameBundleHook.CustomFilePreInitialize"/> — the exact VFS-unpack step that
+    /// <c>GameBundle.InitializeFromPaths</c> runs: it turns a path into a stack of parsed
+    /// <see cref="FileBase"/> (decrypt + decompress + read SerializedFile metadata) but does NOT build a
+    /// single AssetCollection or read any object's data. That per-asset data read plus the processor pass
+    /// is the slow part of <c>LoadAndProcess</c> we deliberately skip here — the whole point of building
+    /// the map fast. We fall back to a direct scheme read when no game hook is active (plain bundles).
+    /// </summary>
+    internal static List<(string Cab, List<string> Deps, List<int> ClassIds)> ScanSerializedMetadata(string file)
+    {
+        // Fast path: a VFS game hook (EndField) exposes a bounded-memory, parallel scan that decrypts and
+        // reads only the CAB-hosting bundles inside the chunk, disposing each as it goes — see
+        // VirtualFileSystem.ScanChunkMetadata. This is the difference between a ~10 min, 21 GB scan and a
+        // fast, flat-memory one on a game that packs >250k bundles into a handful of chunks.
+        if (GameBundleHook.ScanChunk is { } scanChunk)
+        {
+            try
+            {
+                return scanChunk(file);
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[CabMap] Scan '{file}': {ex.GetType().Name}: {ex.Message}");
+                return new();
+            }
+        }
+
+        // Fallback (non-VFS games): drive the hook's file-pre-initialize unpack if present, otherwise a
+        // direct scheme read, then project each resulting SerializedFile's metadata. Bundles are disposed
+        // as they are read so a whole-game scan stays flat.
+        List<(string, List<string>, List<int>)> result = new();
+        List<FileBase> fileStack = new();
+
+        try
+        {
+            GameBundleHook.FilePreInitializeDelegate? preInitialize = GameBundleHook.CustomFilePreInitialize;
+            if (preInitialize is not null)
+            {
+                preInitialize(new GameBundle(), new[] { file }, fileStack, LocalFileSystem.Instance, null);
+            }
+            else
+            {
+                fileStack.Add(SchemeReader.LoadFile(file, LocalFileSystem.Instance));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Verbose(LogCategory.Import, $"[CabMap] Unpack '{file}': {ex.GetType().Name}: {ex.Message}");
+            return result;
+        }
+
+        string fallbackName = Path.GetFileName(file);
+        foreach (FileBase fileBase in fileStack)
+        {
+            try
+            {
+                IEnumerable<SerializedFile> serializedFiles;
+                if (fileBase is SerializedFile single)
+                {
+                    serializedFiles = [single];
+                }
+                else if (fileBase is FileContainer container)
+                {
+                    container.ReadContentsRecursively();
+                    serializedFiles = container.FetchSerializedFiles();
+                }
+                else
+                {
+                    continue; // ResourceFile / FailedFile — no asset type table to read
+                }
+
+                foreach (SerializedFile sf in serializedFiles)
+                {
+                    result.Add(GameBundleHook.ReadSerializedMetadata(sf, fallbackName));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[CabMap] Read '{file}': {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                // Free the decompressed bundle bytes immediately — a whole-game scan would balloon otherwise.
+                (fileBase as IDisposable)?.Dispose();
+            }
+        }
+
+        return result;
     }
 
     public static (string baseFolder, Dictionary<string, Entry> entries) Load(string path)
