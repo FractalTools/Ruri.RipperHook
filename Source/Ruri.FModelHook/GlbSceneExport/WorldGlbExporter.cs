@@ -66,6 +66,7 @@ public sealed class WorldGlbExporter
     // Persist across parts: materials are written once (deduped); the distinct
     // mesh / part bookkeeping is for the summary log.
     private readonly List<MaterialExporter2> _materialExporters = new();
+    private readonly List<string> _materialKeys = new(); // parallel to _materialExporters, for logging
     private readonly HashSet<string> _writtenMaterialKeys = new(StringComparer.Ordinal);
     private readonly HashSet<FGuid> _distinctMeshGuids = new();
     private readonly List<string> _writtenParts = new();
@@ -271,6 +272,10 @@ public sealed class WorldGlbExporter
                 {
                     _materialExporters.RemoveRange(before, _materialExporters.Count - before);
                 }
+                else
+                {
+                    _materialKeys.Add(materialKey);
+                }
             }
         }
         return meshBuilder;
@@ -299,15 +304,19 @@ public sealed class WorldGlbExporter
     {
         if (!_options.ExportMaterials) return;
         var directory = new DirectoryInfo(outputDirectory);
-        foreach (var material in _materialExporters)
+        for (int i = 0; i < _materialExporters.Count; i++)
         {
+            // Log BEFORE decoding so a hard native texture-decode crash (which
+            // can't be caught in-process) pinpoints the offending material.
+            string key = i < _materialKeys.Count ? _materialKeys[i] : "(unknown)";
+            _log($"[GlbScene]   material {i + 1}/{_materialExporters.Count}: {key}");
             try
             {
-                material.TryWriteToDir(directory, out _, out _);
+                _materialExporters[i].TryWriteToDir(directory, out _, out _);
             }
             catch (Exception ex)
             {
-                _logError($"[GlbScene] Material export failed: {ex.Message}");
+                _logError($"[GlbScene] Material export failed ({key}): {ex.Message}");
             }
         }
     }

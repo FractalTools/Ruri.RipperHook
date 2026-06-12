@@ -129,6 +129,15 @@ namespace Ruri.FModelHook.GlbSceneExport
 
             ExporterOptions options = UserSettings.Default.ExportOptions;
             options.MeshFormat = EMeshFormat.Gltf2;
+            // Export geometry + material NAMES (baked into the glTF primitives)
+            // but NOT decoded texture sidecars. Bulk texture decode across a
+            // whole open world is intermittently crash-prone — a thread-safety
+            // race in CUE4Parse's parallel native texture decode — and a hard
+            // native crash here would take down the whole FModel process. The
+            // scene geometry is the deliverable; textures are re-linked by
+            // material name via FModel's normal per-asset texture export, or via
+            // the headless CLI: 'Ruri.FModelHook.CLI --export-map-direct --with-materials'.
+            options.ExportMaterials = false;
             string outputDirectory = UserSettings.Default.ModelDirectory;
 
             foreach (string mapPath in mapPaths)
