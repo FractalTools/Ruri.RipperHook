@@ -157,8 +157,17 @@ internal static class Il2CppX86Listing
         // andps/andnps/orps/xorps（+pd、+V 变体）是位运算：其浮点类型操作数实为位掩码（abs/sign 掩码等），
         // 字节值当浮点读会出 NaN/-0 等误导文本 → 强制按十六进制渲染，而非浮点。
         bool isFloat = IsFloatElement(info.ElementType) && !IsBitwiseFloatLogical(instruction.Mnemonic);
-        if (info.ElementCount == 1 && !isFloat) return false;                                  // 标量整数：歧义（可能是运行期全局指针）→ 保留 g_
-        if (isFloat && info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非常规浮点宽度（Float80/128/bf16）不解
+        // 元素宽度可还原校验：浮点 2/4/8；整数（含位掩码 / 标量整数）1/2/4/8。标量整数是否真常量由注解层
+        // 按"只读且已落盘的 PE 段"门控（Il2CppAsmAnnotator.ConstantAddressAllowed），避免把 .data 运行期
+        // 全局指针当常量——故此处放行标量整数、交给注解层裁决。
+        if (isFloat)
+        {
+            if (info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非常规浮点宽度（Float80/128/bf16）不解
+        }
+        else
+        {
+            if (info.ElementSize != 1 && info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非 2 幂整数元素宽度不解
+        }
 
         virtualAddress = address;
         operand = new Il2CppAsmAnnotator.DataConstantOperand(info.ElementSize, info.ElementCount, isFloat);

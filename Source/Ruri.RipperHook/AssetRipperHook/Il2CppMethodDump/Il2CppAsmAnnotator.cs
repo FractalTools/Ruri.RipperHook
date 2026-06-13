@@ -52,6 +52,28 @@ internal static class Il2CppAsmAnnotator
     private static Dictionary<ulong, string> _exports; // PE 导出表 VA→名（权威）
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
+    private static ulong _imageBase;
+    private static PeSection[] _sections; // PE 段表：VA 落在哪个段 + 是否可执行 / 可写 / 已落盘
+
+    private enum AddressKind { Unknown, Code, ReadOnlyData, WritableData }
+
+    private readonly struct PeSection
+    {
+        public readonly ulong RvaStart;
+        public readonly ulong RvaEnd;        // RvaStart + VirtualSize
+        public readonly ulong FileBackedEnd; // RvaStart + SizeOfRawData（之后是 .bss / 零填充，文件里无字节）
+        public readonly bool Executable;
+        public readonly bool Writable;
+
+        public PeSection(ulong rvaStart, ulong rvaEnd, ulong fileBackedEnd, bool executable, bool writable)
+        {
+            RvaStart = rvaStart;
+            RvaEnd = rvaEnd;
+            FileBackedEnd = fileBackedEnd;
+            Executable = executable;
+            Writable = writable;
+        }
+    }
 
     /// <summary>整段反汇编：逐行替换地址为符号。给 ARM 等走 PrintAssembly 的回退路径用。</summary>
     public static string Annotate(ApplicationAnalysisContext app, string asmText)
@@ -91,7 +113,10 @@ internal static class Il2CppAsmAnnotator
         string hex = m.Groups["a"].Success ? m.Groups["a"].Value : m.Groups["b"].Value;
         if (!ulong.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong addr)) return m.Value;
         if (addr < 0x10000) return m.Value; // 小立即数 / 寄存器相对偏移 / 8 位寄存器名 (ah/bh…)
-        return Resolve(addr, IsInBrackets(line, m.Index), overrides, dataConstants) ?? m.Value;
+        bool inBrackets = IsInBrackets(line, m.Index);
+        // [reg±idx*scale+disp] 里的 disp 是字段/结构偏移，不是绝对全局地址——保留原十六进制，别误标 g_。
+        if (inBrackets && IsRegisterRelativeDisplacement(line, m.Index)) return m.Value;
+        return Resolve(addr, inBrackets, overrides, dataConstants) ?? m.Value;
     }
 
     private static bool IsInBrackets(string line, int idx)
@@ -103,6 +128,25 @@ internal static class Il2CppAsmAnnotator
             else if (line[i] == ']') depth--;
         }
         return depth > 0;
+    }
+
+    /// <summary>
+    /// token 所在的 <c>[...]</c> 内是否含 <c>+</c> / <c>*</c>（即寄存器相对寻址，如 <c>[r14+r8*8+46AF0h]</c>）。
+    /// 若是，则该十六进制是字段/结构偏移而非绝对全局地址，调用方应原样保留、不标 <c>g_</c>。
+    /// （绝对全局是裸 <c>[18FC445B8h]</c> 形式，括号内无算符。）
+    /// </summary>
+    private static bool IsRegisterRelativeDisplacement(string line, int tokenIndex)
+    {
+        int open = line.LastIndexOf('[', System.Math.Min(tokenIndex, line.Length - 1));
+        if (open < 0) return false;
+        int close = line.IndexOf(']', tokenIndex);
+        if (close < 0) close = line.Length;
+        for (int i = open + 1; i < close && i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '+' || c == '*') return true;
+        }
+        return false;
     }
 
     private static string Resolve(ulong addr, bool inBrackets, IReadOnlyDictionary<ulong, string> overrides, IReadOnlyDictionary<ulong, DataConstantOperand> dataConstants)
@@ -129,13 +173,16 @@ internal static class Il2CppAsmAnnotator
         // 运行期才填充的全局指针，并非常量）。还原不出再退回 g_。
         if (inBrackets)
         {
-            if (dataConstants != null && dataConstants.TryGetValue(addr, out DataConstantOperand operand))
+            if (dataConstants != null && dataConstants.TryGetValue(addr, out DataConstantOperand operand) && ConstantAddressAllowed(addr, operand))
             {
                 string constant = TryReadDataConstant(addr, operand);
                 if (constant != null)
                     return constant;
             }
-            return "g_" + addr.ToString("X"); // 无名 codegen 全局，元数据里没有它的名字
+            // 落在可执行段的括号地址（多为 lea / 以数据形式引用的代码指针、跳转表项）→ 代码标签，而非数据全局。
+            if (ClassifyAddress(addr, out _) == AddressKind.Code)
+                return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
+            return "g_" + addr.ToString("X"); // 无名 codegen 全局（多为运行期才填充的 .data/.bss 槽，文件里无值）
         }
         // 代码目标：方法体内分支 → loc_，区域外无名运行时函数 → sub_。
         return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
@@ -297,6 +344,100 @@ internal static class Il2CppAsmAnnotator
         return value.ToString("X", CultureInfo.InvariantCulture) + "h";
     }
 
+    /// <summary>
+    /// 常量只在"只读且已落盘"的 PE 段里才是真常量（编译期常量池）。.data/.bss（可写或未落盘）多是
+    /// 运行期由 il2cpp 填充的全局指针/槽，其文件字节并非常量（标量整数尤甚）。段表解析失败时退回旧
+    /// 行为：仅放行浮点标量 / 向量（它们历来都在 .rdata，安全）。
+    /// </summary>
+    private static bool ConstantAddressAllowed(ulong addr, in DataConstantOperand operand)
+    {
+        if (_sections == null)
+            return !(operand.ElementCount == 1 && !operand.IsFloatElement);
+        return ClassifyAddress(addr, out bool fileBacked) == AddressKind.ReadOnlyData && fileBacked;
+    }
+
+    /// <summary>把 VA 归类到 PE 段：代码 / 只读数据 / 可写数据，并报告该 VA 是否有文件实体字节。</summary>
+    private static AddressKind ClassifyAddress(ulong virtualAddress, out bool fileBacked)
+    {
+        fileBacked = false;
+        PeSection[] sections = _sections;
+        if (sections == null || virtualAddress < _imageBase)
+            return AddressKind.Unknown;
+
+        ulong rva = virtualAddress - _imageBase;
+        foreach (PeSection section in sections)
+        {
+            if (rva >= section.RvaStart && rva < section.RvaEnd)
+            {
+                fileBacked = rva < section.FileBackedEnd;
+                if (section.Executable) return AddressKind.Code;
+                return section.Writable ? AddressKind.WritableData : AddressKind.ReadOnlyData;
+            }
+        }
+        return AddressKind.Unknown;
+    }
+
+    /// <summary>
+    /// 解析 PE 头 + 段表（只读取文件头部若干 KB，经 <see cref="LibCpp2IlMain.Binary"/> 的
+    /// <c>GetByteAtRawAddress</c>，避免拷整张 GameAssembly）。失败则 <see cref="_sections"/> 置 null、优雅降级。
+    /// </summary>
+    private static void ParsePeSections()
+    {
+        _sections = null;
+        _imageBase = 0;
+        try
+        {
+            Il2CppBinary binary = LibCpp2IlMain.Binary;
+            if (binary == null) return;
+
+            long rawLength = binary.RawLength;
+            int headerLength = (int)System.Math.Min(rawLength, 16384L);
+            if (headerLength < 0x200) return;
+
+            Span<byte> header = stackalloc byte[16384];
+            header = header.Slice(0, headerLength);
+            for (int i = 0; i < headerLength; i++)
+            {
+                header[i] = binary.GetByteAtRawAddress((ulong)i);
+            }
+
+            if (header[0] != (byte)'M' || header[1] != (byte)'Z') return;
+            int pe = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(0x3C));
+            if (pe <= 0 || pe + 0x18 > headerLength) return;
+            if (header[pe] != (byte)'P' || header[pe + 1] != (byte)'E') return;
+
+            int coff = pe + 4;
+            ushort sectionCount = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(coff + 2));
+            ushort optionalSize = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(coff + 16));
+            int optional = coff + 20;
+            ushort magic = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(optional));
+            _imageBase = magic == 0x20b
+                ? BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(optional + 24)) // PE32+
+                : BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(optional + 28)); // PE32
+
+            int tableStart = optional + optionalSize;
+            if (sectionCount == 0 || sectionCount > 96 || tableStart + sectionCount * 40 > headerLength) return;
+
+            PeSection[] parsed = new PeSection[sectionCount];
+            for (int i = 0; i < sectionCount; i++)
+            {
+                int s = tableStart + i * 40;
+                uint virtualSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(s + 8));
+                uint virtualAddress = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(s + 12));
+                uint rawSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(s + 16));
+                uint characteristics = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(s + 36));
+                bool executable = (characteristics & 0x20000000u) != 0; // IMAGE_SCN_MEM_EXECUTE
+                bool writable = (characteristics & 0x80000000u) != 0;   // IMAGE_SCN_MEM_WRITE
+                parsed[i] = new PeSection(virtualAddress, virtualAddress + virtualSize, virtualAddress + rawSize, executable, writable);
+            }
+            _sections = parsed;
+        }
+        catch
+        {
+            _sections = null;
+        }
+    }
+
     private static void EnsureMaps(ApplicationAnalysisContext app)
     {
         if (ReferenceEquals(_app, app) && _keyFunctions != null) return;
@@ -340,6 +481,7 @@ internal static class Il2CppAsmAnnotator
 
         _sortedMethodStarts = app.MethodsByAddress.Keys.Where(k => k != 0).OrderBy(k => k).ToArray();
         _globalCache.Clear();
+        ParsePeSections();
         _app = app;
     }
 
