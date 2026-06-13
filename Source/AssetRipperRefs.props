@@ -78,6 +78,12 @@
       <SpecificVersion>False</SpecificVersion>
       <Private>true</Private>
     </Reference>
+    <!-- PrefabHierarchyObject / SceneHierarchyObject for World -> prefab/scene export. -->
+    <Reference Include="AssetRipper.Processing">
+      <HintPath>$(RuriArBin)AssetRipper.Processing.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

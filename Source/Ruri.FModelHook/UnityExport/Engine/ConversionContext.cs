@@ -1,6 +1,7 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
+using AssetRipper.Export.UnityProjects;
 using CUE4Parse.UE4.Assets.Exports;
 
 namespace Ruri.FModelHook.UnityExport.Engine;
@@ -14,6 +15,7 @@ public sealed class ConversionContext
 {
     private readonly Dictionary<UObject, IUnityObjectBase?> _cache = new(ReferenceEqualityComparer.Instance);
     private readonly List<IUnityObjectBase> _ordered = new();
+    private readonly List<IExportCollection> _exportGroups = new();
 
     public ConversionContext(ProcessedAssetCollection collection) => Collection = collection;
 
@@ -21,6 +23,14 @@ public sealed class ConversionContext
 
     // Every successfully-converted object, in creation order — the export worklist.
     public IReadOnlyList<IUnityObjectBase> Converted => _ordered;
+
+    // Multi-object export units (a prefab / scene built by an aggregating mapping
+    // like World): these objects are written together into one file instead of one
+    // .asset each. The session exports these groups and skips their members from the
+    // per-asset pass.
+    public IReadOnlyList<IExportCollection> ExportGroups => _exportGroups;
+
+    public void RegisterExportGroup(IExportCollection group) => _exportGroups.Add(group);
 
     // Convert one UE object to its Unity counterpart, deduplicated by source
     // identity. The created object is cached BEFORE its fields are populated so a

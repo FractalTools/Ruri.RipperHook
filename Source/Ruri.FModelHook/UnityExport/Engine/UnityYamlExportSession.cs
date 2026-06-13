@@ -57,10 +57,20 @@ public sealed class UnityYamlExportSession
     // Returns the number of assets actually written.
     public int ExportAll(string projectDirectory)
     {
-        // One export collection per asset (each assigns a fresh GUID + writes a .meta).
-        List<IExportCollection> collections = new(_context.Converted.Count);
+        // Objects claimed by a group (prefab/scene) are written as part of that
+        // group's single file, not as standalone .asset files.
+        HashSet<IUnityObjectBase> grouped = new();
+        foreach (IExportCollection group in _context.ExportGroups)
+            foreach (IUnityObjectBase asset in group.Assets)
+                grouped.Add(asset);
+
+        // Group collections first, then one export collection per remaining asset
+        // (each assigns a fresh GUID + writes a .meta).
+        List<IExportCollection> collections = new(_context.ExportGroups);
         foreach (IUnityObjectBase asset in _context.Converted)
         {
+            if (grouped.Contains(asset))
+                continue;
             if (_exporter.TryCreateCollection(asset, out IExportCollection? collection))
                 collections.Add(collection);
         }
