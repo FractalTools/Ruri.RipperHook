@@ -44,10 +44,27 @@ public static class UnityYamlExportRunner
 
     public static RunResult Run(Options options)
     {
+        List<string> packages = SelectPackages(options);
+        options.Log($"[UnityExport] {packages.Count} package(s) selected " +
+                    $"(filter={(options.PackageFilter is { Count: > 0 } f ? string.Join(",", f) : "*")}).");
+        return ConvertAndExport(options.Provider, packages, options.OutputDirectory, options.UnityVersionText, options.Log, options.LogError);
+    }
+
+    // Convert an explicit set of package keys and write the result. Shared by the
+    // headless CLI (Run) and the FModel GUI hook (which passes the right-clicked
+    // selection). Null/empty unityVersionText defaults to 2022.3.0f1.
+    public static RunResult ConvertAndExport(
+        IFileProvider provider,
+        IReadOnlyList<string> packageKeys,
+        string outputDirectory,
+        string? unityVersionText,
+        Action<string> log,
+        Action<string> logError)
+    {
         UnityMappings.RegisterAll();
 
         UnityVersion version;
-        string versionText = string.IsNullOrWhiteSpace(options.UnityVersionText) ? "2022.3.0f1" : options.UnityVersionText!;
+        string versionText = string.IsNullOrWhiteSpace(unityVersionText) ? "2022.3.0f1" : unityVersionText!;
         try
         {
             version = UnityVersion.Parse(versionText);
@@ -56,28 +73,24 @@ public static class UnityYamlExportRunner
         {
             throw new ArgumentException($"Invalid Unity version '{versionText}': {ex.Message}", ex);
         }
-        options.Log($"[UnityExport] target Unity version = {version}");
+        log($"[UnityExport] target Unity version = {version}");
 
         RunResult result = new();
-        UnityYamlExportSession session = new(version, options.LogError);
+        UnityYamlExportSession session = new(version, logError);
 
-        List<string> packages = SelectPackages(options);
-        options.Log($"[UnityExport] {packages.Count} package(s) selected " +
-                    $"(filter={(options.PackageFilter is { Count: > 0 } f ? string.Join(",", f) : "*")}).");
-
-        foreach (string key in packages)
+        foreach (string key in packageKeys)
         {
-            if (!options.Provider.Files.TryGetValue(key, out GameFile? gameFile) || gameFile == null)
+            if (!provider.Files.TryGetValue(key, out GameFile? gameFile) || gameFile == null)
                 continue;
 
             IPackage package;
             try
             {
-                package = options.Provider.LoadPackage(gameFile);
+                package = provider.LoadPackage(gameFile);
             }
             catch (Exception ex)
             {
-                options.LogError($"[UnityExport] LoadPackage failed '{key}': {ex.Message}");
+                logError($"[UnityExport] LoadPackage failed '{key}': {ex.Message}");
                 continue;
             }
             result.PackagesScanned++;
@@ -91,7 +104,7 @@ public static class UnityYamlExportRunner
                 }
                 catch (Exception ex)
                 {
-                    options.LogError($"[UnityExport] export deserialize failed in '{key}': {ex.Message}");
+                    logError($"[UnityExport] export deserialize failed in '{key}': {ex.Message}");
                     continue;
                 }
                 result.ExportsSeen++;
@@ -109,12 +122,12 @@ public static class UnityYamlExportRunner
             }
         }
 
-        Directory.CreateDirectory(options.OutputDirectory);
-        result.FilesWritten = session.ExportAll(options.OutputDirectory);
+        Directory.CreateDirectory(outputDirectory);
+        result.FilesWritten = session.ExportAll(outputDirectory);
 
-        options.Log($"[UnityExport] Done. packages={result.PackagesScanned} exports={result.ExportsSeen} " +
-                    $"converted={result.Converted} files={result.FilesWritten}");
-        LogTypeBreakdown(options, result);
+        log($"[UnityExport] Done. packages={result.PackagesScanned} exports={result.ExportsSeen} " +
+            $"converted={result.Converted} files={result.FilesWritten}");
+        LogTypeBreakdown(log, result);
         return result;
     }
 
@@ -146,12 +159,12 @@ public static class UnityYamlExportRunner
         return selected;
     }
 
-    private static void LogTypeBreakdown(Options options, RunResult result)
+    private static void LogTypeBreakdown(Action<string> log, RunResult result)
     {
         if (result.ConvertedByType.Count > 0)
         {
-            options.Log("[UnityExport] converted by type: " +
-                        string.Join(", ", result.ConvertedByType.Select(kv => $"{kv.Key}={kv.Value}")));
+            log("[UnityExport] converted by type: " +
+                string.Join(", ", result.ConvertedByType.Select(kv => $"{kv.Key}={kv.Value}")));
         }
         if (result.UnmappedByType.Count > 0)
         {
@@ -160,7 +173,7 @@ public static class UnityYamlExportRunner
                 .OrderByDescending(kv => kv.Value)
                 .Take(15)
                 .Select(kv => $"{kv.Key}={kv.Value}");
-            options.Log("[UnityExport] unmapped by type (top 15): " + string.Join(", ", top));
+            log("[UnityExport] unmapped by type (top 15): " + string.Join(", ", top));
         }
     }
 
