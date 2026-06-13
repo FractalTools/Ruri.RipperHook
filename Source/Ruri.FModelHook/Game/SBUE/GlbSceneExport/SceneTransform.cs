@@ -4,7 +4,7 @@ using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
 using FModel.Views.Snooper;
 
-namespace Ruri.FModelHook.GlbSceneExport;
+namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 // Coordinate-space bridge between FModel's verified world preview and a glTF
 // scene graph.

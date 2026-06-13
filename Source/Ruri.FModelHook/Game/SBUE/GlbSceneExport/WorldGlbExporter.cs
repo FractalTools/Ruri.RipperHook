@@ -22,7 +22,7 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
 
-namespace Ruri.FModelHook.GlbSceneExport;
+namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, VertexEmpty>;
 

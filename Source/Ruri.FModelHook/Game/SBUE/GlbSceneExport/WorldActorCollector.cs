@@ -10,7 +10,7 @@ using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Objects.UObject;
 using FModel.Views.Snooper;
 
-namespace Ruri.FModelHook.GlbSceneExport;
+namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 // One collected placement: an actor (or component-holder) plus the base
 // transform of the world it belongs to. WP cells / streaming sub-levels are

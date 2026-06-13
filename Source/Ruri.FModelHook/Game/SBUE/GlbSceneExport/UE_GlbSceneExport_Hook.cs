@@ -19,7 +19,7 @@ using Ruri.Hook;
 using Ruri.Hook.Attributes;
 using Ruri.Hook.Core;
 
-namespace Ruri.FModelHook.GlbSceneExport
+namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
 {
     // Default-on, toggleable (via Hooks > Enabled Hooks...) interactive hook
     // that adds "Export GLB Scene" to the asset-list right-click menu for
