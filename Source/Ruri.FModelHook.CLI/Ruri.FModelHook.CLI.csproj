@@ -33,4 +33,9 @@
     <ProjectReference Include="..\..\FModel\FModel\FModel.csproj" />
   </ItemGroup>
 
+  <!-- The entry exe must carry the AssetRipper assemblies in its own .deps.json,
+       otherwise the runtime cannot resolve them even though Ruri.FModelHook copied
+       the DLLs next to the exe. Same shared set the library imports. -->
+  <Import Project="..\AssetRipperRefs.props" />
+
 </Project>

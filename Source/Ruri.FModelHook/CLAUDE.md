@@ -1,4 +1,30 @@
-## TODO: UE 资源 → Unity YAML 导出 hook(牛头蛇尾架构)
+## 实现状态:已完成(branch `feature/ue-unity-yaml-export`)
+
+本文档的牛头蛇尾设计已 **完整实现并验证**(7 个 commit,headless CLI 自测试循环跑通,测试数据 `D:\Game\OniValleyDemo5.1`,UE5.1)。下面的设计正文保留作架构参考;实际落地与最初的若干推测有出入,**以本节为准**。
+
+**结构铁律:所有 FModelHook 的 hook/特性都落在 `Source/Ruri.FModelHook/Game/SBUE/` 下**(与 `GlbSceneExport`/`ShaderDecompiler`/`Headless` 并列),命名空间 `Ruri.FModelHook.Game.SBUE.<Feature>`。UnityExport 即 `Game/SBUE/UnityExport/`。
+
+**落地结构**(`Source/Ruri.FModelHook/Game/SBUE/UnityExport/`,命名空间 `Ruri.FModelHook.Game.SBUE.UnityExport.*`):
+- `Engine/` — `IUnityObjectMapping` / `Mapping`(`Set`/`After` fluent builder)/ `MapperRegistry`(exact+基类链派发)/ `ConversionContext`(可重入、按源对象 dedup、cross-ref PPtr、group 导出)/ `MinimalExportContainer`(`ProjectAssetContainer` 的最小忠实镜像)/ `UnityYamlExportSession` / `EnumMaps` / `StructCopy` 思路并入各 mapping / `VertexPacker`(无损 VertexData 打包)/ `MeshDataFactory`。
+- `Mappings/` — `Texture / Material / StaticMesh / SkeletalMesh / Animation / World` + `UnityMappings.RegisterAll()`。
+- `Hook/UE_UnityYamlExport_Hook.cs` — FModel GUI 右键「Export → Unity YAML」(detour `MainWindow.OnLoaded` + 全局 `ContextMenu.OpenedEvent`,0 改 FModel)。
+- `UnityYamlExportRunner` — headless 驱动;`ConvertAndExport(provider, keys, outDir, ver, log, logErr)` 被 CLI 与 GUI 共用。
+
+**CLI 自测试入口**:`Ruri.FModelHook.CLI.exe --export-unity --game-dir <Paks> --ue-version GAME_UE5_1 --mappings <usmap> --export-out <dir> [--package-filter tok,..] [--max-packages N] [--unity-version 2022.3.0f1]`。输出目录每次运行清空。验证产物:Texture2D(DXT/BC 直传)、Material(`m_TexEnvs/m_Floats/m_Colors`,texture PPtr 解析)、Mesh(无损 float VertexData + submesh + AABB)、SkeletalMesh(CompressedMesh 带骨权重 + bindpose + CRC32 骨名 + morph→BlendShape)、AnimationClip(legacy 曲线,骨骼路径绑定,ACL 由 CUE4Parse 解)、UWorld→`.prefab`(GameObject/Transform/MeshFilter/MeshRenderer,mesh+material 跨资源引用)。
+
+**与原设计的关键修正(踩过的坑)**:
+- **依赖不是 `Ruri.SourceGenerated.dll`,而是预构建的 AR DLL 闭包**(`AssetRipper/Source/0Bins/AssetRipper/<cfg>/`,经 `Source/AssetRipperRefs.props` 被 FModelHook **和** CLI 同时 `<Import>`)。原因:AR 是冻结区且其 `AssetRipper.SourceGenerated.Extensions` 的 Roslyn 源生成器 pin 在 Microsoft.CodeAnalysis 5.3,而 CLI 的 .NET SDK 只有 Roslyn 5.0 → **无法从命令行重编译冻结树**。改用预构建闭包 + RAR 传递解析,绝不重建冻结树。CLI 是 entry exe,**必须**自己也 import 这组引用,否则 `.deps.json` 缺 AR 程序集运行时 `FileNotFoundException`。
+- **Mesh(ClassID 43)是 sealed group → 字段无 `_C43` 后缀**:`VertexData`/`IndexBuffer`/`SubMeshes`/`Shapes`/`BindPose`/`BoneNameHashes`/`Skin`/`LocalAABB` 都是裸名,name 用 `Name`(不是 `Name_C43`/`Name_R`)。Texture2D(`_C28`)、Material(`_C21`)才有后缀。
+- **VertexData 打包用 AR 自己的 `VertexDataBlob.Create(MeshData,...)` 再 flush 到 `mesh.VertexData`**(它的 skin 通道是 `//todo` 空桩)→ 故 **skeletal mesh 改走 `mesh.FillWithCompressedMeshData`**(`compressedMesh.SetWeights` 是 2022.3 唯一带得动骨权重的路径;static mesh 保持无损 VertexData)。
+- 几何/骨骼/动画的**解码全部复用 CUE4Parse-Conversion**(`UStaticMesh/USkeletalMesh.TryConvert`、`UAnimSequence.ConvertAnims`),免去手解 `FPackedNormal`/ACL。
+- 坐标保持**原始 UE 轴**(与 mesh 一致);UE→Unity 基变换(Y/Z swap + 0.01)是后续统一线性变换。UV 已做 `1-V` 翻转。
+- World Partition cell / OFPA 聚合(`WorldActorCollector`)与 shader 占位、texture 的 colorspace/wrap、CompleteImageSize 为已记录的后续增强点。
+
+---
+
+## 设计正文(原 TODO,保留作架构参考)
+
+## UE 资源 → Unity YAML 导出 hook(牛头蛇尾架构)
 
 ```
 [FModel / CUE4Parse]  →→→  [Ruri Mapper]  →→→  [AssetRipper]

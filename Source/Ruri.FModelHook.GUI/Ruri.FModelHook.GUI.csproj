@@ -14,7 +14,7 @@
   <PropertyGroup>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net8.0-windows\win-x64\</OutputPath>
+    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net10.0-windows\win-x64\</OutputPath>
     <IntermediateOutputPath>..\..\FModel\FModel\obj\Ruri.FModelHook.GUI\$(Configuration)\</IntermediateOutputPath>
     <TargetFramework>net10.0-windows7.0</TargetFramework>
     <UseWPF>true</UseWPF>
@@ -31,5 +31,13 @@
     <ProjectReference Include="..\Ruri.FModelHook\Ruri.FModelHook.csproj" />
     <ProjectReference Include="..\..\FModel\FModel\FModel.csproj" />
   </ItemGroup>
+
+  <!-- The GUI is an entry exe, so its .deps.json must carry the AssetRipper
+       assemblies the UnityExport hook touches at runtime (UnityYamlExportRunner ->
+       GameBundle / ProcessedAssetCollection / DefaultYamlExporter), otherwise
+       invoking "Export -> Unity YAML" from the Hooks menu throws FileNotFoundException
+       even though Ruri.FModelHook copied the DLLs next to the exe. Same shared set
+       the library + CLI import. -->
+  <Import Project="..\AssetRipperRefs.props" />
 
 </Project>
