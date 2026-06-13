@@ -14,7 +14,7 @@
   <PropertyGroup>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net8.0-windows\win-x64\</OutputPath>
+    <OutputPath>..\..\FModel\FModel\bin\$(Configuration)\net10.0-windows\win-x64\</OutputPath>
     <IntermediateOutputPath>..\..\FModel\FModel\obj\Ruri.FModelHook.GUI\$(Configuration)\</IntermediateOutputPath>
     <TargetFramework>net10.0-windows7.0</TargetFramework>
     <UseWPF>true</UseWPF>
