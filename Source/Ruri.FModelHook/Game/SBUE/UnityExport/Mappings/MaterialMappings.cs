@@ -7,9 +7,9 @@ using AssetRipper.SourceGenerated.Subclasses.UnityPropertySheet;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Math;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // UMaterialInterface (UMaterial / UMaterialInstanceConstant / ...) -> Material.
 // CUE4Parse's GetParams flattens the whole scalar/vector/texture parameter graph

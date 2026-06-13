@@ -1,4 +1,4 @@
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // Single entry point that registers every UE -> Unity mapping family exactly
 // once (idempotent + thread-safe). Each phase adds one line here; the registry

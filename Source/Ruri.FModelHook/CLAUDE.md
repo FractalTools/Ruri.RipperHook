@@ -2,7 +2,9 @@
 
 本文档的牛头蛇尾设计已 **完整实现并验证**(7 个 commit,headless CLI 自测试循环跑通,测试数据 `D:\Game\OniValleyDemo5.1`,UE5.1)。下面的设计正文保留作架构参考;实际落地与最初的若干推测有出入,**以本节为准**。
 
-**落地结构**(`Source/Ruri.FModelHook/UnityExport/`):
+**结构铁律:所有 FModelHook 的 hook/特性都落在 `Source/Ruri.FModelHook/Game/SBUE/` 下**(与 `GlbSceneExport`/`ShaderDecompiler`/`Headless` 并列),命名空间 `Ruri.FModelHook.Game.SBUE.<Feature>`。UnityExport 即 `Game/SBUE/UnityExport/`。
+
+**落地结构**(`Source/Ruri.FModelHook/Game/SBUE/UnityExport/`,命名空间 `Ruri.FModelHook.Game.SBUE.UnityExport.*`):
 - `Engine/` — `IUnityObjectMapping` / `Mapping`(`Set`/`After` fluent builder)/ `MapperRegistry`(exact+基类链派发)/ `ConversionContext`(可重入、按源对象 dedup、cross-ref PPtr、group 导出)/ `MinimalExportContainer`(`ProjectAssetContainer` 的最小忠实镜像)/ `UnityYamlExportSession` / `EnumMaps` / `StructCopy` 思路并入各 mapping / `VertexPacker`(无损 VertexData 打包)/ `MeshDataFactory`。
 - `Mappings/` — `Texture / Material / StaticMesh / SkeletalMesh / Animation / World` + `UnityMappings.RegisterAll()`。
 - `Hook/UE_UnityYamlExport_Hook.cs` — FModel GUI 右键「Export → Unity YAML」(detour `MainWindow.OnLoaded` + 全局 `ContextMenu.OpenedEvent`,0 改 FModel)。

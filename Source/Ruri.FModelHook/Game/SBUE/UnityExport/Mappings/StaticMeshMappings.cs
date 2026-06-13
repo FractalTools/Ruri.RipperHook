@@ -4,9 +4,9 @@ using AssetRipper.SourceGenerated.Extensions;
 using CUE4Parse_Conversion.Meshes;
 using CUE4Parse_Conversion.Meshes.PSK;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // UStaticMesh -> Mesh. Geometry comes through CUE4Parse-Conversion's decoder
 // (positions / normals / tangents / UVs / colors already unpacked from the

@@ -15,7 +15,7 @@ using Ruri.Hook;
 using Ruri.Hook.Attributes;
 using Ruri.Hook.Core;
 
-namespace Ruri.FModelHook.UnityExport.Hook;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Hook;
 
 // Default-on, toggleable interactive hook that adds "Export -> Unity YAML" to the
 // asset-list right-click menu for .uasset / .umap selections. On click it loads

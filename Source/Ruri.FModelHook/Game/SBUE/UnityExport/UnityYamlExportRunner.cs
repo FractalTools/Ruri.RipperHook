@@ -4,10 +4,10 @@ using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.Assets;
 using CUE4Parse.UE4.Assets.Exports;
-using Ruri.FModelHook.UnityExport.Engine;
-using Ruri.FModelHook.UnityExport.Mappings;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
-namespace Ruri.FModelHook.UnityExport;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport;
 
 // Headless UE -> Unity YAML export driver. Given a mounted CUE4Parse provider,
 // it walks matching packages, converts every export through the mapper registry,

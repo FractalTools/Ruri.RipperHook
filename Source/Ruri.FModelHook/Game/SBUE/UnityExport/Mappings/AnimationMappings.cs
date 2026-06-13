@@ -11,13 +11,13 @@ using CUE4Parse_Conversion.Animations;
 using CUE4Parse_Conversion.Animations.PSA;
 using CUE4Parse.UE4.Assets.Exports.Animation;
 using CUE4Parse.UE4.Objects.Core.Math;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 // Namespace import brings the ToTangent(...) extension into scope; the alias
 // disambiguates the enum type from its same-named namespace.
 using AssetRipper.SourceGenerated.Extensions.Enums.Keyframe.TangentMode;
 using TangentModeKeyframe = AssetRipper.SourceGenerated.Extensions.Enums.Keyframe.TangentMode.TangentMode;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // UAnimSequence -> AnimationClip (legacy generic clip). CUE4Parse decodes the
 // ACL-compressed tracks for us (UAnimSequence.ConvertAnims), giving per-bone

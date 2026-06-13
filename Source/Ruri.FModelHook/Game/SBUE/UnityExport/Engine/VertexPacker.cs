@@ -7,7 +7,7 @@ using AssetRipper.SourceGenerated.Subclasses.StreamInfo;
 using AssetRipper.SourceGenerated.Subclasses.SubMesh;
 using AssetRipper.SourceGenerated.Subclasses.VertexData;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // Packs a MeshData (managed vertex arrays) into a Unity Mesh's UNCOMPRESSED
 // VertexData blob — lossless, unlike the quantized CompressedMesh path. The byte

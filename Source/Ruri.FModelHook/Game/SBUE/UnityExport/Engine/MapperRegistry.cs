@@ -2,7 +2,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using CUE4Parse.UE4.Assets.Exports;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // The central UE-type -> Unity-mapping table. Mappings register here once at
 // startup; ConversionContext looks one up per UE object. Adding an asset family

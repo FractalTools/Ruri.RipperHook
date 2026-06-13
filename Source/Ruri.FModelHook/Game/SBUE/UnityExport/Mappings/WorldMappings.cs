@@ -19,9 +19,9 @@ using CUE4Parse.UE4.Assets.Exports.StaticMesh;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Objects.UObject;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // UWorld -> a Unity prefab hierarchy. Unlike the 1:1 asset mappings, a world
 // produces MANY Unity objects (a root GameObject plus one GameObject + Transform

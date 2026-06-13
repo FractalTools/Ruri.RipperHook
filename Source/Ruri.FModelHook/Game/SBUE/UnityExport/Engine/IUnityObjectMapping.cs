@@ -1,7 +1,7 @@
 using AssetRipper.Assets;
 using CUE4Parse.UE4.Assets.Exports;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // One registered conversion: a single concrete CUE4Parse UObject type -> a
 // single AssetRipper Unity object. Split into Create + Populate so the engine

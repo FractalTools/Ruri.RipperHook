@@ -4,7 +4,7 @@ using AssetRipper.Export.UnityProjects;
 using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // Minimal IExportContainer for synthetic export. A faithful reduction of
 // AssetRipper.Export.UnityProjects.ProjectAssetContainer (ProjectAssetContainer.cs:49-90)

@@ -2,9 +2,9 @@ using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Extensions;
 using CUE4Parse.UE4.Assets.Exports.Texture;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // UTexture2D -> Texture2D. GPU-encoded mip bytes (BC/DXT/PF_*) are passed
 // straight into ImageData_C28 — Unity natively ingests block formats, so we do

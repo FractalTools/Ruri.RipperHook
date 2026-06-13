@@ -15,7 +15,7 @@ using CUE4Parse_Conversion.Meshes;
 using Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 using Ruri.FModelHook.Game.SBUE.Headless;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
-using Ruri.FModelHook.UnityExport;
+using Ruri.FModelHook.Game.SBUE.UnityExport;
 using Ruri.Hook;
 using Ruri.Hook.Config;
 using Ruri.Hook.Core;

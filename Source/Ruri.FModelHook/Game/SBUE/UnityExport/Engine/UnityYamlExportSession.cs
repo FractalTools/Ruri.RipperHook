@@ -7,7 +7,7 @@ using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
 using CUE4Parse.UE4.Assets.Exports;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // Owns the lifetime of one synthetic Unity export: a GameBundle + a single
 // ProcessedAssetCollection (wrapped in a ConversionContext) that every converted

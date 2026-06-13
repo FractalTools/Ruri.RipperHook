@@ -8,7 +8,7 @@ using SystemVector2 = System.Numerics.Vector2;
 using SystemVector3 = System.Numerics.Vector3;
 using SystemVector4 = System.Numerics.Vector4;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // Builds AssetRipper MeshData (managed vertex arrays) from CUE4Parse-Conversion's
 // decoded mesh LODs. CUE4Parse already unpacks FPackedNormal / half UVs into

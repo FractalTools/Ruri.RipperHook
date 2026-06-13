@@ -4,7 +4,7 @@ using AssetRipper.Assets.Metadata;
 using AssetRipper.Export.UnityProjects;
 using CUE4Parse.UE4.Assets.Exports;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // The reentrant conversion state for one export session: the target collection
 // plus a source-identity cache so each UE object converts to exactly one Unity

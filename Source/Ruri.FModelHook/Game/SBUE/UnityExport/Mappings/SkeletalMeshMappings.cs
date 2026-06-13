@@ -13,12 +13,12 @@ using CUE4Parse.UE4.Assets.Exports.Animation;
 using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
-using Ruri.FModelHook.UnityExport.Engine;
+using Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 using SystemMatrix4x4 = System.Numerics.Matrix4x4;
 using SystemQuaternion = System.Numerics.Quaternion;
 using SystemVector3 = System.Numerics.Vector3;
 
-namespace Ruri.FModelHook.UnityExport.Mappings;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Mappings;
 
 // USkeletalMesh -> Mesh. Shares the static-mesh geometry path (VertexPacker),
 // then layers on the skinning data that lives outside the vertex buffer:

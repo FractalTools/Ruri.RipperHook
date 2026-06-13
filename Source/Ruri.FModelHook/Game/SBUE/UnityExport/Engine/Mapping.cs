@@ -4,7 +4,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using CUE4Parse.UE4.Assets.Exports;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // Fluent, statically-typed mapping builder for one (TSrc UObject -> TDst Unity
 // object) pair. Set() records a target property (extracted once from an

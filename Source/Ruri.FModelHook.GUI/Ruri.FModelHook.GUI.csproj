@@ -32,4 +32,12 @@
     <ProjectReference Include="..\..\FModel\FModel\FModel.csproj" />
   </ItemGroup>
 
+  <!-- The GUI is an entry exe, so its .deps.json must carry the AssetRipper
+       assemblies the UnityExport hook touches at runtime (UnityYamlExportRunner ->
+       GameBundle / ProcessedAssetCollection / DefaultYamlExporter), otherwise
+       invoking "Export -> Unity YAML" from the Hooks menu throws FileNotFoundException
+       even though Ruri.FModelHook copied the DLLs next to the exe. Same shared set
+       the library + CLI import. -->
+  <Import Project="..\AssetRipperRefs.props" />
+
 </Project>

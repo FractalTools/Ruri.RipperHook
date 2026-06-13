@@ -1,7 +1,7 @@
 using AssetRipper.SourceGenerated.Enums;
 using CUE4Parse.UE4.Assets.Exports.Texture;
 
-namespace Ruri.FModelHook.UnityExport.Engine;
+namespace Ruri.FModelHook.Game.SBUE.UnityExport.Engine;
 
 // UE enum -> Unity enum lookups, declared once and reused by every mapping.
 // A switch is simpler and more readable than any reflection scheme; an unmapped
