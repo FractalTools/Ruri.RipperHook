@@ -16,8 +16,8 @@ public static class UnityMappings
             if (_registered) return;
             TextureMappings.Register();
             MaterialMappings.Register();
-            // Phase 3+: StaticMeshMappings / SkeletalMeshMappings /
-            //           AnimationMappings / WorldMappings register here.
+            StaticMeshMappings.Register();
+            // Phase 4+: SkeletalMeshMappings / AnimationMappings / WorldMappings register here.
             _registered = true;
         }
     }
