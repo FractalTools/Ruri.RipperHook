@@ -48,6 +48,9 @@ internal static class Il2CppX86Listing
         // 识别 il2cpp 元数据初始化惯用法，给那两个无名全局起语义名。
         Dictionary<ulong, string> overrides = DetectMetadataInitIdiom(app, instructions);
 
+        // 预判常量池操作数（直接寻址、浮点 / 向量）：注解层据此把它们的文件字节解引用成实际值，替代裸 g_ 指针。
+        Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> dataConstants = CollectDataConstants(instructions);
+
         // 每个 Render 用全新的 formatter/output（Cpp2IL 的是 static、非线程安全；这里本地实例即可）。
         MasmFormatter formatter = new();
         StringOutput output = new();
@@ -59,7 +62,7 @@ internal static class Il2CppX86Listing
                 sb.Append("loc_").Append(instruction.IP.ToString("X")).Append(":\n");
             }
             formatter.Format(instruction, output);
-            sb.Append(Il2CppAsmAnnotator.AnnotateLine(app, output.ToStringAndReset(), overrides)).Append('\n');
+            sb.Append(Il2CppAsmAnnotator.AnnotateLine(app, output.ToStringAndReset(), overrides, dataConstants)).Append('\n');
         }
         return sb.ToString();
     }
@@ -78,7 +81,7 @@ internal static class Il2CppX86Listing
         for (int i = 0; i < instructions.Count; i++)
         {
             Instruction x = instructions[i];
-            if (IsAbsoluteMemory(x) && x.MemorySize == MemorySize.UInt8 && x.Op1Kind == OpKind.Immediate8)
+            if (IsDirectMemoryOperand(x) && x.MemorySize == MemorySize.UInt8 && x.Op1Kind == OpKind.Immediate8)
             {
                 if (x.Mnemonic == Mnemonic.Cmp && x.Immediate8 == 0) (cmpZero ??= new()).Add(x.MemoryDisplacement64);
                 else if (x.Mnemonic == Mnemonic.Mov && x.Immediate8 == 1) (movOne ??= new()).Add(x.MemoryDisplacement64);
@@ -88,7 +91,7 @@ internal static class Il2CppX86Listing
                 && x.NearBranchTarget == initMethod)
             {
                 Instruction prev = instructions[i - 1];
-                if (prev.Mnemonic == Mnemonic.Push && IsAbsoluteMemory(prev))
+                if (prev.Mnemonic == Mnemonic.Push && IsDirectMemoryOperand(prev))
                 {
                     (result ??= new())[prev.MemoryDisplacement64] = "method_init_token";
                 }
@@ -104,9 +107,73 @@ internal static class Il2CppX86Listing
         return result;
     }
 
-    // ds:[abs]：第一操作数是无基址/无变址的绝对内存寻址。
-    private static bool IsAbsoluteMemory(in Instruction instruction)
+    // 第一操作数是"直接寻址"的内存：无变址，基址为空（32 位绝对 [disp]）或 RIP/EIP（64 位 IP 相对——
+    // 其 MemoryDisplacement64 即解析后的绝对目标，与格式化器打印的绝对地址、注解键一致）。
+    private static bool IsDirectMemoryOperand(in Instruction instruction)
         => instruction.Op0Kind == OpKind.Memory
-        && instruction.MemoryBase == Register.None
-        && instruction.MemoryIndex == Register.None;
+        && instruction.MemoryIndex == Register.None
+        && (instruction.MemoryBase == Register.None
+            || instruction.MemoryBase == Register.RIP
+            || instruction.MemoryBase == Register.EIP);
+
+    /// <summary>
+    /// 预判本方法里所有"直接寻址的常量池操作数"：浮点标量、以及任意向量（含整型 SIMD 掩码）。
+    /// 返回 绝对地址 → 形状；标量整数刻意排除（其文件字节常是运行期才填充的全局指针，并非常量）。
+    /// 注解层在所有元数据都未命中后据此把文件字节解引用成实际值。
+    /// </summary>
+    private static Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> CollectDataConstants(List<Instruction> instructions)
+    {
+        Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> result = null;
+        foreach (Instruction instruction in instructions)
+        {
+            if (TryGetConstantOperand(instruction, out ulong virtualAddress, out Il2CppAsmAnnotator.DataConstantOperand operand))
+            {
+                (result ??= new Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand>())[virtualAddress] = operand;
+            }
+        }
+        return result;
+    }
+
+    private static bool TryGetConstantOperand(in Instruction instruction, out ulong virtualAddress, out Il2CppAsmAnnotator.DataConstantOperand operand)
+    {
+        virtualAddress = 0;
+        operand = default;
+
+        // 必须真正解引用内存且元素大小已知（自动排除 lea / 纯寄存器指令——它们 MemorySize 为 Unknown）。
+        MemorySize memorySize = instruction.MemorySize;
+        if (memorySize == MemorySize.Unknown) return false;
+
+        // 仅直接目标：无变址，基址为空或 RIP/EIP。
+        if (instruction.MemoryIndex != Register.None) return false;
+        Register memoryBase = instruction.MemoryBase;
+        if (memoryBase != Register.None && memoryBase != Register.RIP && memoryBase != Register.EIP) return false;
+
+        ulong address = instruction.MemoryDisplacement64;
+        if (address < 0x10000) return false; // 小立即数 / 栈相关，绝不会是全局常量
+
+        MemorySizeInfo info = memorySize.GetInfo();
+        if (info.ElementSize <= 0 || info.ElementCount <= 0) return false;
+
+        // andps/andnps/orps/xorps（+pd、+V 变体）是位运算：其浮点类型操作数实为位掩码（abs/sign 掩码等），
+        // 字节值当浮点读会出 NaN/-0 等误导文本 → 强制按十六进制渲染，而非浮点。
+        bool isFloat = IsFloatElement(info.ElementType) && !IsBitwiseFloatLogical(instruction.Mnemonic);
+        if (info.ElementCount == 1 && !isFloat) return false;                                  // 标量整数：歧义（可能是运行期全局指针）→ 保留 g_
+        if (isFloat && info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非常规浮点宽度（Float80/128/bf16）不解
+
+        virtualAddress = address;
+        operand = new Il2CppAsmAnnotator.DataConstantOperand(info.ElementSize, info.ElementCount, isFloat);
+        return true;
+    }
+
+    private static bool IsFloatElement(MemorySize elementType)
+        => elementType == MemorySize.Float16
+        || elementType == MemorySize.Float32
+        || elementType == MemorySize.Float64;
+
+    // 浮点位运算（内存操作数是位掩码、不是浮点值）：andps/andnps/orps/xorps + pd + V 变体。
+    private static bool IsBitwiseFloatLogical(Mnemonic mnemonic)
+        => mnemonic is Mnemonic.Andps or Mnemonic.Andnps or Mnemonic.Orps or Mnemonic.Xorps
+            or Mnemonic.Andpd or Mnemonic.Andnpd or Mnemonic.Orpd or Mnemonic.Xorpd
+            or Mnemonic.Vandps or Mnemonic.Vandnps or Mnemonic.Vorps or Mnemonic.Vxorps
+            or Mnemonic.Vandpd or Mnemonic.Vandnpd or Mnemonic.Vorpd or Mnemonic.Vxorpd;
 }
