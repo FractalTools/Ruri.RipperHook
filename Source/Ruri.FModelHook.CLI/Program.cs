@@ -15,6 +15,7 @@ using CUE4Parse_Conversion.Meshes;
 using Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 using Ruri.FModelHook.Game.SBUE.Headless;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
+using Ruri.FModelHook.UnityExport;
 using Ruri.Hook;
 using Ruri.Hook.Config;
 using Ruri.Hook.Core;
@@ -72,6 +73,15 @@ public static class Program
         if (opts.ExportMapDirect || opts.ListMaps)
         {
             return RunExportMapDirect(opts);
+        }
+
+        // Settings-free direct UE -> Unity YAML export ("牛头蛇尾"). Builds a
+        // CUE4Parse provider straight from flags and runs the UnityExport mapper
+        // pipeline — the headless self-test loop for the Unity exporter. No
+        // FModel boot, no %AppData% config.
+        if (opts.ExportUnity)
+        {
+            return RunExportUnity(opts);
         }
 
         // Headless shader export+decompile. Builds a CUE4Parse provider straight
@@ -367,6 +377,96 @@ public static class Program
         catch (Exception ex)
         {
             HookLogger.LogFailure($"[GlbScene] Direct export crashed: {ex}");
+            return 1;
+        }
+    }
+
+    // Settings-free direct UE -> Unity YAML export. Builds a CUE4Parse provider
+    // from explicit flags (same mount path as --export-map-direct), then converts
+    // matching packages to Unity .asset + .meta via the UnityExport mapper. The
+    // output directory is wiped each run so the self-test loop never reads a stale
+    // mix from a previous iteration.
+    private static int RunExportUnity(CliOptions opts)
+    {
+        if (string.IsNullOrWhiteSpace(opts.GameDir) || !Directory.Exists(opts.GameDir))
+        {
+            HookLogger.LogFailure($"[UnityExport] --game-dir missing or not found: {opts.GameDir}");
+            return 2;
+        }
+        if (string.IsNullOrWhiteSpace(opts.UeVersion) || !Enum.TryParse<EGame>(opts.UeVersion, ignoreCase: true, out var game))
+        {
+            HookLogger.LogFailure($"[UnityExport] --ue-version invalid or missing (e.g. GAME_UE5_1). Got: '{opts.UeVersion}'");
+            return 2;
+        }
+
+        string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
+            ? Path.Combine(AppContext.BaseDirectory, "RuriUnityExport")
+            : opts.ExportOut!;
+
+        try
+        {
+            var versions = new VersionContainer(game);
+            var provider = new DefaultFileProvider(opts.GameDir!, SearchOption.AllDirectories, isCaseInsensitive: true, versions: versions);
+            provider.ReadShaderMaps = true;   // materials (Phase 2) need inline shader maps; harmless for textures
+            provider.Initialize();
+
+            string aesHex = string.IsNullOrWhiteSpace(opts.Aes)
+                ? "0x0000000000000000000000000000000000000000000000000000000000000000"
+                : opts.Aes!;
+            try
+            {
+                provider.SubmitKey(new FGuid(), new FAesKey(aesHex));
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[UnityExport] SubmitKey failed (continuing — paks may be unencrypted): {ex.Message}");
+            }
+            provider.PostMount();
+
+            if (!string.IsNullOrWhiteSpace(opts.MappingsPath))
+            {
+                if (!File.Exists(opts.MappingsPath))
+                {
+                    HookLogger.LogFailure($"[UnityExport] --mappings not found: {opts.MappingsPath}");
+                    return 2;
+                }
+                provider.MappingsContainer = new FileUsmapTypeMappingsProvider(opts.MappingsPath!);
+            }
+            else
+            {
+                HookLogger.LogFailure("[UnityExport] WARNING: no --mappings given. UE5 IoStore packages use unversioned properties; without a .usmap most assets will fail to deserialize.");
+            }
+
+            try { provider.LoadVirtualPaths(); }
+            catch (Exception ex) { HookLogger.LogFailure($"[UnityExport] LoadVirtualPaths failed (continuing): {ex.Message}"); }
+
+            HookLogger.Log($"[UnityExport] Provider mounted. game={game} files={provider.Files.Count} mappings={(provider.MappingsContainer != null)} unityVersion={opts.UnityVersion ?? "2022.3.0f1"}");
+
+            // Wipe + recreate the output directory so each self-test run starts clean.
+            if (Directory.Exists(outputDirectory))
+            {
+                try { Directory.Delete(outputDirectory, recursive: true); }
+                catch (Exception ex) { HookLogger.LogFailure($"[UnityExport] could not clear output dir (continuing): {ex.Message}"); }
+            }
+            Directory.CreateDirectory(outputDirectory);
+
+            UnityYamlExportRunner.RunResult result = UnityYamlExportRunner.Run(new UnityYamlExportRunner.Options
+            {
+                Provider = provider,
+                OutputDirectory = outputDirectory,
+                UnityVersionText = opts.UnityVersion,
+                PackageFilter = opts.PackageFilters.Count > 0 ? opts.PackageFilters : null,
+                MaxPackages = opts.MaxPackages,
+                Log = HookLogger.Log,
+                LogError = HookLogger.LogFailure,
+            });
+
+            HookLogger.LogSuccess($"[UnityExport] Done. packages={result.PackagesScanned} exports={result.ExportsSeen} converted={result.Converted} files={result.FilesWritten} -> {outputDirectory}");
+            return result.FilesWritten > 0 ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[UnityExport] Direct export crashed: {ex}");
             return 1;
         }
     }

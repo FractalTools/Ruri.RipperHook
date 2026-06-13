@@ -19,6 +19,12 @@
     <ProjectReference Include="..\..\FModel\CUE4Parse\CUE4Parse\CUE4Parse.csproj" />
     <ProjectReference Include="..\..\FModel\CUE4Parse\CUE4Parse-Conversion\CUE4Parse-Conversion.csproj" />
   </ItemGroup>
+
+  <!-- UE -> Unity YAML export ("牛头蛇尾"). The shared AssetRipper reference set
+       lives in ..\AssetRipperRefs.props (imported by both this library and the CLI
+       entry exe so both .deps.json carry the AR assemblies). See that file for why
+       they are prebuilt <Reference HintPath> and not <ProjectReference>. -->
+  <Import Project="..\AssetRipperRefs.props" />
   
   <ItemGroup>
     <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />

@@ -23,3 +23,5 @@ Source/Ruri.SourceGenerated/*
 # nondeterministic & rebuilt on every run.
 __pycache__/
 *.pyc
+# UE -> Unity YAML export self-test output (CLI clears each run)
+TestLoopOutput/

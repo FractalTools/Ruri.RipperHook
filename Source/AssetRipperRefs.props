@@ -1,0 +1,77 @@
+<Project>
+
+  <!-- Shared AssetRipper reference set for the UE -> Unity YAML exporter.
+       Imported by BOTH Ruri.FModelHook (where the mapper lives) and
+       Ruri.FModelHook.CLI (the entry exe, whose .deps.json must list these
+       assemblies or the runtime cannot resolve them — a plain <Reference> in a
+       referenced library does NOT flow into the entry app's deps.json).
+
+       These are <Reference HintPath>, NOT <ProjectReference>, on purpose:
+       AssetRipper is frozen (CLAUDE.md §1) and AssetRipper.SourceGenerated.Extensions
+       carries a Roslyn source generator pinned to Microsoft.CodeAnalysis 5.3, which
+       the CLI .NET SDK (Roslyn 5.0) cannot load — recompiling the frozen tree from
+       the command line is impossible. The prebuilt closure under 0Bins/AssetRipper/<cfg>/
+       was produced by a 5.3-capable host and already contains the generated CreateXxx
+       factories. Referencing the entry DLLs there lets RAR transitively resolve +
+       copy-local the rest of the closure from that one folder, never building the
+       frozen tree. Same prebuilt-DLL pattern Ruri.RipperHook uses for Ruri.SourceGenerated.dll.
+
+       Path is anchored to this file's own location ($(MSBuildThisFileDirectory) =
+       Source/) so it resolves identically no matter which sibling project imports it. -->
+  <PropertyGroup>
+    <RuriArBin>$(MSBuildThisFileDirectory)..\AssetRipper\Source\0Bins\AssetRipper\$(Configuration)\</RuriArBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AssetRipper.Assets">
+      <HintPath>$(RuriArBin)AssetRipper.Assets.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.IO.Files">
+      <HintPath>$(RuriArBin)AssetRipper.IO.Files.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <!-- IEndianSpanReadable appears in IUnityObjectBase's inherited Read(...) signatures. -->
+    <Reference Include="AssetRipper.IO.Endian">
+      <HintPath>$(RuriArBin)AssetRipper.IO.Endian.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.Export.UnityProjects">
+      <HintPath>$(RuriArBin)AssetRipper.Export.UnityProjects.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.SourceGenerated.Extensions">
+      <HintPath>$(RuriArBin)AssetRipper.SourceGenerated.Extensions.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <!-- The stock NuGet AssetRipper.SourceGenerated 1.3.14.2 type model (ITexture2D /
+         IMesh / IMaterial / enums) — the identity the exporter + CreateXxx extensions
+         compile against, NOT the renamed Ruri.SourceGenerated.dll. -->
+    <Reference Include="AssetRipper.SourceGenerated">
+      <HintPath>$(RuriArBin)AssetRipper.SourceGenerated.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.Primitives">
+      <HintPath>$(RuriArBin)AssetRipper.Primitives.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.Yaml">
+      <HintPath>$(RuriArBin)AssetRipper.Yaml.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AssetRipper.Numerics">
+      <HintPath>$(RuriArBin)AssetRipper.Numerics.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

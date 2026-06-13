@@ -62,6 +62,16 @@ internal sealed class CliOptions
     public string? Aes { get; set; }           // optional AES main key (0x...)
     public bool WithMaterials { get; set; }    // opt in to material + texture sidecar export (default: geometry + material names only)
 
+    // Settings-free direct UE -> Unity YAML export ("牛头蛇尾"): build a CUE4Parse
+    // provider from --game-dir / --ue-version / --mappings / --aes (same as
+    // --export-map-direct), walk matching packages, convert each export through
+    // the UnityExport mapper registry, and write .asset + .meta. This is the
+    // headless self-test loop for the Unity exporter.
+    public bool ExportUnity { get; set; }
+    public string? UnityVersion { get; set; }            // target Unity version, e.g. 2022.3.0f1 (default 2022.3.0f1)
+    public List<string> PackageFilters { get; } = new(); // --package-filter <substring> (repeatable / comma list)
+    public int? MaxPackages { get; set; }                // cap packages scanned (self-test throttle)
+
     public static CliOptions Parse(string[] args)
     {
         var opts = new CliOptions();
@@ -144,6 +154,23 @@ internal sealed class CliOptions
                 case "--with-materials":
                     opts.WithMaterials = true;
                     break;
+                case "--export-unity":
+                    opts.ExportUnity = true;
+                    break;
+                case "--unity-version":
+                    if (i + 1 < args.Length) { opts.UnityVersion = args[i + 1]; i++; }
+                    break;
+                case "--package-filter":
+                    if (i + 1 < args.Length)
+                    {
+                        foreach (string tok in args[i + 1].Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                            opts.PackageFilters.Add(tok.Trim());
+                        i++;
+                    }
+                    break;
+                case "--max-packages":
+                    if (i + 1 < args.Length && int.TryParse(args[i + 1], out int maxPkg)) { opts.MaxPackages = maxPkg; i++; }
+                    break;
                 default:
                     // Pass-through: forwarded to the hook-side ParseCliArgs so
                     // any future flags it grows are auto-consumed without a
@@ -193,6 +220,18 @@ internal sealed class CliOptions
         "                        geometry + material names only — bulk texture decode is",
         "                        intermittently crash-prone on large worlds).",
         "  --list-maps           With --export-map-direct: print every .umap and exit.",
+        "",
+        "UE -> Unity YAML export (settings-free, skips FModel boot):",
+        "  --export-unity        Convert UE assets to Unity .asset + .meta YAML (牛头蛇尾).",
+        "  --game-dir PATH       Folder containing the game's Paks (or the game root).",
+        "  --ue-version NAME     CUE4Parse EGame enum name, e.g. GAME_UE5_1 (required).",
+        "  --mappings PATH       Local .usmap mappings file (required for UE5 IoStore).",
+        "  --aes 0x...           Optional AES main key if the paks are encrypted.",
+        "  --unity-version VER   Target Unity version (default 2022.3.0f1).",
+        "  --package-filter SUB  Only convert packages whose path contains SUB",
+        "                        (repeatable / comma list). Omit to convert everything.",
+        "  --max-packages N      Cap packages scanned (self-test throttle).",
+        "  --export-out DIR      Output directory (cleared each run; default TestLoopOutput).",
         "  -h, --help            Print this help and exit.",
         "",
         "All shader-export inputs (game dir, AES main+dynamic keys, mappings, EGame",
