@@ -71,20 +71,26 @@ internal static class Il2CppX86Listing
     /// 识别 il2cpp 每方法元数据初始化惯用法：
     /// <c>cmp byte ptr [X],0 / jne / push [Y] / call il2cpp_codegen_initialize_method / mov byte ptr [X],1</c>。
     /// X = 本方法 "元数据已初始化" 标志，Y = 传给初始化器的元数据 token。两者元数据里都没有名字，这里起语义名。
+    /// 守卫读取既可能是 <c>cmp byte ptr [X],0</c>，也可能是编译器先清零寄存器再 <c>cmp byte ptr [X],sil</c>，
+    /// 或 <c>test byte ptr [X],…</c>——只要该字节既被读作守卫又被 <c>mov byte ptr [X],1</c> 置位，就是一次性标志。
     /// </summary>
     private static Dictionary<ulong, string> DetectMetadataInitIdiom(ApplicationAnalysisContext app, List<Instruction> instructions)
     {
         ulong initMethod = Il2CppAsmAnnotator.KeyFunctionAddress(app, "initialize_method");
-        HashSet<ulong> cmpZero = null, movOne = null;
+        HashSet<ulong> readGuard = null, setOne = null;
         Dictionary<ulong, string> result = null;
 
         for (int i = 0; i < instructions.Count; i++)
         {
             Instruction x = instructions[i];
-            if (IsDirectMemoryOperand(x) && x.MemorySize == MemorySize.UInt8 && x.Op1Kind == OpKind.Immediate8)
+            if (IsDirectMemoryOperand(x) && x.MemorySize == MemorySize.UInt8)
             {
-                if (x.Mnemonic == Mnemonic.Cmp && x.Immediate8 == 0) (cmpZero ??= new()).Add(x.MemoryDisplacement64);
-                else if (x.Mnemonic == Mnemonic.Mov && x.Immediate8 == 1) (movOne ??= new()).Add(x.MemoryDisplacement64);
+                // 置位：mov byte ptr [X],1（初始化完成标记）。
+                if (x.Mnemonic == Mnemonic.Mov && x.Op1Kind == OpKind.Immediate8 && x.Immediate8 == 1)
+                    (setOne ??= new()).Add(x.MemoryDisplacement64);
+                // 守卫读取：cmp / test 该字节（对端是立即数 0 还是清零寄存器都算）。
+                else if (x.Mnemonic == Mnemonic.Cmp || x.Mnemonic == Mnemonic.Test)
+                    (readGuard ??= new()).Add(x.MemoryDisplacement64);
             }
             if (i > 0 && initMethod != 0 && x.Mnemonic == Mnemonic.Call
                 && x.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64
@@ -97,11 +103,11 @@ internal static class Il2CppX86Listing
                 }
             }
         }
-        if (cmpZero != null && movOne != null)
+        if (readGuard != null && setOne != null)
         {
-            foreach (ulong addr in cmpZero)
+            foreach (ulong addr in setOne)
             {
-                if (movOne.Contains(addr)) (result ??= new())[addr] = "method_init_flag";
+                if (readGuard.Contains(addr)) (result ??= new())[addr] = "method_init_flag";
             }
         }
         return result;
@@ -185,4 +191,157 @@ internal static class Il2CppX86Listing
             or Mnemonic.Andpd or Mnemonic.Andnpd or Mnemonic.Orpd or Mnemonic.Xorpd
             or Mnemonic.Vandps or Mnemonic.Vandnps or Mnemonic.Vorps or Mnemonic.Vxorps
             or Mnemonic.Vandpd or Mnemonic.Vandnpd or Mnemonic.Vorpd or Mnemonic.Vxorpd;
+
+    /// <summary>
+    /// 静态追踪 <c>il2cpp_init</c> 的调用图，给少数被高频引用的 il2cpp 运行时全局槽（.bss——运行期才填充、
+    /// 文件里无值，故无法静态读出"值"，但其"身份"可由 init 代码权威确定）命名。纯反汇编 + 与 global-metadata
+    /// 头部布局核对，绝不执行任何代码：
+    /// <list type="bullet">
+    /// <item><c>s_GlobalMetadata</c> / <c>s_GlobalMetadataHeader</c>：<c>GlobalMetadata::Initialize</c> 里同一
+    /// MapMetadata 结果先后存入相邻两槽，其一随即被按头部字段（<c>[rax+imm]</c>）解引用；先存者=base，后存者=header。</item>
+    /// <item><c>s_StringLiteralTable</c>：按 <c>header.stringLiteralSize</c>（<c>[header+0xC]</c>，标准 v29 头）
+    /// 分配、按字面量索引惰性填充的 <c>Il2CppString*</c> 缓存。</item>
+    /// </list>
+    /// 找不到（非 PE / 布局不符）就返回空表，优雅降级。
+    /// </summary>
+    public static Dictionary<ulong, string> TraceRuntimeGlobals(ApplicationAnalysisContext app)
+    {
+        Dictionary<ulong, string> map = new();
+        try
+        {
+            var binary = LibCpp2IlMain.Binary;
+            if (binary == null) return map;
+            ulong initVa = binary.GetVirtualAddressOfExportedFunctionByName("il2cpp_init");
+            if (initVa == 0) return map;
+            int bitness = binary.is32Bit ? 32 : 64;
+
+            HashSet<ulong> visited = new();
+            Queue<ulong> queue = new();
+            queue.Enqueue(initVa);
+            List<List<Instruction>> functions = new();
+            int budget = 0;
+            while (queue.Count > 0 && budget < 20000)
+            {
+                ulong funcVa = queue.Dequeue();
+                if (!visited.Add(funcVa)) continue;
+                budget++;
+                long off = binary.MapVirtualAddressToRaw(funcVa, false);
+                if (off < 0) continue;
+                byte[] code;
+                try { code = binary.ReadByteArrayAtRawAddress(off, 0x4000); }
+                catch { continue; }
+                if (code == null || code.Length == 0) continue;
+
+                ByteArrayCodeReader reader = new(code);
+                Decoder decoder = Decoder.Create(bitness, reader, funcVa);
+                List<Instruction> insns = new(128);
+                int guard = 0;
+                while (guard++ < 4000)
+                {
+                    decoder.Decode(out Instruction ins);
+                    if (ins.IsInvalid) break;
+                    insns.Add(ins);
+                    if ((ins.Mnemonic == Mnemonic.Call || ins.Mnemonic == Mnemonic.Jmp)
+                        && ins.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32)
+                    {
+                        ulong target = ins.NearBranchTarget;
+                        if (!visited.Contains(target) && visited.Count + queue.Count < 20000) queue.Enqueue(target);
+                    }
+                    if (ins.Mnemonic == Mnemonic.Ret || ins.Mnemonic == Mnemonic.Int3) break;
+                }
+                functions.Add(insns);
+            }
+
+            ulong headerSlot = 0;
+            foreach (List<Instruction> insns in functions)
+            {
+                if (TryFindMetadataPair(insns, out ulong slotBase, out ulong slotHeader))
+                {
+                    map[slotBase] = "s_GlobalMetadata";
+                    map[slotHeader] = "s_GlobalMetadataHeader";
+                    headerSlot = slotHeader;
+                    break;
+                }
+            }
+            if (headerSlot != 0)
+            {
+                foreach (List<Instruction> insns in functions)
+                {
+                    if (TryFindStringLiteralCache(insns, headerSlot, out ulong slotCache))
+                    {
+                        map[slotCache] = "s_StringLiteralTable";
+                        break;
+                    }
+                }
+            }
+            System.Console.WriteLine($"    [+] AR_Il2CppMethodDump: traced {map.Count} il2cpp runtime global(s) from il2cpp_init: {string.Join(", ", map.Values)}");
+        }
+        catch { }
+        return map;
+    }
+
+    // mov [直接寻址], <reg>（.bss/.data 槽 = 寄存器）。
+    private static bool IsDirectStoreOfRegister(in Instruction x, Register reg)
+        => x.Mnemonic == Mnemonic.Mov && x.Op0Kind == OpKind.Memory
+        && x.MemoryIndex == Register.None
+        && (x.MemoryBase == Register.None || x.MemoryBase == Register.RIP || x.MemoryBase == Register.EIP)
+        && x.Op1Kind == OpKind.Register && x.Op1Register == reg;
+
+    // call; mov [A],rax; …(rax 被 [rax+imm] 解引用、未被重写)…; mov [B],rax  → A=base, B=header。
+    private static bool TryFindMetadataPair(List<Instruction> insns, out ulong slotBase, out ulong slotHeader)
+    {
+        slotBase = 0; slotHeader = 0;
+        for (int i = 1; i < insns.Count; i++)
+        {
+            if (insns[i - 1].Mnemonic != Mnemonic.Call || !IsDirectStoreOfRegister(insns[i], Register.RAX)) continue;
+            ulong a = insns[i].MemoryDisplacement64;
+            bool sawDeref = false;
+            for (int j = i + 1; j < insns.Count && j < i + 18; j++)
+            {
+                Instruction y = insns[j];
+                if (y.Mnemonic == Mnemonic.Call) break;                                  // rax 被调用结果覆盖
+                // rax 被重写才终止；cmp/test 只读 Op0、不写，不能算重写（否则 `test rax,rax` 会误截断）。
+                if (y.Op0Kind == OpKind.Register && y.Op0Register == Register.RAX
+                    && y.Mnemonic != Mnemonic.Cmp && y.Mnemonic != Mnemonic.Test) break;
+                if (y.MemoryBase == Register.RAX && y.MemoryIndex == Register.None) sawDeref = true;
+                if (sawDeref && IsDirectStoreOfRegister(y, Register.RAX))
+                {
+                    ulong b = y.MemoryDisplacement64;
+                    if (b != a) { slotBase = a; slotHeader = b; return true; }
+                }
+            }
+        }
+        return false;
+    }
+
+    // mov rax,[header]; …(reg)←[rax+0Ch]…; call; mov [C],rax  → C = 字符串字面量缓存。
+    private static bool TryFindStringLiteralCache(List<Instruction> insns, ulong headerSlot, out ulong slotCache)
+    {
+        slotCache = 0;
+        for (int i = 0; i < insns.Count; i++)
+        {
+            Instruction x = insns[i];
+            if (x.Mnemonic != Mnemonic.Mov || x.Op0Kind != OpKind.Register || x.Op0Register != Register.RAX) continue;
+            if (x.Op1Kind != OpKind.Memory || x.MemoryIndex != Register.None) continue;
+            if (x.MemoryBase != Register.RIP && x.MemoryBase != Register.None) continue;
+            if (x.MemoryDisplacement64 != headerSlot) continue;
+
+            for (int j = i + 1; j < insns.Count && j < i + 8; j++)
+            {
+                Instruction y = insns[j];
+                if (y.Op1Kind != OpKind.Memory || y.MemoryBase != Register.RAX || y.MemoryIndex != Register.None || y.MemoryDisplacement64 != 0x0C) continue;
+                for (int k = j + 1; k < insns.Count && k < j + 14; k++)
+                {
+                    if (insns[k].Mnemonic != Mnemonic.Call) continue;
+                    for (int m = k + 1; m < insns.Count && m < k + 4; m++)
+                    {
+                        if (IsDirectStoreOfRegister(insns[m], Register.RAX)) { slotCache = insns[m].MemoryDisplacement64; return true; }
+                    }
+                    break;
+                }
+                break;
+            }
+        }
+        return false;
+    }
 }

@@ -52,6 +52,7 @@ internal static class Il2CppAsmAnnotator
     private static Dictionary<ulong, string> _exports; // PE 导出表 VA→名（权威）
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
+    private static Dictionary<ulong, string> _runtimeGlobals; // il2cpp_init 静态追踪出的运行时全局槽 VA→名（.bss，运行期填充）
     private static ulong _imageBase;
     private static PeSection[] _sections; // PE 段表：VA 落在哪个段 + 是否可执行 / 可写 / 已落盘
 
@@ -160,6 +161,8 @@ internal static class Il2CppAsmAnnotator
             return export;
         if (_keyFunctions.TryGetValue(addr, out string keyFunc))
             return keyFunc;
+        if (_runtimeGlobals != null && _runtimeGlobals.TryGetValue(addr, out string runtimeGlobal)) // il2cpp_init 追踪出的运行时全局（s_GlobalMetadata 等）
+            return runtimeGlobal;
         if (!_globalCache.TryGetValue(addr, out string global))
         {
             global = ResolveGlobal(addr);
@@ -482,6 +485,7 @@ internal static class Il2CppAsmAnnotator
         _sortedMethodStarts = app.MethodsByAddress.Keys.Where(k => k != 0).OrderBy(k => k).ToArray();
         _globalCache.Clear();
         ParsePeSections();
+        _runtimeGlobals = Il2CppX86Listing.TraceRuntimeGlobals(app);
         _app = app;
     }
 
