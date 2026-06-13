@@ -10,21 +10,19 @@ using CUE4Parse.UE4.Assets.Exports;
 namespace Ruri.FModelHook.UnityExport.Engine;
 
 // Owns the lifetime of one synthetic Unity export: a GameBundle + a single
-// ProcessedAssetCollection that every converted object lands in, plus the YAML
-// writer. Convert() turns one UE export into a Unity object via the registry;
-// ExportAll() writes each as a .asset + .meta, sharing ONE container so
-// cross-asset PPtrs (material -> texture, mesh -> ...) resolve to real GUIDs.
+// ProcessedAssetCollection (wrapped in a ConversionContext) that every converted
+// object lands in, plus the YAML writer. Convert() turns one UE export into a
+// Unity object via the registry (deduplicated); ExportAll() writes each as a
+// .asset + .meta, sharing ONE container so cross-asset PPtrs resolve to real GUIDs.
 public sealed class UnityYamlExportSession
 {
     private readonly GameBundle _bundle;
-    private readonly ProcessedAssetCollection _collection;
+    private readonly ConversionContext _context;
     private readonly UnityVersion _version;
     private readonly DefaultYamlExporter _exporter = new();
-    private readonly List<IUnityObjectBase> _converted = new();
     private readonly Action<string> _logError;
 
-    public int ConvertedCount => _converted.Count;
-    public ProcessedAssetCollection Collection => _collection;
+    public int ConvertedCount => _context.Converted.Count;
 
     public UnityYamlExportSession(UnityVersion version, Action<string> logError)
     {
@@ -34,7 +32,8 @@ public sealed class UnityYamlExportSession
         // AddNewProcessedCollection MUST carry the version, else version dispatch
         // falls to the Texture2D_3_5 antique layout with different field names
         // (FModelHook design note).
-        _collection = _bundle.AddNewProcessedCollection("RuriUnityExport", version);
+        ProcessedAssetCollection collection = _bundle.AddNewProcessedCollection("RuriUnityExport", version);
+        _context = new ConversionContext(collection);
     }
 
     // Convert one UE export into a Unity object (or null if unmapped). Per-asset
@@ -44,9 +43,7 @@ public sealed class UnityYamlExportSession
     {
         try
         {
-            IUnityObjectBase? converted = MapperRegistry.Convert(source, _collection);
-            if (converted != null) _converted.Add(converted);
-            return converted;
+            return _context.Convert(source);
         }
         catch (Exception ex)
         {
@@ -55,13 +52,14 @@ public sealed class UnityYamlExportSession
         }
     }
 
-    // Write every converted object as {projectDirectory}/{GetBestDirectory}/{name}.asset
-    // (+ .meta). Returns the number of assets actually written.
+    // Write every converted object (including ones pulled in transitively as
+    // references) as {projectDirectory}/{GetBestDirectory}/{name}.{ext} (+ .meta).
+    // Returns the number of assets actually written.
     public int ExportAll(string projectDirectory)
     {
         // One export collection per asset (each assigns a fresh GUID + writes a .meta).
-        List<IExportCollection> collections = new(_converted.Count);
-        foreach (IUnityObjectBase asset in _converted)
+        List<IExportCollection> collections = new(_context.Converted.Count);
+        foreach (IUnityObjectBase asset in _context.Converted)
         {
             if (_exporter.TryCreateCollection(asset, out IExportCollection? collection))
                 collections.Add(collection);
