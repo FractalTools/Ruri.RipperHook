@@ -84,6 +84,44 @@
       <SpecificVersion>False</SpecificVersion>
       <Private>true</Private>
     </Reference>
+    <!-- ExportHandler / FullConfiguration / ExportSettings live here (AR.Export.dll
+         hosts the AssetRipper.Export.Configuration namespace; ExportHandler itself
+         is in AR.Export.UnityProjects.dll). FModelHook hands the populated
+         GameBundle to ExportHandler.Export so textures route through
+         TextureAssetExporter -> PNG instead of the bare-YAML DefaultYamlExporter. -->
+    <Reference Include="AssetRipper.Export">
+      <HintPath>$(RuriArBin)AssetRipper.Export.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <!-- BaseManager (stub IAssemblyManager for our synthetic, script-less bundle)
+         lives in AR.Import.dll, together with ImportSettings / CoreConfiguration. -->
+    <Reference Include="AssetRipper.Import">
+      <HintPath>$(RuriArBin)AssetRipper.Import.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <!-- EngineResourceData JSON-serializer context referenced by FullConfiguration. -->
+    <Reference Include="AssetRipper.Mining.PredefinedAssets">
+      <HintPath>$(RuriArBin)AssetRipper.Mining.PredefinedAssets.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <!-- Logger.cs (in AR.Import.dll) wires Cpp2IL.Core's log events from its static
+         ctor; if either Cpp2IL.Core or its native peer LibCpp2IL is missing from
+         the entry-app folder, the type initializer throws TypeInitializationException
+         the first time anything touches Logger.* (which ExportHandler.Export does
+         from line 1). -->
+    <Reference Include="Cpp2IL.Core">
+      <HintPath>$(RuriArBin)Cpp2IL.Core.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="LibCpp2IL">
+      <HintPath>$(RuriArBin)LibCpp2IL.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

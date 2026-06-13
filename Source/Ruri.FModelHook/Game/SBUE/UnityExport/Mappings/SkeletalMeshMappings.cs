@@ -7,6 +7,7 @@ using AssetRipper.SourceGenerated.Subclasses.BlendShapeData;
 using AssetRipper.SourceGenerated.Subclasses.BlendShapeVertex;
 using AssetRipper.SourceGenerated.Subclasses.MeshBlendShape;
 using AssetRipper.SourceGenerated.Subclasses.MeshBlendShapeChannel;
+using AssetRipper.SourceGenerated.Subclasses.MinMaxAABB;
 using CUE4Parse_Conversion.Meshes;
 using CUE4Parse_Conversion.Meshes.PSK;
 using CUE4Parse.UE4.Assets.Exports.Animation;
@@ -60,7 +61,14 @@ public static class SkeletalMeshMappings
         MeshData meshData = MeshDataFactory.FromSkeletalMeshLod(lod, skin, bindPose);
         mesh.FillWithCompressedMeshData(meshData);
 
+        // FillWithCompressedMeshData defaults IsReadable to false (struct init zero);
+        // a skinned mesh that Unity wants to bind at runtime needs CPU-readable data
+        // for SkinnedMeshRenderer.BakeMesh / collider cooking — flip it back on.
+        if (mesh.Has_IsReadable())
+            mesh.IsReadable = true;
+
         SetBoneNameHashes(mesh, converted.RefSkeleton);
+        SetBonesAABB(mesh, lod, converted.RefSkeleton.Count);
         SetBlendShapes(mesh, source, lod.LODIndex);
     }
 
@@ -73,7 +81,11 @@ public static class SkeletalMeshMappings
         return skin;
     }
 
-    // Keep the 4 largest influences and renormalize so the weights sum to 1.
+    // Keep the 4 largest influences, sort descending and renormalize so the weights
+    // sum to 1. Descending order matters because AR.CompressedMesh.SetWeights stores
+    // weights as int(w * 31) and stops once accumulated == 31; putting the biggest
+    // weight first minimizes quantization error on the small tail. It also matches
+    // Unity's BoneWeight convention ("indices are in descending order of weight").
     private static BoneWeight4 ToBoneWeight(IReadOnlyList<BoneInfluence> influences)
     {
         Span<int> bones = stackalloc int[4];
@@ -88,6 +100,22 @@ public static class SkeletalMeshMappings
                 weights[minSlot] = influence.Weight;
                 bones[minSlot] = influence.Bone;
             }
+        }
+
+        // Insertion sort, 4 elements: descending by weight.
+        for (int i = 1; i < 4; i++)
+        {
+            float weightCarry = weights[i];
+            int boneCarry = bones[i];
+            int slot = i;
+            while (slot > 0 && weights[slot - 1] < weightCarry)
+            {
+                weights[slot] = weights[slot - 1];
+                bones[slot] = bones[slot - 1];
+                slot--;
+            }
+            weights[slot] = weightCarry;
+            bones[slot] = boneCarry;
         }
 
         float sum = weights[0] + weights[1] + weights[2] + weights[3];
@@ -132,6 +160,75 @@ public static class SkeletalMeshMappings
 
         if (mesh.Has_RootBoneNameHash())
             mesh.RootBoneNameHash = Crc32Algorithm.HashUTF8(refSkeleton[0].Name.Text);
+    }
+
+    // Per-bone local-space AABB, one entry per ref-skeleton bone (entries align to
+    // BoneNameHashes / BindPose). Unity uses these for SkinnedMeshRenderer culling
+    // and updateWhenOffscreen; missing them produces over-conservative bounds and
+    // off-screen culling artifacts. We compute mesh-local AABBs over every vertex
+    // whose primary (largest-weight) bone is that bone, which matches Unity's
+    // internal "GetBoneAABBs" semantics. Bones with no vertices get an empty box
+    // (Min == Max == 0) — Unity treats that as "this bone has no skinned vertices".
+    private static void SetBonesAABB(IMesh mesh, CSkelMeshLod lod, int boneCount)
+    {
+        if (!mesh.Has_BonesAABB() || boneCount == 0)
+            return;
+
+        CSkelMeshVertex[]? verts = lod.Verts;
+        if (verts is null || verts.Length == 0)
+            return;
+
+        SystemVector3[] mins = new SystemVector3[boneCount];
+        SystemVector3[] maxs = new SystemVector3[boneCount];
+        bool[] seen = new bool[boneCount];
+
+        for (int v = 0; v < verts.Length; v++)
+        {
+            CSkelMeshVertex vertex = verts[v];
+            IReadOnlyList<BoneInfluence> influences = vertex.Influences;
+            if (influences.Count == 0)
+                continue;
+
+            // Use only the strongest influence — matches Unity's per-bone bounds
+            // (every vertex belongs to one "primary" bone box) without overcounting.
+            int bestBone = -1;
+            float bestWeight = 0f;
+            for (int k = 0; k < influences.Count; k++)
+            {
+                BoneInfluence influence = influences[k];
+                if (influence.Weight > bestWeight)
+                {
+                    bestWeight = influence.Weight;
+                    bestBone = influence.Bone;
+                }
+            }
+            if (bestBone < 0 || bestBone >= boneCount)
+                continue;
+
+            SystemVector3 position = new(vertex.Position.X, vertex.Position.Y, vertex.Position.Z);
+            if (!seen[bestBone])
+            {
+                mins[bestBone] = position;
+                maxs[bestBone] = position;
+                seen[bestBone] = true;
+            }
+            else
+            {
+                mins[bestBone] = SystemVector3.Min(mins[bestBone], position);
+                maxs[bestBone] = SystemVector3.Max(maxs[bestBone], position);
+            }
+        }
+
+        for (int i = 0; i < boneCount; i++)
+        {
+            MinMaxAABB box = mesh.BonesAABB.AddNew();
+            if (seen[i])
+            {
+                box.Min.SetValues(mins[i].X, mins[i].Y, mins[i].Z);
+                box.Max.SetValues(maxs[i].X, maxs[i].Y, maxs[i].Z);
+            }
+            // Else leave as default zero box (bone has no skinned verts).
+        }
     }
 
     // Aggregate every UMorphTarget into mesh.Shapes. Each morph target becomes one

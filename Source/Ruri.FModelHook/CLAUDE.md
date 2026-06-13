@@ -5,7 +5,7 @@
 **结构铁律:所有 FModelHook 的 hook/特性都落在 `Source/Ruri.FModelHook/Game/SBUE/` 下**(与 `GlbSceneExport`/`ShaderDecompiler`/`Headless` 并列),命名空间 `Ruri.FModelHook.Game.SBUE.<Feature>`。UnityExport 即 `Game/SBUE/UnityExport/`。
 
 **落地结构**(`Source/Ruri.FModelHook/Game/SBUE/UnityExport/`,命名空间 `Ruri.FModelHook.Game.SBUE.UnityExport.*`):
-- `Engine/` — `IUnityObjectMapping` / `Mapping`(`Set`/`After` fluent builder)/ `MapperRegistry`(exact+基类链派发)/ `ConversionContext`(可重入、按源对象 dedup、cross-ref PPtr、group 导出)/ `MinimalExportContainer`(`ProjectAssetContainer` 的最小忠实镜像)/ `UnityYamlExportSession` / `EnumMaps` / `StructCopy` 思路并入各 mapping / `VertexPacker`(无损 VertexData 打包)/ `MeshDataFactory`。
+- `Engine/` — `IUnityObjectMapping` / `Mapping`(`Set`/`After` fluent builder)/ `MapperRegistry`(exact+基类链派发)/ `ConversionContext`(可重入、按源对象 dedup、cross-ref PPtr、group 导出)/ `UnityYamlExportSession`(回填阶段持 GameBundle + ProcessedAssetCollection,导出阶段把 bundle 交给 AR 的 `ExportHandler.Process + Export`,由 AR 自己的 `ProjectExporter` 按类型分派 Texture→PNG / Material→.mat / Mesh→.asset / Prefab→.prefab)/ `EnumMaps` / `StructCopy` 思路并入各 mapping / `VertexPacker`(无损 VertexData 打包)/ `MeshDataFactory`。
 - `Mappings/` — `Texture / Material / StaticMesh / SkeletalMesh / Animation / World` + `UnityMappings.RegisterAll()`。
 - `Hook/UE_UnityYamlExport_Hook.cs` — FModel GUI 右键「Export → Unity YAML」(detour `MainWindow.OnLoaded` + 全局 `ContextMenu.OpenedEvent`,0 改 FModel)。
 - `UnityYamlExportRunner` — headless 驱动;`ConvertAndExport(provider, keys, outDir, ver, log, logErr)` 被 CLI 与 GUI 共用。
@@ -189,23 +189,32 @@ foreach (var lazy in pkg.ExportsLazy) {
 - ImageData 直接 `tex.ImageData_C28 = bytes`,**不要碰 `StreamData_C28`**(那是 .resS 外链)。YAML serializer 自动转 hex blob。
 - 跨 collection PPtr 要先 `targetCol.AddDependency(referencedCol)`。
 
-### YAML 写出(全 public,无需 hook)
+### 工程写出(交给 AR 自己的 `ExportHandler`,绝不自己写编码/序列化)
 
 ```csharp
-var exporter = new DefaultYamlExporter();
-var exportCol = new AssetExportCollection<IUnityObjectBase>(exporter, unityObj);
-IExportContainer container = new MinimalExportContainer(col, UnityVersion.V_2022, exportCol);
-exportCol.Export(container, "C:/out/UnityProject", LocalFileSystem.Instance);
+// 回填阶段:UnityYamlExportSession 把转换好的 IUnityObjectBase 全塞进一个
+// ProcessedAssetCollection(在 GameBundle 里),cross-asset PPtr 走
+// ConversionContext.Ptr() 已经建好。
+// 导出阶段:直接把 GameBundle 喂给 AR 的 ExportHandler:
+var settings = new FullConfiguration();             // ImageExportFormat 默认 Png
+var assemblyManager = new BaseManager(_ => { });    // 我们的合成 bundle 没脚本,空 manager 即可
+var gameData = new GameData(bundle, version, assemblyManager, null);
+var handler = new ExportHandler(settings);
+if (bundle.HasAnyAssetCollections())
+    handler.Process(gameData);                      // SpriteProcessor 给每个 Texture2D 加 SpriteInformationObject MainAsset → 触发 TextureExportCollection → PNG
+handler.Export(gameData, outputDir, LocalFileSystem.Instance);
 ```
 
-`IExportContainer` 只 5 方法,自己实现一个 stub:
-- `GetExportID(asset)` → 调 `ExportIdHandler.GetMainExportID(asset)`
-- `CreateExportPointer(asset)` → 同 collection 内 `new MetaPtr(GetExportID(asset))`,跨 collection 用 `new MetaPtr(id, guid, AssetType.Serialized)`
-- `ExportVersion` → 目标 UnityVersion
-- `File` → `asset.Collection`
-- `Scene` → 单 asset 场景下 null 即可
+为什么前一版 `DefaultYamlExporter` + 手写 `MinimalExportContainer` 是错的:
+- Texture2D 走默认 YAML serializer → 输出 `.texture2D`(中间格式),不是 PNG。
+- 真正的 PNG 路径是 `TextureAssetExporter`(AR 的 `Overrides.cs` 注册),且 **只在 `texture.MainAsset is SpriteInformationObject` 时**才能被 `TryCreateCollection` 选中——必须跑过 `SpriteProcessor`。
+- `ProjectAssetContainer` 自带 cross-asset PPtr → `{fileID, guid, type}` 解析,自己写 stub 容器只够单 asset 用。
 
-**不要拖整套 `ProjectAssetContainer` + `ProjectExporter`**,那是给 AR 内部 full project export 用的。
+**关键铁律**:我们只做"回填"(UE 数据 → AR 对象 + PPtr cross-ref);**编码/PNG/序列化/路径布局** 全是 AR 自己的活,绝不在我们这边重复造轮子。新增 AR 程序集引用只在 `Source/AssetRipperRefs.props` 加 `HintPath`,绝不动 `AssetRipper/Source/`。
+
+AR 的 `Logger` 是进程级 static 注册表——`ExportAll` 会在范围内 `Logger.Add(forwarder)` / `Logger.Remove(forwarder)` 把 Warning/Error 桥到我们的 logError,这样 "Can't export 'X' because resources file 'Y' missing" / "Unable to convert 'X' to bitmap" 这类 per-collection 失败诊断才会浮上来;否则它们沉默到 void、PNG 缺了都不知道原因。
+
+AR `Import.dll` 的 `Logger` static ctor 强引用 `Cpp2IL.Core` + `LibCpp2IL`(订阅它们的日志事件),所以这两个 DLL 必须随 AR.Import 一起进入口 exe 目录——`AssetRipperRefs.props` 已 `<Reference HintPath>` 把它们带过去,千万别去掉。
 
 ---
 
@@ -238,8 +247,7 @@ Source/Ruri.FModelHook/
       IUnityObjectMapping.cs            # ~30 行
       Mapping.cs                        # ~30 行 fluent builder
       MapperRegistry.cs                 # ~20 行
-      MinimalExportContainer.cs         # ~50 行 IExportContainer stub
-      UnityYamlExportSession.cs         # ~50 行 bundle + collection + writer 生命周期
+      UnityYamlExportSession.cs         # bundle + collection 生命周期 + 把 GameBundle 交给 AR ExportHandler 跑 Process+Export
       StructCopy.cs                     # FVector→Vector3f 等手写扩展
       EnumMaps.cs                       # EPixelFormat / TextureAddress / ... → Unity enum
     Mappings/
