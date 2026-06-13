@@ -72,6 +72,12 @@
       <SpecificVersion>False</SpecificVersion>
       <Private>true</Private>
     </Reference>
+    <!-- Crc32Algorithm.HashUTF8 for Unity bone-name / blend-shape-channel hashes. -->
+    <Reference Include="AssetRipper.Checksum">
+      <HintPath>$(RuriArBin)AssetRipper.Checksum.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

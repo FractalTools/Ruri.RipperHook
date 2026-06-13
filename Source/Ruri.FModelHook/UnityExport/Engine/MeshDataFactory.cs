@@ -20,10 +20,17 @@ namespace Ruri.FModelHook.UnityExport.Engine;
 // linear transform; the vertex DATA here is already lossless and complete.
 public static class MeshDataFactory
 {
-    public static MeshData FromStaticMeshLod(CStaticMeshLod lod)
+    public static MeshData FromStaticMeshLod(CStaticMeshLod lod) => FromBaseLod(lod, lod.Verts!);
+
+    // CSkelMeshVertex derives from CMeshVertex, so skeletal LODs share the exact
+    // geometry transcription; the caller supplies skin (per-vertex bone weights)
+    // and bind pose, which the compressed-mesh fill consumes alongside geometry.
+    public static MeshData FromSkeletalMeshLod(CSkelMeshLod lod, BoneWeight4[] skin, System.Numerics.Matrix4x4[] bindPose)
+        => FromBaseLod(lod, lod.Verts!) with { Skin = skin, BindPose = bindPose };
+
+    private static MeshData FromBaseLod(CBaseMeshLod lod, CMeshVertex[] verts)
     {
         int count = lod.NumVerts;
-        CMeshVertex[] verts = lod.Verts!;
 
         SystemVector3[] vertices = new SystemVector3[count];
         SystemVector3[]? normals = lod.HasNormals ? new SystemVector3[count] : null;
