@@ -5,6 +5,7 @@ using AssetRipper.IO.Files.Streams.Smart;
 using System.Buffers;
 using System.Reflection;
 using Ruri.RipperHook.Core;
+using AssetRipper.IO.Files.Exceptions;
 
 namespace Ruri.RipperHook.HookUtils.BundleFileBlockReaderHook;
 
@@ -78,13 +79,23 @@ public class BundleFileBlockReaderHook : CommonHook, IHookModule
         var type = Type.GetType(TYPE);
         var m_blocksInfo = (BlocksInfo)GetPrivateField(type, "m_blocksInfo");
         var m_dataOffset = (long)GetPrivateField(type, "m_dataOffset");
-        var m_stream = (Stream)GetPrivateField(type, "m_stream");
+        var m_stream = (SmartStream)GetPrivateField(type, "m_stream");
         var m_cachedBlockIndex = (int)GetPrivateField(type, "m_cachedBlockIndex");
         var m_cachedBlockStream = (SmartStream)GetPrivateField(type, "m_cachedBlockStream");
 
         if ((bool)GetPrivateField(type, "m_isDisposed"))
         {
             throw new ObjectDisposedException(nameof(type));
+        }
+
+        // Avoid storing entire non-compresed entries in memory by mapping a stream to the block location.
+        if (m_blocksInfo.StorageBlocks.Length == 1 && m_blocksInfo.StorageBlocks[0].CompressionType == CompressionType.None)
+        {
+            if (m_dataOffset + entry.Offset + entry.Size > m_stream.Length)
+            {
+                throw new InvalidFormatException("Entry extends beyond the end of the stream.");
+            }
+            return m_stream.CreatePartial(m_dataOffset + entry.Offset, entry.Size);
         }
 
         // find block offsets
@@ -97,14 +108,8 @@ public class BundleFileBlockReaderHook : CommonHook, IHookModule
             blockDecompressedOffset += m_blocksInfo.StorageBlocks[blockIndex].UncompressedSize;
         }
         long entryOffsetInsideBlock = entry.Offset - blockDecompressedOffset;
-
-        // Default: AR's private CreateStream (byte[] for small entries, MemoryStream
-        // for medium, temp file for >= 50MB). Games that produce huge numbers of
-        // entries (VFS / WMW / BLK decrypt paths) can opt into SpillLargeEntriesToTemp
-        // by passing it as the constructor's entryStreamFactory argument.
-        using SmartStream entryStream = CustomEntryStreamFactory != null
-            ? CustomEntryStreamFactory(entry)
-            : (SmartStream)CreateStream.Invoke(this, new object[] { entry.Size });
+        
+        using SmartStream entryStream = (SmartStream)CreateStream.Invoke(this, new object[] { entry.Size });
         long left = entry.Size;
         m_stream.Position = m_dataOffset + blockCompressedOffset;
 
