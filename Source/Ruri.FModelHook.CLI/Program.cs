@@ -347,6 +347,16 @@ public static class Program
             string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
                 ? Path.Combine(AppContext.BaseDirectory, "GlbSceneExport")
                 : opts.ExportOut!;
+            // Wipe + recreate so each run starts clean (matches --export-unity and
+            // the documented "CLI clears the output dir every run" rule). Without
+            // this, a prior run's Actors/ + Assets/ + .glb parts linger and a
+            // completeness reconciliation (actor/asset counts vs manifest) reads a
+            // stale mix.
+            if (Directory.Exists(outputDirectory))
+            {
+                try { Directory.Delete(outputDirectory, recursive: true); }
+                catch (Exception ex) { HookLogger.LogFailure($"[GlbScene] could not clear output dir (continuing): {ex.Message}"); }
+            }
             Directory.CreateDirectory(outputDirectory);
 
             int exported = 0;

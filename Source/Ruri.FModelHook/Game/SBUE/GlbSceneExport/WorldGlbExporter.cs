@@ -3,78 +3,62 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using CUE4Parse.FileProvider;
+using CUE4Parse.UE4.Assets;
 using CUE4Parse.UE4.Assets.Exports;
-using CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
-using CUE4Parse.UE4.Assets.Exports.GeometryCollection;
-using CUE4Parse.UE4.Assets.Exports.Material;
-using CUE4Parse.UE4.Assets.Exports.StaticMesh;
-using CUE4Parse.UE4.Objects.Core.Misc;
-using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse_Conversion;
-using CUE4Parse_Conversion.Materials;
-using CUE4Parse_Conversion.Meshes;
-using CUE4Parse_Conversion.Meshes.glTF;
-using CUE4Parse_Conversion.Meshes.PSK;
-using FModel.Views.Snooper;
-using SharpGLTF.Geometry;
-using SharpGLTF.Geometry.VertexTypes;
-using SharpGLTF.Scenes;
-using SharpGLTF.Schema2;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, VertexEmpty>;
-
-// Exports a whole UE map as glTF binary (.glb) scene(s).
+// Top-level orchestrator for `--export-map-direct`. Responsibilities split
+// across three layers that all run in the SAME pass so the output package is
+// internally consistent (a manifest count never references an actor that was
+// never written):
 //
-// Geometry is produced by CUE4Parse's own glTF section exporter
-// (Gltf.ExportStaticMeshSections) so every mesh is byte-identical to what
-// FModel writes when you "Save Model" a single static mesh as GLB. On top of
-// that we build a multi-node SharpGLTF SceneBuilder: each placed component
-// becomes one AddRigidMesh(mesh, worldMatrix) call, and identical meshes
-// (matched by LightingGuid) share a single MeshBuilder so glTF stores them once
-// and instances them — exactly how FModel's preview instances them.
+//   (A) RENDER LAYER  — Iterate every collected actor, fan it out through
+//       ComponentResolver into PlacedComponent, dispatch each placement
+//       through the IComponentExporter registry. Mesh / spline / light /
+//       camera / landscape all write into ONE shared GlbSceneContext, which
+//       part-flushes at MaxInstancesPerGlb. Result: `<map>.glb` (or
+//       `<map>.partNNN.glb`) + material sidecars.
+//   (B) LOSSLESS LAYER — Walk the SAME actor list and for every actor write
+//       a JSON dump under `Actors/`. This is independent of (A): an actor
+//       with no renderable component still produces a JSON. So Niagara,
+//       PostProcessVolume, SkyAtmosphere, DataLayer info, PlayerStart all
+//       round-trip without loss.
+//   (C) CLOSURE LAYER — Walk the map package's import set, recursively
+//       export every referenced asset under `Assets/`. Foundation revision
+//       writes a manifest counter; the real recursion lands in the cell.
 //
-// Actor discovery (including World Partition aggregation) is delegated to
-// WorldActorCollector; the per-actor mesh resolution below is a 1:1 port of
-// FModel Renderer.WorldMesh / ProcessMesh (Renderer.cs:533-690).
+// A scene-manifest.json at the run root ties the three layers together with
+// per-layer counts plus a `dropped` list (the user requirement is
+// dropped == 0; the manifest is the audit trail).
 //
-// SCALE: an open world expands its InstancedStaticMeshComponents into hundreds
-// of thousands of placements. SharpGLTF's ToGltf2() materialises one Schema2
-// node per placement and runs out of memory well before that. So the scene is
-// written in BUDGETED PARTS: once the in-flight SceneBuilder reaches
-// MaxInstancesPerGlb nodes it is flushed to "<map>.partNNN.glb" and a fresh
-// builder continues. Every part is world-space aligned, so importing them all
-// reconstitutes the complete scene. A map that fits in one part is written as
-// a single "<map>.glb" with no suffix.
+// The Export() signature stays identical to the prior monolithic version so
+// callers (UE_GlbSceneExport_Hook + the CLI's RunExportMapDirect) need no
+// changes.
 public sealed class WorldGlbExporter
 {
-    // Node budget per .glb part. Kept well under the point where ToGltf2()
-    // exhausts memory on a large open world, while keeping the part count low.
-    private const int MaxInstancesPerGlb = 50_000;
+    // Render-layer dispatch table. Spline BEFORE static (USplineMeshComponent
+    // : UStaticMeshComponent, the first CanExport hit wins). Static between
+    // them and the actor-level landscape entry so component-bearing actors
+    // exhaust the component options before the actor-as-leaf landscape
+    // entry has a chance.
+    private static IComponentExporter[] BuildExporterRegistry() => new IComponentExporter[]
+    {
+        new SplineMeshComponentExporter(),
+        new StaticMeshComponentExporter(),
+        new LightComponentExporter(),
+        new CameraComponentExporter(),
+        new LandscapeComponentExporter(),
+    };
 
     private readonly IFileProvider _provider;
     private readonly ExporterOptions _options;
     private readonly Action<string> _log;
     private readonly Action<string> _logError;
-
-    // Reset on every part flush so peak memory is bounded by one part.
-    private SceneBuilder _sceneBuilder = new();
-    private Dictionary<FGuid, MESH?> _meshCache = new();
-
-    // Persist across parts: materials are written once (deduped); the distinct
-    // mesh / part bookkeeping is for the summary log.
-    private readonly List<MaterialExporter2> _materialExporters = new();
-    private readonly List<string> _materialKeys = new(); // parallel to _materialExporters, for logging
-    private readonly HashSet<string> _writtenMaterialKeys = new(StringComparer.Ordinal);
-    private readonly HashSet<FGuid> _distinctMeshGuids = new();
-    private readonly List<string> _writtenParts = new();
-
-    private string _outputBasePath = string.Empty;
-    private int _placementCount;
-    private int _batchInstanceCount;
-    private int _overrideMaterialSkips;
+    private readonly IComponentExporter[] _exporterRegistry;
 
     public WorldGlbExporter(IFileProvider provider, ExporterOptions options, Action<string> log, Action<string> logError)
     {
@@ -82,6 +66,7 @@ public sealed class WorldGlbExporter
         _options = options;
         _log = log;
         _logError = logError;
+        _exporterRegistry = BuildExporterRegistry();
     }
 
     public bool Export(UWorld world, string sourcePackageKey, string outputDirectory, CancellationToken cancellationToken)
@@ -95,263 +80,212 @@ public sealed class WorldGlbExporter
         string scanKey = StripExtension(sourcePackageKey);
         _log($"[GlbScene] Exporting world '{worldPackagePath}' (file key '{scanKey}') ...");
 
-        _outputBasePath = BuildOutputBase(outputDirectory, worldPackagePath);
+        string outputBasePath = BuildOutputBase(outputDirectory, worldPackagePath);
+        string actorsOutputDirectory = outputBasePath + "_Actors";
+        string assetsOutputDirectory = outputBasePath + "_Assets";
+        string manifestPath = outputBasePath + ".scene-manifest.json";
 
         var collector = new WorldActorCollector(_provider, _log, _logError, cancellationToken);
         List<WorldActor> actors = collector.Collect(world, scanKey);
+        SceneCensus.Log(actors, _log);
 
-        _log($"[GlbScene] Building scene in <= {MaxInstancesPerGlb}-instance .glb parts...");
+        // Diagnostic gate: RURI_GLB_CENSUS_ONLY=1 dumps the census (plus a
+        // deep structural sample of the named ExportTypes) and returns before
+        // the heavy geometry build, so scene-coverage iteration is fast.
+        if (Environment.GetEnvironmentVariable("RURI_GLB_CENSUS_ONLY") is "1")
+        {
+            string? sampleList = Environment.GetEnvironmentVariable("RURI_GLB_CENSUS_SAMPLES");
+            if (!string.IsNullOrWhiteSpace(sampleList))
+            {
+                SceneCensus.DumpSamples(
+                    actors,
+                    _log,
+                    sampleList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+            _log("[GlbScene] RURI_GLB_CENSUS_ONLY set — skipping geometry build.");
+            return true;
+        }
+
+        // Build the shared scene context and the manifest the three layers
+        // populate as they run.
+        var manifest = new SceneManifest
+        {
+            SourceMapPackagePath = worldPackagePath,
+            GameVersion = _provider.Versions?.Game.ToString() ?? string.Empty,
+        };
+        var materialFactory = new GlbMaterialFactory(_log, _logError);
+        var context = new GlbSceneContext(_provider, _options, _log, _logError, materialFactory, manifest);
+        context.SetOutputBasePath(outputBasePath);
+
+        // (A) Render layer ----------------------------------------------------
+        _log($"[GlbScene] Building scene in <= {GlbSceneContext.MaxInstancesPerGlb}-instance .glb parts...");
         foreach (var placement in actors)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                ProcessActor(placement.Actor, placement.BaseTransform);
+                DispatchActor(placement.Actor, placement.BaseTransform, context);
             }
             catch (Exception ex)
             {
                 _logError($"[GlbScene] Actor '{(placement.Actor as UObject)?.Name}' failed: {ex.Message}");
+                manifest.RecordDroppedActor($"{(placement.Actor as UObject)?.GetPathName() ?? "?"}: {ex.Message}");
             }
         }
-        FlushBatch();
+        context.FlushBatch();
+        // Punctual lights AND cameras cannot ride the SceneBuilder in this
+        // SharpGLTF build (LightBuilder ctors are internal; SceneBuilder.AddCamera
+        // is a no-op through ToGltf2), so both were buffered across the pass and
+        // are emitted now, after the final mesh flush, into one dedicated .glb
+        // part at the Schema2 layer — complete set, written exactly once.
+        context.WritePendingLightsAndCameras();
+        _log($"[GlbScene][Diag] resolver yielded {_instrumentation.Resolved} components (claimed={_instrumentation.Claimed}, unclaimed={_instrumentation.Unclaimed}); pendingLights={context.PendingLightCount} pendingCameras={context.PendingCameraCount}.");
 
-        if (_overrideMaterialSkips > 0)
-        {
-            _log($"[GlbScene] Note: {_overrideMaterialSkips} component(s) used per-instance OverrideMaterials; " +
-                 "the shared instanced mesh keeps its base materials (per-variant material export is a future phase).");
-        }
+        // The "271 components used per-instance OverrideMaterials" diagnostic
+        // line from the prior monolith is no longer needed: GlbSceneContext
+        // now folds the override material set into the mesh-share key, so
+        // overrides correctly emit distinct MeshBuilders and the previously
+        // skipped placements now contribute geometry with the overridden
+        // material name baked into the SharpGLTF primitive.
 
-        if (_placementCount == 0 || _writtenParts.Count == 0)
+        if (context.PlacementCount == 0 || context.WrittenParts.Count == 0)
         {
             _logError($"[GlbScene] No renderable meshes written for '{worldPackagePath}'.");
-            return false;
+            // Even an empty render layer must still flush the lossless +
+            // closure layers + manifest — they prove the actor list was
+            // walked even though nothing rendered. Continue rather than
+            // early-returning so the user sees the audit data on failure.
         }
 
         if (_options.ExportMaterials)
         {
-            _log($"[GlbScene] Exporting {_materialExporters.Count} materials/textures...");
-            WriteMaterials(outputDirectory);
+            _log($"[GlbScene] Exporting {context.MaterialExporters.Count} materials/textures...");
+            new MaterialTextureWriter(_log, _logError).Write(
+                context.MaterialExporters,
+                context.MaterialKeys,
+                outputDirectory);
             _log("[GlbScene] Materials/textures exported.");
         }
 
-        string outputDescription = FinalizeParts();
-        _log($"[GlbScene] Done. placements={_placementCount} uniqueMeshes={_distinctMeshGuids.Count} " +
-             $"parts={_writtenParts.Count} materials={_materialExporters.Count} -> {outputDescription}");
-        return true;
-    }
+        string outputDescription = FinalizePartsAndRecordManifest(outputBasePath, context, manifest);
 
-    // 1:1 port of FModel Renderer.WorldMesh (Renderer.cs:533-584).
-    private void ProcessActor(IPropertyHolder actor, Transform baseTransform)
-    {
-        if (actor.TryGetValue(out FPackageIndex[] instanceComponents, "InstanceComponents"))
-        {
-            foreach (var component in instanceComponents)
-            {
-                if (!component.TryLoad(out UStaticMeshComponent staticMeshComponent) ||
-                    !staticMeshComponent.GetStaticMesh().TryLoad(out UStaticMesh mesh) ||
-                    mesh.Materials.Length < 1)
-                    continue;
+        // (B) Lossless layer --------------------------------------------------
+        var losslessActorList = new List<IPropertyHolder>(actors.Count);
+        foreach (var placement in actors) losslessActorList.Add(placement.Actor);
+        var losslessExporter = new CompleteSceneDataExporter(_log, _logError, manifest);
+        losslessExporter.ExportAll(losslessActorList, actorsOutputDirectory);
 
-                var relation = SceneTransform.CalculateTransform(staticMeshComponent, baseTransform);
-                if (staticMeshComponent is UInstancedStaticMeshComponent { PerInstanceSMData.Length: > 0 } instanced)
-                {
-                    foreach (var perInstance in instanced.PerInstanceSMData!)
-                    {
-                        AddMeshInstance(mesh, staticMeshComponent, SceneTransform.InstanceTransform(
-                            relation,
-                            perInstance.TransformData.Translation,
-                            perInstance.TransformData.Rotation,
-                            perInstance.TransformData.Scale3D));
-                    }
-                }
-                else
-                {
-                    AddMeshInstance(mesh, staticMeshComponent, relation);
-                }
-            }
-        }
-        else if (actor.TryGetValue(out FPackageIndex componentTemplate, "ComponentTemplate") &&
-                 componentTemplate.TryLoad(out UObject template))
-        {
-            if (!template.TryGetValue(out UStaticMesh mesh, "StaticMesh") &&
-                template.TryGetValue(out FPackageIndex restCollection, "RestCollection") &&
-                restCollection.TryLoad(out UGeometryCollection geometryCollection) &&
-                geometryCollection.RootProxyData is { ProxyMeshes.Length: > 0 } rootProxyData)
-            {
-                rootProxyData.ProxyMeshes[0].TryLoad(out mesh);
-            }
+        // (C) Closure layer ---------------------------------------------------
+        var closureExporter = new DependencyClosureExporter(_provider, _log, _logError, manifest);
+        closureExporter.ExportClosure(world.Owner, assetsOutputDirectory);
 
-            if (mesh is { Materials.Length: > 0 })
-            {
-                AddMeshInstance(mesh, template, SceneTransform.CalculateTransform(template, baseTransform));
-            }
-        }
-        else if (actor.TryGetValue(out FPackageIndex staticMeshComponentIndex, "StaticMeshComponent", "ComponentTemplate", "StaticMesh", "Mesh", "LightMesh", "SplineMesh") &&
-                 staticMeshComponentIndex.TryLoad(out UStaticMeshComponent staticMeshComponent) &&
-                 staticMeshComponent.GetStaticMesh().TryLoad(out UStaticMesh mesh) &&
-                 mesh.Materials.Length > 0)
-        {
-            AddMeshInstance(mesh, staticMeshComponent, SceneTransform.CalculateTransform(staticMeshComponent, baseTransform));
-        }
-    }
-
-    private void AddMeshInstance(UStaticMesh mesh, UObject component, Transform placement)
-    {
-        if (component.TryGetValue(out FPackageIndex[] overrideMaterials, "OverrideMaterials") && overrideMaterials.Length > 0)
-        {
-            _overrideMaterialSkips++;
-        }
-
-        if (!_meshCache.TryGetValue(mesh.LightingGuid, out var meshBuilder))
-        {
-            meshBuilder = BuildMesh(mesh);
-            _meshCache[mesh.LightingGuid] = meshBuilder;
-        }
-        if (meshBuilder == null) return;
-
-        _distinctMeshGuids.Add(mesh.LightingGuid);
-        _sceneBuilder.AddRigidMesh(meshBuilder, SceneTransform.NodeMatrix(placement));
-        _placementCount++;
-        _batchInstanceCount++;
-
-        if (_batchInstanceCount >= MaxInstancesPerGlb)
-        {
-            FlushBatch();
-        }
-    }
-
-    // Materialise the current SceneBuilder to a .glb part and start a fresh one
-    // so peak memory stays bounded by a single part's node count.
-    private void FlushBatch()
-    {
-        if (_batchInstanceCount == 0) return;
-
-        string partPath = $"{_outputBasePath}.part{_writtenParts.Count:D3}.glb";
-        if (WriteSceneTo(partPath, _sceneBuilder))
-        {
-            _writtenParts.Add(partPath);
-            _log($"[GlbScene] Wrote part {_writtenParts.Count - 1} ({_batchInstanceCount} instances) -> {partPath}");
-        }
-
-        _sceneBuilder = new SceneBuilder();
-        _meshCache = new Dictionary<FGuid, MESH?>();
-        _batchInstanceCount = 0;
-    }
-
-    private MESH? BuildMesh(UStaticMesh mesh)
-    {
-        if (!mesh.TryConvert(out var convertedMesh, _options.NaniteMeshFormat) || convertedMesh.LODs.Count == 0)
-        {
-            _logError($"[GlbScene] Mesh '{mesh.Name}' has no LODs; skipped.");
-            return null;
-        }
-
-        var lod = convertedMesh.LODs[0];
-        if (lod.Sections.Value == null)
-        {
-            _logError($"[GlbScene] Mesh '{mesh.Name}' LOD0 has no sections; skipped.");
-            return null;
-        }
-
-        var meshBuilder = new MESH(mesh.Name);
-        var sections = lod.Sections.Value;
-        for (int i = 0; i < sections.Length; i++)
-        {
-            CMeshSection section = sections[i];
-            string? materialKey = section.Material?.Load<UMaterialInterface>()?.GetPathName();
-
-            int before = _options.ExportMaterials ? _materialExporters.Count : 0;
-            Gltf.ExportStaticMeshSections(i, lod, section, _options.ExportMaterials ? _materialExporters : null, meshBuilder, _options);
-
-            // De-duplicate the material exporter just appended so a material
-            // shared across the scene is decoded and written only once (even
-            // though its geometry is re-emitted into each part that uses it).
-            if (_options.ExportMaterials && _materialExporters.Count > before)
-            {
-                if (materialKey == null || !_writtenMaterialKeys.Add(materialKey))
-                {
-                    _materialExporters.RemoveRange(before, _materialExporters.Count - before);
-                }
-                else
-                {
-                    _materialKeys.Add(materialKey);
-                }
-            }
-        }
-        return meshBuilder;
-    }
-
-    private bool WriteSceneTo(string glbPath, SceneBuilder sceneBuilder)
-    {
+        // Manifest ------------------------------------------------------------
         try
         {
-            // Same call CUE4Parse uses for single-mesh GLB export (Gltf.cs:111).
-            ModelRoot model = sceneBuilder.ToGltf2();
-            Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
-            var glb = model.WriteGLB();
-            using var stream = File.Create(glbPath);
-            stream.Write(glb.Array!, glb.Offset, glb.Count);
-            return true;
+            manifest.Write(manifestPath);
+            _log($"[GlbScene] Scene manifest -> {manifestPath}");
         }
         catch (Exception ex)
         {
-            _logError($"[GlbScene] GLB write failed ({glbPath}): {ex.Message}");
-            return false;
+            _logError($"[GlbScene] Manifest write failed: {ex.Message}");
+        }
+
+        _log($"[GlbScene] Done. placements={context.PlacementCount} uniqueMeshes={context.UniqueMeshCount} " +
+             $"parts={context.WrittenParts.Count} materials={context.MaterialCount} " +
+             $"actors={manifest.Lossless.ActorCount} closure={manifest.Closure.AssetCount} " +
+             $"dropped={manifest.Dropped.Actors + manifest.Dropped.Components + manifest.Dropped.Assets} " +
+             $"-> {outputDescription}");
+        return context.PlacementCount > 0 && context.WrittenParts.Count > 0;
+    }
+
+    // Resolve the actor's renderable components and dispatch each to the
+    // first IComponentExporter that claims it. Multiple placements per actor
+    // are the normal case for cooked BPs (BP_Boulder = 13 StaticMeshComponent,
+    // BP_Chochin_lamp = mesh + PointLight, ...).
+    private void DispatchActor(IPropertyHolder actor, FModel.Views.Snooper.Transform baseTransform, GlbSceneContext context)
+    {
+        int placementsBefore = context.PlacementCount;
+        int claimed = 0;
+        int unclaimed = 0;
+
+        foreach (var placement in ComponentResolver.Resolve(actor, baseTransform))
+        {
+            bool handled = false;
+            foreach (var exporter in _exporterRegistry)
+            {
+                if (!exporter.CanExport(placement.Component)) continue;
+                exporter.Export(in placement, context);
+                handled = true;
+                break;
+            }
+            if (handled) claimed++; else unclaimed++;
+        }
+        _instrumentation.Resolved += claimed + unclaimed;
+        _instrumentation.Claimed += claimed;
+        _instrumentation.Unclaimed += unclaimed;
+
+        // RURI_GLB_PER_ACTOR_DIAG=<ExportType>: dump per-actor claim+placement
+        // counts for the named ExportType. Kept gated because emitting a line
+        // per actor on a 2537-actor world would drown the run log; it is the
+        // hook the parity self-test uses to compare against a known baseline.
+        string actorType = (actor as UObject)?.ExportType ?? "?";
+        if (Environment.GetEnvironmentVariable("RURI_GLB_PER_ACTOR_DIAG") is { } typeFilter
+            && actorType.Equals(typeFilter, StringComparison.Ordinal))
+        {
+            string actorName = (actor as UObject)?.Name ?? "?";
+            _log($"[GlbScene][PerActor] {actorType} '{actorName}': claimed={claimed} unclaimed={unclaimed} placementsAdded={context.PlacementCount - placementsBefore}");
         }
     }
 
-    private void WriteMaterials(string outputDirectory)
+    private struct InstrumentationCounters
     {
-        if (!_options.ExportMaterials) return;
-        var directory = new DirectoryInfo(outputDirectory);
-        for (int i = 0; i < _materialExporters.Count; i++)
-        {
-            // Log BEFORE decoding so a hard native texture-decode crash (which
-            // can't be caught in-process) pinpoints the offending material.
-            string key = i < _materialKeys.Count ? _materialKeys[i] : "(unknown)";
-            _log($"[GlbScene]   material {i + 1}/{_materialExporters.Count}: {key}");
-            try
-            {
-                _materialExporters[i].TryWriteToDir(directory, out _, out _);
-            }
-            catch (Exception ex)
-            {
-                _logError($"[GlbScene] Material export failed ({key}): {ex.Message}");
-            }
-        }
+        public int Resolved;
+        public int Claimed;
+        public int Unclaimed;
     }
+    private InstrumentationCounters _instrumentation;
 
     // When the whole world fit in a single part, drop the ".partNNN" suffix so
     // small maps produce a clean "<map>.glb". Returns a human-readable summary
-    // of what was written.
-    private string FinalizeParts()
+    // of what was written and folds the part list into the manifest.
+    private string FinalizePartsAndRecordManifest(string outputBasePath, GlbSceneContext context, SceneManifest manifest)
     {
-        if (_writtenParts.Count == 1)
+        manifest.Render.PlacementCount = context.PlacementCount;
+        manifest.Render.UniqueMeshCount = context.UniqueMeshCount;
+        manifest.Render.MaterialCount = context.MaterialCount;
+
+        IReadOnlyList<string> writtenParts = context.WrittenParts;
+        if (writtenParts.Count == 1)
         {
-            string single = _outputBasePath + ".glb";
+            string single = outputBasePath + ".glb";
             try
             {
-                if (!string.Equals(single, _writtenParts[0], StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(single, writtenParts[0], StringComparison.OrdinalIgnoreCase))
                 {
                     if (File.Exists(single)) File.Delete(single);
-                    File.Move(_writtenParts[0], single);
-                    _writtenParts[0] = single;
+                    File.Move(writtenParts[0], single);
                 }
             }
             catch (Exception ex)
             {
                 _logError($"[GlbScene] Could not rename single part to '{single}': {ex.Message}");
-                return _writtenParts[0];
+                manifest.Render.PartFiles.Add(writtenParts[0]);
+                manifest.Render.PartFileCount = 1;
+                return writtenParts[0];
             }
+            manifest.Render.PartFiles.Add(single);
+            manifest.Render.PartFileCount = 1;
             return single;
         }
 
-        return $"{_writtenParts.Count} parts ('{Path.GetFileName(_outputBasePath)}.partNNN.glb')";
+        foreach (var part in writtenParts) manifest.Render.PartFiles.Add(part);
+        manifest.Render.PartFileCount = writtenParts.Count;
+        return $"{writtenParts.Count} parts ('{Path.GetFileName(outputBasePath)}.partNNN.glb')";
     }
 
-    // Map package path under the output root WITHOUT extension; the ".glb" (or
-    // ".partNNN.glb") suffix is appended by the writer. Materials/textures land
-    // in their own package-path-mirrored folders under the same root.
+    // Map package path under the output root WITHOUT extension; the ".glb"
+    // (or ".partNNN.glb") suffix is appended by the writer. Materials/textures
+    // land in their own package-path-mirrored folders under the same root.
     private static string BuildOutputBase(string outputDirectory, string worldPackagePath)
     {
         string relative = worldPackagePath.Replace('\\', '/');
