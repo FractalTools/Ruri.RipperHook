@@ -413,31 +413,23 @@ internal sealed class UnifiedMaterialReader
             });
         }
 
-        // Numeric parameter names go onto a synthetic `Material` cbuffer
-        // entry. Without byte offsets we can't pin them to specific
-        // packoffset c-N slots, so we just expose the name list — the
-        // patcher will leave individual members anonymous but spirv-cross
-        // will still emit the cbuffer name as `Material` (vs `type_Material`
-        // with no friendly name). The list is preserved so a future
-        // resolution pass (e.g. preshader replay) can reorder them.
-        var materialCb = new ConstantBufferParameter
-        {
-            Name = "Material",
-            Size = 0,
-        };
-        List<VectorParameter> vectorParams = new();
-        int slot = 0;
-        AppendNumericVectorParams(cachedParams, "ScalarNames", ref slot, vectorParams);
-        AppendNumericVectorParams(cachedParams, "VectorNames", ref slot, vectorParams);
-        AppendNumericVectorParams(cachedParams, "StaticSwitchNames", ref slot, vectorParams);
-        AppendNumericVectorParams(cachedParams, "UnknownKindNames", ref slot, vectorParams);
-        if (vectorParams.Count > 0)
-        {
-            materialCb.VectorParameters = vectorParams.ToArray();
-            metadata.ConstantBufferParameters.Add(materialCb);
-        }
-
-        if (metadata.TextureParameters.Count == 0 && metadata.ConstantBufferParameters.Count == 0)
+        // CRITICAL — do NOT synthesise a numeric Material cbuffer from
+        // CachedParameters. CachedExpressionData carries parameter NAMES but
+        // NO byte offsets (those live only in the UniformExpressionSet, which
+        // this cook strips — LoadedShaderMaps is empty for ~all materials). The
+        // old behaviour placed each name at a guessed slot*16 offset and typed
+        // every scalar as float4; the rewriter then PINNED those guesses onto
+        // the flat `Material_m0[N]` whenever the synthetic offsets happened to
+        // pass access-chain validation — emitting WRONG names/offsets/types
+        // (e.g. the scalar `RefractionDepthBias` rendered `float4 ... : packoffset(c0)`).
+        // That is precisely the "metadata that doesn't correspond, forced onto
+        // the cb" failure mode. A guessed Material cb is worse than an honest
+        // anonymous `Material_loose[N]`, so we emit NONE here: numeric Material
+        // members are named ONLY through the byte-offset-accurate UES path
+        // (UnifiedMaterialReader Path 1 / MaterialConstantBufferReader). Texture
+        // names above are safe — the patcher matches them by bind index, not
+        // offset — so they stay.
+        if (metadata.TextureParameters.Count == 0)
         {
             return null;
         }
@@ -461,28 +453,6 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    private static void AppendNumericVectorParams(JsonElement owner, string property, ref int slot, List<VectorParameter> dest)
-    {
-        if (!owner.TryGetProperty(property, out JsonElement arr) || arr.ValueKind != JsonValueKind.Array) return;
-        foreach (JsonElement v in arr.EnumerateArray())
-        {
-            if (v.ValueKind != JsonValueKind.String) continue;
-            string? name = v.GetString();
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            dest.Add(new VectorParameter
-            {
-                Name = name!,
-                NameIndex = -1,
-                Type = ShaderParamType.Float,
-                Index = slot * 16,        // synthetic byte offset; byte-offset pinning relies on the inline-shader-map path
-                ArraySize = 1,
-                IsMatrix = false,
-                RowCount = 4,
-                ColumnCount = 1,
-            });
-            slot++;
-        }
-    }
 
     private bool TryResolveMaterialEntry(string materialPath, out JsonElement entry)
     {
