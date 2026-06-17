@@ -91,25 +91,12 @@ internal sealed class ShaderTypeSeedRegistry
         }
 
         Dictionary<ulong, EngineUbMetadata> byHash = new();
-        List<string> scanRoots = new();
-        if (!string.IsNullOrEmpty(gameVersionEnum))
-        {
-            string specific = Path.Combine(directory, gameVersionEnum, "_ShaderType");
-            if (Directory.Exists(specific)) scanRoots.Add(specific);
-        }
-        if (tryBaseFallback
-            && !string.IsNullOrEmpty(gameVersionEnum)
-            && !gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)
-            && EngineUbMetadataRegistry.TryDeriveBaseUeFromEGameForShaderTypes(gameVersionEnum, out string baseUe)
-            && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
-        {
-            string baseDir = Path.Combine(directory, baseUe, "_ShaderType");
-            if (Directory.Exists(baseDir)) scanRoots.Add(baseDir);
-        }
-        // Recursive sweep — only files under a `_ShaderType` folder qualify so
-        // we don't pull in regular engine-UB seeds (which live at the parent
-        // level and would just fail JSON-schema sniffing anyway).
-        if (Directory.Exists(directory)) scanRoots.Add(directory);
+        // Same version-scoped roots as the engine-UB registry (game-specific
+        // folder + base UE major.minor folder, e.g. `5.4.4/`). The per-file
+        // `/_ShaderType/` path filter below keeps this to ShaderType seeds.
+        // Scoping to one engine version stops a cook's loose-param class from
+        // pulling a stale LAYOUT_FIELD member list out of a different version.
+        List<string> scanRoots = EngineUbMetadataRegistry.BuildScanRoots(directory, gameVersionEnum, tryBaseFallback);
 
         HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<ulong, string> hashToName = new();

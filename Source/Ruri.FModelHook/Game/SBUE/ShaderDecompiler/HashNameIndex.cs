@@ -47,28 +47,18 @@ internal sealed class HashNameIndex
             return Empty;
         }
 
+        // Version-scoped roots shared with the engine-UB / ShaderType
+        // registries, then narrowed to each root's `<subfolder>/_HashToName.json`.
+        // Scoping keeps a 5.4 cook off another version's hash→name table
+        // (harmless for canonical FNames, but consistent + cheaper).
+        List<string> versionRoots = EngineUbMetadataRegistry.BuildScanRoots(directory, gameVersionEnum, tryBaseFallback);
         List<string> scanRoots = new();
-        if (!string.IsNullOrEmpty(gameVersionEnum))
-        {
-            string specific = Path.Combine(directory, gameVersionEnum, subfolder);
-            if (Directory.Exists(specific)) scanRoots.Add(specific);
-        }
-        if (tryBaseFallback
-            && !string.IsNullOrEmpty(gameVersionEnum)
-            && !gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)
-            && EngineUbMetadataRegistry.TryDeriveBaseUeFromEGameForShaderTypes(gameVersionEnum, out string baseUe)
-            && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
-        {
-            string baseDir = Path.Combine(directory, baseUe, subfolder);
-            if (Directory.Exists(baseDir)) scanRoots.Add(baseDir);
-        }
-        // Recursive sweep under root for any `<subfolder>/_HashToName.json`.
-        if (Directory.Exists(directory))
+        string needle = $"/{subfolder}/_HashToName.json";
+        foreach (string versionRoot in versionRoots)
         {
             try
             {
-                string needle = $"/{subfolder}/_HashToName.json";
-                foreach (string f in Directory.EnumerateFiles(directory, "_HashToName.json", SearchOption.AllDirectories))
+                foreach (string f in Directory.EnumerateFiles(versionRoot, "_HashToName.json", SearchOption.AllDirectories))
                 {
                     if (f.Replace('\\', '/').EndsWith(needle, StringComparison.OrdinalIgnoreCase)
                         && !scanRoots.Contains(Path.GetDirectoryName(f)!, StringComparer.OrdinalIgnoreCase))

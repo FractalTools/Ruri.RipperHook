@@ -75,26 +75,10 @@ internal sealed class EngineUbMetadataRegistry
         Dictionary<string, List<uint>> hashesByName = new(StringComparer.Ordinal);
         int loaded = 0, skipped = 0;
 
-        // Build a prioritised scan list: game-specific folder first, then
-        // base UE folder (only when the toggle is on and the enum names a
-        // game-specific derivative), then a recursive sweep of anything
-        // else under root.
-        List<string> scanRoots = new();
-        if (!string.IsNullOrEmpty(gameVersionEnum))
-        {
-            string specific = Path.Combine(directory, gameVersionEnum);
-            if (Directory.Exists(specific)) scanRoots.Add(specific);
-        }
-        if (tryBaseFallback
-            && !string.IsNullOrEmpty(gameVersionEnum)
-            && !gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal)
-            && TryDeriveBaseUeFromEGame(gameVersionEnum, out string baseUe)
-            && !string.Equals(baseUe, gameVersionEnum, StringComparison.Ordinal))
-        {
-            string baseDir = Path.Combine(directory, baseUe);
-            if (Directory.Exists(baseDir)) scanRoots.Add(baseDir);
-        }
-        scanRoots.Add(directory); // recursive sweep — catches everything else, idempotent on dupe (Name,Hash)
+        // Resolve the version-scoped roots (see `BuildScanRoots`). The shared
+        // builder is also used by the sister registries (ShaderType / VF /
+        // pipeline) so every symbol source scopes to the same engine version.
+        List<string> scanRoots = BuildScanRoots(directory, gameVersionEnum, tryBaseFallback);
 
         HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
         foreach (string root in scanRoots)
@@ -139,7 +123,7 @@ internal sealed class EngineUbMetadataRegistry
     // of MemberType consuming Resources from the END. Returns 0xFFFFFFFF if
     // any resource has an unknown UBMT_* type (silent for diagnostics — the
     // caller logs the mismatch).
-    internal static uint ComputeLayoutHash(uint constantBufferSize, byte bindingFlags, bool hasStaticSlot, IReadOnlyList<EngineUbResourceSlot> resources)
+    internal static uint ComputeLayoutHash(uint constantBufferSize, byte bindingFlags, bool hasStaticSlot, IReadOnlyList<EngineUbResourceSlot> resources, bool ue55Plus = false)
     {
         uint h = ((constantBufferSize & 0xFFFFu) << 16) | ((uint)bindingFlags << 8) | (uint)(hasStaticSlot ? 1 : 0);
         for (int i = 0; i < resources.Count; i++)
@@ -149,51 +133,70 @@ internal sealed class EngineUbMetadataRegistry
         // in UE's source.
         while (n >= 4)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 0;
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 8;
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 16;
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 24;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 8;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 16;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 24;
         }
         while (n >= 2)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 0;
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF) << 16;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 0;
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF) << 16;
         }
         while (n > 0)
         {
-            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType) & 0xFF);
+            n--; h ^= (uint)(UbmtValue(resources[n].UbmtType, ue55Plus) & 0xFF);
         }
         return h;
     }
 
-    // EUniformBufferBaseType (RHIDefinitions.h:1414). Same values in 5.1 and 5.4.
-    private static int UbmtValue(string typeName) => typeName switch
+    // EUniformBufferBaseType (RHIDefinitions.h). UE 5.5 inserted
+    // UBMT_RDG_TEXTURE_NON_PIXEL_SRV at slot 13, shifting every later enum +1
+    // and appending UBMT_RESOURCE_COLLECTION at 24. The diagnostic MUST use the
+    // table for the seed's own engine version or every 5.5+ seed's self-check
+    // would false-mismatch (the fold reads a wrong integer for the shifted
+    // types). Mirrors Ruri.UEShaderTpkDumper.Core.UbmtTables.
+    private static int UbmtValue(string typeName, bool ue55Plus)
     {
-        "UBMT_INVALID"                       => 0,
-        "UBMT_BOOL"                          => 1,
-        "UBMT_INT32"                         => 2,
-        "UBMT_UINT32"                        => 3,
-        "UBMT_FLOAT32"                       => 4,
-        "UBMT_TEXTURE"                       => 5,
-        "UBMT_SRV"                           => 6,
-        "UBMT_UAV"                           => 7,
-        "UBMT_SAMPLER"                       => 8,
-        "UBMT_RDG_TEXTURE"                   => 9,
-        "UBMT_RDG_TEXTURE_ACCESS"            => 10,
-        "UBMT_RDG_TEXTURE_ACCESS_ARRAY"      => 11,
-        "UBMT_RDG_TEXTURE_SRV"               => 12,
-        "UBMT_RDG_TEXTURE_UAV"               => 13,
-        "UBMT_RDG_BUFFER_ACCESS"             => 14,
-        "UBMT_RDG_BUFFER_ACCESS_ARRAY"       => 15,
-        "UBMT_RDG_BUFFER_SRV"                => 16,
-        "UBMT_RDG_BUFFER_UAV"                => 17,
-        "UBMT_RDG_UNIFORM_BUFFER"            => 18,
-        "UBMT_NESTED_STRUCT"                 => 19,
-        "UBMT_INCLUDED_STRUCT"               => 20,
-        "UBMT_REFERENCED_STRUCT"             => 21,
-        "UBMT_RENDER_TARGET_BINDING_SLOTS"   => 22,
-        _ => -1, // unknown — hash will diverge, surfaces as MISMATCH in log
-    };
+        // Types added in 5.5 carry their exact final ordinal directly and are
+        // NOT subject to the generic shift below. Pre-5.5 they don't exist —
+        // return the dumper's friendly aliases so a stray reference doesn't
+        // hard-diverge the diagnostic.
+        if (typeName == "UBMT_RDG_TEXTURE_NON_PIXEL_SRV") return ue55Plus ? 13 : 12; // ~ RDG_TEXTURE_SRV
+        if (typeName == "UBMT_RESOURCE_COLLECTION")        return ue55Plus ? 24 : 22; // ~ RENDER_TARGET_BINDING_SLOTS
+
+        int v = typeName switch
+        {
+            "UBMT_INVALID"                       => 0,
+            "UBMT_BOOL"                          => 1,
+            "UBMT_INT32"                         => 2,
+            "UBMT_UINT32"                        => 3,
+            "UBMT_FLOAT32"                       => 4,
+            "UBMT_TEXTURE"                       => 5,
+            "UBMT_SRV"                           => 6,
+            "UBMT_UAV"                           => 7,
+            "UBMT_SAMPLER"                       => 8,
+            "UBMT_RDG_TEXTURE"                   => 9,
+            "UBMT_RDG_TEXTURE_ACCESS"            => 10,
+            "UBMT_RDG_TEXTURE_ACCESS_ARRAY"      => 11,
+            "UBMT_RDG_TEXTURE_SRV"               => 12,
+            "UBMT_RDG_TEXTURE_UAV"               => 13,
+            "UBMT_RDG_BUFFER_ACCESS"             => 14,
+            "UBMT_RDG_BUFFER_ACCESS_ARRAY"       => 15,
+            "UBMT_RDG_BUFFER_SRV"                => 16,
+            "UBMT_RDG_BUFFER_UAV"                => 17,
+            "UBMT_RDG_UNIFORM_BUFFER"            => 18,
+            "UBMT_NESTED_STRUCT"                 => 19,
+            "UBMT_INCLUDED_STRUCT"               => 20,
+            "UBMT_REFERENCED_STRUCT"             => 21,
+            "UBMT_RENDER_TARGET_BINDING_SLOTS"   => 22,
+            _ => -1, // unknown — hash will diverge, surfaces as MISMATCH in log
+        };
+        // 5.5 inserted NON_PIXEL_SRV at slot 13, shifting the original 13..22
+        // members up by +1. Apply only to those existing members.
+        if (ue55Plus && v >= 13) v += 1;
+        return v;
+    }
 
     private static byte BindingFlagsValue(string name) => name switch
     {
@@ -215,7 +218,8 @@ internal sealed class EngineUbMetadataRegistry
             bool hasStaticSlot = string.Equals(meta.BindingFlags, "Static", StringComparison.Ordinal)
                               || string.Equals(meta.BindingFlags, "StaticAndShader", StringComparison.Ordinal);
             uint cbSize = (uint)meta.ConstantBufferSize;
-            uint computedAsIs = ComputeLayoutHash(cbSize, bf, hasStaticSlot, meta.Resources);
+            bool ue55Plus = SeedIsUe55Plus(meta.EngineVersion);
+            uint computedAsIs = ComputeLayoutHash(cbSize, bf, hasStaticSlot, meta.Resources, ue55Plus);
             if (computedAsIs == declared)
             {
                 matched++;
@@ -225,11 +229,24 @@ internal sealed class EngineUbMetadataRegistry
             // recorded the unaligned numeric end but the engine folded the
             // aligned C++ struct sizeof, this catches the off-by-padding.
             uint aligned16 = (cbSize + 15u) & ~15u;
-            uint computedAligned = ComputeLayoutHash(aligned16, bf, hasStaticSlot, meta.Resources);
+            uint computedAligned = ComputeLayoutHash(aligned16, bf, hasStaticSlot, meta.Resources, ue55Plus);
             mismatched++;
             log($"[EngineUbMetadata][HashVerify] MISMATCH name={meta.Name} declared=0x{declared:X8} computed(cbsize={cbSize})=0x{computedAsIs:X8}  align16(cbsize={aligned16})=0x{computedAligned:X8}{(computedAligned == declared ? "  <- align16 reproduces declared" : "")}");
         }
         log($"[EngineUbMetadata][HashVerify] {matched} matched, {mismatched} mismatched of {byNameAndHash.Count} loaded seeds.");
+    }
+
+    // True when a seed's recorded EngineVersion ("5.5.4", "5.6.1", "5.7.4", …)
+    // is UE 5.5 or later — picks the shifted UBMT enum table for the hash
+    // self-check. Best-effort: an unparseable version defaults to pre-5.5.
+    private static bool SeedIsUe55Plus(string? engineVersion)
+    {
+        if (string.IsNullOrWhiteSpace(engineVersion)) return false;
+        string[] parts = engineVersion.Split('.');
+        if (parts.Length < 2) return false;
+        return int.TryParse(parts[0], out int major)
+            && int.TryParse(parts[1], out int minor)
+            && (major > 5 || (major == 5 && minor >= 5));
     }
 
     // Derives the base UE major.minor `EGame` name (e.g. "GAME_UE5_4")
@@ -263,6 +280,108 @@ internal sealed class EngineUbMetadataRegistry
     // so the actual logic stays in one place.
     internal static bool TryDeriveBaseUeFromEGameForShaderTypes(string gameVersionEnum, out string baseUeName)
         => TryDeriveBaseUeFromEGame(gameVersionEnum, out baseUeName);
+
+    // Shared scan-root resolver for every source-truth registry (engine UB,
+    // ShaderType, VF/pipeline hash indexes). CRITICAL CORRECTNESS RULE: a cook
+    // is ONE engine version, so seeds from OTHER versions must never enter the
+    // lookup pool. Mixing versions lets a cook UB collide with a wrong-version
+    // seed (same key, different numeric layout → dedup keeps an arbitrary one)
+    // and silently emit a wrong member layout (e.g. a scalar declared as an
+    // array). So when ANY version-scoped folder is found we return ONLY those
+    // and DO NOT fall back to the load-everything recursive sweep.
+    //
+    // Folders are organised two ways in the wild:
+    //   * `<EGame enum>/`     — e.g. `GAME_InfinityNikki/`, `GAME_UE5_4/`
+    //   * `<X.Y.Z version>/`  — e.g. `5.4.4/` (what the TpkDumper emits)
+    // We resolve both for the game's own enum and for its base UE major.minor.
+    // Callers scan each returned root recursively with their own file glob.
+    internal static List<string> BuildScanRoots(string directory, string? gameVersionEnum, bool tryBaseFallback)
+    {
+        List<string> scanRoots = new();
+        bool foundVersionScoped = false;
+
+        // 1. Game-specific enum folder (overrides for modded UEs / project UBs).
+        if (!string.IsNullOrEmpty(gameVersionEnum))
+        {
+            string specific = Path.Combine(directory, gameVersionEnum);
+            if (Directory.Exists(specific)) { scanRoots.Add(specific); foundVersionScoped = true; }
+        }
+
+        // 2. Base UE version folders (enum-named AND X.Y.Z-named). Loaded when
+        //    the game enum already names a base UE (`GAME_UE5_4` IS the base),
+        //    or when the base-fallback toggle is on for a game-specific
+        //    derivative. Modded forks rarely re-shuffle unmodified leaf UBs
+        //    (e.g. NiagaraMeshVF, IndirectLightingCache), so the matching
+        //    same-version base seeds recover those safely — the layout hash
+        //    still gates every apply, so a modded UB simply won't match.
+        bool gameIsBaseUe = !string.IsNullOrEmpty(gameVersionEnum)
+            && gameVersionEnum.StartsWith("GAME_UE", StringComparison.Ordinal);
+        if ((gameIsBaseUe || tryBaseFallback)
+            && TryGetEngineMajorMinor(gameVersionEnum, out int major, out int minor))
+        {
+            string baseEnumDir = Path.Combine(directory, $"GAME_UE{major}_{minor}");
+            if (Directory.Exists(baseEnumDir) && !scanRoots.Contains(baseEnumDir))
+            {
+                scanRoots.Add(baseEnumDir);
+                foundVersionScoped = true;
+            }
+            foreach (string verDir in EnumerateVersionStringFolders(directory, major, minor))
+            {
+                if (!scanRoots.Contains(verDir)) { scanRoots.Add(verDir); foundVersionScoped = true; }
+            }
+        }
+
+        // 3. Last resort: when NOTHING version-scoped matched (unorganised drop,
+        //    or an engine version we have no folder for), sweep the whole root
+        //    so a flat install still works. Callers dedup, so this is safe.
+        if (!foundVersionScoped) scanRoots.Add(directory);
+        return scanRoots;
+    }
+
+    // Resolve the engine major.minor for a game enum. When the enum already
+    // names a base UE (`GAME_UE5_4`) parse it directly; otherwise derive the
+    // base via the masking helper above (`GAME_InfinityNikki` → `GAME_UE5_4`)
+    // and parse that. Returns false when the enum is null/empty or doesn't
+    // resolve to a `GAME_UE<major>_<minor>` form. Exposed internal so sibling
+    // registries (ShaderType / VF / pipeline) can apply the same scoping.
+    internal static bool TryGetEngineMajorMinor(string? gameVersionEnum, out int major, out int minor)
+    {
+        major = 0; minor = 0;
+        if (string.IsNullOrEmpty(gameVersionEnum)) return false;
+        string baseName = gameVersionEnum;
+        if (!baseName.StartsWith("GAME_UE", StringComparison.Ordinal)
+            && !TryDeriveBaseUeFromEGame(gameVersionEnum, out baseName))
+        {
+            return false;
+        }
+        const string prefix = "GAME_UE";
+        if (!baseName.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        string rest = baseName.Substring(prefix.Length); // e.g. "5_4"
+        int underscore = rest.IndexOf('_');
+        if (underscore <= 0 || underscore >= rest.Length - 1) return false;
+        return int.TryParse(rest.AsSpan(0, underscore), out major)
+            && int.TryParse(rest.AsSpan(underscore + 1), out minor);
+    }
+
+    // Enumerate immediate subfolders of `directory` whose name is an X.Y or
+    // X.Y.Z version string for the requested engine major.minor — e.g. for
+    // (5, 4) this matches "5.4", "5.4.4", "5.4.10" but NOT "5.40". This is the
+    // folder convention the TpkDumper emits (`<out-root>/<X.Y.Z>/`). Exposed
+    // internal so sibling registries reuse the exact same matching.
+    internal static IEnumerable<string> EnumerateVersionStringFolders(string directory, int major, int minor)
+    {
+        string exact = $"{major}.{minor}";
+        string prefix = exact + ".";
+        foreach (string dir in Directory.EnumerateDirectories(directory))
+        {
+            string name = Path.GetFileName(dir);
+            if (string.Equals(name, exact, StringComparison.Ordinal)
+                || name.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                yield return dir;
+            }
+        }
+    }
 
     // Cache the serializer options. JsonStringEnumConverter accepts "Float",
     // "Int", etc. — matches the generator's PascalCase enum names and the
