@@ -63,8 +63,9 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //   * Geometry conversion (cm -> m + Z-up -> Y-up) lives inside
 //     Gltf.ExportStaticMeshSections, which the static-mesh pipeline also
 //     relies on. The node matrix is built with SceneTransform.NodeMatrix so
-//     the S^-1 * W convention is identical to the static-mesh path. No
-//     parallel coordinate convention exists.
+//     the placement convention (N = W, FModel's verified Transform.Matrix) is
+//     identical to the static-mesh path. No parallel coordinate convention
+//     exists.
 //
 // Heightmaps + weightmaps:
 //   * Written as PNG sidecars under
@@ -249,9 +250,10 @@ public sealed class LandscapeComponentExporter : IComponentExporter
                 context.Options);
         }
 
-        // Compose the node matrix (S^-1 * W) via SceneTransform.NodeMatrix
-        // exactly like the static-mesh path. This is THE bridge that pairs the
-        // byte-identical mesh export with the byte-identical proxy placement.
+        // Compose the node matrix (N = W, FModel's verified placement matrix)
+        // via SceneTransform.NodeMatrix exactly like the static-mesh path. This
+        // is THE bridge that pairs the byte-identical mesh export with the
+        // byte-identical proxy placement.
         Matrix4x4 nodeMatrix = SceneTransform.NodeMatrix(proxyRootWorldTransform);
 
         // Write the .glb. We construct a one-mesh SceneBuilder so the file is

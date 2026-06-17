@@ -9,47 +9,51 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // Coordinate-space bridge between FModel's verified world preview and a glTF
 // scene graph.
 //
-// FModel's Snooper builds, per placed component, a `Transform` whose `Matrix`
-// maps a RAW Unreal-local vertex (Z-up, centimetres) into the viewer's glTF
-// space (Y-up, metres). That matrix already does the Y/Z swizzle, the W
-// negation (LH -> RH), and the 1 cm -> 1 unit scaling (SCALE_DOWN_RATIO).
-// See FModel Views/Snooper/Transform.cs:20-23 and Renderer.cs:676-690.
+// The mesh geometry we place is produced by CUE4Parse's
+// `Gltf.ExportStaticMeshSections`, which emits each vertex as
 //
-// Our mesh geometry, however, is produced by CUE4Parse's `Gltf.ExportStaticMeshSections`,
-// which emits each vertex ALREADY in glTF-local space (it applies SwapYZ and
-// the *0.01 scale per vertex — Gltf.cs:287-290). So a node placed in the scene
-// must NOT re-apply that per-vertex map. Let
+//     g = SwapYZ(v) * 0.01    (Unreal-local cm vertex v -> glTF-local, Y-up, metres)
 //
-//     S : Unreal-local -> glTF-local,   S(v) = SwapYZ(v) * 0.01   (= what the mesh export bakes in)
-//     W : Unreal-local -> glTF-world    (= FModel's Transform.Matrix, the verified preview placement)
+// See Gltf.cs:287 (`SwapYZ(vert.Position*0.01f)`) and SwapYZ at Gltf.cs:301-305
+// (`(X, Z, Y)`).
 //
-// then for a mesh whose vertices are already S(v), the glTF node world matrix is
+// FModel's verified Snooper preview builds the SAME vertex: StaticModel.cs:33-35
+// stores `(v.X, v.Z, v.Y) * SCALE_DOWN_RATIO` = `SwapYZ(v) * 0.01` — byte-for-byte
+// `g`. It then renders `g * W`, where `W` = FModel's `Transform.Matrix`
+// (Transform.cs:20-23). Critically, the Y/Z swizzle, the W-negation (LH->RH) and
+// the metre scaling live in the VERTEX LOADER (StaticModel.cs) and in
+// `Position = location * SCALE_DOWN_RATIO`; `W` itself operates entirely in the
+// glTF-local (Y-up, metres) space that `g` already lives in. So `W` is NOT a
+// cm->m / Z-up->Y-up converter — it is a placement transform on top of `g`.
 //
-//     N = S^-1 * W
+// Therefore the correct glTF node matrix for a mesh whose vertices are `g` is
+// simply
 //
-// because  g_local = v . S  =>  v = g_local . S^-1  =>  g_world = v . W = g_local . (S^-1 * W).
-// det(N) = det(S^-1)*det(W) > 0 (both flip handedness, the flips cancel), so N is a
-// clean proper transform — no mirrored geometry. This pairs the byte-identical
-// CUE4Parse mesh exporter with the byte-identical FModel placement matrix.
+//     N = W = placement.Matrix
+//
+// because FModel's reference render is exactly `g * W`. No inverse-mesh
+// correction is applied: our mesh already lives in the space `W` expects, so
+// any extra factor double-counts the swizzle/scale. (The prior revision
+// pre-multiplied by `S^-1 = 100 * SwapYZ`, which (a) re-expanded the already-
+// metric mesh back to centimetres — a 100x blow-up that swung every instance's
+// huge mesh around the origin into a giant radial disk — and (b) injected a
+// second Y/Z swap, leaving every node mirrored (det < 0). N = W fixes both:
+// correct size and det(W) > 0, no mirror.)
+//
+// Lights and cameras already place via `placement.Matrix` directly (with their
+// own punctual/camera axis remaps); this is the matching convention for meshes.
 internal static class SceneTransform
 {
-    // FModel Views/Snooper/Constants.cs:21 — 1 Unreal unit (cm) -> 1 viewer unit.
+    // FModel Views/Snooper/Constants.cs — 1 Unreal unit (cm) -> 1 viewer unit.
     private const float ScaleDownRatio = 0.01f;
 
-    // S^-1 in System.Numerics row-vector form: out.X = 100*v.X, out.Y = 100*v.Z,
-    // out.Z = 100*v.Y. (S maps X->0.01X, Y->0.01Z, Z->0.01Y; SwapYZ is its own
-    // inverse, the scale inverts 0.01 -> 100.)
-    private static readonly Matrix4x4 InverseMeshLocalToGltf = new(
-        100f, 0f, 0f, 0f,
-        0f, 0f, 100f, 0f,
-        0f, 100f, 0f, 0f,
-        0f, 0f, 0f, 1f);
-
     // The world matrix to hand SharpGLTF's SceneBuilder.AddRigidMesh for a mesh
-    // built by Gltf.ExportStaticMeshSections.
+    // built by Gltf.ExportStaticMeshSections. The mesh vertices are already in
+    // FModel's glTF-local space, so the node matrix is FModel's verified
+    // placement matrix verbatim.
     public static Matrix4x4 NodeMatrix(Transform placement)
     {
-        return Matrix4x4.Multiply(InverseMeshLocalToGltf, placement.Matrix);
+        return placement.Matrix;
     }
 
     // 1:1 port of FModel Renderer.CalculateTransform (Renderer.cs:676-690).

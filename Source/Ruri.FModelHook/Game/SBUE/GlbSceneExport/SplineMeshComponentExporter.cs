@@ -132,11 +132,11 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         // CalcSliceTransform output lives in component space because both
         // splinePos and the basis vectors are derived from SplineParams.*,
         // which FSplineMeshParams.cs:15/31 documents as "in component space").
-        // So composing the placement's world transform (which already folds
-        // the AttachParent chain via SceneTransform.CalculateTransform) and
-        // the mesh-local-to-glTF inverse (SceneTransform.NodeMatrix) puts the
-        // bent mesh exactly where the verified preview puts the straight
-        // mesh of a non-spline component.
+        // So the placement's world transform (which already folds the
+        // AttachParent chain via SceneTransform.CalculateTransform) is handed
+        // straight through SceneTransform.NodeMatrix (N = W, FModel's verified
+        // placement matrix) to put the bent mesh exactly where the verified
+        // preview puts the straight mesh of a non-spline component.
         context.AddRigidMesh(
             deformedMesh,
             overrideMaterials,

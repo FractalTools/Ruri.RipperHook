@@ -88,11 +88,13 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //     comment claimed Ry(+90) sent (-Z) to (+X), which is the column-vec
 //     answer; System.Numerics is row-vec and the sign flips.
 //
-//   * In System.Numerics row-vector convention the SceneTransform pipeline
-//     composes its corrections on the LEFT (NodeMatrix = S^-1 * W in
-//     Matrix4x4.Multiply(A, B) which is A * B in row-vector space -- see
-//     SceneTransform.cs:50-53). Following the same pattern, the camera node
-//     matrix is `cameraAxisRemap * placement.WorldTransform.Matrix`.
+//   * In System.Numerics row-vector convention a local-frame correction
+//     composes on the LEFT (Matrix4x4.Multiply(A, B) = A * B applied as
+//     v * A * B, so A acts in the mesh/camera-local frame before W). The mesh
+//     path needs no such correction (SceneTransform.NodeMatrix = W, because the
+//     exported mesh already lives in FModel's glTF-local space); the camera,
+//     however, must rotate its Unreal-local axes into the glTF camera frame, so
+//     the camera node matrix is `cameraAxisRemap * placement.WorldTransform.Matrix`.
 //
 // ---------------------------------------------------------------------------
 // Lossless preservation:
