@@ -36,6 +36,8 @@ partial class MainForm
 	private ToolStripMenuItem exportFilteredConvertedAssetsMenuItem = null!;
 	private ToolStripMenuItem exportFilteredYamlAssetsMenuItem = null!;
 	private ContextMenuStrip assetListContextMenuStrip = null!;
+	private ToolStripMenuItem contextLoadSelectedMenuItem = null!;
+	private ToolStripSeparator contextLoadSeparator = null!;
 	private ToolStripMenuItem contextExportSelectedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedConvertedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedYamlAssetsMenuItem = null!;
@@ -57,7 +59,8 @@ partial class MainForm
 	private ColumnHeader columnHeaderContainer = null!;
 	private ColumnHeader columnHeaderType = null!;
 	private ColumnHeader columnHeaderPathID = null!;
-	private ColumnHeader columnHeaderSize = null!;
+	private ColumnHeader columnHeaderSource = null!;
+	private ColumnHeader columnHeaderDeps = null!;
 	private TextBox listSearch = null!;
 	private ComboBox typeFilterComboBox = null!;
 	private TabControl tabControl2 = null!;
@@ -116,6 +119,8 @@ partial class MainForm
 		exportFilteredConvertedAssetsMenuItem = new ToolStripMenuItem();
 		exportFilteredYamlAssetsMenuItem = new ToolStripMenuItem();
 		assetListContextMenuStrip = new ContextMenuStrip(components);
+		contextLoadSelectedMenuItem = new ToolStripMenuItem();
+		contextLoadSeparator = new ToolStripSeparator();
 		contextExportSelectedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedConvertedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedYamlAssetsMenuItem = new ToolStripMenuItem();
@@ -137,7 +142,8 @@ partial class MainForm
 		columnHeaderContainer = new ColumnHeader();
 		columnHeaderType = new ColumnHeader();
 		columnHeaderPathID = new ColumnHeader();
-		columnHeaderSize = new ColumnHeader();
+		columnHeaderSource = new ColumnHeader();
+		columnHeaderDeps = new ColumnHeader();
 		listSearch = new TextBox();
 		typeFilterComboBox = new ComboBox();
 		tabControl2 = new TabControl();
@@ -237,7 +243,11 @@ partial class MainForm
 		exportFilteredYamlAssetsMenuItem.Text = "YAML";
 		exportFilteredYamlAssetsMenuItem.Click += exportFilteredYamlAssetsMenuItem_Click;
 		exportFilteredAssetsMenuItem.Click += exportFilteredAssetsMenuItem_Click;
-		assetListContextMenuStrip.Items.AddRange([contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
+		assetListContextMenuStrip.Items.AddRange([contextLoadSelectedMenuItem, contextLoadSeparator, contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
+		assetListContextMenuStrip.Opening += assetListContextMenuStrip_Opening;
+		// CAB-map mode only: load the selected virtual files + their dependency closure into the Asset List.
+		contextLoadSelectedMenuItem.Text = RuriLocalization.ContextLoadSelected;
+		contextLoadSelectedMenuItem.Click += contextLoadSelectedMenuItem_Click;
 		contextExportSelectedAssetsMenuItem.DropDownItems.AddRange([contextExportSelectedConvertedAssetsMenuItem, contextExportSelectedYamlAssetsMenuItem]);
 		contextExportSelectedAssetsMenuItem.Text = "Export selected";
 		contextExportSelectedConvertedAssetsMenuItem.Text = "Converted";
@@ -300,7 +310,7 @@ partial class MainForm
 		hookTreeView.HideSelection = false;
 		hookTreeView.BeforeCheck += hookTreeView_BeforeCheck;
 		hookTreeView.AfterCheck += hookTreeView_AfterCheck;
-		assetListView.Columns.AddRange([columnHeaderName, columnHeaderContainer, columnHeaderType, columnHeaderPathID, columnHeaderSize]);
+		assetListView.Columns.AddRange([columnHeaderName, columnHeaderContainer, columnHeaderType, columnHeaderPathID, columnHeaderSource, columnHeaderDeps]);
 		assetListView.Dock = DockStyle.Fill;
 		assetListView.FullRowSelect = true;
 		assetListView.HideSelection = false;
@@ -311,20 +321,26 @@ partial class MainForm
 		assetListView.TabIndex = 0;
 		assetListView.UseCompatibleStateImageBehavior = false;
 		assetListView.View = View.Details;
+		// Virtual mode: one list serves both loaded assets (hundreds–thousands) and CAB-map virtual files
+		// (258k+) without materialising a ListViewItem per row. Rows come from MainForm's active backing.
+		assetListView.VirtualMode = true;
 		assetListView.ContextMenuStrip = assetListContextMenuStrip;
+		assetListView.RetrieveVirtualItem += assetListView_RetrieveVirtualItem;
 		assetListView.SelectedIndexChanged += assetListView_SelectedIndexChanged;
 		assetListView.MouseUp += assetListView_MouseUp;
 		assetListView.ColumnClick += assetListView_ColumnClick;
 		columnHeaderName.Text = "Name";
-		columnHeaderName.Width = 220;
+		columnHeaderName.Width = 240;
 		columnHeaderContainer.Text = "Container";
-		columnHeaderContainer.Width = 220;
+		columnHeaderContainer.Width = 300;
 		columnHeaderType.Text = "Type";
 		columnHeaderType.Width = 120;
 		columnHeaderPathID.Text = "PathID";
 		columnHeaderPathID.Width = 90;
-		columnHeaderSize.Text = "Size";
-		columnHeaderSize.Width = 90;
+		columnHeaderSource.Text = "Source";
+		columnHeaderSource.Width = 200;
+		columnHeaderDeps.Text = "Deps";
+		columnHeaderDeps.Width = 50;
 		listSearch.Dock = DockStyle.Top;
 		listSearch.PlaceholderText = "Search";
 		listSearch.TextChanged += listSearch_TextChanged;

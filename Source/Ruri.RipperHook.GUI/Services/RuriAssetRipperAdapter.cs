@@ -123,7 +123,7 @@ internal sealed class RuriAssetRipperAdapter
 
 	public string GetYaml(RipperAssetEntry entry) => NormalizeForTextBox(SerializeYaml(entry.Asset));
 
-	public IReadOnlyList<TreeNode> BuildSceneTree(Dictionary<string, AssetItem> assetItemsByObjectKey)
+	public IReadOnlyList<TreeNode> BuildSceneTree(Dictionary<string, GameObjectTreeNode> nodes)
 	{
 		List<TreeNode> roots = [];
 		if (!IsLoaded)
@@ -131,10 +131,9 @@ internal sealed class RuriAssetRipperAdapter
 			return roots;
 		}
 
-		Dictionary<string, GameObjectTreeNode> nodes = [];
 		foreach (IGameObject gameObject in GameFileLoader.GameBundle.FetchAssets().OfType<IGameObject>())
 		{
-			GameObjectTreeNode node = GetOrCreateNode(gameObject, nodes, assetItemsByObjectKey);
+			GameObjectTreeNode node = GetOrCreateNode(gameObject, nodes);
 			ITransform? transform = gameObject.TryGetComponent<ITransform>();
 			ITransform? parentTransform = transform?.Father_C4P;
 			IGameObject? parentGameObject = parentTransform?.GameObject_C4P;
@@ -147,7 +146,7 @@ internal sealed class RuriAssetRipperAdapter
 				continue;
 			}
 
-			GameObjectTreeNode parentNode = GetOrCreateNode(parentGameObject, nodes, assetItemsByObjectKey);
+			GameObjectTreeNode parentNode = GetOrCreateNode(parentGameObject, nodes);
 			if (ReferenceEquals(parentNode, node) || WouldCreateCycle(parentNode, node))
 			{
 				if (!roots.Contains(node))
@@ -188,7 +187,7 @@ internal sealed class RuriAssetRipperAdapter
 					container,
 					asset.ClassName,
 					asset.PathID,
-					EstimateSize(asset),
+					0, // Size column was removed; skip the per-asset YAML serialize that estimated it.
 					collection.Name));
 			}
 		}
@@ -517,7 +516,7 @@ internal sealed class RuriAssetRipperAdapter
 		return false;
 	}
 
-	private static GameObjectTreeNode GetOrCreateNode(IGameObject gameObject, Dictionary<string, GameObjectTreeNode> nodes, Dictionary<string, AssetItem> assetItemsByObjectKey)
+	private static GameObjectTreeNode GetOrCreateNode(IGameObject gameObject, Dictionary<string, GameObjectTreeNode> nodes)
 	{
 		string objectKey = GetObjectKey(gameObject);
 		if (nodes.TryGetValue(objectKey, out GameObjectTreeNode? existing))
@@ -527,10 +526,6 @@ internal sealed class RuriAssetRipperAdapter
 
 		GameObjectTreeNode created = new(gameObject);
 		nodes.Add(objectKey, created);
-		if (assetItemsByObjectKey.TryGetValue(objectKey, out AssetItem? assetItem))
-		{
-			assetItem.TreeNode = created;
-		}
 		return created;
 	}
 }

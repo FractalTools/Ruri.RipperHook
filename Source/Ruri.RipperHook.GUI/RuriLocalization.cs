@@ -370,6 +370,13 @@ internal static class RuriLocalization
         _ => "Export (with all dependencies)...",
     };
 
+    public static string ContextLoadSelected => Lang switch
+    {
+        "zh-Hans" => "加载选中（含依赖，可预览）",
+        "zh-Hant" => "載入選中（含相依，可預覽）",
+        _ => "Load selected (with dependencies)",
+    };
+
     public static string WithDepsCaption => Lang switch
     {
         "zh-Hans" => "连同依赖导出",
