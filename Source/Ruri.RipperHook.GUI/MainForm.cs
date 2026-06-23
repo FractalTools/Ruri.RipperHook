@@ -37,7 +37,16 @@ public partial class MainForm : Form
 	private HookConfig _hookConfig;
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
-	private IReadOnlyList<RipperAssetEntry> _filteredAssets = [];
+	private List<RipperAssetEntry> _filteredAssets = [];
+	// The Asset List is one virtual-mode list with two backings: loaded assets (preview/scene-tree work) and
+	// CAB-map virtual files (each CAB a row; selection exports/loads its dependency closure). Same search,
+	// multi-select, sort, and "Export with dependencies" serve both — see assetListView_RetrieveVirtualItem.
+	private enum AssetListMode { Assets, CabMap }
+	private AssetListMode _listMode = AssetListMode.Assets;
+	private List<ExportCabMap.CabRow> _allCabRows = [];
+	private List<ExportCabMap.CabRow> _filteredCabRows = [];
+	private readonly Dictionary<string, int> _assetIndexByObjectKey = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, Components.GameObjectTreeNode> _nodeByObjectKey = new(StringComparer.Ordinal);
 	private bool _suppressHookTreeEvents;
 	private Font? _hookTreeBoldFont;
 	private int _sortColumn = -1;
@@ -91,7 +100,7 @@ public partial class MainForm : Form
 	private bool _wireframeEnabled = true;
 	private int _shadeMode;
 	private string? _glOverlayText;
-	private AssetItem? _currentPreviewItem;
+	private RipperAssetEntry? _currentPreviewItem;
 	private string? _pendingYamlText;
 	private bool _yamlLoadedForCurrentSelection;
 	private int _previewRequestVersion;
@@ -201,7 +210,10 @@ public partial class MainForm : Form
 	{
 		ResetLoadedSession();
 		_adapter.Reset();
+		_exportMap.Clear();
+		_allCabRows = [];
 		ResetForm();
+		UpdateCabMapState();
 	}
 
 	private async void settingsToolStripMenuItem_Click(object? sender, EventArgs e)
@@ -245,45 +257,87 @@ public partial class MainForm : Form
 		ApplyFilter();
 	}
 
+	// Virtual-mode renderer: one row per loaded asset (Assets mode) or per CAB (CAB-map mode).
+	private void assetListView_RetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
+	{
+		if (_listMode == AssetListMode.CabMap)
+		{
+			if ((uint)e.ItemIndex >= (uint)_filteredCabRows.Count)
+			{
+				return;
+			}
+			ExportCabMap.CabRow row = _filteredCabRows[e.ItemIndex];
+			ListViewItem cab = new(CabDisplayName(row));
+			cab.SubItems.Add(row.ContainerPaths.Count > 0 ? string.Join("  |  ", row.ContainerPaths) : row.Cab);
+			cab.SubItems.Add(CabTypeNames(row));
+			cab.SubItems.Add(string.Empty);                  // PathID — n/a for a bundle
+			cab.SubItems.Add(row.RelativePath);              // Source = the hosting .chk
+			cab.SubItems.Add(row.DependencyCount.ToString());
+			e.Item = cab;
+			return;
+		}
+
+		if ((uint)e.ItemIndex >= (uint)_filteredAssets.Count)
+		{
+			return;
+		}
+		RipperAssetEntry entry = _filteredAssets[e.ItemIndex];
+		ListViewItem item = new(entry.Name);
+		item.SubItems.Add(entry.Container);
+		item.SubItems.Add(entry.TypeString);
+		item.SubItems.Add(entry.PathId.ToString());
+		item.SubItems.Add(entry.SourceFile);                 // Source = the CAB / collection
+		item.SubItems.Add(string.Empty);                     // Deps — n/a for a single asset
+		e.Item = item;
+	}
+
 	private void assetListView_SelectedIndexChanged(object? sender, EventArgs e)
 	{
 		StopAudio();
-		if (assetListView.SelectedItems.Count == 0)
+		int selectedCount = assetListView.SelectedIndices.Count;
+		if (selectedCount == 0)
 		{
 			ShowEmptyPreview();
 			return;
 		}
 
-		if (assetListView.SelectedItems.Count > 1)
+		// CAB-map virtual files have no materialised asset to preview — show a summary instead.
+		if (_listMode == AssetListMode.CabMap)
+		{
+			_currentPreviewItem = null;
+			_previewRequestVersion++;
+			ClearPreviewSurfaces();
+			ExportCabMap.CabRow? single = selectedCount == 1 ? CabRowAtSelection(0) : null;
+			assetInfoLabel.Text = single is not null
+				? $"CAB: {single.Cab}\r\nSource: {single.RelativePath}\r\nDependencies: {single.DependencyCount}\r\n\r\n{string.Join("\r\n", single.ContainerPaths)}"
+				: $"{selectedCount} virtual files selected. Right-click to load them or export with dependencies.";
+			yamlTextBox.Text = "YAML is not available for CAB-map virtual files.";
+			return;
+		}
+
+		if (selectedCount > 1)
 		{
 			_currentPreviewItem = null;
 			_pendingYamlText = null;
 			_yamlLoadedForCurrentSelection = false;
 			_previewLoadedForCurrentSelection = false;
 			_previewRequestVersion++;
-			ClearMeshPreview();
-			imagePreviewBox.Image?.Dispose();
-			imagePreviewBox.Image = null;
-			imagePreviewBox.Visible = false;
-			glControl.Visible = false;
-			textPreviewBox.Visible = false;
-			textPreviewBox.Clear();
-			audioPanel.Visible = false;
+			ClearPreviewSurfaces();
 			yamlTextBox.Text = "YAML is disabled while multiple assets are selected.";
-			assetInfoLabel.Text = $"{assetListView.SelectedItems.Count} assets selected. Preview is disabled for multi-select.";
+			assetInfoLabel.Text = $"{selectedCount} assets selected. Preview is disabled for multi-select.";
 			return;
 		}
 
-		AssetItem item = (AssetItem)assetListView.SelectedItems[0];
-		_currentPreviewItem = item;
+		RipperAssetEntry entry = _filteredAssets[assetListView.SelectedIndices[0]];
+		_currentPreviewItem = entry;
 		_yamlLoadedForCurrentSelection = false;
 		_previewLoadedForCurrentSelection = false;
 		_pendingYamlText = null;
 		_previewRequestVersion++;
 		yamlTextBox.Text = tabControl2.SelectedTab == tabPage5 ? "Loading YAML..." : "Select the YAML tab to load structured text.";
-		if (item.TreeNode is not null && sceneTreeView.SelectedNode != item.TreeNode)
+		if (_nodeByObjectKey.TryGetValue(GetObjectKey(entry), out Components.GameObjectTreeNode? node) && sceneTreeView.SelectedNode != node)
 		{
-			sceneTreeView.SelectedNode = item.TreeNode;
+			sceneTreeView.SelectedNode = node;
 		}
 		ShowSelectionLoadingState();
 		if (tabControl2.SelectedTab == tabPage4)
@@ -304,39 +358,33 @@ public partial class MainForm : Form
 		}
 
 		ListViewHitTestInfo hit = assetListView.HitTest(e.Location);
-		if (hit.Item is not AssetItem item)
+		if (hit.Item is null)
 		{
 			assetListContextMenuStrip.Close();
 			return;
 		}
-
-		if (!item.Selected)
+		if (!hit.Item.Selected)
 		{
-			assetListView.SelectedItems.Clear();
-			item.Selected = true;
-			item.Focused = true;
+			assetListView.SelectedIndices.Clear();
+			hit.Item.Selected = true;
+			hit.Item.Focused = true;
 		}
 	}
 
 	private void sceneTreeView_NodeMouseClick(object? sender, TreeNodeMouseClickEventArgs e)
 	{
 		sceneTreeView.SelectedNode = e.Node;
-		if (e.Node is not GameObjectTreeNode goNode)
+		if (_listMode != AssetListMode.Assets || e.Node is not GameObjectTreeNode goNode)
 		{
 			return;
 		}
 
-		for (int i = 0; i < assetListView.Items.Count; i++)
+		if (_assetIndexByObjectKey.TryGetValue(GetObjectKey(goNode.GameObject), out int index) && (uint)index < (uint)_filteredAssets.Count)
 		{
-			if (assetListView.Items[i] is AssetItem item && ReferenceEquals(item.TreeNode, goNode))
-			{
-				assetListView.SelectedItems.Clear();
-				item.Selected = true;
-				item.Focused = true;
-				item.EnsureVisible();
-				tabControl1.SelectedTab = tabPage2;
-				break;
-			}
+			assetListView.SelectedIndices.Clear();
+			assetListView.SelectedIndices.Add(index);
+			assetListView.EnsureVisible(index);
+			tabControl1.SelectedTab = tabPage2;
 		}
 	}
 
@@ -410,7 +458,7 @@ public partial class MainForm : Form
 		return scope switch
 		{
 			ExportScope.All => _adapter.Assets.ToList(),
-			ExportScope.Selected => assetListView.SelectedItems.Cast<AssetItem>().Select(static item => item.Entry).ToList(),
+			ExportScope.Selected => SelectedAssetEntries(),
 			ExportScope.Filtered => _filteredAssets.ToList(),
 			_ => [],
 		};
@@ -429,7 +477,7 @@ public partial class MainForm : Form
 
 	private void tabControl2_SelectedIndexChanged(object? sender, EventArgs e)
 	{
-		if (assetListView.SelectedItems.Count != 1)
+		if (_listMode != AssetListMode.Assets || assetListView.SelectedIndices.Count != 1)
 		{
 			return;
 		}
@@ -449,7 +497,8 @@ public partial class MainForm : Form
 		typeFilterComboBox.BeginUpdate();
 		typeFilterComboBox.Items.Clear();
 		typeFilterComboBox.Items.Add("All");
-		foreach (string type in _adapter.GetTypes())
+		IEnumerable<string> types = _listMode == AssetListMode.CabMap ? CabMapTypeNames() : _adapter.GetTypes();
+		foreach (string type in types)
 		{
 			typeFilterComboBox.Items.Add(type);
 		}
@@ -459,20 +508,25 @@ public partial class MainForm : Form
 
 	private void ApplyFilter()
 	{
-		string type = typeFilterComboBox.SelectedItem as string ?? "All";
-		_filteredAssets = SortAssets(_adapter.Filter(listSearch.Text, type));
-		Dictionary<string, AssetItem> itemsByObjectKey = [];
-		assetListView.BeginUpdate();
-		assetListView.Items.Clear();
-		foreach (RipperAssetEntry asset in _filteredAssets)
+		if (_listMode == AssetListMode.CabMap)
 		{
-			AssetItem item = new(asset);
-			assetListView.Items.Add(item);
-			itemsByObjectKey[GetObjectKey(asset)] = item;
+			ApplyCabMapFilter();
+			return;
 		}
+
+		string type = typeFilterComboBox.SelectedItem as string ?? "All";
+		_filteredAssets = SortAssets(_adapter.Filter(listSearch.Text, type)).ToList();
+		_assetIndexByObjectKey.Clear();
+		for (int i = 0; i < _filteredAssets.Count; i++)
+		{
+			_assetIndexByObjectKey[GetObjectKey(_filteredAssets[i])] = i;
+		}
+		// VirtualListSize = 0 then count clears stale selection and forces a full redraw of the virtual rows.
+		assetListView.VirtualListSize = 0;
+		assetListView.VirtualListSize = _filteredAssets.Count;
 		UpdateSortIndicator();
-		assetListView.EndUpdate();
-		_sceneRoots = _adapter.BuildSceneTree(itemsByObjectKey).ToList();
+		_nodeByObjectKey.Clear();
+		_sceneRoots = _adapter.BuildSceneTree(_nodeByObjectKey).ToList();
 		ApplyTreeFilter();
 		SetStatus($"Showing {_filteredAssets.Count} / {_adapter.Assets.Count} assets.");
 		ShowEmptyPreview();
@@ -491,7 +545,7 @@ public partial class MainForm : Form
 			1 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.Container, b.Container, StringComparison.OrdinalIgnoreCase)),
 			2 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.TypeString, b.TypeString, StringComparison.OrdinalIgnoreCase)),
 			3 => Comparer<RipperAssetEntry>.Create(static (a, b) => a.PathId.CompareTo(b.PathId)),
-			4 => Comparer<RipperAssetEntry>.Create(static (a, b) => a.Size.CompareTo(b.Size)),
+			4 => Comparer<RipperAssetEntry>.Create(static (a, b) => string.Compare(a.SourceFile, b.SourceFile, StringComparison.OrdinalIgnoreCase)),
 			_ => Comparer<RipperAssetEntry>.Create(static (_, _) => 0),
 		};
 
@@ -593,8 +647,12 @@ public partial class MainForm : Form
 	{
 		StopAudio();
 		ClearMeshPreview();
+		_listMode = AssetListMode.Assets;
 		_filteredAssets = [];
-		assetListView.Items.Clear();
+		_filteredCabRows = [];
+		_assetIndexByObjectKey.Clear();
+		_nodeByObjectKey.Clear();
+		assetListView.VirtualListSize = 0;
 		sceneTreeView.Nodes.Clear();
 		_sceneRoots.Clear();
 		listSearch.Clear();
@@ -610,6 +668,7 @@ public partial class MainForm : Form
 
 	private void RebuildLoadedState()
 	{
+		_listMode = AssetListMode.Assets;
 		RebuildFilters();
 		ApplyFilter();
 		RebuildSceneTree();
@@ -704,9 +763,7 @@ public partial class MainForm : Form
 				case PreviewKind.Image:
 					imagePreviewBox.Visible = true;
 				_currentImageBytes = preview.Data?.ToArray();
-				_currentImageIsTexture2D = assetListView.SelectedItems.Count > 0
-					&& assetListView.SelectedItems[0] is AssetItem imageItem
-					&& imageItem.Entry.Asset is ITexture2D;
+				_currentImageIsTexture2D = _currentPreviewItem?.Asset is ITexture2D;
 				RefreshImagePreview();
 				break;
 			case PreviewKind.Mesh:
@@ -743,7 +800,7 @@ public partial class MainForm : Form
 
 	private async void LoadPreviewForCurrentSelectionAsync()
 	{
-		AssetItem? item = _currentPreviewItem;
+		RipperAssetEntry? item = _currentPreviewItem;
 		if (item is null || tabControl2.SelectedTab != tabPage4)
 		{
 			return;
@@ -752,7 +809,7 @@ public partial class MainForm : Form
 		int requestVersion = _previewRequestVersion;
 		try
 		{
-			PreviewData preview = await Task.Run(() => _adapter.GetPreview(item.Entry));
+			PreviewData preview = await Task.Run(() => _adapter.GetPreview(item));
 			if (requestVersion != _previewRequestVersion || !ReferenceEquals(item, _currentPreviewItem) || tabControl2.SelectedTab != tabPage4)
 			{
 				return;
@@ -776,12 +833,12 @@ public partial class MainForm : Form
 
 	private async void LoadYamlForCurrentSelectionAsync()
 	{
-		if (_yamlLoadedForCurrentSelection || assetListView.SelectedItems.Count != 1)
+		if (_yamlLoadedForCurrentSelection || _listMode != AssetListMode.Assets || assetListView.SelectedIndices.Count != 1)
 		{
 			return;
 		}
 
-		AssetItem? item = _currentPreviewItem;
+		RipperAssetEntry? item = _currentPreviewItem;
 		if (item is null)
 		{
 			yamlTextBox.Clear();
@@ -791,7 +848,7 @@ public partial class MainForm : Form
 		yamlTextBox.Text = "Loading YAML...";
 		try
 		{
-			string yamlText = await Task.Run(() => _adapter.GetYaml(item.Entry));
+			string yamlText = await Task.Run(() => _adapter.GetYaml(item));
 			if (!ReferenceEquals(item, _currentPreviewItem))
 			{
 				return;

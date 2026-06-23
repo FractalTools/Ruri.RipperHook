@@ -16,7 +16,6 @@ namespace Ruri.RipperHook.GUI;
 public partial class MainForm
 {
 	private readonly ExportCabMap _exportMap = new();
-	private CabFileBrowser? _cabFileBrowser;
 
 	// Accumulated bundle-granular load filter (chunk-entry file names) across appended scoped loads, so a
 	// reloaded old+new path set keeps every previously-loaded closure's bundles instead of filtering them out.
@@ -43,8 +42,8 @@ public partial class MainForm
 		ToggleUi(false);
 		try
 		{
-			// Load the map and, if present, its name-index sidecar (so the browser is searchable by name),
-			// then materialise + sort the virtual-file rows — all off the UI thread (258k+ CABs).
+			// Load the map and, if present, its name-index sidecar (so the list is searchable by name), then
+			// materialise + sort the virtual-file rows — all off the UI thread (258k+ CABs).
 			List<ExportCabMap.CabRow> rows = [];
 			await Task.Run(() =>
 			{
@@ -60,7 +59,8 @@ public partial class MainForm
 			});
 			string nameState = _exportMap.HasNames ? RuriLocalization.CabMapNamesLoaded : RuriLocalization.CabMapNamesMissing;
 			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath) + " " + nameState);
-			OpenCabFileBrowser(rows);
+			_allCabRows = rows;
+			EnterCabMapMode();   // show the virtual files right in the Asset List
 		}
 		catch (Exception ex)
 		{
@@ -73,26 +73,10 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>Open the virtual-file browser populated from the loaded CAB map (replacing any prior one).</summary>
-	private void OpenCabFileBrowser(IReadOnlyList<ExportCabMap.CabRow> rows)
-	{
-		if (!_exportMap.HasMap)
-		{
-			return;
-		}
-		if (_cabFileBrowser is { IsDisposed: false })
-		{
-			_cabFileBrowser.Close();
-		}
-		_cabFileBrowser = new CabFileBrowser(this, rows, _exportMap.HasNames);
-		_cabFileBrowser.Show(this);
-		_cabFileBrowser.BringToFront();
-	}
-
 	/// <summary>
-	/// On-demand, bundle-granular load of the selected CABs (+ their dependency closure) into the asset view
+	/// On-demand, bundle-granular load of the selected CABs (+ their dependency closure) into the Asset List
 	/// for preview. Only the closure's bundles are extracted from each chunk, so this stays memory-bounded
-	/// even when a selection's chunks hold 100k+ unrelated bundles.
+	/// even when a selection's chunks hold 100k+ unrelated bundles. Switches the list to loaded-asset mode.
 	/// </summary>
 	internal async Task LoadCabsScopedAsync(IReadOnlyList<string> seedCabs, bool append)
 	{
@@ -112,10 +96,17 @@ public partial class MainForm
 			_scopedLoadFilter.Add(fileName);
 		}
 
+		string[] nextPaths = append
+			? _lastLoadedPaths.Concat(files).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+			: files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+		// Drop the CAB-map search term so the loaded closure shows in full (not filtered to the search).
+		listSearch.Clear();
+
 		GameBundleHook.LoadIncludeFile = _scopedLoadFilter.Count > 0 ? name => _scopedLoadFilter.Contains(name) : null;
 		try
 		{
-			await LoadAssetBrowserPathsAsync(files, append);
+			await LoadPathsAsync(nextPaths, LoadSessionKind.MixedPaths, replaceCurrent: true);
 		}
 		finally
 		{
@@ -126,7 +117,7 @@ public partial class MainForm
 	/// <summary>
 	/// Unitypackage-style export of the selected CABs plus their full transitive dependency closure: load
 	/// just those bundles (bundle-granular) then run a real AssetRipper export — models, prefabs, meshes,
-	/// animations, textures, materials and everything they reference.
+	/// animations, textures, materials and everything they reference. Returns to CAB-map browsing afterwards.
 	/// </summary>
 	internal async Task ExportCabsWithDepsAsync(IReadOnlyList<string> seedCabs, string outputDir)
 	{
@@ -146,6 +137,7 @@ public partial class MainForm
 			RuriLocalization.WithDepsFailedCaption,
 			RuriLocalization.WithDepsFailedStatus);
 
+		bool wasCabMap = _listMode == AssetListMode.CabMap;
 		GameBundleHook.LoadIncludeFile = fileNames.Count > 0 ? name => fileNames.Contains(name) : null;
 		try
 		{
@@ -155,6 +147,60 @@ public partial class MainForm
 		{
 			GameBundleHook.LoadIncludeFile = null;
 		}
+
+		// RunFilteredExportAsync resets the loaded session; restore the CAB-map view so browsing continues.
+		if (wasCabMap && _allCabRows.Count > 0)
+		{
+			EnterCabMapMode();
+		}
+	}
+
+	// ── unified context-menu actions (work in both list modes) ───────────────────────────────────
+	private async void contextLoadSelectedMenuItem_Click(object? sender, EventArgs e)
+	{
+		if (_listMode != AssetListMode.CabMap)
+		{
+			return;
+		}
+		List<string> cabs = SelectedCabNames();
+		if (cabs.Count > 0)
+		{
+			await LoadCabsScopedAsync(cabs, append: false);
+		}
+	}
+
+	/// <summary>The CABs to export-with-dependencies: the selected virtual files, or the selected assets' CABs.</summary>
+	private List<string> SelectedCabsForDependencyExport()
+	{
+		if (_listMode == AssetListMode.CabMap)
+		{
+			return SelectedCabNames();
+		}
+		HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
+		foreach (RipperAssetEntry entry in SelectedAssetEntries())
+		{
+			if (!string.IsNullOrWhiteSpace(entry.SourceFile))
+			{
+				cabs.Add(entry.SourceFile);
+			}
+		}
+		return cabs.ToList();
+	}
+
+	// Show only the actions that apply to the current list mode (Load selected is CAB-map only; the per-asset
+	// Converted/YAML export is loaded-assets only; Export with dependencies works in both when a map is loaded).
+	private void assetListContextMenuStrip_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
+	{
+		if (assetListView.SelectedIndices.Count == 0)
+		{
+			e.Cancel = true;
+			return;
+		}
+		bool cabMap = _listMode == AssetListMode.CabMap;
+		contextLoadSelectedMenuItem.Visible = cabMap;
+		contextLoadSeparator.Visible = cabMap;
+		contextExportSelectedAssetsMenuItem.Visible = !cabMap;
+		contextExportWithDepsMenuItem.Enabled = _exportMap.HasMap;
 	}
 
 	private async void buildCabMapToolStripMenuItem_Click(object? sender, EventArgs e)
@@ -270,22 +316,14 @@ public partial class MainForm
 
 	private async void contextExportWithDepsMenuItem_Click(object? sender, EventArgs e)
 	{
-		if (!_exportMap.HasMap || assetListView.SelectedItems.Count == 0)
+		if (!_exportMap.HasMap || assetListView.SelectedIndices.Count == 0)
 		{
 			return;
 		}
 
-		// Each selected asset's source CAB → export that bundle + its full transitive dependency closure,
-		// bundle-granular (only those bundles are loaded out of their chunks). SourceFile is the collection
-		// name, i.e. the CAB.
-		HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
-		foreach (AssetItem item in assetListView.SelectedItems.Cast<AssetItem>())
-		{
-			if (!string.IsNullOrWhiteSpace(item.Entry.SourceFile))
-			{
-				cabs.Add(item.Entry.SourceFile);
-			}
-		}
+		// Selected virtual files (CAB-map mode) or the selected assets' source CABs (Assets mode) → export
+		// each bundle + its full transitive dependency closure, bundle-granular.
+		List<string> cabs = SelectedCabsForDependencyExport();
 		if (cabs.Count == 0)
 		{
 			MessageBox.Show(this, RuriLocalization.WithDepsNoSource, RuriLocalization.WithDepsCaption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -296,7 +334,7 @@ public partial class MainForm
 			return;
 		}
 
-		await ExportCabsWithDepsAsync(cabs.ToList(), output);
+		await ExportCabsWithDepsAsync(cabs, output);
 	}
 
 	/// <summary>Resolve bundles for the types via the map, pick output, then export with the type filter applied.</summary>
