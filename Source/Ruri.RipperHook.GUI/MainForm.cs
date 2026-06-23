@@ -38,13 +38,15 @@ public partial class MainForm : Form
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private List<RipperAssetEntry> _filteredAssets = [];
-	// The Asset List is one virtual-mode list with two backings: loaded assets (preview/scene-tree work) and
-	// CAB-map virtual files (each CAB a row; selection exports/loads its dependency closure). Same search,
-	// multi-select, sort, and "Export with dependencies" serve both — see assetListView_RetrieveVirtualItem.
-	private enum AssetListMode { Assets, CabMap }
-	private AssetListMode _listMode = AssetListMode.Assets;
+	// Two decoupled tabs share the filter rules + per-tab quick search: the loaded "Asset List" (preview /
+	// scene-tree; _filteredAssets) and the "Virtual Asset List" CAB-map tab (each CAB a row; _filteredCabRows,
+	// in MainForm.AssetList.cs). Loading/exporting a virtual selection resolves its dependency closure and
+	// appends it into the loaded Asset List, so browsing the virtual files never resets loaded assets.
 	private List<ExportCabMap.CabRow> _allCabRows = [];
 	private List<ExportCabMap.CabRow> _filteredCabRows = [];
+	// Previewing a virtual file appends its closure to the shared loaded state; mark the loaded Asset List
+	// dirty and rebuild it lazily when that tab is next shown (not mid-preview).
+	private bool _assetListDirty;
 	private readonly Dictionary<string, int> _assetIndexByObjectKey = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, Components.GameObjectTreeNode> _nodeByObjectKey = new(StringComparer.Ordinal);
 	private bool _suppressHookTreeEvents;
@@ -115,6 +117,8 @@ public partial class MainForm : Form
 		_hookConfig = hookConfig;
 		_configPath = configPath;
 		InitializeComponent();
+		BuildVirtualTab();
+		BuildFilterMenu();
 		InitializeHookMenu();
 		ResetForm();
 		UpdateHookStatus();
@@ -190,7 +194,9 @@ public partial class MainForm : Form
 		ToggleUi(false);
 		try
 		{
-			await Task.Run(() => _adapter.LoadPaths(normalizedPaths));
+			await _adapterLoadLock.WaitAsync();
+			try { await Task.Run(() => _adapter.LoadPaths(normalizedPaths)); }
+			finally { _adapterLoadLock.Release(); }
 			RememberLoadSession(normalizedPaths, sessionKind);
 			RebuildLoadedState();
 			SetStatus($"Loaded {_adapter.Assets.Count} assets from {normalizedPaths.Length} path(s).");
@@ -212,6 +218,14 @@ public partial class MainForm : Form
 		_adapter.Reset();
 		_exportMap.Clear();
 		_allCabRows = [];
+		_filteredCabRows = [];
+		if (virtualListView is not null)
+		{
+			virtualListView.VirtualListSize = 0;
+		}
+		virtualSearch?.Clear();
+		_filterRules.Clear();
+		_filterDialog?.RefreshFromRules();
 		ResetForm();
 		UpdateCabMapState();
 	}
@@ -244,7 +258,7 @@ public partial class MainForm : Form
 
 	private void listSearch_TextChanged(object? sender, EventArgs e)
 	{
-		ApplyFilter();
+		QuickSearchChanged();
 	}
 
 	private void treeSearch_TextChanged(object? sender, EventArgs e)
@@ -254,29 +268,12 @@ public partial class MainForm : Form
 
 	private void typeFilterComboBox_SelectedIndexChanged(object? sender, EventArgs e)
 	{
-		ApplyFilter();
+		ApplyAssetFilter();
 	}
 
-	// Virtual-mode renderer: one row per loaded asset (Assets mode) or per CAB (CAB-map mode).
+	// Virtual-mode renderer for the loaded Asset List: one row per loaded asset (the CAB-map tab has its own).
 	private void assetListView_RetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
 	{
-		if (_listMode == AssetListMode.CabMap)
-		{
-			if ((uint)e.ItemIndex >= (uint)_filteredCabRows.Count)
-			{
-				return;
-			}
-			ExportCabMap.CabRow row = _filteredCabRows[e.ItemIndex];
-			ListViewItem cab = new(CabDisplayName(row));
-			cab.SubItems.Add(row.ContainerPaths.Count > 0 ? string.Join("  |  ", row.ContainerPaths) : row.Cab);
-			cab.SubItems.Add(CabTypeNames(row));
-			cab.SubItems.Add(string.Empty);                  // PathID — n/a for a bundle
-			cab.SubItems.Add(row.RelativePath);              // Source = the hosting .chk
-			cab.SubItems.Add(row.DependencyCount.ToString());
-			e.Item = cab;
-			return;
-		}
-
 		if ((uint)e.ItemIndex >= (uint)_filteredAssets.Count)
 		{
 			return;
@@ -298,20 +295,6 @@ public partial class MainForm : Form
 		if (selectedCount == 0)
 		{
 			ShowEmptyPreview();
-			return;
-		}
-
-		// CAB-map virtual files have no materialised asset to preview — show a summary instead.
-		if (_listMode == AssetListMode.CabMap)
-		{
-			_currentPreviewItem = null;
-			_previewRequestVersion++;
-			ClearPreviewSurfaces();
-			ExportCabMap.CabRow? single = selectedCount == 1 ? CabRowAtSelection(0) : null;
-			assetInfoLabel.Text = single is not null
-				? $"CAB: {single.Cab}\r\nSource: {single.RelativePath}\r\nDependencies: {single.DependencyCount}\r\n\r\n{string.Join("\r\n", single.ContainerPaths)}"
-				: $"{selectedCount} virtual files selected. Right-click to load them or export with dependencies.";
-			yamlTextBox.Text = "YAML is not available for CAB-map virtual files.";
 			return;
 		}
 
@@ -350,22 +333,23 @@ public partial class MainForm : Form
 		}
 	}
 
+	// Shared by both lists (sender-aware): right-click a row that isn't selected → select just it before the menu.
 	private void assetListView_MouseUp(object? sender, MouseEventArgs e)
 	{
-		if (e.Button != MouseButtons.Right)
+		if (e.Button != MouseButtons.Right || sender is not ListView lv)
 		{
 			return;
 		}
 
-		ListViewHitTestInfo hit = assetListView.HitTest(e.Location);
+		ListViewHitTestInfo hit = lv.HitTest(e.Location);
 		if (hit.Item is null)
 		{
-			assetListContextMenuStrip.Close();
+			lv.ContextMenuStrip?.Close();
 			return;
 		}
 		if (!hit.Item.Selected)
 		{
-			assetListView.SelectedIndices.Clear();
+			lv.SelectedIndices.Clear();
 			hit.Item.Selected = true;
 			hit.Item.Focused = true;
 		}
@@ -374,7 +358,7 @@ public partial class MainForm : Form
 	private void sceneTreeView_NodeMouseClick(object? sender, TreeNodeMouseClickEventArgs e)
 	{
 		sceneTreeView.SelectedNode = e.Node;
-		if (_listMode != AssetListMode.Assets || e.Node is not GameObjectTreeNode goNode)
+		if (e.Node is not GameObjectTreeNode goNode)
 		{
 			return;
 		}
@@ -477,7 +461,7 @@ public partial class MainForm : Form
 
 	private void tabControl2_SelectedIndexChanged(object? sender, EventArgs e)
 	{
-		if (_listMode != AssetListMode.Assets || assetListView.SelectedIndices.Count != 1)
+		if (assetListView.SelectedIndices.Count != 1)
 		{
 			return;
 		}
@@ -492,30 +476,10 @@ public partial class MainForm : Form
 		}
 	}
 
-	private void RebuildFilters()
+	private void ApplyAssetFilter()
 	{
-		typeFilterComboBox.BeginUpdate();
-		typeFilterComboBox.Items.Clear();
-		typeFilterComboBox.Items.Add("All");
-		IEnumerable<string> types = _listMode == AssetListMode.CabMap ? CabMapTypeNames() : _adapter.GetTypes();
-		foreach (string type in types)
-		{
-			typeFilterComboBox.Items.Add(type);
-		}
-		typeFilterComboBox.SelectedIndex = 0;
-		typeFilterComboBox.EndUpdate();
-	}
-
-	private void ApplyFilter()
-	{
-		if (_listMode == AssetListMode.CabMap)
-		{
-			ApplyCabMapFilter();
-			return;
-		}
-
-		string type = typeFilterComboBox.SelectedItem as string ?? "All";
-		_filteredAssets = SortAssets(_adapter.Filter(listSearch.Text, type)).ToList();
+		string quick = listSearch.Text.Trim();
+		_filteredAssets = SortAssets(_adapter.Assets.Where(a => RowPasses(quick, column => AssetColumnValue(a, column))).ToList()).ToList();
 		_assetIndexByObjectKey.Clear();
 		for (int i = 0; i < _filteredAssets.Count; i++)
 		{
@@ -578,7 +542,7 @@ public partial class MainForm : Form
 			_sortColumn = e.Column;
 			_sortAscending = true;
 		}
-		ApplyFilter();
+		ApplyAssetFilter();
 	}
 
 	private void UpdateSortIndicator()
@@ -643,13 +607,15 @@ public partial class MainForm : Form
 		}
 	}
 
+	// Clears the loaded Asset List + preview only; the Virtual Asset List (CAB-map) survives so a dependency
+	// export — which resets the loaded session — doesn't wipe the virtual browsing state. Full reset of the
+	// virtual side is done explicitly in resetToolStripMenuItem_Click.
 	private void ResetForm()
 	{
 		StopAudio();
 		ClearMeshPreview();
-		_listMode = AssetListMode.Assets;
 		_filteredAssets = [];
-		_filteredCabRows = [];
+		_assetListDirty = false;
 		_assetIndexByObjectKey.Clear();
 		_nodeByObjectKey.Clear();
 		assetListView.VirtualListSize = 0;
@@ -668,11 +634,21 @@ public partial class MainForm : Form
 
 	private void RebuildLoadedState()
 	{
-		_listMode = AssetListMode.Assets;
 		RebuildFilters();
-		ApplyFilter();
+		ApplyAssetFilter();
 		RebuildSceneTree();
 		RefreshTitle();
+		_assetListDirty = false;
+	}
+
+	// Lazy refresh: previewing virtual files appends to the loaded state without rebuilding the (hidden) loaded
+	// Asset List; rebuild it the moment that tab is shown so it reflects everything loaded so far.
+	private void tabControl1_SelectedIndexChanged(object? sender, EventArgs e)
+	{
+		if (tabControl1.SelectedTab == tabPage2 && _assetListDirty)
+		{
+			RebuildLoadedState();
+		}
 	}
 
 	private void RememberLoadSession(string[] paths, LoadSessionKind sessionKind)
@@ -833,7 +809,7 @@ public partial class MainForm : Form
 
 	private async void LoadYamlForCurrentSelectionAsync()
 	{
-		if (_yamlLoadedForCurrentSelection || _listMode != AssetListMode.Assets || assetListView.SelectedIndices.Count != 1)
+		if (_yamlLoadedForCurrentSelection || assetListView.SelectedIndices.Count != 1)
 		{
 			return;
 		}

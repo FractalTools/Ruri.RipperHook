@@ -36,8 +36,6 @@ partial class MainForm
 	private ToolStripMenuItem exportFilteredConvertedAssetsMenuItem = null!;
 	private ToolStripMenuItem exportFilteredYamlAssetsMenuItem = null!;
 	private ContextMenuStrip assetListContextMenuStrip = null!;
-	private ToolStripMenuItem contextLoadSelectedMenuItem = null!;
-	private ToolStripSeparator contextLoadSeparator = null!;
 	private ToolStripMenuItem contextExportSelectedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedConvertedAssetsMenuItem = null!;
 	private ToolStripMenuItem contextExportSelectedYamlAssetsMenuItem = null!;
@@ -119,8 +117,6 @@ partial class MainForm
 		exportFilteredConvertedAssetsMenuItem = new ToolStripMenuItem();
 		exportFilteredYamlAssetsMenuItem = new ToolStripMenuItem();
 		assetListContextMenuStrip = new ContextMenuStrip(components);
-		contextLoadSelectedMenuItem = new ToolStripMenuItem();
-		contextLoadSeparator = new ToolStripSeparator();
 		contextExportSelectedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedConvertedAssetsMenuItem = new ToolStripMenuItem();
 		contextExportSelectedYamlAssetsMenuItem = new ToolStripMenuItem();
@@ -243,11 +239,9 @@ partial class MainForm
 		exportFilteredYamlAssetsMenuItem.Text = "YAML";
 		exportFilteredYamlAssetsMenuItem.Click += exportFilteredYamlAssetsMenuItem_Click;
 		exportFilteredAssetsMenuItem.Click += exportFilteredAssetsMenuItem_Click;
-		assetListContextMenuStrip.Items.AddRange([contextLoadSelectedMenuItem, contextLoadSeparator, contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
+		assetListContextMenuStrip.Items.AddRange([contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
 		assetListContextMenuStrip.Opening += assetListContextMenuStrip_Opening;
 		// CAB-map mode only: load the selected virtual files + their dependency closure into the Asset List.
-		contextLoadSelectedMenuItem.Text = RuriLocalization.ContextLoadSelected;
-		contextLoadSelectedMenuItem.Click += contextLoadSelectedMenuItem_Click;
 		contextExportSelectedAssetsMenuItem.DropDownItems.AddRange([contextExportSelectedConvertedAssetsMenuItem, contextExportSelectedYamlAssetsMenuItem]);
 		contextExportSelectedAssetsMenuItem.Text = "Export selected";
 		contextExportSelectedConvertedAssetsMenuItem.Text = "Converted";

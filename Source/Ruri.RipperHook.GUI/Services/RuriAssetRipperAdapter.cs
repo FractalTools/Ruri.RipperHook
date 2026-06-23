@@ -123,6 +123,13 @@ internal sealed class RuriAssetRipperAdapter
 
 	public string GetYaml(RipperAssetEntry entry) => NormalizeForTextBox(SerializeYaml(entry.Asset));
 
+	/// <summary>
+	/// Preview for one just-loaded asset, with its real size computed on demand (the list builds entries with
+	/// Size 0 to stay fast; a single previewed asset can afford the serialize). Used by the CAB-map on-demand
+	/// preview so a selected virtual file shows its texture/mesh + real data as soon as it is read.
+	/// </summary>
+	public PreviewData GetPreviewWithSize(RipperAssetEntry entry) => GetPreview(entry with { Size = EstimateSize(entry.Asset) });
+
 	public IReadOnlyList<TreeNode> BuildSceneTree(Dictionary<string, GameObjectTreeNode> nodes)
 	{
 		List<TreeNode> roots = [];

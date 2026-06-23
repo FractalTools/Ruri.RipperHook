@@ -145,7 +145,9 @@ public partial class MainForm
 			string[] pathArray = inputPaths.ToArray();
 			string loadLabel = inputPaths.Count == 1 ? inputPaths[0] : $"{inputPaths.Count}";
 			SetStatus(string.Format(text.Loading, loadLabel));
-			await Task.Run(() => GameFileLoader.LoadAndProcess(pathArray));
+			await _adapterLoadLock.WaitAsync();
+			try { await Task.Run(() => GameFileLoader.LoadAndProcess(pathArray)); }
+			finally { _adapterLoadLock.Release(); }
 
 			SetStatus(string.Format(text.Exporting, outputPath));
 			Logger.Info(LogCategory.Export, $"Filtered export -> {outputPath} (hooks: {string.Join(", ", extraHooks)})");
