@@ -18,16 +18,28 @@ namespace Ruri.RipperHook.GUI.Services;
 internal sealed class ExportCabMap
 {
     private const uint Magic = 0x52434D32; // "RCM2" — keep in sync with Ruri.RipperHook.CLI CabMap
+    private const uint NameMagic = 0x524E4D32; // "RNM2" — name-index sidecar, keep in sync with CLI CabMap
 
     private sealed record Entry(string RelativePath, List<string> Dependencies, List<int> ClassIds);
 
+    /// <summary>One CAB's name-index row: the chunk-entry file name that hosts it + its Container paths.</summary>
+    internal sealed record NameEntry(string FileName, List<string> Paths);
+
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _pathToCabs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, NameEntry> _nameIndex = new(StringComparer.OrdinalIgnoreCase);
     private string _baseFolder = string.Empty;
 
     public bool HasMap => _entries.Count > 0;
+    public bool HasNames => _nameIndex.Count > 0;
     public int CabCount => _entries.Count;
     public string MapPath { get; private set; } = string.Empty;
+
+    /// <summary>The sidecar name-index path for a CAB map: <c>&lt;cabmap&gt;.names</c> (matches the CLI).</summary>
+    public static string NameIndexPath(string cabMapPath) => Path.ChangeExtension(Path.GetFullPath(cabMapPath), ".names");
+
+    /// <summary>One virtual-file row for the browser: a CAB, where it lives, what it holds, how connected it is.</summary>
+    internal sealed record CabRow(string Cab, string RelativePath, IReadOnlyList<int> ClassIds, int DependencyCount, IReadOnlyList<string> ContainerPaths);
 
     /// <summary>All distinct ClassIDs present anywhere in the map — used to populate the type picker.</summary>
     public IReadOnlySet<int> AvailableClassIds
@@ -47,8 +59,83 @@ internal sealed class ExportCabMap
     {
         _entries.Clear();
         _pathToCabs.Clear();
+        _nameIndex.Clear();
         _baseFolder = string.Empty;
         MapPath = string.Empty;
+    }
+
+    /// <summary>
+    /// Load the optional name-index sidecar (CAB → chunk-entry file name + Container paths) written by the
+    /// CLI's <c>--build-name-index</c>. Without it the browser still lists CABs by hash; with it every CAB
+    /// shows its readable addressable paths and the list becomes searchable by name (e.g. "pelica").
+    /// </summary>
+    public void LoadNames(string path)
+    {
+        _nameIndex.Clear();
+        using FileStream stream = File.OpenRead(path);
+        using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
+        if (reader.ReadUInt32() != NameMagic)
+        {
+            throw new InvalidDataException($"Not a name index (or stale format — rebuild it): {path}");
+        }
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++)
+        {
+            string cab = reader.ReadString();
+            string fileName = reader.ReadString();
+            int pathCount = reader.ReadInt32();
+            List<string> paths = new(pathCount);
+            for (int j = 0; j < pathCount; j++) paths.Add(reader.ReadString());
+            _nameIndex[cab] = new NameEntry(fileName, paths);
+        }
+    }
+
+    /// <summary>Every CAB as a virtual-file row (with its Container paths when a name index is loaded).</summary>
+    public IEnumerable<CabRow> EnumerateCabRows()
+    {
+        foreach ((string cab, Entry entry) in _entries)
+        {
+            IReadOnlyList<string> paths = _nameIndex.TryGetValue(cab, out NameEntry? name) ? name.Paths : [];
+            yield return new CabRow(cab, entry.RelativePath, entry.ClassIds, entry.Dependencies.Count, paths);
+        }
+    }
+
+    /// <summary>
+    /// Resolve the given seed CABs to a scoped, bundle-granular load: the on-disk chunk files that host them
+    /// plus their transitive dependency closure, AND the chunk-ENTRY file names of every CAB in the closure.
+    /// The caller hands the file names to <c>GameBundleHook.LoadIncludeFile</c> so only those bundles are
+    /// extracted from the (possibly 161k-bundle) chunks instead of loading each chunk whole.
+    /// </summary>
+    public (string[] Files, HashSet<string> LoadFilterFileNames) ResolveScopedClosure(IEnumerable<string> seedCabs)
+    {
+        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> closureCabs = new(StringComparer.OrdinalIgnoreCase);
+        Queue<string> queue = new();
+        foreach (string cab in seedCabs)
+        {
+            if (!string.IsNullOrWhiteSpace(cab)) queue.Enqueue(cab);
+        }
+
+        while (queue.Count > 0)
+        {
+            string cab = queue.Dequeue();
+            if (!closureCabs.Add(cab)) continue;
+            if (!_entries.TryGetValue(cab, out Entry? entry)) continue;
+            string full = Path.GetFullPath(Path.Combine(_baseFolder, entry.RelativePath));
+            if (File.Exists(full)) resultFiles.Add(full);
+            foreach (string dep in entry.Dependencies) queue.Enqueue(dep);
+        }
+
+        HashSet<string> fileNames = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string cab in closureCabs)
+        {
+            if (_nameIndex.TryGetValue(cab, out NameEntry? name) && !string.IsNullOrEmpty(name.FileName))
+            {
+                fileNames.Add(name.FileName);
+            }
+        }
+
+        return (resultFiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray(), fileNames);
     }
 
     public void Load(string path)

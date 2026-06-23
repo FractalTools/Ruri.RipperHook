@@ -55,10 +55,21 @@ internal static class Program
             return CabMap.Build(opts.LoadPaths[0], buildOut);
         }
 
-        bool typeDriven = opts.CabMapPath is { Length: > 0 } && opts.LoadTypes.Length > 0;
-        if (opts.LoadPaths.Length == 0 && !typeDriven)
+        if (opts.BuildNameIndexPath is { Length: > 0 } nameIndexOut)
         {
-            Console.Error.WriteLine("[Ruri.CLI] --load is required for headless mode (or --cab-map with --load-types). Use the GUI executable for the AssetRipper Web UI, or pass --list-hooks to query hook ids.");
+            if (opts.LoadPaths.Length == 0)
+            {
+                Console.Error.WriteLine("[Ruri.CLI] --build-name-index needs --load <rootDir> to scan.");
+                return 1;
+            }
+            return CabMap.BuildNameIndex(opts.LoadPaths[0], nameIndexOut) > 0 ? 0 : 1;
+        }
+
+        bool typeDriven = opts.CabMapPath is { Length: > 0 } && opts.LoadTypes.Length > 0;
+        bool nameDriven = opts.CabMapPath is { Length: > 0 } && opts.Names.Length > 0;
+        if (opts.LoadPaths.Length == 0 && !typeDriven && !nameDriven)
+        {
+            Console.Error.WriteLine("[Ruri.CLI] --load is required for headless mode (or --cab-map with --load-types / --names). Use the GUI executable for the AssetRipper Web UI, or pass --list-hooks to query hook ids.");
             return 1;
         }
 

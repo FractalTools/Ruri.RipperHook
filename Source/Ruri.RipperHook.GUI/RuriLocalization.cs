@@ -244,6 +244,20 @@ internal static class RuriLocalization
         _ => "CABMap loaded: {0} CABs ({1})",
     };
 
+    public static string CabMapNamesLoaded => Lang switch
+    {
+        "zh-Hans" => "（含名称索引，可按名搜索）",
+        "zh-Hant" => "（含名稱索引，可依名搜尋）",
+        _ => "(name index loaded — searchable by name)",
+    };
+
+    public static string CabMapNamesMissing => Lang switch
+    {
+        "zh-Hans" => "（无 .names 名称索引，仅显示 CAB 哈希）",
+        "zh-Hant" => "（無 .names 名稱索引，僅顯示 CAB 雜湊）",
+        _ => "(no .names index — CAB hashes only)",
+    };
+
     public static string CabMapBuildSelectGameFolder => Lang switch
     {
         "zh-Hans" => "选择要构建依赖图的游戏数据目录（如 <名称>_Data）",

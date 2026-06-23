@@ -5,6 +5,7 @@ using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.IO.Files.SerializedFiles.Parser;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.CLI;
 
@@ -270,6 +271,241 @@ internal static class CabMap
         return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    // ── name index (CAB → chunk-entry file name + its AssetBundle Container addressable paths) ─────
+    //
+    // The CAB map keys everything by content hash; the readable names ("…/pelica/…") live only inside
+    // each bundle's AssetBundle Container. A name index is a sidecar — "<cabmap>.names" — built once by a
+    // bounded scan that reads ONLY the AssetBundle object per CAB, so the CAB map itself stays untouched
+    // (the user's whole point: use the map directly). Each CAB also records the chunk-entry file name that
+    // hosts it (e.g. Data/Bundles/Windows/main/<hash>.ab) — which differs from the inner CAB name — because
+    // a scoped load must filter chunk entries by THAT name. Pair a name match with the CAB map's dependency
+    // graph and you get "every asset called pelica, plus its full dependency closure".
+
+    internal sealed record NameEntry(string FileName, List<string> Paths);
+
+    private const uint NameMagic = 0x524E4D32; // "RNM2" (v2 adds the per-CAB chunk-entry file name)
+
+    /// <summary>The sidecar name-index path for a CAB map: <c>&lt;cabmap&gt;.names</c>.</summary>
+    public static string NameIndexPath(string cabMapPath) => Path.ChangeExtension(Path.GetFullPath(cabMapPath), ".names");
+
+    /// <summary>True if <paramref name="path"/> is a current-format name index; false (rebuild) if missing or stale.</summary>
+    public static bool IsNameIndexCurrent(string path)
+    {
+        try
+        {
+            using FileStream stream = File.OpenRead(path);
+            using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
+            return stream.Length >= 4 && reader.ReadUInt32() == NameMagic;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Build a name index over <paramref name="rootFolder"/> (one file at a time, bounded memory) and write
+    /// it to <paramref name="outPath"/>. The active game hook must be applied so encrypted bundles decrypt.
+    /// Returns the number of CABs with at least one readable container path.
+    /// </summary>
+    public static int BuildNameIndex(string rootFolder, string outPath)
+    {
+        if (!Directory.Exists(rootFolder))
+        {
+            Console.Error.WriteLine($"[NameIndex] Root folder not found: {rootFolder}");
+            return 0;
+        }
+        string fullRoot = Path.GetFullPath(rootFolder);
+        string[] files = Directory.GetFiles(fullRoot, "*.*", SearchOption.AllDirectories);
+
+        // Every CAB is recorded (even when its container has no paths) so its chunk-entry file name is
+        // always available for the scoped load filter; the paths drive name search and may be empty.
+        Dictionary<string, NameEntry> index = new(StringComparer.OrdinalIgnoreCase);
+        int scanned = 0;
+
+        GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
+        try
+        {
+            foreach (string file in files)
+            {
+                scanned++;
+                int before = index.Count;
+                foreach ((string cab, string fileName, List<string> paths) in ScanContainerNames(file))
+                {
+                    index[cab] = new NameEntry(fileName, paths);
+                }
+                int added = index.Count - before;
+                if (added > 0)
+                {
+                    Console.Error.WriteLine($"[NameIndex] {Path.GetFileName(file)}: +{added} CABs ({index.Count} total)");
+                }
+            }
+        }
+        finally
+        {
+            GameBundleHook.ScanIncludeFile = null;
+        }
+
+        SaveNameIndex(Path.GetFullPath(outPath), index);
+        Console.Error.WriteLine($"[NameIndex] {scanned} files scanned, {index.Count} CABs indexed → {Path.GetFullPath(outPath)}");
+        return index.Count;
+    }
+
+    private static List<(string Cab, string FileName, List<string> Paths)> ScanContainerNames(string file)
+    {
+        // Fast path: a VFS game hook (EndField) exposes a bounded, parallel container-name scan.
+        if (GameBundleHook.ScanChunkNames is { } scanChunk)
+        {
+            try
+            {
+                return scanChunk(file);
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[NameIndex] Scan '{file}': {ex.GetType().Name}: {ex.Message}");
+                return new();
+            }
+        }
+
+        // Fallback (non-VFS games): drive the hook's file-pre-initialize unpack if present, then read each
+        // SerializedFile's AssetBundle Container, disposing as we go.
+        List<(string, string, List<string>)> result = new();
+        List<FileBase> fileStack = new();
+        try
+        {
+            GameBundleHook.FilePreInitializeDelegate? preInitialize = GameBundleHook.CustomFilePreInitialize;
+            if (preInitialize is not null)
+            {
+                preInitialize(new GameBundle(), new[] { file }, fileStack, LocalFileSystem.Instance, null);
+            }
+            else
+            {
+                fileStack.Add(SchemeReader.LoadFile(file, LocalFileSystem.Instance));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Verbose(LogCategory.Import, $"[NameIndex] Unpack '{file}': {ex.GetType().Name}: {ex.Message}");
+            return result;
+        }
+
+        string fallbackName = Path.GetFileName(file);
+        foreach (FileBase fileBase in fileStack)
+        {
+            try
+            {
+                if (fileBase is SerializedFile single)
+                {
+                    result.Add(GameBundleHook.ReadContainerNames(single, fallbackName));
+                }
+                else if (fileBase is FileContainer container)
+                {
+                    container.ReadContentsRecursively();
+                    foreach (SerializedFile sf in container.FetchSerializedFiles())
+                    {
+                        result.Add(GameBundleHook.ReadContainerNames(sf, fallbackName));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[NameIndex] Read '{file}': {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                (fileBase as IDisposable)?.Dispose();
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Load a name index sidecar: CAB → (chunk-entry file name, container paths).</summary>
+    public static Dictionary<string, NameEntry> LoadNameIndex(string path)
+    {
+        Dictionary<string, NameEntry> index = new(StringComparer.OrdinalIgnoreCase);
+        using FileStream stream = File.OpenRead(path);
+        using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
+        if (reader.ReadUInt32() != NameMagic)
+        {
+            throw new InvalidDataException($"Not a name index (or stale format — rebuild it): {path}");
+        }
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++)
+        {
+            string cab = reader.ReadString();
+            string fileName = reader.ReadString();
+            int pathCount = reader.ReadInt32();
+            List<string> paths = new(pathCount);
+            for (int j = 0; j < pathCount; j++) paths.Add(reader.ReadString());
+            index[cab] = new NameEntry(fileName, paths);
+        }
+        return index;
+    }
+
+    private static void SaveNameIndex(string outPath, IReadOnlyDictionary<string, NameEntry> index)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+        using FileStream stream = File.Create(outPath);
+        using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
+        writer.Write(NameMagic);
+        writer.Write(index.Count);
+        foreach ((string cab, NameEntry entry) in index.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            writer.Write(cab);
+            writer.Write(entry.FileName);
+            writer.Write(entry.Paths.Count);
+            foreach (string p in entry.Paths) writer.Write(p);
+        }
+    }
+
+    /// <summary>
+    /// Resolve a name match to a scoped load: find every CAB whose AssetBundle Container has a path matching
+    /// any of <paramref name="nameRegexes"/> (the seeds), take their transitive dependency closure via the
+    /// CAB map, and return the on-disk chunk files that host them. <paramref name="loadFilterFileNames"/>
+    /// returns the chunk-ENTRY file names (e.g. Data/Bundles/Windows/main/&lt;hash&gt;.ab) of every CAB in
+    /// the closure — the exact set a scoped load must extract, so the huge chunks contribute only the few
+    /// hundred bundles the target actually needs. <paramref name="matchedCabs"/> is the seed count.
+    /// </summary>
+    public static string[] ResolveByNames(string baseFolder, Dictionary<string, Entry> entries, Dictionary<string, NameEntry> nameIndex, Regex[] nameRegexes, out int matchedCabs, out HashSet<string> loadFilterFileNames)
+    {
+        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
+        Queue<string> seeds = new();
+        int seedCount = 0;
+        foreach ((string cab, NameEntry entry) in nameIndex)
+        {
+            bool matched = false;
+            foreach (string p in entry.Paths)
+            {
+                if (nameRegexes.Any(r => r.IsMatch(p)))
+                {
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched)
+            {
+                seeds.Enqueue(cab);
+                seedCount++;
+            }
+        }
+        matchedCabs = seedCount;
+
+        // Full closure CAB set (seeds + transitive deps), then map each to its chunk-entry file name —
+        // the bundle-granular load filter so only these bundles are extracted from the (huge) chunks.
+        HashSet<string> closureCabs = new(StringComparer.OrdinalIgnoreCase);
+        Bfs(baseFolder, entries, seeds, resultFiles, closureCabs);
+
+        loadFilterFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string cab in closureCabs)
+        {
+            if (nameIndex.TryGetValue(cab, out NameEntry? entry) && !string.IsNullOrEmpty(entry.FileName))
+            {
+                loadFilterFileNames.Add(entry.FileName);
+            }
+        }
+        return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private static Dictionary<string, List<string>> BuildPathIndex(Dictionary<string, Entry> entries)
     {
         Dictionary<string, List<string>> pathToCabs = new(StringComparer.OrdinalIgnoreCase);
@@ -285,9 +521,9 @@ internal static class CabMap
         return pathToCabs;
     }
 
-    private static void Bfs(string baseFolder, Dictionary<string, Entry> entries, Queue<string> queue, HashSet<string> resultFiles)
+    private static void Bfs(string baseFolder, Dictionary<string, Entry> entries, Queue<string> queue, HashSet<string> resultFiles, HashSet<string>? visitedOut = null)
     {
-        HashSet<string> visitedCabs = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> visitedCabs = visitedOut ?? new(StringComparer.OrdinalIgnoreCase);
         while (queue.Count > 0)
         {
             string cab = queue.Dequeue();

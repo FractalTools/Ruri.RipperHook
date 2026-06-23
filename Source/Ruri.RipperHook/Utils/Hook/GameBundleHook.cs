@@ -1,13 +1,21 @@
 ﻿using System.Reflection;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.IO;
+using AssetRipper.Assets.Metadata;
+using AssetRipper.Import.AssetCreation;
+using AssetRipper.Import.Logging;
+using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.ResourceFiles;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.IO.Files.SerializedFiles.Parser;
 using AssetRipper.Primitives;
+using AssetRipper.SourceGenerated;
+using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using Ruri.RipperHook.Core;
 
 namespace Ruri.RipperHook.HookUtils.GameBundleHook;
@@ -50,6 +58,18 @@ public class GameBundleHook : CommonHook, IHookModule
     }
 
     /// <summary>
+    /// Optional load-mode filter consulted by the VFS chunk extractor on the NORMAL load path: when set,
+    /// a chunk's inner bundle is only extracted (and decrypted) if this returns <c>true</c> for its name.
+    /// This is what makes "load just pelica + its dependencies" possible — a single chunk can hold 161k
+    /// bundles, so loading the whole chunk to reach the few hundred a target actually needs would exhaust
+    /// memory. The CAB-map resolves a target to its exact dependency-closure CAB set; this filter then
+    /// loads only those bundles out of the chunks that host them. <c>null</c> (the default) loads
+    /// everything, so ordinary whole-game loading is completely unaffected. Set it for the duration of a
+    /// scoped load, then reset to <c>null</c>.
+    /// </summary>
+    public static Func<string, bool>? LoadIncludeFile;
+
+    /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each
     /// bundle's bytes as it goes (bounded memory) and extracting in parallel. This is the fast path the CAB
@@ -79,6 +99,95 @@ public class GameBundleHook : CommonHook, IHookModule
         foreach (SerializedType type in sf.Types)
             classIds.Add(type.TypeID < 0 ? 114 : type.TypeID);
         return (cab, deps, classIds.ToList());
+    }
+
+    // ── name scan (CAB → its AssetBundle Container addressable paths) ─────────────────────────────
+    //
+    // The CAB map keys everything by content hash; the human-readable names ("…/pelica/…") live only
+    // inside each bundle's AssetBundle (ClassID 142) object, in its Container — the addressable path of
+    // every asset the bundle hosts. A name scan reads ONLY that one object per CAB (skipping the heavy
+    // Mesh/AnimationClip/Texture payloads) so it stays metadata-cheap and bounded-memory, then pairs the
+    // names with the CAB map's dependency graph to expand a name match to its full dependency closure.
+
+    /// <summary>
+    /// Default version a name scan reads the AssetBundle object at when a SerializedFile's version is
+    /// stripped. Set by the active game hook (EndField uses its custom experimental class version);
+    /// resolving the source-generated AssetBundle layout needs a concrete version.
+    /// </summary>
+    public static UnityVersion NameScanVersion;
+
+    /// <summary>
+    /// Set by a VFS game hook: decrypt + parse each CAB-hosting bundle of an on-disk path and return one
+    /// tuple per SerializedFile of (CAB name, its AssetBundle Container addressable paths). Bounded-memory
+    /// and parallel like <see cref="ScanChunk"/>; <c>null</c> when no VFS hook is active.
+    /// </summary>
+    public delegate List<(string Cab, string FileName, List<string> Paths)> ScanChunkNamesDelegate(string path);
+    public static ScanChunkNamesDelegate? ScanChunkNames;
+
+    /// <summary>
+    /// A factory that materialises ONLY the AssetBundle (142) object of a collection, returning <c>null</c>
+    /// for every other class so <see cref="SerializedAssetCollection"/>.FromSerializedFile skips the heavy
+    /// Mesh/AnimationClip/Texture payload reads. The AssetBundle Container already lists every asset's
+    /// readable addressable path, so this one small object is all a name scan needs.
+    /// </summary>
+    private sealed class AssetBundleOnlyFactory : AssetFactoryBase
+    {
+        private readonly GameAssetFactory _inner;
+
+        public AssetBundleOnlyFactory(IAssemblyManager assemblyManager)
+        {
+            _inner = new GameAssetFactory(assemblyManager);
+        }
+
+        public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
+        {
+            return assetInfo.ClassID == (int)ClassIDType.AssetBundle
+                ? _inner.ReadAsset(assetInfo, assetData, assetType)
+                : null;
+        }
+    }
+
+    private static readonly IAssemblyManager NameScanAssemblyManager = new BaseManager(static _ => { });
+    private static readonly AssetBundleOnlyFactory NameScanFactory = new(NameScanAssemblyManager);
+
+    /// <summary>
+    /// Read one SerializedFile's AssetBundle Container — the readable addressable paths of every asset it
+    /// hosts (e.g. <c>assets/beyond/arts/entity/actor/.../pelica/...</c>) — by materialising only the
+    /// AssetBundle object. Metadata-cheap: skips all heavy payload objects. Returns the CAB name (for
+    /// resolving back through the CAB map's dependency graph), the chunk-entry file name that hosts it
+    /// (e.g. <c>Data/Bundles/Windows/main/&lt;hash&gt;.ab</c> — the key a scoped load must filter by, since
+    /// it differs from the inner CAB name), and the distinct container paths.
+    /// </summary>
+    public static (string Cab, string FileName, List<string> Paths) ReadContainerNames(SerializedFile sf, string fallbackName)
+    {
+        string cab = string.IsNullOrWhiteSpace(sf.NameFixed) ? fallbackName : sf.NameFixed;
+        List<string> paths = new();
+        try
+        {
+            AssetCollection collection = (AssetCollection)FromSerializedFile.Invoke(null, new object[] { new GameBundle(), sf, NameScanFactory, NameScanVersion })!;
+            foreach (IUnityObjectBase asset in collection)
+            {
+                if (asset is not IAssetBundle assetBundle)
+                {
+                    continue;
+                }
+                var container = assetBundle.Container;
+                int count = container.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    string key = container.GetKey(i).String;
+                    if (!string.IsNullOrWhiteSpace(key))
+                    {
+                        paths.Add(key);
+                    }
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.Verbose(LogCategory.Import, $"[NameScan] '{cab}': {exception.GetType().Name}: {exception.Message}");
+        }
+        return (cab, fallbackName, paths);
     }
 
     // Static callback used by the hooked method

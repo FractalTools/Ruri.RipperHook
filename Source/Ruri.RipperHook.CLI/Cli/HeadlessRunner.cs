@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
@@ -8,6 +9,7 @@ using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using Newtonsoft.Json;
+using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.CLI;
 
@@ -36,21 +38,28 @@ internal static class HeadlessRunner
             }
         }
 
-        // Type-driven loading (--cab-map + --load-types) gets its file set from the map, so --load is optional then.
+        // Type/name-driven loading (--cab-map + --load-types / --names) gets its file set from the map,
+        // so --load is optional then.
         bool typeDriven = options.CabMapPath is { Length: > 0 } && options.LoadTypes.Length > 0;
+        bool nameDriven = options.CabMapPath is { Length: > 0 } && options.Names.Length > 0;
 
-        if (options.LoadPaths.Length == 0 && !typeDriven)
+        if (options.LoadPaths.Length == 0 && !typeDriven && !nameDriven)
         {
-            EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "Missing --load (or use --cab-map with --load-types)");
+            EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "Missing --load (or use --cab-map with --load-types / --names)");
             return 1;
         }
 
         string[] paths = ResolveLoadPaths(options.LoadPaths);
-        if (paths.Length == 0 && !typeDriven)
+        if (paths.Length == 0 && !typeDriven && !nameDriven)
         {
             EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"Path not found: {string.Join(", ", options.LoadPaths)}");
             return 1;
         }
+
+        // When --names drives a scoped cab-map load, this is the set of chunk-entry file names (the .ab
+        // bundle archives) of the dependency closure — the bundle-granular load filter that extracts ONLY
+        // these bundles out of the (possibly 161k-bundle) chunks.
+        HashSet<string>? loadFilterFileNames = null;
 
         if (options.CabMapPath is { Length: > 0 } cabMapPath)
         {
@@ -73,8 +82,25 @@ internal static class HeadlessRunner
                     }
                     foreach (string f in CabMap.ResolveByTypes(baseFolder, entries, typeIds)) resolved.Add(f);
                 }
+                if (options.Names.Length > 0)
+                {
+                    // Find every CAB whose AssetBundle Container has a path matching --names (e.g. pelica),
+                    // then load that CAB plus its whole dependency closure. The name index is a sidecar built
+                    // once over the game folder; the CAB map itself is never modified.
+                    string nameIndexPath = CabMap.NameIndexPath(cabMapPath);
+                    if (!CabMap.IsNameIndexCurrent(nameIndexPath))
+                    {
+                        Console.Error.WriteLine($"[Ruri.CLI] name index missing/stale → building once over '{baseFolder}' (reads each bundle's AssetBundle Container; may take minutes)...");
+                        CabMap.BuildNameIndex(baseFolder, nameIndexPath);
+                    }
+                    Dictionary<string, CabMap.NameEntry> nameIndex = CabMap.LoadNameIndex(nameIndexPath);
+                    string[] byName = CabMap.ResolveByNames(baseFolder, entries, nameIndex, options.Names, out int matchedCabs, out HashSet<string> loadFilter);
+                    foreach (string f in byName) resolved.Add(f);
+                    loadFilterFileNames = loadFilter;
+                    Console.Error.WriteLine($"[Ruri.CLI] cab-map names [{string.Join(",", options.Names.Select(static r => r.ToString()))}]: {matchedCabs} CAB(s) matched → {loadFilter.Count} bundle(s) with dependencies across {byName.Length} chunk file(s)");
+                }
                 string[] expanded = resolved.ToArray();
-                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) + {options.LoadTypes.Length} type(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
+                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) + {options.LoadTypes.Length} type(s) + {options.Names.Length} name(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
                 paths = expanded;
             }
             catch (Exception ex)
@@ -97,7 +123,11 @@ internal static class HeadlessRunner
             return 1;
         }
 
-        ExportFilter.Configure(allowedClassIds, options.Names, options.SmokeTestLimit, options.FailFast);
+        // When --names drove cab-map seeding, the export must write the whole dependency closure
+        // (pelica + everything it needs), so the name regex is NOT also applied as a per-asset export
+        // filter — otherwise the unnamed dependencies (textures/materials/meshes) would be dropped.
+        Regex[] exportNameFilter = nameDriven ? [] : options.Names;
+        ExportFilter.Configure(allowedClassIds, exportNameFilter, options.SmokeTestLimit, options.FailFast);
         ExportFilter.Install();
 
         try
@@ -107,7 +137,24 @@ internal static class HeadlessRunner
             settings.LogConfigurationValues();
 
             var handler = new ExportHandler(settings);
-            GameData gameData = handler.Load(paths, LocalFileSystem.Instance);
+
+            // Scoped, bundle-granular load: when --names resolved a dependency closure, extract ONLY those
+            // bundles from each chunk (a closure of a few thousand bundles can span the 161k-bundle chunk;
+            // loading it whole would exhaust memory). The closure's chunk-entry file names were captured in
+            // the name index, so the filter is an exact membership test on the raw entry name.
+            if (loadFilterFileNames is { Count: > 0 })
+            {
+                GameBundleHook.LoadIncludeFile = name => loadFilterFileNames.Contains(name);
+            }
+            GameData gameData;
+            try
+            {
+                gameData = handler.Load(paths, LocalFileSystem.Instance);
+            }
+            finally
+            {
+                GameBundleHook.LoadIncludeFile = null;
+            }
             handler.Process(gameData);
 
             (int totalAssets, Dictionary<int, int> byType) = SummarizeAssets(gameData);

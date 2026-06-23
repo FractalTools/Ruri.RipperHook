@@ -29,6 +29,14 @@ internal sealed class CliOptions
     public string? BuildCabMapPath { get; init; }
 
     /// <summary>
+    /// Set to build a name index (CAB → its AssetBundle Container addressable paths) for the directory in
+    /// <see cref="LoadPaths"/>[0], then exit. The readable names ("…/pelica/…") the hash-keyed CAB map can't
+    /// hold; written as a "<c>.names</c>" sidecar so <c>--cab-map --names</c> can resolve a name to its CABs
+    /// and their dependency closure without modifying the CAB map.
+    /// </summary>
+    public string? BuildNameIndexPath { get; init; }
+
+    /// <summary>
     /// When set, the CABMap at this path is loaded and used to resolve the transitive
     /// dependency closure of each file in <see cref="LoadPaths"/>. AR then sees every chk the
     /// seed bundles cross-reference, which is the only way to get a complete character
@@ -58,6 +66,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<LogType> LogLevel { get; }
     public Option<bool> FailFast { get; }
     public Option<string?> BuildCabMap { get; }
+    public Option<string?> BuildNameIndex { get; }
     public Option<string?> CabMap { get; }
     public Option<string[]> LoadTypes { get; }
     public Argument<string[]> Passthrough { get; }
@@ -112,6 +121,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         LogLevel = new Option<LogType>("--log-level", () => LogType.Info, "Log level threshold (Verbose|Debug|Info|Warning|Error).");
         FailFast = new Option<bool>("--fail-fast", () => true, "Abort on first per-asset export failure (default true).");
         BuildCabMap = new Option<string?>("--build-cab-map", "Build a CABMap (.bin) for --load[0] and exit. Format matches the GUI Asset Browser CABMap.");
+        BuildNameIndex = new Option<string?>("--build-name-index", "Build a name index (CAB → AssetBundle Container paths) for --load[0] and exit. Sidecar for --cab-map --names.");
         CabMap = new Option<string?>("--cab-map", "Load a CABMap (.bin) and expand each --load entry to its transitive CAB dependencies before handing files to AR.");
         LoadTypes = new Option<string[]>("--load-types", "With --cab-map, load only bundles containing these ClassID names (+ deps), e.g. Shader ComputeShader. Build the map first with --build-cab-map.")
         {
@@ -136,6 +146,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LogLevel,
             FailFast,
             BuildCabMap,
+            BuildNameIndex,
             CabMap,
             LoadTypes,
             Passthrough,
@@ -159,6 +170,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LogLevel = pr.GetValueForOption(LogLevel),
             FailFast = pr.GetValueForOption(FailFast),
             BuildCabMapPath = pr.GetValueForOption(BuildCabMap),
+            BuildNameIndexPath = pr.GetValueForOption(BuildNameIndex),
             CabMapPath = pr.GetValueForOption(CabMap),
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
