@@ -101,6 +101,30 @@ public static class HeadlessShaderExportRunner
             .ToList();
         log($"[Headless] {archives.Count} shader archive(s) selected for export.");
 
+        // Wipe the `Decompiled/` output root up-front so a killed or prior run
+        // can NEVER leave stale `.shader` files mixed with this run's fresh
+        // output (user directive: 每次导出 shader 时清空目录). Pass180's per-archive
+        // recreate only fires once that archive reaches the decompile phase, so
+        // a mid-run kill (or an archive this run doesn't reach) used to keep
+        // stale files around. Every archive shares one `Decompiled` root under
+        // its Content dir; clear each distinct root exactly once before emitting.
+        var clearedDecompiledRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (GameFile entry in archives)
+        {
+            string ebp = Path.Combine(cfg.RawDataDirectory, entry.PathWithoutExtension).Replace('\\', '/');
+            string decompiledRoot = Path.Combine(Path.GetDirectoryName(ebp)!, "Decompiled");
+            if (!clearedDecompiledRoots.Add(decompiledRoot) || !Directory.Exists(decompiledRoot)) continue;
+            try
+            {
+                Directory.Delete(decompiledRoot, true);
+                log($"[Headless] Cleared stale decompiled output: {decompiledRoot}");
+            }
+            catch (Exception ex)
+            {
+                logError($"[Headless] Failed to clear decompiled output {decompiledRoot}: {ex.Message}");
+            }
+        }
+
         int processed = 0;
         foreach (GameFile entry in archives)
         {
