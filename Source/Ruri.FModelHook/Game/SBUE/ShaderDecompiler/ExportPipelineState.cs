@@ -80,6 +80,12 @@ internal sealed class ExportPipelineState
     // Once-only gates.
     public bool IoStoreHashesExtracted { get; set; }
     public bool NiagaraBridgeExtracted { get; set; }
+    // Set once the complete full-provider material scan has run (cold start)
+    // OR once Pass 005 confirmed a prior run's scan was complete (warm start).
+    // Gates Pass 030 so the expensive whole-provider material walk happens at
+    // most once per session and never again across sessions while the cache
+    // is valid.
+    public bool MaterialScanComplete { get; set; }
     public bool UnifiedMetadataWritten { get; set; }
 
     // Black-hole cache: set once Pass 005 has tried to warm the in-memory

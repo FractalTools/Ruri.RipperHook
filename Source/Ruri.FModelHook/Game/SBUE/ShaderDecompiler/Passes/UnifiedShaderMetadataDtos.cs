@@ -23,7 +23,7 @@ internal sealed class UnifiedShaderMetadataRoot
     // symbols. The game-version guard alone can't catch this — the game is the
     // same, only the tool changed. Bump `CurrentCacheFormatVersion` on any
     // such change.
-    public const int CurrentCacheFormatVersion = 5;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit
+    public const int CurrentCacheFormatVersion = 7;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit; 6=+top-level MaterialResourceHashes bridge (Tier 1 hash->material) + MaterialScanComplete marker; bridge candidate set = container-header packages ∪ M_/MI_/MF_/MPC_/MAT_ prefixed; 7=cap MaterialResourceHashes to 16 materials/hash + Tier 2 enrich one representative material per hash
     public int CacheFormatVersion { get; set; }
 
     // FModel's `EGame` enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
@@ -59,6 +59,23 @@ internal sealed class UnifiedShaderMetadataRoot
     // unreferenced from the IoStore container header.
     public Dictionary<string, List<string>> NiagaraShaderMapHashes { get; set; } = new();
 
+    // TOP-LEVEL material naming bridge: shader-map hash -> the material
+    // package(s) whose inline `LoadedShaderMaps[*].ResourceHash` equals it.
+    // This is the COMPLETE material<->shader-map association — the IoStore
+    // container header (`PackageShaderMapHashes`) only carries a small,
+    // unreliable fraction of it on this cook, so the bulk of shader-maps would
+    // otherwise emit as UnknownMaterial. Built ONCE by Pass 030 walking every
+    // shader-map-owning package (the `PackageShaderMapHashes` keys) and reading
+    // each material's authoritative inline ResourceHash, then cached.
+    //
+    // Kept TOP-LEVEL (next to the Niagara bridge) rather than only inside the
+    // heavy `MaterialInterfaces` entries so it survives Pass 140's lean read:
+    // a full-material cook produces a multi-GB unified whose `MaterialInterfaces`
+    // block is SKIPPED past the 1 GiB ceiling, but this small (hash -> paths)
+    // dict stays readable, so material NAMING never regresses with file size
+    // even when the rich per-material CB symbols do.
+    public Dictionary<string, List<string>> MaterialResourceHashes { get; set; } = new();
+
     // Black-hole cache completion marker. Pass 035 is a WHOLE-PROVIDER walk
     // (all Niagara packages, not archive-scoped) and is all-or-nothing — a
     // partial walk would leave NiagaraShaderMapHashes incomplete. Pass 035
@@ -68,6 +85,20 @@ internal sealed class UnifiedShaderMetadataRoot
     // material cache is per-package and seeded entry-by-entry, so it's safe
     // to reuse incrementally even from a partial prior run.
     public bool NiagaraBridgeComplete { get; set; }
+
+    // Black-hole cache completion marker for the MATERIAL side, mirroring
+    // NiagaraBridgeComplete. The IoStore container header's per-package
+    // `ShaderMapHashes` list associates only a small fraction of this cook's
+    // shader-maps to a package (verified ~3% on InfinityNikki/X6Game — the
+    // fork barely populates it), so a hash-scoped material scan leaves the
+    // rest as UnknownMaterial. The fix is a ONE-TIME full-provider scan that
+    // captures every material's inline `LoadedShaderMaps[*].ResourceHash`
+    // (the authoritative library key = the archive's ShaderMapHashes,
+    // independent of the container header). This marker is set true ONLY
+    // after that complete walk finishes, so the warm-cache pass (Pass 005)
+    // can trust the persisted MaterialInterfaces as exhaustive and skip the
+    // multi-minute re-scan — the "材质球符号拉一次就不再拉" guarantee.
+    public bool MaterialScanComplete { get; set; }
 }
 
 internal sealed class UnifiedShaderLibraryMetadata

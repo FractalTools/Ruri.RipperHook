@@ -235,6 +235,7 @@ public static class Program
                 SkipGlobal = opts.SkipGlobal,
                 SplitVariants = splitVariants,
                 SkipDecompile = opts.ExportOnly,
+                ListArchivesOnly = opts.ListArchives,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });

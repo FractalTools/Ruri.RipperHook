@@ -108,6 +108,28 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             }
         }
 
+        // Material ResourceHash bridge (Pass 030 Tier 1) — keyed BY HASH, the
+        // authoritative shader-map-hash -> material association. This is the
+        // dominant naming source on IoStore cooks whose container header
+        // (PackageShaderMapHashes) lists only a fraction of the material<->
+        // shader-map links. Top-level + small, so it loads even in the lean
+        // path (when MaterialInterfaces is skipped past the 1 GiB ceiling) —
+        // material naming therefore never regresses with unified-file size.
+        if (root.MaterialResourceHashes != null)
+        {
+            foreach (KeyValuePair<string, List<string>> kvp in root.MaterialResourceHashes)
+            {
+                string hash = kvp.Key;
+                if (string.IsNullOrWhiteSpace(hash) || kvp.Value == null) continue;
+                foreach (string assetPath in kvp.Value)
+                {
+                    string normalized = assetPath.Replace('\\', '/');
+                    if (!MatchesFilter(normalized, filterVariants)) continue;
+                    AddHash(state.HashToMaterialsFromUnified, hash, normalized);
+                }
+            }
+        }
+
         // Niagara bridge — keyed BY HASH (not by package), so the value
         // direction is reversed from PackageShaderMapHashes. Pass 035
         // built this from FShaderMapBase.ResourceHash. The hash is the
@@ -213,6 +235,9 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                 case nameof(UnifiedRoot.NiagaraShaderMapHashes):
                     root.NiagaraShaderMapHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader);
                     break;
+                case nameof(UnifiedRoot.MaterialResourceHashes):
+                    root.MaterialResourceHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader);
+                    break;
                 case nameof(UnifiedRoot.MaterialInterfaces):
                     if (includeMaterialInterfaces)
                         root.MaterialInterfaces = serializer.Deserialize<Dictionary<string, UnifiedMaterialEntry>>(reader);
@@ -268,6 +293,11 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         // Niagara asset paths whose `LoadedScriptResources[*].
         // RenderingThreadShaderMap` produced that hash.
         public Dictionary<string, List<string>>? NiagaraShaderMapHashes { get; set; }
+        // Pass 030 Tier 1 — authoritative shader-map-hash -> material paths
+        // bridge built from each material's inline ResourceHash. Top-level so
+        // it survives the lean read; the dominant naming source on IoStore
+        // cooks with a sparse container header.
+        public Dictionary<string, List<string>>? MaterialResourceHashes { get; set; }
     }
     private sealed class UnifiedMaterialEntry
     {

@@ -46,122 +46,272 @@ internal static class Pass030_ScanMaterialPackages
         BuildMaterialContexts(state, provider);
     }
 
-    // Two scan modes, chosen by what's available on `state`:
+    // Two-tier material resolution, designed around the fact that the
+    // InfinityNikki/X6Game IoStore container header (`PackageShaderMapHashes`)
+    // associates only a tiny, unreliable fraction of shader-maps to a package
+    // — so a hash-scoped scan keyed on it leaves 18-85% of every archive's
+    // shader-maps as `UnknownMaterial` (the user-reported "很多 shader 找不到
+    // 材质球").
     //
-    // 1. **Hash-scoped scan** (preferred) — when Pass010 stashed the current
-    //    archive's shader-map hashes AND Pass040 already built the
-    //    package -> hash index, walk only the packages whose hashes
-    //    intersect. On a 5k+ asset game this turns a multi-minute scan
-    //    into a few seconds because each shader-archive only references
-    //    the materials in its chunk.
+    //   TIER 1 — the COMPLETE shader-map-hash -> material bridge, built ONCE
+    //     and cached forever. Walks every shader-map-OWNING package (the
+    //     container header's StoreEntries with a non-empty hash list — the
+    //     `PackageShaderMapHashes` keys, ~23k packages, NOT the 157k "any path
+    //     with /Material/" set) and reads each material's authoritative inline
+    //     `LoadedShaderMaps[*].ResourceHash` — the FShaderMapResource library
+    //     key that IS the archive's `ShaderMapHashes`, present for every cooked
+    //     material regardless of the container-header gap (the headless mount
+    //     sets `provider.ReadShaderMaps = true`). Lightweight: only the hashes
+    //     are kept, the package is dropped — so memory stays bounded even over
+    //     23k loads. Persisted to the top-level `MaterialResourceHashes` dict
+    //     and gated by MaterialScanComplete so it never re-runs while the cache
+    //     is valid — the "材质球符号拉一次就不再拉" guarantee, mirroring Pass 035.
     //
-    // 2. **Full provider scan** (fallback) — older non-IoStore paks (or
-    //    games that don't populate the per-package hash list in the
-    //    container header) leave Pass040's index empty. We fall back to
-    //    walking every UAsset and filter by `IsMaterialCandidate`. Same
-    //    behaviour as the original implementation, just guarded so we
-    //    don't take the slow path when the fast path is available.
-    //
-    // Both modes funnel through `LoadAndCacheMaterial` so the same
-    // (PathWithoutExtension -> UnifiedMaterialMetadata?) cache is
-    // reused across multiple archive exports in the same FModel session.
-    // A null cache value is a "tried and failed" marker — don't retry.
+    //   TIER 2 — the RICH per-material symbols (UniformExpressionSet / render
+    //     state) the .shader `Properties` block needs, extracted for JUST the
+    //     materials the CURRENT archive references (resolved through the Tier 1
+    //     bridge). A handful of full LoadPackage calls per archive instead of
+    //     the whole game, so CB-symbol extraction stays cheap and the unified
+    //     file's heavy `MaterialInterfaces` block stays bounded to materials
+    //     actually exported.
     private static void BuildMaterialContexts(ExportPipelineState state, AbstractVfsFileProvider provider)
     {
         var output = state.Root;
         var log = state.Log;
         var cache = state.LoadedMaterialCache;
-        var archiveHashes = state.CurrentArchiveShaderMapHashes;
-        var packageHashIndex = state.Root.PackageShaderMapHashes;
 
-        if (archiveHashes.Count > 0 && packageHashIndex.Count > 0)
+        // Non-IoStore cooks have no container-header package->hash index, so
+        // the candidate set can't be scoped to shader-map-owning packages.
+        // Fall back to the legacy full provider walk (cached) — those games are
+        // small enough for it, and their materials carry inline shader maps.
+        if (output.PackageShaderMapHashes.Count == 0)
         {
-            // 1. Collect the intersecting candidates (cheap; the hash-set
-            //    membership test is the only per-package work here).
-            var candidateList = new List<KeyValuePair<string, List<string>>>();
-            foreach (KeyValuePair<string, List<string>> kvp in packageHashIndex)
+            if (!state.MaterialScanComplete)
             {
-                if (HashesIntersect(kvp.Value, archiveHashes)) candidateList.Add(kvp);
-            }
-            int candidates = candidateList.Count;
-
-            long reused = 0;
-            long loaded = 0;
-            long extracted = 0;
-            long loadFailures = 0;
-
-            // 2. Load + extract the cache-misses in PARALLEL. Each
-            //    provider.LoadPackage is AES-decrypt + zstd/oodle-decompress +
-            //    full deserialize — IO + crypto bound, identical to Pass 035's
-            //    walk, so it parallelises the same way and the same ~8-way cap
-            //    saturates the disk/crypto without thrashing. The cache is a
-            //    ConcurrentDictionary so worker writes are safe; output is
-            //    merged single-threaded afterwards.
-            int parallelism = Math.Min(8, Math.Max(2, Environment.ProcessorCount / 2));
-            System.Threading.Tasks.Parallel.ForEach(
-                candidateList,
-                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parallelism },
-                kvp =>
-                {
-                    string packagePath = kvp.Key;
-                    if (cache.ContainsKey(packagePath)) { System.Threading.Interlocked.Increment(ref reused); return; }
-
-                    UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, packagePath, out bool loadedOk, out bool failed);
-                    if (loadedOk) System.Threading.Interlocked.Increment(ref loaded);
-                    if (failed) System.Threading.Interlocked.Increment(ref loadFailures);
-
-                    // Copy the IoStore-derived shader-map hashes onto the
-                    // material so the unified file is self-contained.
-                    // PackageShaderMapHashes is the AUTHORITATIVE bridge for
-                    // IoStore cooks (modern UE5) — without this copy the
-                    // consumer can't link back from a shader-archive hash to a
-                    // material when LoadedShaderMaps is empty.
-                    if (metadata != null)
-                    {
-                        metadata.PackageShaderMapHashes = new List<string>(kvp.Value);
-                        System.Threading.Interlocked.Increment(ref extracted);
-                    }
-                    cache[packagePath] = metadata;
-                });
-
-            // 3. Merge into the cumulative output single-threaded — both
-            //    freshly-extracted and (Pass 005) cache-seeded non-null entries.
-            //    `produced` gates the full-scan fallback so a fully cache-warmed
-            //    scan (extracted==0 but everything reused) does NOT re-walk.
-            int produced = 0;
-            foreach (KeyValuePair<string, List<string>> kvp in candidateList)
-            {
-                if (cache.TryGetValue(kvp.Key, out UnifiedMaterialMetadata? m) && m != null)
-                {
-                    output.MaterialInterfaces[kvp.Key] = m;
-                    produced++;
-                }
-            }
-
-            log($"    Material scan (hash-scoped): archive-hashes={archiveHashes.Count}, candidates={candidates}, cache-reused={reused}, loaded={loaded}, extracted={extracted}, produced={produced}, skipped-on-error={loadFailures}.");
-
-            // Hash-scoped scan produced zero materials despite having
-            // both archive hashes and a package-hash index — likely a
-            // hash-format/casing mismatch between the two sources, or a
-            // session timing issue where Pass020 hadn't fully populated
-            // the index yet. Fall back to the full provider walk so the
-            // unified file isn't shipped with `MaterialInterfaces: {}`
-            // — that leaves every per-material reader empty and every
-            // Material CB anonymous downstream (root cause documented
-            // per UE_SYMBOL_SOURCES.md). NOTE: gate on `produced` (extracted +
-            // cache-reused) so a fully cache-warmed scan doesn't re-walk.
-            if (produced == 0 && candidates > 0)
-            {
-                log($"    Material scan (hash-scoped): produced ZERO materials (candidates={candidates}) — falling back to full provider scan.");
                 FullProviderScan(provider, output, cache, log);
+                state.MaterialScanComplete = true;
+                output.MaterialScanComplete = true;
             }
             return;
         }
 
-        // Fallback path — no IoStore hash index available, do the full
-        // provider walk. Cache is still honoured so re-export of the
-        // same archive in a session is cheap.
-        FullProviderScan(provider, output, cache, log);
+        // TIER 1 — build (or reuse) the complete hash -> material bridge.
+        if (!state.MaterialScanComplete)
+        {
+            BuildResourceHashBridge(state, provider);
+            state.MaterialScanComplete = true;
+            output.MaterialScanComplete = true;
+        }
+        else
+        {
+            log($"    Material bridge: SKIPPED — {output.MaterialResourceHashes.Count} cached hash->material entries reused. Symbols not re-pulled.");
+        }
+
+        // TIER 2 — rich symbols for this archive's materials only.
+        EnrichCurrentArchiveMaterials(state, provider);
+    }
+
+    // TIER 1 — load every shader-map-owning package, read its material's
+    // authoritative inline shader-map hashes, and fold them into the top-level
+    // (hash -> material paths) bridge. Lightweight per package: the hashes are
+    // copied out and the deserialized package is released, so peak memory is
+    // ~the bridge dict, not 23k full material graphs.
+    private static void BuildResourceHashBridge(ExportPipelineState state, AbstractVfsFileProvider provider)
+    {
+        var output = state.Root;
+        var log = state.Log;
+
+        // Candidate set = the container header's shader-map-owning packages
+        // UNION every material-prefixed asset (M_/MI_/MF_/MPC_/MAT_). The
+        // container-header set alone (~23k) misses materials whose StoreEntry
+        // was cooked with an EMPTY shader-map-hash list (UE's "shader-map has no
+        // associated assets" case) — these are common for effect / character
+        // material instances (e.g. X6Game_5's whole material set), so without
+        // the prefix union those in-game assets stay UnknownMaterial. The union
+        // is ~136k here; loading them all is the ONE-TIME "符号拉取" the user
+        // asked to pay once and cache forever (the "不要一次性导出整个 shader 库
+        // 会卡死电脑" concern is about the DECOMPILE side, not this scan). The
+        // scan is memory-bounded: CUE4Parse's LoadPackage does NOT cache, so the
+        // deserialized packages are GC'd right after their hashes are copied out
+        // — peak RAM is the (small) bridge dict plus the in-flight workers.
+        var containerKeys = new HashSet<string>(output.PackageShaderMapHashes.Keys, StringComparer.OrdinalIgnoreCase);
+        var packageSet = new HashSet<string>(containerKeys, StringComparer.OrdinalIgnoreCase);
+        foreach (GameFile file in provider.Files.Values)
+        {
+            if (IsPrefixedMaterialAsset(file)) packageSet.Add(file.PathWithoutExtension);
+        }
+        var packages = packageSet.ToList();
+        log($"    Material bridge: START — reading inline shader-map hashes from {packages.Count} package(s) ({containerKeys.Count} container-header shader-map owners + {packages.Count - containerKeys.Count} material-prefixed).");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        var bridge = new ConcurrentDictionary<string, ConcurrentDictionary<string, byte>>(StringComparer.OrdinalIgnoreCase);
+        // Container-header packages that yielded NO hashes on the parallel pass.
+        // A container-header StoreEntry that LISTS shader-map hashes is EXPECTED
+        // to own an inline shader map, so an empty there is suspicious — likely a
+        // racy miss: CUE4Parse's UMaterial.Deserialize swallows the transient
+        // concurrency exception and silently leaves LoadedShaderMap null
+        // (UMaterial.cs try/catch). We re-check just those SINGLE-THREADED below
+        // (no contention) to deterministically recover them. Prefix-only empties
+        // are NOT retried — most are MIs that genuinely inherit a parent's map
+        // and own none, so retrying all ~110k would cost minutes for nothing.
+        var emptyContainerPackages = new ConcurrentBag<string>();
+        long withHashes = 0, failures = 0;
+        int parallelism = Math.Min(8, Math.Max(2, Environment.ProcessorCount / 2));
+
+        System.Threading.Tasks.Parallel.ForEach(
+            packages,
+            new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parallelism },
+            path =>
+            {
+                List<string>? hashes = LoadMaterialShaderMapHashes(provider, path);
+                if (hashes == null || hashes.Count == 0)
+                {
+                    if (containerKeys.Contains(path)) emptyContainerPackages.Add(path);
+                    return;
+                }
+                System.Threading.Interlocked.Increment(ref withHashes);
+                foreach (string h in hashes)
+                {
+                    ConcurrentDictionary<string, byte> set = bridge.GetOrAdd(h, static _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+                    set.TryAdd(path, 0);
+                }
+            });
+
+        // Deterministic single-threaded recovery over the suspicious empties.
+        long recovered = 0;
+        foreach (string path in emptyContainerPackages)
+        {
+            List<string>? hashes = LoadMaterialShaderMapHashes(provider, path);
+            if (hashes == null) { System.Threading.Interlocked.Increment(ref failures); continue; }
+            if (hashes.Count == 0) continue;
+            System.Threading.Interlocked.Increment(ref recovered);
+            foreach (string h in hashes)
+            {
+                ConcurrentDictionary<string, byte> set = bridge.GetOrAdd(h, static _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+                set.TryAdd(path, 0);
+            }
+        }
+
+        // Cap the per-hash material list. One shader-map is commonly shared by
+        // dozens of material instances (same parent, different param values), so
+        // an uncapped list bloats the .shader UsedMaterials block to 40+ entries
+        // and the bridge dict to many MB. Keep the first N alphabetically — a
+        // stable, representative sample that still names the shader and shows the
+        // sharing without drowning the output.
+        const int maxMaterialsPerHash = 16;
+        foreach (KeyValuePair<string, ConcurrentDictionary<string, byte>> kvp in bridge)
+        {
+            output.MaterialResourceHashes[kvp.Key] = kvp.Value.Keys
+                .OrderBy(static p => p, StringComparer.OrdinalIgnoreCase)
+                .Take(maxMaterialsPerHash)
+                .ToList();
+        }
+
+        log($"    Material bridge: DONE — packages={packages.Count}, with-shadermaps={withHashes + recovered} (parallel={withHashes} + single-thread-recovered={recovered}), bridge-hashes={output.MaterialResourceHashes.Count}, skipped-on-error={failures}, took {sw.Elapsed.TotalSeconds:F1}s.");
+    }
+
+    // Lightweight reader: load a package, take the FIRST UMaterialInterface
+    // export, and return its inline shader-map hashes (ResourceHash — the
+    // archive library key — plus CookedShaderMapIdHash for non-IoStore cooks).
+    // Returns null on load failure, an empty list when the package has no
+    // material / no inline shader map. The package graph is NOT retained.
+    private static List<string>? LoadMaterialShaderMapHashes(AbstractVfsFileProvider provider, string packagePath)
+    {
+        CUE4Parse.UE4.Assets.IPackage? package;
+        try
+        {
+            package = provider.LoadPackage(packagePath);
+        }
+        catch
+        {
+            return null;
+        }
+        if (package == null) return null;
+
+        try
+        {
+            var result = new List<string>();
+            foreach (CUE4Parse.UE4.Assets.Exports.UObject export in package.GetExports())
+            {
+                if (export is not UMaterialInterface material) continue;
+                if (material.LoadedMaterialResources == null) break;
+                foreach (var resource in material.LoadedMaterialResources)
+                {
+                    var shaderMap = resource.LoadedShaderMap;
+                    if (shaderMap == null) continue;
+                    string? resourceHash = shaderMap.ResourceHash?.ToString() ?? shaderMap.Code?.ResourceHash.ToString();
+                    if (!string.IsNullOrWhiteSpace(resourceHash)) result.Add(resourceHash!);
+                    string? cooked = shaderMap.ShaderMapId.CookedShaderMapIdHash?.ToString();
+                    if (!string.IsNullOrWhiteSpace(cooked)) result.Add(cooked!);
+                }
+                break;
+            }
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // TIER 2 — resolve the materials the CURRENT archive references through the
+    // complete Tier 1 bridge, then load JUST those fully so their
+    // UniformExpressionSet / render state land in MaterialInterfaces for the
+    // .shader Properties block. Cached across archives in the session.
+    private static void EnrichCurrentArchiveMaterials(ExportPipelineState state, AbstractVfsFileProvider provider)
+    {
+        var output = state.Root;
+        var log = state.Log;
+        var cache = state.LoadedMaterialCache;
+        HashSet<string> archiveHashes = state.CurrentArchiveShaderMapHashes;
+        if (archiveHashes.Count == 0) return;
+
+        // ONE representative material per shader-map hash. The rich symbols we
+        // need (UniformExpressionSet parameter NAMES, render state) come from the
+        // material's parent and are identical across the dozens of instances that
+        // share a shader-map, so loading them all would be wasted IO. The .shader
+        // Properties block is built from the primary asset's UES (Pass 170); the
+        // full UsedMaterials list still comes from the (capped) bridge.
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string hash in archiveHashes)
+        {
+            if (output.MaterialResourceHashes.TryGetValue(hash, out List<string>? materials) && materials.Count > 0)
+            {
+                paths.Add(materials[0]);
+            }
+        }
+
+        // SINGLE-THREADED on purpose. The set is tiny (the few dozen materials
+        // THIS archive references), and CUE4Parse's inline-shader-map
+        // deserialize throws transiently under concurrency (swallowed in
+        // UMaterial.Deserialize -> empty UniformExpressionSet), which would make
+        // the .shader Properties block flicker run-to-run. Sequential here costs
+        // ~1-2s and makes the rich CB symbols deterministic.
+        long reused = 0, loaded = 0, failures = 0, produced = 0;
+        foreach (string path in paths)
+        {
+            if (cache.ContainsKey(path)) { reused++; continue; }
+
+            UnifiedMaterialMetadata? metadata = LoadAndExtractByPath(provider, path, out bool loadedOk, out bool failed);
+            if (loadedOk) loaded++;
+            if (failed) failures++;
+            if (metadata != null && output.PackageShaderMapHashes.TryGetValue(path, out List<string>? hashes))
+            {
+                metadata.PackageShaderMapHashes = new List<string>(hashes);
+            }
+            cache[path] = metadata;
+        }
+
+        foreach (string path in paths)
+        {
+            if (cache.TryGetValue(path, out UnifiedMaterialMetadata? m) && m != null)
+            {
+                output.MaterialInterfaces[path] = m;
+                produced++;
+            }
+        }
+
+        log($"    Material enrich (archive-scoped): archive-hashes={archiveHashes.Count}, materials={paths.Count}, loaded={loaded}, reused={reused}, produced={produced}, skipped-on-error={failures}.");
     }
 
     private static void FullProviderScan(AbstractVfsFileProvider provider, UnifiedShaderMetadataRoot output, ConcurrentDictionary<string, UnifiedMaterialMetadata?> cache, Action<string> log)
@@ -169,6 +319,7 @@ internal static class Pass030_ScanMaterialPackages
         // Pre-filter to the material-candidate list so the parallel partition
         // sizes correctly and the considered-count is exact.
         var candidates = provider.Files.Values.Where(IsMaterialCandidate).ToList();
+        log($"    Material scan (full): START — {candidates.Count} material candidate(s) to load.");
 
         long reused = 0;
         long loaded = 0;
@@ -302,17 +453,22 @@ internal static class Pass030_ScanMaterialPackages
         return metadata;
     }
 
-    // Linear scan against the archive's hash set. The archive set is
-    // typically a few thousand hashes, the package list is shorter
-    // (one-or-two hashes per package), so this beats building a hash
-    // map for the small inner list.
-    private static bool HashesIntersect(List<string> packageHashes, HashSet<string> archiveHashes)
+    // Precise material-asset predicate for the Tier 1 bridge union: a `.uasset`
+    // whose NAME carries a material prefix. Name-only on purpose — the old broad
+    // "path contains Material" matched 157k texture/curve/etc. files under
+    // /Materials/ folders; this stays on the real material assets. MF_/MPC_ own
+    // no FMaterialShaderMap (LoadMaterialShaderMapHashes returns empty — a cheap
+    // wasted load), but M_/MI_/MAT_ are what recover the empty-container-entry
+    // materials the container-header set misses.
+    private static bool IsPrefixedMaterialAsset(GameFile file)
     {
-        for (int i = 0; i < packageHashes.Count; i++)
-        {
-            if (archiveHashes.Contains(packageHashes[i])) return true;
-        }
-        return false;
+        if (!file.Name.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase)) return false;
+        string name = file.Name;
+        return name.StartsWith("M_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("MI_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("MF_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("MPC_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("MAT_", StringComparison.OrdinalIgnoreCase);
     }
 
     // Tighter than the original `Path.Contains("/Material")`. Old check

@@ -83,9 +83,27 @@ internal static class Pass005_WarmMaterialCacheFromDisk
         }
 
         int materials = SeedMaterials(state, cached);
+        int bridge = SeedResourceHashBridge(state, cached);
         int niagara = SeedNiagara(state, cached);
 
-        state.Log($"    Warm cache: seeded {materials} material(s) + {niagara} Niagara hash bridge(s) from prior run in {sw.ElapsedMilliseconds} ms"
+        // Trust the prior TIER-1 material bridge as exhaustive ONLY when it
+        // stamped the completion marker AND actually carries bridge entries —
+        // same all-or-nothing contract as the Niagara bridge. A pre-marker
+        // (older tool) or empty bridge leaves the flag false, so Pass 030
+        // re-builds the full hash->material bridge and re-stamps it.
+        if (cached.MaterialScanComplete && bridge > 0)
+        {
+            state.MaterialScanComplete = true;
+            // Re-stamp the completion marker on the live Root so Pass 080
+            // PERSISTS it on this run's rewrite — otherwise a warm run would
+            // write MaterialScanComplete=false and the NEXT run would re-build
+            // the whole bridge (the same all-or-nothing re-stamp SeedNiagara
+            // does for NiagaraBridgeComplete).
+            state.Root.MaterialScanComplete = true;
+        }
+
+        state.Log($"    Warm cache: seeded {materials} material(s) + {bridge} hash->material bridge entr(ies) + {niagara} Niagara hash bridge(s) from prior run in {sw.ElapsedMilliseconds} ms"
+                  + $"{(state.MaterialScanComplete ? " (Pass 030 bridge build will be SKIPPED)" : "")}"
                   + $"{(state.NiagaraBridgeExtracted ? " (Pass 035 walk will be SKIPPED)" : "")}."
                   + " Already-pulled symbols will not be re-pulled.");
     }
@@ -130,11 +148,17 @@ internal static class Pass005_WarmMaterialCacheFromDisk
                 case nameof(UnifiedShaderMetadataRoot.NiagaraBridgeComplete):
                     root.NiagaraBridgeComplete = reader.TokenType == JsonToken.Boolean && (bool)reader.Value!;
                     break;
+                case nameof(UnifiedShaderMetadataRoot.MaterialScanComplete):
+                    root.MaterialScanComplete = reader.TokenType == JsonToken.Boolean && (bool)reader.Value!;
+                    break;
                 case nameof(UnifiedShaderMetadataRoot.MaterialInterfaces):
                     root.MaterialInterfaces = serializer.Deserialize<Dictionary<string, UnifiedMaterialMetadata>>(reader) ?? new();
                     break;
                 case nameof(UnifiedShaderMetadataRoot.NiagaraShaderMapHashes):
                     root.NiagaraShaderMapHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader) ?? new();
+                    break;
+                case nameof(UnifiedShaderMetadataRoot.MaterialResourceHashes):
+                    root.MaterialResourceHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader) ?? new();
                     break;
                 default:
                     reader.Skip(); // PackageShaderMapHashes / ShaderCodeArchives — not needed by the cache
@@ -160,6 +184,20 @@ internal static class Pass005_WarmMaterialCacheFromDisk
             count++;
         }
         return count;
+    }
+
+    // Seed the TIER-1 (hash -> material paths) bridge. Top-level and small
+    // (~tens of thousands of hash keys), so it always loads regardless of the
+    // unified file's size — this is what keeps material NAMING working even
+    // when the heavy MaterialInterfaces block is skipped on a multi-GB cook.
+    private static int SeedResourceHashBridge(ExportPipelineState state, UnifiedShaderMetadataRoot cached)
+    {
+        if (cached.MaterialResourceHashes == null || cached.MaterialResourceHashes.Count == 0) return 0;
+        foreach (KeyValuePair<string, List<string>> kv in cached.MaterialResourceHashes)
+        {
+            if (kv.Value != null) state.Root.MaterialResourceHashes[kv.Key] = kv.Value;
+        }
+        return state.Root.MaterialResourceHashes.Count;
     }
 
     // Seed the Niagara bridge. Only trusted when the prior run stamped the
