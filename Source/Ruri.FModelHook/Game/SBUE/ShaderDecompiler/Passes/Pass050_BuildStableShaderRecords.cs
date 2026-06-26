@@ -139,11 +139,38 @@ internal static class Pass050_BuildStableShaderRecords
             }
         }
 
+        // Tier 1 bridge (Pass 030): the authoritative shader-map-hash ->
+        // material association built from inline ResourceHash. Dominant source
+        // on this cook — the container header above only covers a fraction.
+        foreach (var kvp in output.MaterialResourceHashes)
+        {
+            if (kvp.Value == null) continue;
+            foreach (string materialPath in kvp.Value)
+            {
+                if (string.IsNullOrWhiteSpace(materialPath)) continue;
+                AddMaterialToHash(map, kvp.Key, materialPath);
+            }
+        }
+
         foreach (var kvp in output.MaterialInterfaces)
         {
             if (kvp.Value?.LoadedShaderMaps == null) continue;
             foreach (var sm in kvp.Value.LoadedShaderMaps)
             {
+                // ResourceHash is the AUTHORITATIVE inline bridge for IoStore
+                // cooks: it equals the FShaderMapResource library key, which is
+                // exactly the archive's `ShaderMapHashes`. This is what links a
+                // material whose package the container header forgot to
+                // associate (the dominant case on InfinityNikki/X6Game — only
+                // ~3% of shader-maps are in the container header). Previously
+                // omitted here, so the inline bridge contributed nothing: the
+                // two hashes below are DIFFERENT ID spaces that never match an
+                // archive hash, leaving the bulk of shader-maps as
+                // UnknownMaterial despite the owning material being scanned.
+                if (!string.IsNullOrWhiteSpace(sm?.ResourceHash))
+                {
+                    AddMaterialToHash(map, sm!.ResourceHash!, kvp.Key);
+                }
                 if (!string.IsNullOrWhiteSpace(sm?.CookedShaderMapIdHash))
                 {
                     AddMaterialToHash(map, sm!.CookedShaderMapIdHash!, kvp.Key);

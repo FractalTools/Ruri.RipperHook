@@ -13,6 +13,13 @@ internal sealed class CliOptions
 {
     public bool SkipGlobal { get; set; }
     public bool ListHooks { get; set; }
+    // Mount the provider from --game-config, enumerate every target
+    // .ushaderbytecode archive (respecting --skip-global / --archive-filter),
+    // print name + size, then exit WITHOUT exporting or decompiling. Lets a
+    // self-test pick a small in-game archive by name before committing to the
+    // multi-GB export — IoStore archives are virtual VFS entries, not loose
+    // files, so they can't be listed from disk.
+    public bool ListArchives { get; set; }
     public bool Help { get; set; }
     public bool? SplitVariants { get; set; } // null = leave persisted setting alone
     public List<string> Hooks { get; } = new();
@@ -90,6 +97,9 @@ internal sealed class CliOptions
                     break;
                 case "--skip-global":
                     opts.SkipGlobal = true;
+                    break;
+                case "--list-archives":
+                    opts.ListArchives = true;
                     break;
                 case "--split-variants":
                     opts.SplitVariants = true;
@@ -199,6 +209,8 @@ internal sealed class CliOptions
         "  --archive-filter TOK  Only export .ushaderbytecode archives whose name contains",
         "                        TOK (comma/space/semicolon list; substring match).",
         "  --skip-global         Skip the engine-internal Global shader archive.",
+        "  --list-archives       Mount the provider and print every target archive (name +",
+        "                        size, respecting --skip-global/--archive-filter), then exit.",
         "  --split-variants      Emit EVERY per-stage variant as a sibling .hlsl file.",
         "  --no-split-variants   Keep only the primary variant inline in the .shader (default).",
         "  --export-only         Build cache + sidecars + .ushaderlib but SKIP decompile.",

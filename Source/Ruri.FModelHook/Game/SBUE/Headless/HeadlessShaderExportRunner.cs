@@ -32,6 +32,11 @@ public static class HeadlessShaderExportRunner
         public IReadOnlyList<string>? ArchiveNameFilter { get; init; }
         public bool SkipGlobal { get; init; }
         public bool SplitVariants { get; init; }
+        // Enumerate target archives (name + size) and return WITHOUT exporting
+        // or decompiling. The provider is still fully mounted (so the archive
+        // list is the real one the export path would see), but Pass 005-200
+        // never run — a fast way to pick a small in-game archive for a smoke test.
+        public bool ListArchivesOnly { get; init; }
         // Build the cache + sidecars + .ushaderlib without decompiling (the
         // master archive's 261k-shader decompile is a multi-hour job; this lets
         // a fast --decompile-only iterate afterwards against the full cache).
@@ -100,6 +105,24 @@ public static class HeadlessShaderExportRunner
             .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
         log($"[Headless] {archives.Count} shader archive(s) selected for export.");
+
+        // --list-archives: enumerate the (real, post-mount) archive set and
+        // return before any export work. Sorted by size so a smoke test can
+        // grab the smallest in-game archive.
+        if (options.ListArchivesOnly)
+        {
+            foreach (GameFile entry in archives.OrderBy(f => f.Size))
+            {
+                log($"[Headless]   {entry.Size,12:N0}  {entry.Path}");
+            }
+            return new RunResult
+            {
+                ArchivesProcessed = 0,
+                MaterialInterfaces = 0,
+                MappingsLoaded = mappingsLoaded,
+                ProjectName = provider.ProjectName ?? string.Empty,
+            };
+        }
 
         // Wipe the `Decompiled/` output root up-front so a killed or prior run
         // can NEVER leave stale `.shader` files mixed with this run's fresh
