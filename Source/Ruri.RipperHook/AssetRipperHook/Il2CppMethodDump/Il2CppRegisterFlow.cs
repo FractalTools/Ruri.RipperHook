@@ -25,7 +25,7 @@ internal static class RegisterFlowUtil
     }
 }
 
-internal enum TrackedKind : byte { Unknown, ManagedRef, TypeInfo, StaticBase, Klass }
+internal enum TrackedKind : byte { Unknown, ManagedRef, TypeInfo, StaticBase, Klass, Callee }
 
 /// <summary>
 /// Abstract value held in a register: a managed object pointer of a known type, a runtime <c>Il2CppClass*</c>
@@ -51,6 +51,7 @@ internal readonly struct TrackedValue : IEquatable<TrackedValue>
     public static TrackedValue Info(TypeAnalysisContext type) => new(TrackedKind.TypeInfo, type, null);
     public static TrackedValue StaticBaseOf(TypeAnalysisContext type) => new(TrackedKind.StaticBase, type, null);
     public static TrackedValue KlassOf(TypeAnalysisContext type) => new(TrackedKind.Klass, type, null); // Il2CppClass* of an object (obtained by dereferencing it at offset 0)
+    public static TrackedValue Callee(TypeAnalysisContext returnType) => new(TrackedKind.Callee, returnType, null); // a loaded virtual function pointer; Type = its return type (materialized on `call`)
 
     public bool IsKnown => Kind != TrackedKind.Unknown;
     public bool Equals(TrackedValue other) => Kind == other.Kind && SameType(Type, other.Type);
@@ -378,6 +379,16 @@ internal sealed class Il2CppRegisterFlow
             isAlloc = true;
             allocResult = TrackedValue.Ref(state[1].Type, "new " + state[1].Type.Name);
         }
+        // Indirect virtual call: `call reg` where reg holds a vtable fn ptr -> rax = its (reference) return type.
+        else if (insn.FlowControl == FlowControl.Call && insn.Op0Kind == OpKind.Register)
+        {
+            int calleeReg = RegisterFlowUtil.GpIndex(insn.Op0Register);
+            if (calleeReg >= 0 && state[calleeReg].Kind == TrackedKind.Callee && state[calleeReg].Type != null)
+            {
+                isAlloc = true;
+                allocResult = TrackedValue.Ref(state[calleeReg].Type, null);
+            }
+        }
 
         ushort mask = _clobber[index];
         for (int r = 0; r < 16; r++) // only the 16 GP registers are clobbered; frame slots (16+) are memory, preserved across calls
@@ -439,6 +450,9 @@ internal sealed class Il2CppRegisterFlow
                     : TrackedValue.Unknown;
             case TrackedKind.TypeInfo when _staticFieldsOffset >= 0 && disp == _staticFieldsOffset:
                 return TrackedValue.StaticBaseOf(baseValue.Type);
+            // Loading a virtual function pointer from the vtable: remember its (reference) return type for the following `call`.
+            case TrackedKind.Klass when !isLea && _model.TryGetVirtualReturnType(baseValue.Type, disp, out TypeAnalysisContext vret):
+                return TrackedValue.Callee(vret);
             default:
                 return TrackedValue.Unknown;
         }
