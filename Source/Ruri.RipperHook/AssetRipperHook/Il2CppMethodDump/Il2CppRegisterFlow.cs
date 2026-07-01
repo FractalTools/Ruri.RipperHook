@@ -108,6 +108,15 @@ internal sealed class Il2CppRegisterFlow
     private ushort[] _clobber;
     private bool[] _writesMemory;
     private string[] _comments;
+    // Named vtable arrows whose slot method returns void/non-reference — candidates for retraction if the call's result
+    // (rax) turns out to be consumed as a managed reference downstream (a self-contradiction => mis-mapped slot name).
+    // fnReg: the register a fn-ptr load targets (its `call reg` is found later), or -1 when the arrow instruction is the
+    // indirect dispatch itself (`call [klass+disp]`). disp/typeName reconstruct the honest T::class[0xNN] fallback and
+    // let a failing call retract its paired MethodInfo load (`mov reg,[klass+disp+8]`, same slot, same wrong name).
+    // kind: the named slot's return kind (Il2CppTypeModel.ReturnKind*) — selects the contradiction test that can never
+    // fire on a correctly-named method (void/scalar: rax can't be dereferenced or full-width-stored; ref: its offset-0
+    // can't be a float; struct/pointer: rax is legitimately a pointer, so no test).
+    private List<(int index, int fnReg, int disp, string typeName, byte kind)> _arrowRetractCandidates;
 
     public Il2CppRegisterFlow(ApplicationAnalysisContext app, MethodAnalysisContext method, List<Instruction> instructions, Il2CppTypeModel model)
     {
@@ -137,6 +146,7 @@ internal sealed class Il2CppRegisterFlow
             PrecomputeClobbers();
             RunDataflow();
             EmitComments();
+            RetractInconsistentArrows();
         }
         catch
         {
@@ -307,6 +317,110 @@ internal sealed class Il2CppRegisterFlow
             if (_entryState[b] == null) continue; // unreachable
             TransferBlock(b, _entryState[b], _comments);
         }
+    }
+
+    /// <summary>
+    /// Self-consistency pass: a named vtable arrow whose slot method returns void/non-reference, but whose call result
+    /// (<c>rax</c>) is then consumed as a managed reference (stored full-width to memory, or dereferenced), is a
+    /// contradiction the tool can detect against its own downstream annotations — the slot name is wrong for this call
+    /// site. Downgrade it to the honest <c>T::class[0xNN]</c> rather than assert a fabricated name (错标比漏标更糟).
+    /// </summary>
+    private void RetractInconsistentArrows()
+    {
+        if (_arrowRetractCandidates == null || _comments == null) return;
+        // Phase 1: condemn each (type, vtable slot) proven mis-mapped — a dispatch whose non-reference result is consumed
+        // as a managed reference. The slot's name is metadata, identical at every call site, so one proof condemns it for
+        // the whole method; a slot never contradicted (e.g. a genuine void setter whose result is ignored) stays named.
+        HashSet<(string, int)> condemned = null;
+        foreach ((int index, int fnReg, int disp, string typeName, byte kind) in _arrowRetractCandidates)
+        {
+            if ((uint)index < (uint)_comments.Length && DispatchResultContradicts(index, fnReg, kind))
+                (condemned ??= new()).Add((typeName, SlotKey(disp)));
+        }
+        if (condemned == null) return;
+        // Phase 2: retract every arrow (call, fn-ptr load, and paired MethodInfo load) of a condemned (type, slot).
+        foreach ((int index, int _, int disp, string typeName, byte _) in _arrowRetractCandidates)
+        {
+            if ((uint)index < (uint)_comments.Length && _comments[index] != null && _comments[index].StartsWith("-> ")
+                && condemned.Contains((typeName, SlotKey(disp))))
+                _comments[index] = typeName + "::class[0x" + disp.ToString("X") + "]";
+        }
+    }
+
+    /// <summary>Folds a klass byte offset to its 0x10-aligned vtable slot base so the methodPtr (<c>+0</c>) and MethodInfo (<c>+8</c>) reads of one call group equal — used only to co-retract a call's arrows (not the authoritative slot map).</summary>
+    private static int SlotKey(int disp) => disp & ~0xF;
+
+    /// <summary>
+    /// From a vtable dispatch — either a fn-ptr load at <paramref name="arrowIndex"/> whose pointer is in
+    /// <paramref name="fnReg"/> then a later <c>call fnReg</c>, or (when <paramref name="fnReg"/> is -1) the arrow
+    /// instruction being itself an indirect <c>call [klass+disp]</c> — decide whether the call's result (<c>rax</c>)
+    /// contradicts the named slot's declared return <paramref name="kind"/>, before <c>rax</c> is redefined. Each test
+    /// is chosen so it can NEVER fire on a correctly-named method (so a good name is never downgraded):
+    /// <list type="bullet">
+    /// <item>Void / Scalar (bool/int/float/enum): <c>rax</c> stored full 64-bit (<c>mov [m],rax</c>) or dereferenced
+    /// (<c>[rax…]</c>) — void yields nothing and a scalar leaves a non-pointer value in rax, so neither can be a base.</item>
+    /// <item>Ref: offset-0 of <c>rax</c> read as a float (<c>movss/movsd xmm,[rax]</c>) — a real object's slot 0 is its
+    /// <c>Il2CppClass*</c>, never float data, so the result is actually a value/struct-return buffer.</item>
+    /// <item>Struct (hidden-buffer pointer) / Pointer (IntPtr) / Unresolved: rax is legitimately a pointer — no test.</item>
+    /// </list>
+    /// Raw instruction shapes only (no dataflow state); small windows that bail on any intervening clobber/call.
+    /// </summary>
+    private bool DispatchResultContradicts(int arrowIndex, int fnReg, byte kind)
+    {
+        bool voidOrScalar = kind is Il2CppTypeModel.ReturnKindVoid or Il2CppTypeModel.ReturnKindScalar;
+        bool isRef = kind == Il2CppTypeModel.ReturnKindRef;
+        if (!voidOrScalar && !isRef)
+            return false; // struct buffer / IntPtr / unresolved — rax is a legitimate pointer, nothing to contradict
+
+        int n = _instructions.Count;
+        int callIdx;
+        if (fnReg < 0)
+        {
+            callIdx = arrowIndex; // the arrow instruction is the indirect call itself (`call [klass+disp]`)
+        }
+        else
+        {
+            callIdx = -1;
+            for (int j = arrowIndex + 1; j < n && j <= arrowIndex + 10; j++)
+            {
+                Instruction c = _instructions[j];
+                // The fn ptr loaded into fnReg is invoked by `call fnReg` (an IndirectCall on a register operand).
+                if (c.FlowControl == FlowControl.IndirectCall && c.Op0Kind == OpKind.Register
+                    && RegisterFlowUtil.GpIndex(c.Op0Register) == fnReg)
+                { callIdx = j; break; }
+                if (c.FlowControl is FlowControl.Call or FlowControl.IndirectCall or FlowControl.IndirectBranch)
+                    return false;                                              // some other call/tail-branch first — can't attribute rax
+                if ((_clobber[j] & (1 << fnReg)) != 0) return false;           // fn-ptr register overwritten before the call
+            }
+            if (callIdx < 0) return false;
+        }
+
+        for (int j = callIdx + 1; j < n && j <= callIdx + 8; j++)
+        {
+            Instruction u = _instructions[j];
+            if (voidOrScalar)
+            {
+                // rax used as a memory base/index (dereferenced) — a void/scalar result is not a pointer.
+                if (u.MemoryBase.GetFullRegister() == Register.RAX || u.MemoryIndex.GetFullRegister() == Register.RAX)
+                    return true;
+                // rax stored full 64-bit to memory — a managed reference a void/scalar method cannot have produced.
+                if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Memory
+                    && u.Op1Kind == OpKind.Register && u.Op1Register == Register.RAX)
+                    return true;
+            }
+            else // isRef
+            {
+                // Reference return whose offset-0 is loaded as a float — impossible for a real object (slot 0 = klass ptr).
+                if ((u.Mnemonic is Mnemonic.Movss or Mnemonic.Movsd) && u.Op1Kind == OpKind.Memory
+                    && u.MemoryBase.GetFullRegister() == Register.RAX && u.MemoryIndex == Register.None
+                    && u.MemoryDisplacement64 == 0)
+                    return true;
+            }
+            // rax redefined/clobbered (incl. any further call) before being consumed — no contradiction.
+            if ((_clobber[j] & (1 << 0)) != 0)
+                return false;
+        }
+        return false;
     }
 
     /// <summary>Walks a block from its entry state; when <paramref name="commentsOut"/> is non-null, records the access comment for each instruction.</summary>
@@ -524,6 +638,19 @@ internal sealed class Il2CppRegisterFlow
                  && _model.TryGetVirtualMethodName(baseValue.Type, disp, out string virtualMethod))
         {
             access = "-> " + virtualMethod; // virtual/interface dispatch through the object's vtable
+            // Consistency gate: if this slot's method returns void/non-reference yet its result (rax) is consumed as a
+            // managed reference downstream, the name is wrong for this call site (mis-mapped vtable/interface slot).
+            // Record it; RetractInconsistentArrows downgrades it to the honest T::class[0xNN] if the contradiction holds.
+            // Two idiom shapes reach here: a fn-ptr load `mov reg,[klass+disp]` (fnReg = dst, its `call reg` is later) and
+            // a direct dispatch `call [klass+disp]` (FlowControl.IndirectCall; fnReg = -1). A tail-call `jmp [klass+disp]`
+            // (IndirectBranch) returns straight to our caller, so its rax use is unobservable here — not a candidate.
+            if (insn.FlowControl != FlowControl.IndirectBranch)
+            {
+                int fnReg = insn.FlowControl == FlowControl.IndirectCall ? -1 : RegisterFlowUtil.GpIndex(insn.Op0Register);
+                if (fnReg >= 0 || insn.FlowControl == FlowControl.IndirectCall)
+                    (_arrowRetractCandidates ??= new()).Add((index, fnReg, disp, baseValue.Type.Name,
+                        _model.GetVirtualReturnKind(baseValue.Type, disp)));
+            }
         }
         else if (baseValue.Kind is TrackedKind.TypeInfo or TrackedKind.Klass && insn.MemoryIndex == Register.None)
         {
