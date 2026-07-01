@@ -516,6 +516,12 @@ internal sealed class Il2CppRegisterFlow
         {
             access = "-> " + virtualMethod; // virtual/interface dispatch through the object's vtable
         }
+        else if (baseValue.Kind is TrackedKind.TypeInfo or TrackedKind.Klass && insn.MemoryIndex == Register.None)
+        {
+            // Any other read off a known Il2CppClass* is the runtime class struct (init flags/state, rgctx, vtable count…);
+            // not a managed field, but the owning type IS metadata — name it so the class-init guard reads clearly.
+            access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
+        }
 
         if (access == null)
             return null;
