@@ -47,6 +47,8 @@ internal static class Il2CppX86Listing
 
         // 识别 il2cpp 元数据初始化惯用法，给那两个无名全局起语义名。
         Dictionary<ulong, string> overrides = DetectMetadataInitIdiom(app, instructions);
+        // 识别 il2cpp icall 惰性缓存惯用法，把缓存槽 g_ 起名成它缓存的那个内部调用（签名字符串就在近旁）。
+        DetectIcallCacheIdiom(instructions, ref overrides);
 
         // 预判常量池操作数（直接寻址、浮点 / 向量）：注解层据此把它们的文件字节解引用成实际值，替代裸 g_ 指针。
         Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> dataConstants = CollectDataConstants(instructions);
@@ -135,6 +137,64 @@ internal static class Il2CppX86Listing
         && (instruction.MemoryBase == Register.None
             || instruction.MemoryBase == Register.RIP
             || instruction.MemoryBase == Register.EIP);
+
+    /// <summary>
+    /// 识别 il2cpp 的内部调用（icall）惰性缓存惯用法，给那个匿名缓存槽命名成它缓存的调用：
+    /// <c>mov rax,[slot] / test / jne skip / lea rcx,[「Ns::method()」] / call resolve / mov [slot],rax / skip: call rax</c>。
+    /// 缓存槽在元数据里无名（运行期才填函数指针），但**它缓存哪个 icall 由近旁的签名 C 字符串明写**。
+    /// 安全性由「同一槽既在 lea 前被读作缓存检查、又在 resolve 调用后被写回」这一 once-cache 不变量保证 —— 双侧命中才命名，
+    /// 绝不把无关的 <c>mov [x],rax</c> 误当缓存。命名经逐方法 <paramref name="overrides"/> 传给注解层（槽的读/写都渲染成 <c>[icall&lt;sig&gt;]</c>）。
+    /// </summary>
+    private static void DetectIcallCacheIdiom(List<Instruction> instructions, ref Dictionary<ulong, string> overrides)
+    {
+        for (int i = 0; i < instructions.Count; i++)
+        {
+            Instruction lea = instructions[i];
+            // lea 的内存操作数在 Op1（`lea reg,[mem]`），不能用查 Op0 的 IsDirectMemoryOperand。
+            if (lea.Mnemonic != Mnemonic.Lea || lea.Op1Kind != OpKind.Memory || lea.MemoryIndex != Register.None
+                || (lea.MemoryBase != Register.None && lea.MemoryBase != Register.RIP && lea.MemoryBase != Register.EIP))
+                continue;
+            string signature = Il2CppAsmAnnotator.ReadCString(lea.MemoryDisplacement64);
+            if (signature == null || !signature.Contains("::"))
+                continue; // 只接内部调用签名形状（Namespace::method(...)）
+
+            // lea 之后几条内：一次 call，随后 mov [slot],rax（把解析出的函数指针写回缓存）。
+            ulong slot = 0;
+            bool sawCall = false;
+            for (int j = i + 1; j < instructions.Count && j <= i + 6; j++)
+            {
+                Instruction y = instructions[j];
+                if (y.Mnemonic == Mnemonic.Call) { sawCall = true; continue; }
+                if (sawCall && y.Mnemonic == Mnemonic.Mov && IsDirectMemoryOperand(y)
+                    && y.Op1Kind == OpKind.Register && y.Op1Register == Register.RAX)
+                {
+                    slot = y.MemoryDisplacement64;
+                    break;
+                }
+            }
+            if (slot == 0)
+                continue;
+
+            // once-cache 不变量：同一槽必须在 lea 之前不远处被读作缓存检查（mov rax,[slot]）。双侧命中才命名。
+            bool readBefore = false;
+            for (int k = i - 1; k >= 0 && k >= i - 10; k--)
+            {
+                Instruction z = instructions[k];
+                if (z.Mnemonic == Mnemonic.Mov && z.Op0Kind == OpKind.Register && z.Op0Register == Register.RAX
+                    && z.Op1Kind == OpKind.Memory && z.MemoryIndex == Register.None
+                    && (z.MemoryBase == Register.None || z.MemoryBase == Register.RIP || z.MemoryBase == Register.EIP)
+                    && z.MemoryDisplacement64 == slot)
+                {
+                    readBefore = true;
+                    break;
+                }
+            }
+            if (!readBefore)
+                continue;
+
+            (overrides ??= new())[slot] = "icall<" + signature + ">";
+        }
+    }
 
     /// <summary>
     /// 预判本方法里所有"直接寻址的常量池操作数"：浮点标量、以及任意向量（含整型 SIMD 掩码）。
