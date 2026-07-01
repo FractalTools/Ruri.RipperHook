@@ -52,6 +52,7 @@ internal static class Il2CppAsmAnnotator
     private static Dictionary<ulong, string> _exports; // PE 导出表 VA→名（权威）
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
+    private static readonly Dictionary<ulong, string> _dataCache = new(); // addr→符号：代码标签 / C 字符串 / 代码指针槽 / g_（仅依赖地址，缓存）
     private static Dictionary<ulong, string> _runtimeGlobals; // il2cpp_init 静态追踪出的运行时全局槽 VA→名（.bss，运行期填充）
     private static ulong _imageBase;
     private static PeSection[] _sections; // PE 段表：VA 落在哪个段 + 是否可执行 / 可写 / 已落盘
@@ -96,6 +97,21 @@ internal static class Il2CppAsmAnnotator
     {
         EnsureMaps(app);
         return HexToken.Replace(line, m => ReplaceToken(line, m, overrides, dataConstants));
+    }
+
+    /// <summary>
+    /// 指令感知路径（<see cref="Il2CppSymbolResolver"/>）的单地址解析入口：直接把一个操作数地址解析成符号，
+    /// 复用与文本 <see cref="AnnotateLine"/> 完全相同的元数据表（托管方法 / PE 导出 / il2cpp 关键函数 /
+    /// 运行时全局 / 字符串字面量 / metadata usage / 常量池 / 段分类 / g_ 兜底）。
+    /// <paramref name="inBrackets"/>=false 用于分支/调用目标（→ 方法名 / sub_ / loc_），=true 用于绝对数据全局
+    /// （→ 字面量 / TypeInfo / 常量 / g_）。命中不了返回 null（调用方保留原始数值）。
+    /// </summary>
+    internal static string ResolveAddress(ApplicationAnalysisContext app, ulong address, bool inBrackets,
+        IReadOnlyDictionary<ulong, string> overrides, IReadOnlyDictionary<ulong, DataConstantOperand> dataConstants)
+    {
+        if (address < 0x10000) return null;
+        EnsureMaps(app);
+        return Resolve(address, inBrackets, overrides, dataConstants);
     }
 
     /// <summary>关键函数（il2cpp 运行时函数）名→地址反查；找不到返回 0。</summary>
@@ -182,10 +198,13 @@ internal static class Il2CppAsmAnnotator
                 if (constant != null)
                     return constant;
             }
-            // 落在可执行段的括号地址（多为 lea / 以数据形式引用的代码指针、跳转表项）→ 代码标签，而非数据全局。
-            if (ClassifyAddress(addr, out _) == AddressKind.Code)
-                return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
-            return "g_" + addr.ToString("X"); // 无名 codegen 全局（多为运行期才填充的 .data/.bss 槽，文件里无值）
+            // 其余数据地址的解析（代码标签 / C 字符串常量 / 指向代码的指针槽 / g_ 兜底）只依赖地址本身，缓存之。
+            if (!_dataCache.TryGetValue(addr, out string dataSymbol))
+            {
+                dataSymbol = ResolveDataAddress(addr);
+                _dataCache[addr] = dataSymbol;
+            }
+            return dataSymbol;
         }
         // 代码目标：方法体内分支 → loc_，区域外无名运行时函数 → sub_。
         return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
@@ -224,6 +243,108 @@ internal static class Il2CppAsmAnnotator
         }
         catch { }
         return null;
+    }
+
+    /// <summary>
+    /// 仅依赖地址的数据符号解析（在常量池未命中后调用，结果按地址缓存）：① 落在可执行段 → 代码标签
+    /// <c>loc_</c>/<c>sub_</c>；② 只读且已落盘段里的 NUL 结尾可打印 C 字符串（icall 签名 / 版本串 / 调试串 ——
+    /// 非托管字面量，<c>GetLiteralByAddress</c> 命不中）→ 引号字符串；③ 已落盘数据槽里存着指向可执行段的指针
+    /// （il2cpp 运行时 API 函数指针表 / vtable）→ <c>-&gt;目标符号</c>；④ 其余（运行期才填充、文件里无值的
+    /// .data/.bss 槽）→ <c>g_</c>。任何一步都以真实字节/元数据为据，绝不臆造。
+    /// </summary>
+    private static string ResolveDataAddress(ulong addr)
+    {
+        AddressKind kind = ClassifyAddress(addr, out bool fileBacked);
+        if (kind == AddressKind.Code)
+            return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
+        if (kind == AddressKind.ReadOnlyData && fileBacked)
+        {
+            string cString = TryReadCString(addr);
+            if (cString != null)
+                return "\"" + Escape(cString) + "\"";
+        }
+        if (fileBacked)
+        {
+            string codePointer = TryResolveCodePointer(addr);
+            if (codePointer != null)
+                return codePointer;
+        }
+        return "g_" + addr.ToString("X");
+    }
+
+    /// <summary>
+    /// 读取 <paramref name="virtualAddress"/> 处的一段 C 字符串（NUL 结尾、全可打印 ASCII、长度≥2、≤255）。
+    /// 经文件偏移直读；映射不到文件字节 / 含不可打印字节 / 过短 → 返回 null（宁缺毋滥，绝不把随机字节当字符串）。
+    /// </summary>
+    private static string TryReadCString(ulong virtualAddress)
+    {
+        Il2CppBinary binary = LibCpp2IlMain.Binary;
+        if (binary == null)
+            return null;
+        long raw;
+        try
+        {
+            if (!binary.TryMapVirtualAddressToRaw(virtualAddress, out raw))
+                return null;
+        }
+        catch { return null; }
+        if (raw < 0 || raw >= binary.RawLength)
+            return null;
+
+        StringBuilder sb = new();
+        for (int i = 0; i < 256; i++)
+        {
+            if (raw + i >= binary.RawLength)
+                return null;
+            byte ch;
+            try { ch = binary.GetByteAtRawAddress((ulong)(raw + i)); }
+            catch { return null; }
+            if (ch == 0)
+                break;
+            if (ch < 0x20 || ch > 0x7E)
+                return null; // 非可打印 → 不是干净 C 字符串
+            sb.Append((char)ch);
+        }
+        return sb.Length >= 2 ? sb.ToString() : null;
+    }
+
+    /// <summary>
+    /// 已落盘数据槽里若存着一个指向可执行段的 64 位指针（il2cpp 运行时 API 的函数指针表项、vtable 项等），
+    /// 把该指针的目标解析成符号（托管方法 / PE 导出 / 关键函数 / <c>sub_</c>），返回形如 <c>-&gt;sub_XXXX</c>。
+    /// 目标不在代码段 / 非 64 位 / 读不出 → 返回 null（交回 <c>g_</c>）。
+    /// </summary>
+    private static string TryResolveCodePointer(ulong slotAddress)
+    {
+        Il2CppBinary binary = LibCpp2IlMain.Binary;
+        if (binary == null || binary.is32Bit)
+            return null;
+        long raw;
+        try
+        {
+            if (!binary.TryMapVirtualAddressToRaw(slotAddress, out raw))
+                return null;
+        }
+        catch { return null; }
+        if (raw < 0 || raw + 8 > binary.RawLength)
+            return null;
+
+        ulong target = 0;
+        try
+        {
+            for (int i = 7; i >= 0; i--)
+                target = (target << 8) | binary.GetByteAtRawAddress((ulong)(raw + i));
+        }
+        catch { return null; }
+        if (target < 0x10000 || ClassifyAddress(target, out _) != AddressKind.Code)
+            return null;
+
+        if (_app.MethodsByAddress.TryGetValue(target, out List<MethodAnalysisContext> targetMethods) && targetMethods.Count > 0)
+            return "->" + targetMethods[0].FullName;
+        if (_exports.TryGetValue(target, out string targetExport))
+            return "->" + targetExport;
+        if (_keyFunctions.TryGetValue(target, out string targetKeyFunc))
+            return "->" + targetKeyFunc;
+        return "->" + (InMethodBody(target) ? "loc_" : "sub_") + target.ToString("X");
     }
 
     /// <summary>
@@ -484,6 +605,7 @@ internal static class Il2CppAsmAnnotator
 
         _sortedMethodStarts = app.MethodsByAddress.Keys.Where(k => k != 0).OrderBy(k => k).ToArray();
         _globalCache.Clear();
+        _dataCache.Clear();
         ParsePeSections();
         _runtimeGlobals = Il2CppX86Listing.TraceRuntimeGlobals(app);
         _app = app;

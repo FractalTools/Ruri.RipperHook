@@ -51,18 +51,32 @@ internal static class Il2CppX86Listing
         // 预判常量池操作数（直接寻址、浮点 / 向量）：注解层据此把它们的文件字节解引用成实际值，替代裸 g_ 指针。
         Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> dataConstants = CollectDataConstants(instructions);
 
-        // 每个 Render 用全新的 formatter/output（Cpp2IL 的是 static、非线程安全；这里本地实例即可）。
-        MasmFormatter formatter = new();
+        // 寄存器数据流：把 this/参数/实例字段/静态字段/数组/调用返回还原成符号，产出每条指令的访问注释（this.field 等）。
+        Il2CppTypeModel model = Il2CppTypeModel.Get(app);
+        Il2CppRegisterFlow flow = new(app, method, instructions, model);
+        flow.Analyze();
+
+        // 指令感知的符号解析器：分支/调用目标、绝对数据全局就地替换成符号；立即数保持原值
+        // （修复旧的纯文本正则会把立即数误标成 sub_ 代码标签的 bug）。每个 Render 用全新 formatter/output（线程隔离）。
+        Il2CppSymbolResolver resolver = new(app, overrides, dataConstants);
+        MasmFormatter formatter = new(resolver);
         StringOutput output = new();
         System.Text.StringBuilder sb = new(bytes.Length * 6);
-        foreach (Instruction instruction in instructions)
+        for (int i = 0; i < instructions.Count; i++)
         {
+            Instruction instruction = instructions[i];
             if (labels.Contains(instruction.IP))
             {
                 sb.Append("loc_").Append(instruction.IP.ToString("X")).Append(":\n");
             }
             formatter.Format(instruction, output);
-            sb.Append(Il2CppAsmAnnotator.AnnotateLine(app, output.ToStringAndReset(), overrides, dataConstants)).Append('\n');
+            sb.Append(output.ToStringAndReset());
+            string comment = flow.CommentAt(i);
+            if (comment != null)
+            {
+                sb.Append("  ; ").Append(comment);
+            }
+            sb.Append('\n');
         }
         return sb.ToString();
     }
