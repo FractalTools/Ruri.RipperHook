@@ -25,7 +25,7 @@ internal static class RegisterFlowUtil
     }
 }
 
-internal enum TrackedKind : byte { Unknown, ManagedRef, TypeInfo, StaticBase }
+internal enum TrackedKind : byte { Unknown, ManagedRef, TypeInfo, StaticBase, Klass }
 
 /// <summary>
 /// Abstract value held in a register: a managed object pointer of a known type, a runtime <c>Il2CppClass*</c>
@@ -50,6 +50,7 @@ internal readonly struct TrackedValue : IEquatable<TrackedValue>
     public static TrackedValue Ref(TypeAnalysisContext type, string alias) => new(TrackedKind.ManagedRef, type, alias);
     public static TrackedValue Info(TypeAnalysisContext type) => new(TrackedKind.TypeInfo, type, null);
     public static TrackedValue StaticBaseOf(TypeAnalysisContext type) => new(TrackedKind.StaticBase, type, null);
+    public static TrackedValue KlassOf(TypeAnalysisContext type) => new(TrackedKind.Klass, type, null); // Il2CppClass* of an object (obtained by dereferencing it at offset 0)
 
     public bool IsKnown => Kind != TrackedKind.Unknown;
     public bool Equals(TrackedValue other) => Kind == other.Kind && SameType(Type, other.Type);
@@ -235,12 +236,17 @@ internal sealed class Il2CppRegisterFlow
                 int idx = RegisterFlowUtil.GpIndex(used.Register);
                 if (idx >= 0) mask |= (ushort)(1 << idx);
             }
-            // Whether this instruction actually STORES to a memory operand (mov [m],x / add [m],x …) as opposed to
-            // merely reading it (cmp [m],x / test [m],x / a load). Drives the "field = value" store rendering so a
-            // compare is never mislabeled as an assignment. Authoritative, from Iced's per-operand access.
+            // Whether this instruction actually STORES to its DISPLAYED memory operand (mov [m],x / add [m],x …) as
+            // opposed to merely reading it (cmp [m],x / a load / an indirect call). Matched to the operand's own base/index
+            // so an incidental stack write (the return-address push of `call [m]`, base=rsp) never counts. Drives the
+            // "field = value" store rendering so neither a compare nor a virtual call is mislabeled as an assignment.
             foreach (UsedMemory usedMemory in info.GetUsedMemory())
             {
-                if (IsWrite(usedMemory.Access)) { _writesMemory[i] = true; break; }
+                if (IsWrite(usedMemory.Access) && usedMemory.Base == insn.MemoryBase && usedMemory.Index == insn.MemoryIndex)
+                {
+                    _writesMemory[i] = true;
+                    break;
+                }
             }
             if (insn.FlowControl == FlowControl.Call)
                 mask |= volatileMask;
@@ -406,6 +412,9 @@ internal sealed class Il2CppRegisterFlow
         int disp = (int)insn.MemoryDisplacement64;
         switch (baseValue.Kind)
         {
+            // Dereferencing a reference-type object at offset 0 loads its Il2CppClass* (the object header slot) — the base for a vtable dispatch.
+            case TrackedKind.ManagedRef when !isLea && disp == 0 && !baseValue.Type.IsValueType:
+                return TrackedValue.KlassOf(baseValue.Type);
             case TrackedKind.ManagedRef when _model.TryGetInstanceField(baseValue.Type, disp, out FieldAnalysisContext field):
                 return (isLea || !field.FieldType.IsValueType)
                     ? TrackedValue.Ref(field.FieldType, Combine(baseValue.Alias, field.Name))
@@ -467,13 +476,29 @@ internal sealed class Il2CppRegisterFlow
         {
             access = "&" + baseValue.Type.Name + "::static_fields";
         }
+        else if (baseValue.Kind == TrackedKind.Klass && insn.MemoryIndex == Register.None
+                 && _model.TryGetVirtualMethodName(baseValue.Type, disp, out string virtualMethod))
+        {
+            access = "-> " + virtualMethod; // virtual/interface dispatch through the object's vtable
+        }
 
         if (access == null)
             return null;
         if (!isWrite)
             return access;
-        return access + " = " + SourceToken(insn, state);
+        if (insn.Mnemonic == Mnemonic.Inc)
+            return access + "++";
+        if (insn.Mnemonic == Mnemonic.Dec)
+            return access + "--";
+        // Only a pure `mov [field], x` store renders as an assignment; other read-modify-writes (add/or/shl [field],x)
+        // just name the field (the mnemonic already shows the operation) — never fabricate a "= source".
+        string source = IsStoreMov(insn.Mnemonic) ? SourceToken(insn, state) : null;
+        return source == null ? access : access + " = " + source;
     }
+
+    private static bool IsStoreMov(Mnemonic mnemonic)
+        => mnemonic is Mnemonic.Mov or Mnemonic.Movss or Mnemonic.Movsd or Mnemonic.Movaps or Mnemonic.Movups
+            or Mnemonic.Movdqa or Mnemonic.Movdqu or Mnemonic.Movq or Mnemonic.Movd;
 
     private static string SourceToken(in Instruction insn, TrackedValue[] state)
     {
@@ -483,11 +508,11 @@ internal sealed class Il2CppRegisterFlow
             int src = RegisterFlowUtil.GpIndex(insn.Op1Register);
             if (src >= 0 && state[src].IsKnown && state[src].Alias != null)
                 return state[src].Alias;
-            return insn.Op1Register.ToString().ToLowerInvariant();
+            return insn.Op1Register == Register.None ? null : insn.Op1Register.ToString().ToLowerInvariant();
         }
         if (IsImmediate(insn.Op1Kind))
             return "0x" + insn.GetImmediate(1).ToString("X");
-        return "…";
+        return null;
     }
 
     private static bool IsImmediate(OpKind kind)
