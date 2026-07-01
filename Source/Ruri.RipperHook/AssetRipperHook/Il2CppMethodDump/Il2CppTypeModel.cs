@@ -155,10 +155,15 @@ internal sealed class Il2CppTypeModel
     public bool TryGetStaticField(TypeAnalysisContext type, int offset, out FieldAnalysisContext field)
         => GetOffsetMap(_staticFields, type, statics: true).TryGetValue(offset, out field);
 
-    // A generic instance (List<Foo>) has no Definition/fields of its own; its field layout is that of the generic type
-    // definition (List<T>), so unwrap to it. Same offsets regardless of the type arguments.
+    // A generic REFERENCE instance (List<Foo>) has no Definition/fields of its own; its field layout equals the generic
+    // definition's (List<T>) — every field is a pointer or fixed primitive, T only appears behind a reference (T[]), so
+    // offsets are type-argument-independent. Only unwrap reference generics: a value-type generic (KeyValuePair<K,V>,
+    // Nullable<T>) inlines its type-arg fields, shifting offsets, so the definition's offsets would be WRONG for a boxed
+    // instance — leave those unresolved rather than mislabel.
     private static TypeAnalysisContext Unwrap(TypeAnalysisContext type)
-        => type is GenericInstanceTypeAnalysisContext generic ? generic.GenericType : type;
+        => type is GenericInstanceTypeAnalysisContext generic && generic.GenericType?.IsValueType == false
+            ? generic.GenericType
+            : type;
 
     private Dictionary<int, FieldAnalysisContext> GetOffsetMap(
         Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> cache, TypeAnalysisContext type, bool statics)
