@@ -1,6 +1,7 @@
 extern alias icedreal;
 using System.Collections.Generic;
 using Cpp2IL.Core.Model.Contexts;
+using Cpp2IL.Core.Utils;
 using LibCpp2IL;
 using LibCpp2IL.BinaryStructures;
 using LibCpp2IL.Metadata;
@@ -30,6 +31,7 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
 
     private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
+    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type
 
     /// <summary>offsetof(Il2CppClass, static_fields) for this binary, or -1 if it could not be discovered.</summary>
     public int StaticFieldsOffset { get; private set; } = -1;
@@ -345,15 +347,40 @@ internal sealed class Il2CppTypeModel
         return offsetInVtable / 0x10;
     }
 
+    /// <summary>Return type of the virtual method dispatched by <c>[klass + byteOffset]</c> (for propagating <c>rax</c> after an indirect call), if a reference type.</summary>
+    public bool TryGetVirtualReturnType(TypeAnalysisContext type, int byteOffset, out TypeAnalysisContext returnType)
+    {
+        returnType = null;
+        if (VtableOffset < 0 || type?.Definition == null)
+            return false;
+        int slot = VtableSlotFromOffset(byteOffset);
+        if (slot < 0)
+            return false;
+        EnsureVtable(type);
+        TypeAnalysisContext[] returns = _vtableReturns[type];
+        if (slot >= returns.Length)
+            return false;
+        returnType = returns[slot];
+        return returnType != null;
+    }
+
     private string[] GetVtableNames(TypeAnalysisContext type)
     {
-        if (_vtableNames.TryGetValue(type, out string[] cached))
-            return cached;
+        EnsureVtable(type);
+        return _vtableNames[type];
+    }
+
+    private void EnsureVtable(TypeAnalysisContext type)
+    {
+        if (_vtableNames.ContainsKey(type))
+            return;
         string[] names;
+        TypeAnalysisContext[] returns;
         try
         {
             MetadataUsage[] vtable = type.Definition.VTable;
             names = new string[vtable.Length];
+            returns = new TypeAnalysisContext[vtable.Length];
             for (int i = 0; i < vtable.Length; i++)
             {
                 MetadataUsage usage = vtable[i];
@@ -362,16 +389,27 @@ internal sealed class Il2CppTypeModel
                 try
                 {
                     if (usage.Type == MetadataUsageType.MethodDef)
-                        names[i] = usage.AsMethod()?.GlobalKey;
+                    {
+                        Il2CppMethodDefinition method = usage.AsMethod();
+                        names[i] = method?.GlobalKey;
+                        if (method?.RawReturnType != null)
+                        {
+                            TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
+                            if (resolved != null && !resolved.IsValueType)
+                                returns[i] = resolved; // only reference returns are useful for chaining
+                        }
+                    }
                     else if (usage.Type == MetadataUsageType.MethodRef)
+                    {
                         names[i] = usage.AsGenericMethodRef()?.ToString();
+                    }
                 }
                 catch { }
             }
         }
-        catch { names = System.Array.Empty<string>(); }
+        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); }
         _vtableNames[type] = names;
-        return names;
+        _vtableReturns[type] = returns;
     }
 
     /// <summary>
