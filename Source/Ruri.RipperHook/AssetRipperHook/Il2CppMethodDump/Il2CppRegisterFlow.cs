@@ -96,6 +96,7 @@ internal sealed class Il2CppRegisterFlow
     private readonly Il2CppTypeModel _model;
     private readonly bool _isPe;
     private readonly int _staticFieldsOffset;
+    private readonly ulong _objectNewAddress; // il2cpp_codegen_object_new: (Il2CppClass* in rcx) -> new object
 
     private readonly Dictionary<ulong, int> _indexByIp = new();
     private int[] _blockOf;
@@ -115,6 +116,7 @@ internal sealed class Il2CppRegisterFlow
         _model = model;
         _isPe = app.Binary is PE;
         _staticFieldsOffset = model.StaticFieldsOffset;
+        _objectNewAddress = Il2CppAsmAnnotator.KeyFunctionAddress(app, "codegen_object_new");
     }
 
     /// <summary>Access comment for the instruction at <paramref name="index"/>, or null.</summary>
@@ -365,15 +367,27 @@ internal sealed class Il2CppRegisterFlow
                 break;
         }
 
+        // Allocation: `mov rcx,[T_TypeInfo]; call il2cpp_codegen_object_new` -> rax = new T (read rcx before it is clobbered).
+        bool isAlloc = false;
+        TrackedValue allocResult = TrackedValue.Unknown;
+        if (insn.FlowControl == FlowControl.Call && _objectNewAddress != 0
+            && insn.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64
+            && insn.NearBranchTarget == _objectNewAddress
+            && state[1].Kind == TrackedKind.TypeInfo && state[1].Type != null)
+        {
+            isAlloc = true;
+            allocResult = TrackedValue.Ref(state[1].Type, "new " + state[1].Type.Name);
+        }
+
         ushort mask = _clobber[index];
-        for (int r = 0; r < 16; r++)
+        for (int r = 0; r < 16; r++) // only the 16 GP registers are clobbered; frame slots (16+) are memory, preserved across calls
         {
             if ((mask & (1 << r)) != 0) state[r] = TrackedValue.Unknown;
         }
 
         if (insn.FlowControl == FlowControl.Call)
         {
-            state[0] = CallReturn(insn); // rax
+            state[0] = isAlloc ? allocResult : CallReturn(insn); // rax
             return;
         }
 
@@ -432,6 +446,13 @@ internal sealed class Il2CppRegisterFlow
 
     private string BuildComment(in Instruction insn, int index, TrackedValue[] state)
     {
+        // Allocation call: `mov rcx,[T_TypeInfo]; call il2cpp_codegen_object_new` -> rax = new T.
+        if (insn.FlowControl == FlowControl.Call && _objectNewAddress != 0
+            && insn.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64
+            && insn.NearBranchTarget == _objectNewAddress
+            && state[1].Kind == TrackedKind.TypeInfo && state[1].Type != null)
+            return "rax = new " + state[1].Type.Name + "()";
+
         int memoryOp = -1;
         for (int k = 0; k < insn.OpCount; k++)
         {
@@ -583,7 +604,7 @@ internal sealed class Il2CppRegisterFlow
     private bool IsFloat(TypeAnalysisContext type)
         => type != null && (type == _app.SystemTypes.SystemSingleType || type == _app.SystemTypes.SystemDoubleType);
 
-    private TrackedValue[] Meet(TrackedValue[] a, TrackedValue[] b)
+    private static TrackedValue[] Meet(TrackedValue[] a, TrackedValue[] b)
     {
         TrackedValue[] result = new TrackedValue[16];
         for (int i = 0; i < 16; i++)
