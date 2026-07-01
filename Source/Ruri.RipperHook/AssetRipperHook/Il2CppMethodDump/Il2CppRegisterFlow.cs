@@ -427,7 +427,16 @@ internal sealed class Il2CppRegisterFlow
             return TrackedValue.Unknown;
         }
         if (insn.MemoryIndex != Register.None)
-            return TrackedValue.Unknown; // indexed access is not a plain field
+        {
+            // Array element load: `[arr + idx*8 + 0x20]` where arr is an array -> the element's (reference) type, so
+            // a field access on the loaded element resolves.
+            int arrayBase = RegisterFlowUtil.GpIndex(insn.MemoryBase);
+            if (!isLea && arrayBase >= 0 && (int)insn.MemoryDisplacement64 >= 0x20
+                && state[arrayBase].Kind == TrackedKind.ManagedRef && IsArrayLike(state[arrayBase].Type)
+                && state[arrayBase].Type is WrappedTypeAnalysisContext wrapped && wrapped.ElementType is { } element && !element.IsValueType)
+                return TrackedValue.Ref(element, (state[arrayBase].Alias ?? "array") + "[i]");
+            return TrackedValue.Unknown;
+        }
 
         int baseIndex = RegisterFlowUtil.GpIndex(insn.MemoryBase);
         if (baseIndex < 0)
