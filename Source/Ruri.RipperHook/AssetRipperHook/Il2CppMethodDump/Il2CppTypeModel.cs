@@ -29,8 +29,13 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _instanceFields = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
 
+    private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
+
     /// <summary>offsetof(Il2CppClass, static_fields) for this binary, or -1 if it could not be discovered.</summary>
     public int StaticFieldsOffset { get; private set; } = -1;
+
+    /// <summary>offsetof(Il2CppClass, vtable) for this binary, or -1 if it could not be discovered.</summary>
+    public int VtableOffset { get; private set; } = -1;
 
     public static Il2CppTypeModel Get(ApplicationAnalysisContext app)
     {
@@ -53,6 +58,7 @@ internal sealed class Il2CppTypeModel
             }
         }
         StaticFieldsOffset = DiscoverStaticFieldsOffset(app);
+        VtableOffset = DiscoverVtableOffset(app);
     }
 
     /// <summary>Maps a runtime <c>Il2CppClass*</c> / <c>Il2CppType*</c> metadata-usage global (VA) to its managed type.</summary>
@@ -303,6 +309,173 @@ internal sealed class Il2CppTypeModel
                 staticBaseType[dst] = typeInfoOf[baseIndex];
                 staticBaseCandidateC[dst] = (int)insn.MemoryDisplacement64;
             }
+        }
+    }
+
+    /// <summary>
+    /// Resolves a virtual/interface dispatch <c>[klass + byteOffset]</c> to the concrete method for <paramref name="type"/>.
+    /// Uses the type's own metadata vtable (<see cref="Il2CppTypeDefinition.VTable"/>) — more accurate than Cpp2IL legacy's
+    /// global slot map — with the empirically discovered <see cref="VtableOffset"/> and the 0x10-byte VirtualInvokeData stride
+    /// ({ methodPtr, MethodInfo* }; a read of the second pointer is normalized by -8).
+    /// </summary>
+    public bool TryGetVirtualMethodName(TypeAnalysisContext type, int byteOffset, out string name)
+    {
+        name = null;
+        if (VtableOffset < 0 || type?.Definition == null)
+            return false;
+        int slot = VtableSlotFromOffset(byteOffset);
+        if (slot < 0)
+            return false;
+        string[] names = GetVtableNames(type);
+        if (slot >= names.Length)
+            return false;
+        name = names[slot];
+        return name != null;
+    }
+
+    private int VtableSlotFromOffset(int byteOffset)
+    {
+        int offsetInVtable = byteOffset - VtableOffset;
+        if (offsetInVtable < 0)
+            return -1;
+        if (offsetInVtable % 0x10 != 0 && offsetInVtable % 8 == 0)
+            offsetInVtable -= 8; // read of the MethodInfo* (second pointer of VirtualInvokeData)
+        if (offsetInVtable < 0 || offsetInVtable % 0x10 != 0)
+            return -1;
+        return offsetInVtable / 0x10;
+    }
+
+    private string[] GetVtableNames(TypeAnalysisContext type)
+    {
+        if (_vtableNames.TryGetValue(type, out string[] cached))
+            return cached;
+        string[] names;
+        try
+        {
+            MetadataUsage[] vtable = type.Definition.VTable;
+            names = new string[vtable.Length];
+            for (int i = 0; i < vtable.Length; i++)
+            {
+                MetadataUsage usage = vtable[i];
+                if (usage == null)
+                    continue;
+                try
+                {
+                    if (usage.Type == MetadataUsageType.MethodDef)
+                        names[i] = usage.AsMethod()?.GlobalKey;
+                    else if (usage.Type == MetadataUsageType.MethodRef)
+                        names[i] = usage.AsGenericMethodRef()?.ToString();
+                }
+                catch { }
+            }
+        }
+        catch { names = System.Array.Empty<string>(); }
+        _vtableNames[type] = names;
+        return names;
+    }
+
+    /// <summary>
+    /// Discovers offsetof(Il2CppClass, vtable) by disassembling a bounded sample of instance methods and looking for the
+    /// virtual-dispatch idiom: <c>mov klass,[this] ; ... (call|mov) [klass + N]</c>. The vtable offset is the candidate C
+    /// for which <c>(N - C)/0x10</c> most often lands on a real vtable slot of the calling type. Version-independent; -1 if inconclusive.
+    /// </summary>
+    private int DiscoverVtableOffset(ApplicationAnalysisContext app)
+    {
+        if (app.Binary is not PE || app.Binary.is32Bit)
+            return -1;
+
+        Dictionary<int, int> votes = new();
+        int scanned = 0;
+        int candidates = 0;
+        foreach (AssemblyAnalysisContext assembly in app.Assemblies)
+        {
+            foreach (TypeAnalysisContext type in assembly.Types)
+            {
+                foreach (MethodAnalysisContext method in type.Methods)
+                {
+                    if (method.UnderlyingPointer == 0 || method.IsStatic || type.Definition == null)
+                        continue;
+                    int vtableCount;
+                    try { vtableCount = type.Definition.VTable?.Length ?? 0; }
+                    catch { continue; }
+                    if (vtableCount == 0)
+                        continue;
+                    if (scanned >= 5000 || candidates >= 1200)
+                        goto done;
+                    scanned++;
+                    int thisReg = IsReturnedViaHiddenPointer(method.ReturnType) ? 2 : 1; // rdx if hidden-return buffer takes rcx, else rcx
+                    ScanMethodForVtable(method, thisReg, vtableCount, votes, ref candidates);
+                }
+            }
+        }
+
+    done:
+        int best = -1;
+        int bestVotes = 0;
+        foreach (KeyValuePair<int, int> vote in votes)
+        {
+            if (vote.Value > bestVotes)
+            {
+                bestVotes = vote.Value;
+                best = vote.Key;
+            }
+        }
+        return bestVotes >= 4 ? best : -1;
+    }
+
+    private void ScanMethodForVtable(MethodAnalysisContext method, int thisReg, int vtableCount, Dictionary<int, int> votes, ref int candidates)
+    {
+        byte[] bytes;
+        try { method.EnsureRawBytes(); bytes = method.RawBytes.ToArray(); }
+        catch { return; }
+        if (bytes.Length == 0 || bytes.Length > 0x4000)
+            return;
+
+        Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(bytes), method.UnderlyingPointer);
+        ulong end = method.UnderlyingPointer + (ulong)bytes.Length;
+        int klassReg = -1; // GP index currently holding Klass(this)
+        int guard = 0;
+        while (decoder.IP < end && guard++ < 8000)
+        {
+            decoder.Decode(out Instruction insn);
+            if (insn.IsInvalid)
+                break;
+
+            // (call|mov) through [klassReg + N] -> a dispatch through the class; vote every plausible vtable offset.
+            if (klassReg >= 0 && insn.MemoryIndex == Register.None && RegisterFlowUtil.GpIndex(insn.MemoryBase) == klassReg
+                && ((insn.Mnemonic == Mnemonic.Call && insn.Op0Kind == OpKind.Memory)
+                    || (insn.Mnemonic == Mnemonic.Mov && insn.Op1Kind == OpKind.Memory)))
+            {
+                VoteVtableOffset((int)insn.MemoryDisplacement64, vtableCount, votes);
+                candidates++;
+            }
+
+            if (insn.Mnemonic == Mnemonic.Mov && insn.Op0Kind == OpKind.Register && insn.Op1Kind == OpKind.Memory
+                && insn.MemoryIndex == Register.None && RegisterFlowUtil.GpIndex(insn.MemoryBase) == thisReg
+                && insn.MemoryDisplacement64 == 0)
+            {
+                klassReg = RegisterFlowUtil.GpIndex(insn.Op0Register); // klass = [this]
+            }
+            else if (klassReg >= 0 && insn.Op0Kind == OpKind.Register && RegisterFlowUtil.GpIndex(insn.Op0Register) == klassReg)
+            {
+                klassReg = -1; // klass register overwritten
+            }
+        }
+    }
+
+    private static void VoteVtableOffset(int byteOffset, int vtableCount, Dictionary<int, int> votes)
+    {
+        for (int candidate = 0xF0; candidate <= 0x158; candidate += 8)
+        {
+            int offsetInVtable = byteOffset - candidate;
+            if (offsetInVtable < 0)
+                continue;
+            if (offsetInVtable % 0x10 != 0 && offsetInVtable % 8 == 0)
+                offsetInVtable -= 8;
+            if (offsetInVtable < 0 || offsetInVtable % 0x10 != 0)
+                continue;
+            if (offsetInVtable / 0x10 < vtableCount)
+                votes[candidate] = votes.TryGetValue(candidate, out int v) ? v + 1 : 1;
         }
     }
 }
