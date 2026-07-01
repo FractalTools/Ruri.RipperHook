@@ -402,17 +402,26 @@ internal sealed class Il2CppTypeModel
                     if (usage.Type == MetadataUsageType.MethodDef)
                     {
                         Il2CppMethodDefinition method = usage.AsMethod();
-                        names[i] = method?.GlobalKey;
-                        if (method?.RawReturnType != null)
+                        // VALIDITY FILTER: only trust the entry when the method's own canonical slot equals this vtable
+                        // index. A class virtual (own or inherited) always sits at its own slot; an INTERFACE-implementation
+                        // slot places a method at an index != its slot, and the `call [klass+off]` there dispatches an
+                        // interface method whose concrete impl depends on the runtime (derived) type — naming it after this
+                        // decode mislabels it (proven: UI `Graphic` slot 21 aliases `IsDestroyed`, whose real slot is 16,
+                        // for what is actually a `Color`-taking call). Suppress -> a miss, never a WRONG symbol.
+                        if (method != null && method.slot == i)
                         {
-                            TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
-                            if (resolved != null && !resolved.IsValueType)
-                                returns[i] = resolved; // only reference returns are useful for chaining
+                            names[i] = method.GlobalKey;
+                            if (method.RawReturnType != null)
+                            {
+                                TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
+                                if (resolved != null && !resolved.IsValueType)
+                                    returns[i] = resolved; // only reference returns are useful for chaining
+                            }
                         }
                     }
                     else if (usage.Type == MetadataUsageType.MethodRef)
                     {
-                        names[i] = usage.AsGenericMethodRef()?.ToString();
+                        names[i] = usage.AsGenericMethodRef()?.ToString(); // generic instance impls are already index-specific
                     }
                 }
                 catch { }
