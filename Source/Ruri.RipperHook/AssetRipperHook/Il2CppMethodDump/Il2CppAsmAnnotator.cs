@@ -125,6 +125,24 @@ internal static class Il2CppAsmAnnotator
         return 0;
     }
 
+    /// <summary>
+    /// 该地址是否为 il2cpp 的「对象分配 / 异常抛出」运行时函数（object_new / raise_exception / …）。
+    /// 用于识别编译器生成的异常抛出小助手（<see cref="Il2CppHelperNamer"/>）——不臆造具体字段名，改为按
+    /// 权威名（KeyFunctionAddresses 字段名或 PE 导出名）里的语义子串判定，故对 il2cpp 版本差异稳健。
+    /// </summary>
+    internal static bool IsAllocOrRaiseFunction(ApplicationAnalysisContext app, ulong addr)
+    {
+        EnsureMaps(app);
+        string name = null;
+        if (_keyFunctions != null && _keyFunctions.TryGetValue(addr, out string k)) name = k;
+        else if (_exports != null && _exports.TryGetValue(addr, out string e)) name = e;
+        if (name == null) return false;
+        return name.Contains("object_new") || name.Contains("bject_new")
+            || name.Contains("raise") || name.Contains("Raise")
+            || name.Contains("exception") || name.Contains("Exception")
+            || name.Contains("throw") || name.Contains("Throw");
+    }
+
     private static string ReplaceToken(string line, Match m, IReadOnlyDictionary<ulong, string> overrides, IReadOnlyDictionary<ulong, DataConstantOperand> dataConstants)
     {
         string hex = m.Groups["a"].Success ? m.Groups["a"].Value : m.Groups["b"].Value;
@@ -206,8 +224,19 @@ internal static class Il2CppAsmAnnotator
             }
             return dataSymbol;
         }
-        // 代码目标：方法体内分支 → loc_，区域外无名运行时函数 → sub_。
-        return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
+        // 代码目标：方法体内分支 → loc_，区域外无名运行时函数 → sub_（能从字节识别的编译器助手给真名）。
+        return CodeLabel(addr);
+    }
+
+    /// <summary>
+    /// 代码地址 → 标签：方法体内部 → <c>loc_</c>；否则先试把无名运行时助手（编译器生成、不在 global-metadata 里，
+    /// 故无托管名）从其自身字节识别出真名（如异常抛出助手 <c>il2cpp_throw_XxxException</c>），识别不出才退回 <c>sub_</c>。
+    /// </summary>
+    private static string CodeLabel(ulong addr)
+    {
+        if (InMethodBody(addr)) return "loc_" + addr.ToString("X");
+        string helper = Il2CppHelperNamer.TryGetName(_app, addr);
+        return helper ?? "sub_" + addr.ToString("X");
     }
 
     private static bool InMethodBody(ulong addr)
@@ -254,9 +283,13 @@ internal static class Il2CppAsmAnnotator
     /// </summary>
     private static string ResolveDataAddress(ulong addr)
     {
+        // The PE image base itself (`lea reg,[image_base]` — module-base computation for RIP-relative addressing),
+        // not a data global; labeling it g_ was misleading.
+        if (_imageBase != 0 && addr == _imageBase)
+            return "image_base";
         AddressKind kind = ClassifyAddress(addr, out bool fileBacked);
         if (kind == AddressKind.Code)
-            return (InMethodBody(addr) ? "loc_" : "sub_") + addr.ToString("X");
+            return CodeLabel(addr);
         if (kind == AddressKind.ReadOnlyData && fileBacked)
         {
             string cString = TryReadCString(addr);
