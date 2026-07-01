@@ -155,9 +155,15 @@ internal sealed class Il2CppTypeModel
     public bool TryGetStaticField(TypeAnalysisContext type, int offset, out FieldAnalysisContext field)
         => GetOffsetMap(_staticFields, type, statics: true).TryGetValue(offset, out field);
 
+    // A generic instance (List<Foo>) has no Definition/fields of its own; its field layout is that of the generic type
+    // definition (List<T>), so unwrap to it. Same offsets regardless of the type arguments.
+    private static TypeAnalysisContext Unwrap(TypeAnalysisContext type)
+        => type is GenericInstanceTypeAnalysisContext generic ? generic.GenericType : type;
+
     private Dictionary<int, FieldAnalysisContext> GetOffsetMap(
         Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> cache, TypeAnalysisContext type, bool statics)
     {
+        type = Unwrap(type);
         if (cache.TryGetValue(type, out Dictionary<int, FieldAnalysisContext> map))
             return map;
 
@@ -169,13 +175,13 @@ internal sealed class Il2CppTypeModel
         }
         else
         {
-            // Instance layout is contiguous across the inheritance chain; walk derived -> base.
+            // Instance layout is contiguous across the inheritance chain; walk derived -> base (unwrapping generics).
             TypeAnalysisContext current = type;
             int guard = 0;
             while (current != null && guard++ < 64)
             {
                 AddFields(map, current, statics: false);
-                current = current.BaseType;
+                current = Unwrap(current.BaseType);
             }
         }
         cache[type] = map;
