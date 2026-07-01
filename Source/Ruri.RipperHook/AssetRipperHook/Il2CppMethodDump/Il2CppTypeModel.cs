@@ -31,7 +31,26 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
 
     private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
-    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type
+    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
+    private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)
+
+    // Return-value kind of a named vtable slot — lets a caller pick a contradiction test that can never fire on a
+    // correctly-named method. Void/Scalar leave nothing (void) or a non-pointer value (bool/int/float/enum) in rax, so
+    // dereferencing rax is impossible; Struct returns a hidden buffer pointer in rax (deref is legitimate); Pointer
+    // (IntPtr) is itself a pointer (deref legitimate); Ref is an object pointer (its slot 0 is the Il2CppClass*).
+    public const byte ReturnKindUnresolved = 0;
+    public const byte ReturnKindVoid = 1;
+    public const byte ReturnKindScalar = 2;
+    public const byte ReturnKindStruct = 3;
+    public const byte ReturnKindRef = 4;
+    public const byte ReturnKindPointer = 5;
+
+    private static readonly HashSet<string> _scalarPrimitives = new()
+    {
+        "System.Boolean", "System.Byte", "System.SByte", "System.Int16", "System.UInt16",
+        "System.Int32", "System.UInt32", "System.Int64", "System.UInt64", "System.Char",
+        "System.Single", "System.Double",
+    };
 
     /// <summary>offsetof(Il2CppClass, static_fields) for this binary, or -1 if it could not be discovered.</summary>
     public int StaticFieldsOffset { get; private set; } = -1;
@@ -375,6 +394,36 @@ internal sealed class Il2CppTypeModel
         return returnType != null;
     }
 
+    /// <summary>Return-value <c>ReturnKind*</c> of the virtual method dispatched by <c>[klass + byteOffset]</c>; <see cref="ReturnKindUnresolved"/> if unknown.</summary>
+    public byte GetVirtualReturnKind(TypeAnalysisContext type, int byteOffset)
+    {
+        if (VtableOffset < 0 || type?.Definition == null)
+            return ReturnKindUnresolved;
+        int slot = VtableSlotFromOffset(byteOffset);
+        if (slot < 0)
+            return ReturnKindUnresolved;
+        EnsureVtable(type);
+        byte[] kinds = _vtableReturnKinds[type];
+        return slot < kinds.Length ? kinds[slot] : ReturnKindUnresolved;
+    }
+
+    private static byte ClassifyReturn(TypeAnalysisContext t)
+    {
+        if (t == null)
+            return ReturnKindUnresolved;
+        string fullName = t.FullName;
+        if (fullName == "System.Void")
+            return ReturnKindVoid;
+        if (!t.IsValueType)
+            return ReturnKindRef;
+        if (fullName == "System.IntPtr" || fullName == "System.UIntPtr")
+            return ReturnKindPointer;
+        if (_scalarPrimitives.Contains(fullName))
+            return ReturnKindScalar;
+        try { if (t.BaseType?.FullName == "System.Enum") return ReturnKindScalar; } catch { } // enums are register-returned like their underlying primitive
+        return ReturnKindStruct;
+    }
+
     private string[] GetVtableNames(TypeAnalysisContext type)
     {
         EnsureVtable(type);
@@ -387,11 +436,13 @@ internal sealed class Il2CppTypeModel
             return;
         string[] names;
         TypeAnalysisContext[] returns;
+        byte[] kinds;
         try
         {
             MetadataUsage[] vtable = type.Definition.VTable;
             names = new string[vtable.Length];
             returns = new TypeAnalysisContext[vtable.Length];
+            kinds = new byte[vtable.Length];
             for (int i = 0; i < vtable.Length; i++)
             {
                 MetadataUsage usage = vtable[i];
@@ -414,6 +465,7 @@ internal sealed class Il2CppTypeModel
                             if (method.RawReturnType != null)
                             {
                                 TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
+                                kinds[i] = ClassifyReturn(resolved);
                                 if (resolved != null && !resolved.IsValueType)
                                     returns[i] = resolved; // only reference returns are useful for chaining
                             }
@@ -427,9 +479,10 @@ internal sealed class Il2CppTypeModel
                 catch { }
             }
         }
-        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); }
+        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); kinds = System.Array.Empty<byte>(); }
         _vtableNames[type] = names;
         _vtableReturns[type] = returns;
+        _vtableReturnKinds[type] = kinds;
     }
 
     /// <summary>
