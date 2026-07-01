@@ -272,6 +272,9 @@ internal static class Il2CppAsmAnnotator
         return "g_" + addr.ToString("X");
     }
 
+    /// <summary>供 X86 列表层的 icall 缓存惯用法识别读取签名字符串（复用同一 C 字符串读取逻辑）。</summary>
+    internal static string ReadCString(ulong virtualAddress) => TryReadCString(virtualAddress);
+
     /// <summary>
     /// 读取 <paramref name="virtualAddress"/> 处的一段 C 字符串（NUL 结尾、全可打印 ASCII、长度≥2、≤255）。
     /// 经文件偏移直读；映射不到文件字节 / 含不可打印字节 / 过短 → 返回 null（宁缺毋滥，绝不把随机字节当字符串）。
