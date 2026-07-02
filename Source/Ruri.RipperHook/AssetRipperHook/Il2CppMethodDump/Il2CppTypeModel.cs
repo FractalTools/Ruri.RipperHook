@@ -139,8 +139,14 @@ internal sealed class Il2CppTypeModel
 
     private int EstimateValueTypeSize(TypeAnalysisContext type, int depth)
     {
-        if (type == null || !type.IsValueType || type.Definition == null || depth > 6)
+        if (type == null || !type.IsValueType || depth > 6)
             return 8;
+        // A generic value-type instance (ValueTuple<…>, Nullable<…>, KeyValuePair<…>) has NO Definition and no own
+        // fields — the open GenericType's fields carry generic-parameter types (T1/T2) all reported at offset 0. Laying
+        // them out from the substituted argument sizes is the only way to size it; skipping this made every such struct
+        // look 8-byte, so a hidden-return buffer register was mis-seeded as `this` (retval.<field> shown as this.<field>).
+        if (type.Definition == null)
+            return type is GenericInstanceTypeAnalysisContext generic ? EstimateGenericValueTypeSize(generic, depth) : 8;
         int max = 0;
         foreach (FieldAnalysisContext field in type.Fields)
         {
@@ -155,6 +161,42 @@ internal sealed class Il2CppTypeModel
             if (end > max) max = end;
         }
         return max == 0 ? 1 : max;
+    }
+
+    /// <summary>
+    /// Size of a generic value-type instance, laid out from its concrete type arguments. The open definition's fields
+    /// all sit at offset 0 with parameter types (VAR), so we substitute each parameter with the matching argument and
+    /// pack the fields sequentially with natural alignment (min(size,8)). The result need not be byte-exact — only the
+    /// MSVC return classification (size ∈ {1,2,4,8} ⇒ register, else hidden pointer) must be right, and over-aligning a
+    /// nested struct only enlarges it, never flipping a genuine ≤8 case (Nullable&lt;int&gt; still packs to 8 ⇒ register).
+    /// </summary>
+    private int EstimateGenericValueTypeSize(GenericInstanceTypeAnalysisContext generic, int depth)
+    {
+        TypeAnalysisContext open = generic.GenericType;
+        if (open?.Definition == null || depth > 6)
+            return 8;
+        Dictionary<string, TypeAnalysisContext> subst = new();
+        var parameters = open.GenericParameters;
+        var arguments = generic.GenericArguments;
+        for (int i = 0; i < parameters.Count && i < arguments.Count; i++)
+            if (parameters[i]?.Name != null)
+                subst[parameters[i].Name] = arguments[i];
+        int offset = 0, maxAlign = 1;
+        foreach (FieldAnalysisContext field in open.Fields)
+        {
+            if (field.IsStatic)
+                continue;
+            TypeAnalysisContext fieldType = field.FieldType;
+            if (fieldType != null && fieldType.Type is Il2CppTypeEnum.IL2CPP_TYPE_VAR or Il2CppTypeEnum.IL2CPP_TYPE_MVAR
+                && fieldType.Name != null && subst.TryGetValue(fieldType.Name, out TypeAnalysisContext concrete))
+                fieldType = concrete;
+            int size = PrimitiveSize(fieldType, depth + 1);
+            int align = size < 1 ? 1 : System.Math.Min(size, 8);
+            offset = (offset + align - 1) & ~(align - 1); // pad to this field's alignment
+            offset += size;
+            if (align > maxAlign) maxAlign = align;
+        }
+        return offset == 0 ? 1 : (offset + maxAlign - 1) & ~(maxAlign - 1);
     }
 
     private int PrimitiveSize(TypeAnalysisContext type, int depth)
