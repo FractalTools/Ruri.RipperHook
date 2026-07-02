@@ -18,6 +18,9 @@ internal static class Il2CppHelperNamer
 {
     private static ApplicationAnalysisContext _app;
     private static readonly Dictionary<ulong, string> _cache = new();
+    private static readonly Dictionary<ulong, bool> _reachesRaise = new();
+    private static ulong _raiseA;   // il2cpp_vm_exception_raise
+    private static ulong _raiseB;   // il2cpp_raise_exception
 
     public static string TryGetName(ApplicationAnalysisContext app, ulong address)
     {
@@ -25,6 +28,9 @@ internal static class Il2CppHelperNamer
         {
             _app = app;
             _cache.Clear();
+            _reachesRaise.Clear();
+            _raiseA = Il2CppAsmAnnotator.KeyFunctionAddress(app, "exception_raise");
+            _raiseB = Il2CppAsmAnnotator.KeyFunctionAddress(app, "raise_exception");
         }
         if (_cache.TryGetValue(address, out string cached))
             return cached;
@@ -52,6 +58,10 @@ internal static class Il2CppHelperNamer
             string typeName = null;   // bare "<Name>Exception"/"<Name>Error" identifier the helper looks its class up by
             bool throwsLike = false;  // calls il2cpp object_new / raise, or ends in int3 (noreturn)
             bool tailCalls = false;   // terminal jmp leaving this body -> delegates the throw to a shared constructor
+            bool sawInt3 = false;     // body reaches an int3 (a never-returns terminator)
+            bool sawCondBranch = false; // a conditional branch => the body has a non-raising fall-through path (a get-or-throw, not a raise intrinsic)
+            bool reachesRaiseDirect = false; // this body itself calls il2cpp_(vm_)exception_raise
+            List<ulong> callTargets = null;  // near call/jmp targets, for transitive raise reachability
             int guard = 0;
             while (decoder.IP < end && guard++ < 40)
             {
@@ -68,27 +78,110 @@ internal static class Il2CppHelperNamer
                     if (IsExceptionTypeName(s))
                         typeName = s;
                 }
+                if ((insn.Mnemonic == Mnemonic.Call || insn.Mnemonic == Mnemonic.Jmp)
+                    && insn.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32)
+                {
+                    ulong t = insn.NearBranchTarget;
+                    if (IsRaise(t))
+                        reachesRaiseDirect = true;
+                    else if (t < address || t >= end)
+                        (callTargets ??= new()).Add(t);
+                }
                 if (insn.Mnemonic == Mnemonic.Call && insn.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32
                     && Il2CppAsmAnnotator.IsAllocOrRaiseFunction(app, insn.NearBranchTarget))
                     throwsLike = true;
                 if (insn.Mnemonic == Mnemonic.Int3)
                     throwsLike = true;
+                if (insn.FlowControl == FlowControl.ConditionalBranch)
+                    sawCondBranch = true; // keep scanning (typeName/raise may still appear), but this disqualifies noReturn
                 if (insn.Mnemonic == Mnemonic.Jmp && insn.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32)
                 {
                     ulong jt = insn.NearBranchTarget;
                     if (jt < address || jt >= end) { tailCalls = true; break; } // leaves the body
                 }
-                if (insn.Mnemonic is Mnemonic.Ret or Mnemonic.Int3)
+                if (insn.Mnemonic == Mnemonic.Ret)
                     break;
+                if (insn.Mnemonic == Mnemonic.Int3)
+                {
+                    sawInt3 = true;
+                    break;
+                }
             }
 
             // Name only when the type is unmistakably an exception AND the body actually disposes of it (allocates/raises
             // inline, or tail-calls the shared constructor). Both together make the label grounded, never guessed.
             if (typeName != null && (throwsLike || tailCalls))
                 return "il2cpp_throw_" + typeName;
+
+            // Codegen raise/throw intrinsic (no embedded type to name): a STRAIGHT-LINE noreturn helper (reaches int3 with
+            // no conditional branch — so no non-raising fall-through, unlike a get-or-throw) that reaches the il2cpp
+            // exception-raise machinery, directly or via the construct-and-raise chain it trampolines into. Grounded (it
+            // demonstrably raises and never returns) without fabricating which exception type.
+            if (sawInt3 && !sawCondBranch && (reachesRaiseDirect || AnyReachesRaise(binary, callTargets)))
+                return "il2cpp_codegen_raise";
         }
         catch { }
         return null;
+    }
+
+    private static bool IsRaise(ulong target)
+        => (_raiseA != 0 && target == _raiseA) || (_raiseB != 0 && target == _raiseB);
+
+    private static bool AnyReachesRaise(Il2CppBinary binary, List<ulong> targets)
+    {
+        if (targets == null)
+            return false;
+        foreach (ulong t in targets)
+            if (ReachesRaise(binary, t, 4))
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Does the code at <paramref name="addr"/> transitively reach <c>il2cpp_(vm_)exception_raise</c> within
+    /// <paramref name="depth"/> call hops (following near call/jmp targets)? Bounded, memoized, cycle-guarded — used only
+    /// to confirm a noreturn helper is a raise intrinsic. Reachability alone is not enough to name (a normal method may
+    /// have a throw path); the caller additionally requires the top-level helper to be noreturn.
+    /// </summary>
+    private static bool ReachesRaise(Il2CppBinary binary, ulong addr, int depth)
+    {
+        if (depth <= 0)
+            return false;
+        if (_reachesRaise.TryGetValue(addr, out bool cached))
+            return cached;
+        _reachesRaise[addr] = false; // cycle guard (assume no until proven)
+        bool result = false;
+        try
+        {
+            long raw = binary.MapVirtualAddressToRaw(addr, false);
+            if (raw >= 0)
+            {
+                byte[] code = binary.ReadByteArrayAtRawAddress(raw, 96);
+                if (code != null && code.Length > 0)
+                {
+                    Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(code), addr);
+                    ulong end = addr + (ulong)code.Length;
+                    int guard = 0;
+                    while (decoder.IP < end && guard++ < 40)
+                    {
+                        decoder.Decode(out Instruction insn);
+                        if (insn.IsInvalid)
+                            break;
+                        if ((insn.Mnemonic == Mnemonic.Call || insn.Mnemonic == Mnemonic.Jmp)
+                            && insn.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32)
+                        {
+                            ulong t = insn.NearBranchTarget;
+                            if (IsRaise(t) || ReachesRaise(binary, t, depth - 1)) { result = true; break; }
+                        }
+                        if (insn.Mnemonic is Mnemonic.Ret or Mnemonic.Int3)
+                            break;
+                    }
+                }
+            }
+        }
+        catch { }
+        _reachesRaise[addr] = result;
+        return result;
     }
 
     /// <summary>
