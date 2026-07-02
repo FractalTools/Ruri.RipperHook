@@ -471,6 +471,12 @@ internal sealed class Il2CppRegisterFlow
             // mislabeled Vector2 get_mouseScrollDelta). A struct's rax is a legit pointer, so this is its only rax signal.
             if (raxLive && eaxAsIntContradicts && ReadsEax(u))
                 return true;
+            // A VOID method has no result, so ANY read of the 8-bit al result betrays a real value-returning method
+            // mislabeled as void — e.g. PeekEntry (returns EntryType) shown as void PrepareNewSerializationSession with
+            // result `cmp al,7`, or GetMouseButtonDown (bool) shown as void set_compositionCursorPos with `or al,cl`.
+            // Only for kind==Void: a genuine bool/int return legitimately reads al/eax, so this never flags those.
+            if (raxLive && kind == Il2CppTypeModel.ReturnKindVoid && ReadsAl(u))
+                return true;
 
             if (u.FlowControl is FlowControl.Call or FlowControl.IndirectCall or FlowControl.IndirectBranch)
                 break; // a call clobbers rax + xmm0; if the result wasn't consumed by now, it isn't observably here
@@ -493,6 +499,17 @@ internal sealed class Il2CppRegisterFlow
     }
 
     private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
+
+    /// <summary>al used as an 8-bit source (`cmp al,x` / `or al,x` / `and al,x` / `test _,al` / `movzx r,al` …) — the 8-bit result consumed. Pure writes to al and the xor/sub-zero idiom are not reads. Used only for void slots, where any al use is impossible.</summary>
+    private static bool ReadsAl(in Instruction u)
+    {
+        if ((u.Mnemonic is Mnemonic.Xor or Mnemonic.Sub) && u.Op0Register == Register.AL && u.Op1Register == Register.AL)
+            return false; // `xor al,al` = zero (discards, not reads)
+        if (u.Op1Register == Register.AL || u.Op2Register == Register.AL)
+            return true; // a source operand (`or al,cl` reads cl+al; `movzx ebx,al` reads al; `test bl,al`)
+        return u.Op0Register == Register.AL // read-modify (`cmp al,x` / `or al,x` / `and al,x`) reads al; pure writes do not
+            && u.Mnemonic is not (Mnemonic.Mov or Mnemonic.Movzx or Mnemonic.Movsx or Mnemonic.Lea);
+    }
 
     /// <summary>eax used as a 32-bit value operand (`cmp edi,eax` / `test eax,eax` / `mov reg,eax` / `add reg,eax` …) — the result consumed as a bare int. Pure writes to eax and the xor/sub-zero idioms are not reads.</summary>
     private static bool ReadsEax(in Instruction u)
