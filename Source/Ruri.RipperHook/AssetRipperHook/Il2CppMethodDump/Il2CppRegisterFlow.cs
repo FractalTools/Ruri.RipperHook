@@ -739,6 +739,22 @@ internal sealed class Il2CppRegisterFlow
             }
         }
 
+        // Call-receiver type mismatch (a Ref-vs-Ref vtable-name proof the return-kind gate can't see): a vtable-produced
+        // reference (tagged with its origin slot) passed as `this` (rcx) into a managed INSTANCE call whose declaring
+        // type is unrelated to the reference's named-return type. The returned object cannot BE that receiver, so the
+        // vtable slot is mislabeled — e.g. IPEndPoint slot 0x180 shown as ToString() (String) whose result is used as the
+        // `this` of System.Net.SocketAddress::get_Item: the slot is really IPEndPoint.Serialize() (returns SocketAddress).
+        // Single-method (non-generic-shared) targets only, so the declaring type is unambiguous.
+        if (insn.FlowControl == FlowControl.Call
+            && insn.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64
+            && state[1].Kind == TrackedKind.ManagedRef && state[1].OriginTypeName != null && state[1].Type != null
+            && _app.MethodsByAddress.TryGetValue(insn.NearBranchTarget, out List<MethodAnalysisContext> receiverMethods)
+            && receiverMethods.Count == 1 && !receiverMethods[0].IsStatic && receiverMethods[0].DeclaringType != null
+            && AreUnrelatedRefClasses(state[1].Type, receiverMethods[0].DeclaringType))
+        {
+            _model.CondemnedVtableSlots.Add((state[1].OriginTypeName, state[1].OriginSlot));
+        }
+
         ushort mask = _clobber[index];
         for (int r = 0; r < 16; r++) // only the 16 GP registers are clobbered; frame slots (16+) are memory, preserved across calls
         {
