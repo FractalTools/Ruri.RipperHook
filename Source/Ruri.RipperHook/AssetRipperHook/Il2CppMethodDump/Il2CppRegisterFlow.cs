@@ -269,7 +269,11 @@ internal sealed class Il2CppRegisterFlow
                     break;
                 }
             }
-            if (insn.FlowControl == FlowControl.Call)
+            // A call clobbers the ABI-volatile registers. This MUST include INDIRECT calls (`call reg` / `call [klass+disp]`
+            // virtual dispatch) — omitting them let a stale reference in rax survive the call and mislabel the next deref
+            // (e.g. a BaseInput left in rax by get_input() read as UnityEngine.Object.m_CachedPtr after the vtable call).
+            // A genuine reference result is re-established afterwards from the callee's return type (CallReturn / directVtableRef).
+            if (insn.FlowControl is FlowControl.Call or FlowControl.IndirectCall)
                 mask |= volatileMask;
             _clobber[i] = mask;
         }
@@ -727,6 +731,7 @@ internal sealed class Il2CppRegisterFlow
         {
             int klassBase = RegisterFlowUtil.GpIndex(insn.MemoryBase);
             if (klassBase >= 0 && state[klassBase].Kind == TrackedKind.Klass && state[klassBase].Type != null
+                && !IsCondemnedSlot(state[klassBase].Type, (int)insn.MemoryDisplacement64)
                 && _model.TryGetVirtualReturnType(state[klassBase].Type, (int)insn.MemoryDisplacement64, out TypeAnalysisContext dvret))
             {
                 hasDirectVtableRef = true;
@@ -764,7 +769,43 @@ internal sealed class Il2CppRegisterFlow
         TypeAnalysisContext returnType = methods[0].ReturnType;
         if (returnType == null || returnType.IsValueType)
             return TrackedValue.Unknown;
+        // One native address can be shared by MANY methods — il2cpp folds identical code, most often the
+        // reference-shared instantiations of one generic method (e.g. Dictionary<K,V>.get_Item, whose closed forms
+        // all compile to a single body). methods[0] is an ARBITRARY representative, so its return type may belong to
+        // an unrelated instantiation; trusting it poisons every downstream field access on the result — a
+        // TMP_Character read gets annotated with Mirror.NetworkBehaviour's field layout (?.syncVarDirtyBits), even a
+        // float store into a purported IntPtr. Only assert the return type when every method at the address agrees on
+        // it; otherwise the concrete type is unrecoverable from the address alone, so stay Unknown (a missing
+        // annotation, never a fabricated one — 错标比漏标更糟).
+        for (int i = 1; i < methods.Count; i++)
+            if (!SameType(methods[i].ReturnType, returnType))
+                return TrackedValue.Unknown;
         return TrackedValue.Ref(returnType, null);
+    }
+
+    /// <summary>
+    /// Whether the vtable slot at <c>[klass + disp]</c> has been proven mis-mapped (its metadata name/return type disagrees
+    /// with the runtime dispatch), by type-slot or by inherited-method key. A condemned slot's return type is unreliable, so
+    /// the flow must not tag a result register with it — same predicate the arrow gate uses to demote the call to class[].
+    /// </summary>
+    private bool IsCondemnedSlot(TypeAnalysisContext klassType, int disp)
+    {
+        if (_model.CondemnedVtableSlots.Contains((klassType.Name, SlotKey(disp))))
+            return true;
+        return _model.TryGetVirtualMethodName(klassType, disp, out string virtualMethod)
+            && _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp)));
+    }
+
+    /// <summary>Semantic type identity: interned <c>Definition</c> when either has one, else <c>FullName</c> (the only stable key for wrapped array/generic/pointer types, which are re-created per resolution).</summary>
+    private static bool SameType(TypeAnalysisContext a, TypeAnalysisContext b)
+    {
+        if (ReferenceEquals(a, b))
+            return true;
+        if (a == null || b == null)
+            return false;
+        if (a.Definition != null || b.Definition != null)
+            return ReferenceEquals(a.Definition, b.Definition);
+        return a.FullName == b.FullName;
     }
 
     private TrackedValue EvalMemory(in Instruction insn, TrackedValue[] state, bool isLea)
@@ -809,7 +850,10 @@ internal sealed class Il2CppRegisterFlow
             case TrackedKind.TypeInfo when _staticFieldsOffset >= 0 && disp == _staticFieldsOffset:
                 return TrackedValue.StaticBaseOf(baseValue.Type);
             // Loading a virtual function pointer from the vtable: remember its (reference) return type + originating slot for the following `call`.
-            case TrackedKind.Klass when !isLea && _model.TryGetVirtualReturnType(baseValue.Type, disp, out TypeAnalysisContext vret):
+            // Skip a CONDEMNED slot — its metadata name/return type is proven mis-mapped, so propagating that return type would
+            // poison the result register (e.g. a BaseInput getter slot condemned to class[0x310], whose stale ref return then
+            // mislabels the callee's real Vector result as UnityEngine.Object.m_CachedPtr).
+            case TrackedKind.Klass when !isLea && !IsCondemnedSlot(baseValue.Type, disp) && _model.TryGetVirtualReturnType(baseValue.Type, disp, out TypeAnalysisContext vret):
                 return TrackedValue.Callee(vret, baseValue.Type.Name, SlotKey(disp));
             default:
                 return TrackedValue.Unknown;
