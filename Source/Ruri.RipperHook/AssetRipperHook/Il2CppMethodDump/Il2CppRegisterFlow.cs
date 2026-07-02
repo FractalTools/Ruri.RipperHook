@@ -504,6 +504,27 @@ internal sealed class Il2CppRegisterFlow
     /// <summary>A GlobalKey naming an <c>Equals(...)</c> method (any declaring type) — always takes at least one argument, so a 0-arg dispatch to it is impossible.</summary>
     private static bool IsEqualsMethodName(string name) => name != null && name.Contains(".Equals(");
 
+    /// <summary>
+    /// For a tail-jmp forwarder (`_method` whose whole body is a tail dispatch through a vtable slot), whether the slot
+    /// resolved to a method whose signature disagrees with <see cref="_method"/>'s — a pure forwarder forwards its own
+    /// args to a same-signature method, so a parameter-count or return-kind difference means the slot is mis-mapped.
+    /// Only param count and return KIND are compared (covariant overrides keep the same kind; explicit-interface
+    /// forwarders keep the same arity — neither is flagged), and a mismatch only ever demotes to the honest class[].
+    /// </summary>
+    private bool IsForwarderSlotMismatch(TypeAnalysisContext receiverType, int disp)
+    {
+        if (_method == null)
+            return false;
+        int slotParams = _model.GetVirtualParamCount(receiverType, disp);
+        int enclosingParams = _method.Parameters?.Count ?? -1;
+        if (slotParams >= 0 && enclosingParams >= 0 && slotParams != enclosingParams)
+            return true;
+        byte slotKind = _model.GetVirtualReturnKind(receiverType, disp);
+        byte enclosingKind = _method.ReturnType != null ? _model.ClassifyReturnKind(_method.ReturnType) : Il2CppTypeModel.ReturnKindUnresolved;
+        return slotKind != Il2CppTypeModel.ReturnKindUnresolved && enclosingKind != Il2CppTypeModel.ReturnKindUnresolved
+            && slotKind != enclosingKind;
+    }
+
     /// <summary>A GlobalKey naming one of the four System.Object base virtuals (Equals/GetHashCode/ToString/Finalize) — the inherited names sitting at vtable slots 0-3.</summary>
     private static bool IsObjectBaseMethodName(string name)
     {
@@ -843,6 +864,17 @@ internal sealed class Il2CppRegisterFlow
                 || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register && insn.Op0Register == Register.RDX
                     && IsEqualsMethodName(virtualMethod)))
             {
+                _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
+                _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));
+                access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
+            }
+            else if (insn.FlowControl == FlowControl.IndirectBranch && IsForwarderSlotMismatch(baseValue.Type, disp))
+            {
+                // Pure pass-through wrapper (`public override X Foo(...) => inner.Foo(...)`, compiled as a tail-jmp through
+                // the inner object's vtable): the forwarded method has the SAME signature as this enclosing method, so if
+                // the slot resolved to a method whose parameter count or return kind differs from _method's, the slot is
+                // mis-mapped (metadata-vs-runtime divergence on a System.Reflection-style vtable, e.g. FieldInfo.SetValue
+                // /5 params shown as get_IsPrivate/0). Condemn app-wide + by method (propagates to non-wrapper consumers).
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
                 _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
