@@ -42,23 +42,26 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
     private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
     private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)
+    private readonly Dictionary<TypeAnalysisContext, sbyte[]> _vtableParamCounts = new(); // type → per-slot declared parameter count (-1 = unknown)
 
     // Return-value kind of a named vtable slot — lets a caller pick a contradiction test that can never fire on a
-    // correctly-named method. Void/Scalar leave nothing (void) or a non-pointer value (bool/int/float/enum) in rax, so
-    // dereferencing rax is impossible; Struct returns a hidden buffer pointer in rax (deref is legitimate); Pointer
-    // (IntPtr) is itself a pointer (deref legitimate); Ref is an object pointer (its slot 0 is the Il2CppClass*).
+    // correctly-named method, keyed to WHERE the result lives per the x64 ABI. Void: nothing. ScalarInt (bool/int/
+    // enum/char): integer in rax — not a pointer, not in xmm0. ScalarFloat (float/double): in xmm0 — rax is garbage.
+    // Ref: object pointer in rax (its slot 0 is the Il2CppClass*; never a float, never in xmm0). Struct: hidden buffer
+    // pointer in rax (deref legitimate). Pointer (IntPtr): itself a pointer (deref legitimate).
     public const byte ReturnKindUnresolved = 0;
     public const byte ReturnKindVoid = 1;
-    public const byte ReturnKindScalar = 2;
+    public const byte ReturnKindScalarInt = 2;
     public const byte ReturnKindStruct = 3;
     public const byte ReturnKindRef = 4;
     public const byte ReturnKindPointer = 5;
+    public const byte ReturnKindScalarFloat = 6;
+    public const byte ReturnKindBool = 7; // split from ScalarInt: a bool result is idiomatically `test al,al`-ed, so that test must not incriminate a genuine bool method
 
-    private static readonly HashSet<string> _scalarPrimitives = new()
+    private static readonly HashSet<string> _scalarIntPrimitives = new()
     {
-        "System.Boolean", "System.Byte", "System.SByte", "System.Int16", "System.UInt16",
+        "System.Byte", "System.SByte", "System.Int16", "System.UInt16",
         "System.Int32", "System.UInt32", "System.Int64", "System.UInt64", "System.Char",
-        "System.Single", "System.Double",
     };
 
     /// <summary>offsetof(Il2CppClass, static_fields) for this binary, or -1 if it could not be discovered.</summary>
@@ -427,9 +430,13 @@ internal sealed class Il2CppTypeModel
             return ReturnKindRef;
         if (fullName == "System.IntPtr" || fullName == "System.UIntPtr")
             return ReturnKindPointer;
-        if (_scalarPrimitives.Contains(fullName))
-            return ReturnKindScalar;
-        try { if (t.BaseType?.FullName == "System.Enum") return ReturnKindScalar; } catch { } // enums are register-returned like their underlying primitive
+        if (fullName == "System.Boolean")
+            return ReturnKindBool;
+        if (fullName == "System.Single" || fullName == "System.Double")
+            return ReturnKindScalarFloat; // returned in xmm0
+        if (_scalarIntPrimitives.Contains(fullName))
+            return ReturnKindScalarInt;
+        try { if (t.BaseType?.FullName == "System.Enum") return ReturnKindScalarInt; } catch { } // enums are integer-returned like their underlying primitive
         return ReturnKindStruct;
     }
 
@@ -446,12 +453,15 @@ internal sealed class Il2CppTypeModel
         string[] names;
         TypeAnalysisContext[] returns;
         byte[] kinds;
+        sbyte[] paramCounts;
         try
         {
             MetadataUsage[] vtable = type.Definition.VTable;
             names = new string[vtable.Length];
             returns = new TypeAnalysisContext[vtable.Length];
             kinds = new byte[vtable.Length];
+            paramCounts = new sbyte[vtable.Length];
+            System.Array.Fill(paramCounts, (sbyte)-1);
             for (int i = 0; i < vtable.Length; i++)
             {
                 MetadataUsage usage = vtable[i];
@@ -471,6 +481,7 @@ internal sealed class Il2CppTypeModel
                         if (method != null && method.slot == i)
                         {
                             names[i] = method.GlobalKey;
+                            paramCounts[i] = method.parameterCount <= sbyte.MaxValue ? (sbyte)method.parameterCount : (sbyte)-1;
                             if (method.RawReturnType != null)
                             {
                                 TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
@@ -488,10 +499,24 @@ internal sealed class Il2CppTypeModel
                 catch { }
             }
         }
-        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); kinds = System.Array.Empty<byte>(); }
+        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); kinds = System.Array.Empty<byte>(); paramCounts = System.Array.Empty<sbyte>(); }
         _vtableNames[type] = names;
         _vtableReturns[type] = returns;
         _vtableReturnKinds[type] = kinds;
+        _vtableParamCounts[type] = paramCounts;
+    }
+
+    /// <summary>Declared parameter count of the virtual method named at <c>[klass + byteOffset]</c>, or -1 if unknown.</summary>
+    public int GetVirtualParamCount(TypeAnalysisContext type, int byteOffset)
+    {
+        if (VtableOffset < 0 || type?.Definition == null)
+            return -1;
+        int slot = VtableSlotFromOffset(byteOffset);
+        if (slot < 0)
+            return -1;
+        EnsureVtable(type);
+        sbyte[] counts = _vtableParamCounts[type];
+        return slot < counts.Length ? counts[slot] : -1;
     }
 
     /// <summary>

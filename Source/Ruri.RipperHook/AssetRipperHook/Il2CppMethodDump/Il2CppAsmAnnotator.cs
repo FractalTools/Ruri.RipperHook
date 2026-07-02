@@ -191,7 +191,7 @@ internal static class Il2CppAsmAnnotator
         if (overrides != null && overrides.TryGetValue(addr, out string ov))
             return ov;
         if (_app.MethodsByAddress.TryGetValue(addr, out List<MethodAnalysisContext> methods) && methods.Count > 0)
-            return methods[0].FullName;
+            return MethodTargetName(methods);
         if (_exports.TryGetValue(addr, out string export)) // PE 导出表：权威符号
             return export;
         if (_keyFunctions.TryGetValue(addr, out string keyFunc))
@@ -252,6 +252,41 @@ internal static class Il2CppAsmAnnotator
         }
         // 严格落在相邻两个方法起点之间 ⇒ 在某方法体内部（起点本身已被 MethodsByAddress 命中）。
         return best >= 0 && best + 1 < starts.Length && addr > starts[best] && addr < starts[best + 1];
+    }
+
+    /// <summary>
+    /// Display name for a call/pointer target. When one native address is shared by MULTIPLE methods (il2cpp folds
+    /// identical code — most often different closed instantiations of one generic method), the specific type arguments
+    /// cannot be recovered from the address alone, so printing one instantiation's args (an arbitrary <c>[0]</c>) leaks
+    /// an unrelated closed type — e.g. <c>List`1&lt;NewTeamRelationship&gt;::Add</c> inside code that uses
+    /// <c>List&lt;CableVertex&gt;</c>. In that case strip the generic arguments, leaving the honest open name
+    /// (<c>List`1::Add</c>). A single-method address keeps its full closed name.
+    /// </summary>
+    private static string MethodTargetName(List<MethodAnalysisContext> methods)
+    {
+        if (methods.Count == 1)
+            return methods[0].FullName;
+        string name = methods[0].FullName;
+        for (int i = 1; i < methods.Count; i++)
+            if (methods[i].FullName != name)
+                return StripGenericArguments(name); // instantiations disagree on args -> don't assert one
+        return name; // identical names -> genuine fold, unambiguous
+    }
+
+    /// <summary>Removes balanced <c>&lt;…&gt;</c> generic-argument groups (keeping the <c>`N</c> arity marker), turning a closed instantiation name into its open form.</summary>
+    private static string StripGenericArguments(string fullName)
+    {
+        if (fullName.IndexOf('<') < 0)
+            return fullName;
+        StringBuilder sb = new(fullName.Length);
+        int depth = 0;
+        foreach (char c in fullName)
+        {
+            if (c == '<') depth++;
+            else if (c == '>') { if (depth > 0) depth--; }
+            else if (depth == 0) sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private static string ResolveGlobal(ulong addr)
@@ -399,7 +434,7 @@ internal static class Il2CppAsmAnnotator
             return null;
 
         if (_app.MethodsByAddress.TryGetValue(target, out List<MethodAnalysisContext> targetMethods) && targetMethods.Count > 0)
-            return "->" + targetMethods[0].FullName;
+            return "->" + MethodTargetName(targetMethods);
         if (_exports.TryGetValue(target, out string targetExport))
             return "->" + targetExport;
         if (_keyFunctions.TryGetValue(target, out string targetKeyFunc))
