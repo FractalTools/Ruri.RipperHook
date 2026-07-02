@@ -138,9 +138,26 @@ namespace Ruri.Hook
 
             lock (LifecycleSyncRoot)
             {
-                HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
                 List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
                 HashSet<string> availableHookIds = new(availableHooks.Select(static hook => BuildHookId(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
+
+                // Self-heal the persisted config: drop any enabled-hook id that has no
+                // implementation in this build (a hook that was renamed or deleted, e.g. an
+                // export-mode hook folded into native/GUI code). Without this a ghost id
+                // survives every config round-trip, spams "no matching implementation" on
+                // every launch, and — worse — poisons the GUI's temporary-hook restore path:
+                // a filtered export captures the pre-export config, layers feature hooks on
+                // top, then restores the captured config afterwards; a ghost id in that
+                // captured set can never re-enable, so the restore looks like it silently
+                // tore every hook down. Pruning here (the single choke point every host and
+                // every reconfiguration flows through) keeps the id set honest everywhere.
+                foreach (string ghostHookId in config.EnabledHooks.Where(id => !availableHookIds.Contains(id)).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
+                {
+                    config.EnabledHooks.Remove(ghostHookId);
+                    Console.WriteLine($"[RuriHook] Dropping unknown hook '{ghostHookId}' from config: no matching hook implementation was found.");
+                }
+
+                HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
 
                 foreach (string hookId in ActiveHookIds.Except(desiredHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
@@ -154,11 +171,6 @@ namespace Ruri.Hook
                     {
                         ApplyHookCore(hookId, type);
                     }
-                }
-
-                foreach (string missingHookId in desiredHookIds.Except(availableHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine($"[RuriHook] Failed to enable hook {missingHookId}: no matching hook implementation was found.");
                 }
             }
         }
