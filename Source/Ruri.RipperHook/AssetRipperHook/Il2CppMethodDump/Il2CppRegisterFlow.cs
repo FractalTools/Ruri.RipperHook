@@ -416,9 +416,42 @@ internal sealed class Il2CppRegisterFlow
                     && u.MemoryDisplacement64 == 0)
                     return true;
             }
-            // rax redefined/clobbered (incl. any further call) before being consumed — no contradiction.
+            // rax redefined/clobbered (incl. any further call) — stop this scan, but still try the `this`-of-call scan
+            // below (it survives the clobber once rax has been moved into rcx).
             if ((_clobber[j] & (1 << 0)) != 0)
-                return false;
+                break;
+        }
+        // Void/scalar result passed as the `this` of a managed instance call (`mov rcx,rax; …; call Instance.Method`) —
+        // a `this` must be a valid object reference, which neither void (nothing) nor a scalar value can be. This survives
+        // rax being clobbered once it has been moved into rcx, so it is a separate forward scan.
+        return voidOrScalar && RaxBecomesThisOfManagedInstanceCall(callIdx);
+    }
+
+    private bool RaxBecomesThisOfManagedInstanceCall(int callIdx)
+    {
+        // Generous window: as long as rax is never clobbered before it reaches rcx (checked below), it is still the
+        // dispatch result no matter the distance — inlined bounds/null checks can separate the call from the `mov rcx,rax`.
+        int n = _instructions.Count;
+        bool inRcx = false;
+        for (int j = callIdx + 1; j < n && j <= callIdx + 20; j++)
+        {
+            Instruction u = _instructions[j];
+            if (!inRcx)
+            {
+                if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Register && u.Op0Register == Register.RCX
+                    && u.Op1Kind == OpKind.Register && u.Op1Register == Register.RAX)
+                { inRcx = true; continue; }
+                if ((_clobber[j] & (1 << 0)) != 0) return false; // rax clobbered before it reaches rcx
+            }
+            else
+            {
+                // rcx now holds the result; a managed *instance* call consumes it as `this` (rcx must be a reference).
+                if (u.FlowControl == FlowControl.Call && u.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32
+                    && _app.MethodsByAddress.TryGetValue(u.NearBranchTarget, out List<MethodAnalysisContext> callee)
+                    && callee.Count > 0 && !callee[0].IsStatic)
+                    return true;
+                if ((_clobber[j] & (1 << 1)) != 0) return false; // rcx reclobbered before the call
+            }
         }
         return false;
     }

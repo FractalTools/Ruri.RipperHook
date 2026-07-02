@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using LibCpp2IL;
+using LibCpp2IL.Metadata;
 using Cpp2IL.Core.Model.Contexts;
 
 namespace Ruri.RipperHook.AR;
@@ -264,10 +265,33 @@ internal static class Il2CppAsmAnnotator
         try
         {
             MetadataUsage usage = LibCpp2IlMain.GetAnyGlobalByAddress(addr);
-            if (usage?.Value != null)
+            if (usage != null)
             {
-                string value = usage.Value.ToString();
-                return usage.Type.ToString().Contains("Type") ? value + "_TypeInfo" : value;
+                // Method/field usages must be formatted to their clean symbol — the raw Value.ToString() of an
+                // Il2CppMethodDefinition/FieldDefinition dumps the whole internal struct
+                // (`Il2CppMethodDefinition[Name='…', DeclaringType=Il2CppTypeDefinition[…]]`), inconsistent with the
+                // rest of the listing. Type/TypeInfo already stringify cleanly (`Namespace.Type`).
+                switch (usage.Type)
+                {
+                    case MetadataUsageType.MethodDef:
+                        string methodKey = usage.AsMethod()?.GlobalKey;
+                        if (methodKey != null) return methodKey;
+                        break;
+                    case MetadataUsageType.MethodRef:
+                        string genericKey = usage.AsGenericMethodRef()?.ToString();
+                        if (genericKey != null) return genericKey;
+                        break;
+                    case MetadataUsageType.FieldInfo:
+                        Il2CppFieldDefinition field = usage.AsField();
+                        if (field?.DeclaringType != null && field.Name != null)
+                            return field.DeclaringType.Name + "::" + field.Name;
+                        break;
+                }
+                if (usage.Value != null)
+                {
+                    string value = usage.Value.ToString();
+                    return usage.Type.ToString().Contains("Type") ? value + "_TypeInfo" : value;
+                }
             }
         }
         catch { }
