@@ -477,6 +477,9 @@ internal sealed class Il2CppRegisterFlow
 
     private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
 
+    /// <summary>A GlobalKey naming an <c>Equals(...)</c> method (any declaring type) — always takes at least one argument, so a 0-arg dispatch to it is impossible.</summary>
+    private static bool IsEqualsMethodName(string name) => name != null && name.Contains(".Equals(");
+
     /// <summary>A GlobalKey naming one of the four System.Object base virtuals (Equals/GetHashCode/ToString/Finalize) — the inherited names sitting at vtable slots 0-3.</summary>
     private static bool IsObjectBaseMethodName(string name)
     {
@@ -807,7 +810,13 @@ internal sealed class Il2CppRegisterFlow
                 || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register
                     && (insn.Op0Register == Register.R8 || insn.Op0Register == Register.R9)
                     && _model.GetVirtualParamCount(baseValue.Type, disp) == 0
-                    && _model.GetVirtualReturnKind(baseValue.Type, disp) is not (Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved)))
+                    && _model.GetVirtualReturnKind(baseValue.Type, disp) is not (Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved))
+                // An Equals(...) name (any declaring type) dispatched with 0 arguments: the MethodInfo lands in rdx (the
+                // arg0 slot) instead of r8, so there is no comparand. Equals is never 0-arg, so the slot is mis-mapped
+                // (a low Object base slot whose runtime method is really the parameterless GetHashCode). Its `object`
+                // parameter is never float, so the rdx=0-args reading is unambiguous.
+                || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register && insn.Op0Register == Register.RDX
+                    && IsEqualsMethodName(virtualMethod)))
             {
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
