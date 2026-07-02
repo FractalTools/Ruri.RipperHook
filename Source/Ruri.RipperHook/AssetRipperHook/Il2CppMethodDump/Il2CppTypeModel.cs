@@ -427,6 +427,9 @@ internal sealed class Il2CppTypeModel
         return slot < kinds.Length ? kinds[slot] : ReturnKindUnresolved;
     }
 
+    /// <summary>Public <c>ReturnKind*</c> of an arbitrary type (e.g. an enclosing method's own return type), for comparing a forwarder against the slot it dispatches.</summary>
+    public byte ClassifyReturnKind(TypeAnalysisContext t) => ClassifyReturn(t);
+
     private static byte ClassifyReturn(TypeAnalysisContext t)
     {
         if (t == null)
