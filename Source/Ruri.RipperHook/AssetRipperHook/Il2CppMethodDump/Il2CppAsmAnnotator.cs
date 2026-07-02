@@ -267,10 +267,43 @@ internal static class Il2CppAsmAnnotator
         if (methods.Count == 1)
             return methods[0].FullName;
         string name = methods[0].FullName;
+        bool allSame = true;
         for (int i = 1; i < methods.Count; i++)
-            if (methods[i].FullName != name)
-                return StripGenericArguments(name); // instantiations disagree on args -> don't assert one
-        return name; // identical names -> genuine fold, unambiguous
+            if (methods[i].FullName != name) { allSame = false; break; }
+        if (allSame)
+            return name; // identical names -> genuine fold, unambiguous
+
+        // Names disagree. If they all reduce to ONE open generic form, the fold is different closed instantiations of
+        // the same method — print that honest open name (List`1::Add).
+        string open = StripGenericArguments(name);
+        bool allSameOpen = true;
+        for (int i = 1; i < methods.Count; i++)
+            if (StripGenericArguments(methods[i].FullName) != open) { allSameOpen = false; break; }
+        if (allSameOpen)
+            return open;
+
+        // The open names still differ: the DECLARING TYPES genuinely disagree — a shared thunk serving several
+        // unrelated types, most often a delegate `Invoke` (il2cpp folds every `void Invoke(<one reference arg>)`
+        // delegate — AsyncCallback, IOAsyncCallback, Action`1<T>… — onto one body). Printing methods[0] would assert
+        // an unrelated type (`System.AsyncCallback::Invoke` on an `Action`1<Collider>` call), so print only the member
+        // name they share; the preceding MethodInfo-load line already carries the concrete type. 错标比漏标更糟.
+        string member = CommonMemberName(methods);
+        return member ?? open;
+    }
+
+    /// <summary>The trailing <c>Type::Member</c> member name if every method shares it (declaring types may differ), else null.</summary>
+    private static string CommonMemberName(List<MethodAnalysisContext> methods)
+    {
+        static string Member(string fullName)
+        {
+            int sep = fullName.LastIndexOf("::", System.StringComparison.Ordinal);
+            return sep >= 0 ? fullName.Substring(sep + 2) : fullName;
+        }
+        string first = Member(methods[0].FullName);
+        for (int i = 1; i < methods.Count; i++)
+            if (Member(methods[i].FullName) != first)
+                return null;
+        return first;
     }
 
     /// <summary>Removes balanced <c>&lt;…&gt;</c> generic-argument groups (keeping the <c>`N</c> arity marker), turning a closed instantiation name into its open form.</summary>
