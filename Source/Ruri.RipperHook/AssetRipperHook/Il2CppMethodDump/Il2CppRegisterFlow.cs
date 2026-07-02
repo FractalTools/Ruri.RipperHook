@@ -501,8 +501,43 @@ internal sealed class Il2CppRegisterFlow
             && u.Mnemonic is not (Mnemonic.Mov or Mnemonic.Movzx or Mnemonic.Movsx or Mnemonic.Movsxd or Mnemonic.Lea); // those write eax without reading it
     }
 
-    /// <summary>A GlobalKey naming an <c>Equals(...)</c> method (any declaring type) — always takes at least one argument, so a 0-arg dispatch to it is impossible.</summary>
-    private static bool IsEqualsMethodName(string name) => name != null && name.Contains(".Equals(");
+    /// <summary>
+    /// On the MethodInfo-load form (`mov &lt;reg&gt;,[klass+slot+8]`), whether the register the trailing MethodInfo* lands in
+    /// disagrees with the slot method's INTEGER parameter count — proving the slot is mis-mapped. For a register-returned
+    /// method (rcx=this), integer params fill rdx/r8/r9 and the MethodInfo trails them, so rdx⇒0, r8⇒1, r9⇒2, anywhere
+    /// else (spilled) ⇒ ≥3 integer args. Float/double params go to xmm and don't shift the sequence, so comparing against
+    /// the integer-only param count is exact (no float-arg false positives). Skips struct returns (rcx becomes the hidden
+    /// buffer, shifting the whole sequence). Catches both "0-param name called with args" and "N-param name called 0-arg"
+    /// (e.g. PropertyInfo.GetGetMethod(bool) dispatched with the MethodInfo in rdx = 0 args → really GetIndexParameters).
+    /// </summary>
+    private bool ArgCountContradicts(TypeAnalysisContext type, int disp, in Instruction insn)
+    {
+        if ((disp & 0xF) != 8 || insn.Op0Kind != OpKind.Register)
+            return false; // only the MethodInfo-load pins the register
+        if (_model.GetVirtualReturnKind(type, disp) is Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved)
+            return false; // struct return adds a hidden buffer pointer at position 0, shifting every arg +1 — ambiguous
+        int total = _model.GetVirtualParamCount(type, disp);
+        if (total < 0)
+            return false;
+        // MSVC x64 is POSITIONAL: the Nth argument occupies the Nth slot regardless of type — an integer arg takes
+        // rcx/rdx/r8/r9, a float takes xmm0-3 AT THE SAME POSITION. For an instance method rcx=this (position 0), the P
+        // declared params fill positions 1..P (each param — int, float, struct-by-val, struct-by-ptr — is exactly one
+        // position), and the trailing MethodInfo* lands at position P+1, in the INTEGER register for that position:
+        // P=0⇒rdx, P=1⇒r8, P=2⇒r9. So the register the MethodInfo is loaded into pins TOTAL param count (floats
+        // included — counting only integer params would mis-predict any float-carrying signature and retract a correct
+        // name). Only a direct load into an arg register is trusted; a load into a scratch register (rax/r10/…), used
+        // when the MethodInfo is staged before a stack spill for P≥3, leaves the position unknowable ⇒ no inference.
+        int implied = insn.Op0Register switch
+        {
+            Register.RDX => 0,
+            Register.R8 => 1,
+            Register.R9 => 2,
+            _ => -1,
+        };
+        if (implied < 0)
+            return false;
+        return implied != total;
+    }
 
     /// <summary>
     /// For a tail-jmp forwarder (`_method` whose whole body is a tail dispatch through a vtable slot), whether the slot
@@ -847,22 +882,11 @@ internal sealed class Il2CppRegisterFlow
             // Already proven mis-mapped for this (type, slot) elsewhere in the app — emit the honest fallback up front
             // (root cut: no arrow, no candidate), so every site reads consistently regardless of local evidence.
             // Also condemn here from an arg-count contradiction on the MethodInfo-load form (`mov <reg>,[klass+slot+8]`):
-            // for a register-returned method (rcx=this) the MethodInfo trails the real args, so a 0-parameter method
-            // loads it into rdx. If a 0-param name loads it into r8/r9 (the arg1/arg2 slots) the real method takes
-            // integer arguments — the slot is mis-mapped. (Restricted to 0 params + non-struct return so the register
-            // mapping is unambiguous: float args go to xmm without shifting, only struct-returns shift rcx.)
+            // the register the trailing MethodInfo* lands in pins the slot method's total (positional) parameter count,
+            // so a mismatch with the named method's arity proves the slot is mis-mapped (see ArgCountContradicts).
             if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp)))
                 || _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp))) // this inherited method proven mis-mapped on another receiver
-                || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register
-                    && (insn.Op0Register == Register.R8 || insn.Op0Register == Register.R9)
-                    && _model.GetVirtualParamCount(baseValue.Type, disp) == 0
-                    && _model.GetVirtualReturnKind(baseValue.Type, disp) is not (Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved))
-                // An Equals(...) name (any declaring type) dispatched with 0 arguments: the MethodInfo lands in rdx (the
-                // arg0 slot) instead of r8, so there is no comparand. Equals is never 0-arg, so the slot is mis-mapped
-                // (a low Object base slot whose runtime method is really the parameterless GetHashCode). Its `object`
-                // parameter is never float, so the rdx=0-args reading is unambiguous.
-                || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register && insn.Op0Register == Register.RDX
-                    && IsEqualsMethodName(virtualMethod)))
+                || ArgCountContradicts(baseValue.Type, disp, insn)) // MethodInfo register disagrees with the slot method's total param count
             {
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
                 _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));
