@@ -335,7 +335,10 @@ internal sealed class Il2CppRegisterFlow
         foreach ((int index, int fnReg, int disp, string typeName, byte kind) in _arrowRetractCandidates)
         {
             if ((uint)index < (uint)_comments.Length && DispatchResultContradicts(index, fnReg, kind))
+            {
                 (condemned ??= new()).Add((typeName, SlotKey(disp)));
+                _model.CondemnedVtableSlots.Add((typeName, SlotKey(disp))); // app-wide: condemn this slot for every later method too
+            }
         }
         if (condemned == null) return;
         // Phase 2: retract every arrow (call, fn-ptr load, and paired MethodInfo load) of a condemned (type, slot).
@@ -670,19 +673,28 @@ internal sealed class Il2CppRegisterFlow
         else if (baseValue.Kind == TrackedKind.Klass && insn.MemoryIndex == Register.None
                  && _model.TryGetVirtualMethodName(baseValue.Type, disp, out string virtualMethod))
         {
-            access = "-> " + virtualMethod; // virtual/interface dispatch through the object's vtable
-            // Consistency gate: if this slot's method returns void/non-reference yet its result (rax) is consumed as a
-            // managed reference downstream, the name is wrong for this call site (mis-mapped vtable/interface slot).
-            // Record it; RetractInconsistentArrows downgrades it to the honest T::class[0xNN] if the contradiction holds.
-            // Two idiom shapes reach here: a fn-ptr load `mov reg,[klass+disp]` (fnReg = dst, its `call reg` is later) and
-            // a direct dispatch `call [klass+disp]` (FlowControl.IndirectCall; fnReg = -1). A tail-call `jmp [klass+disp]`
-            // (IndirectBranch) returns straight to our caller, so its rax use is unobservable here — not a candidate.
-            if (insn.FlowControl != FlowControl.IndirectBranch)
+            // Already proven mis-mapped for this (type, slot) elsewhere in the app — emit the honest fallback up front
+            // (root cut: no arrow, no candidate), so every site reads consistently regardless of local evidence.
+            if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp))))
             {
-                int fnReg = insn.FlowControl == FlowControl.IndirectCall ? -1 : RegisterFlowUtil.GpIndex(insn.Op0Register);
-                if (fnReg >= 0 || insn.FlowControl == FlowControl.IndirectCall)
-                    (_arrowRetractCandidates ??= new()).Add((index, fnReg, disp, baseValue.Type.Name,
-                        _model.GetVirtualReturnKind(baseValue.Type, disp)));
+                access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
+            }
+            else
+            {
+                access = "-> " + virtualMethod; // virtual/interface dispatch through the object's vtable
+                // Consistency gate: if this slot's method returns void/non-reference yet its result (rax) is consumed as a
+                // managed reference downstream, the name is wrong for this call site (mis-mapped vtable/interface slot).
+                // Record it; RetractInconsistentArrows downgrades it to the honest T::class[0xNN] if the contradiction holds.
+                // Two idiom shapes reach here: a fn-ptr load `mov reg,[klass+disp]` (fnReg = dst, its `call reg` is later) and
+                // a direct dispatch `call [klass+disp]` (FlowControl.IndirectCall; fnReg = -1). A tail-call `jmp [klass+disp]`
+                // (IndirectBranch) returns straight to our caller, so its rax use is unobservable here — not a candidate.
+                if (insn.FlowControl != FlowControl.IndirectBranch)
+                {
+                    int fnReg = insn.FlowControl == FlowControl.IndirectCall ? -1 : RegisterFlowUtil.GpIndex(insn.Op0Register);
+                    if (fnReg >= 0 || insn.FlowControl == FlowControl.IndirectCall)
+                        (_arrowRetractCandidates ??= new()).Add((index, fnReg, disp, baseValue.Type.Name,
+                            _model.GetVirtualReturnKind(baseValue.Type, disp)));
+                }
             }
         }
         else if (baseValue.Kind is TrackedKind.TypeInfo or TrackedKind.Klass && insn.MemoryIndex == Register.None)
