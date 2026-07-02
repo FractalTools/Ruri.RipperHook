@@ -43,6 +43,8 @@ public partial class AR_Il2CppMethodDump_Hook
         {
             if (transform is Il2CppAsmCommentTransform) return;
         }
+        // Name the LayoutKind argument of synthesized [StructLayout] attributes before the asm-comment pass runs.
+        decompiler.AstTransforms.Add(new Il2CppLayoutKindTransform());
         decompiler.AstTransforms.Add(new Il2CppAsmCommentTransform());
     }
 }
