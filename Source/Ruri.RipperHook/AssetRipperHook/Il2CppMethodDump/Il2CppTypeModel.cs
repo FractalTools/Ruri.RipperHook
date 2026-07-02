@@ -39,6 +39,14 @@ internal sealed class Il2CppTypeModel
     /// </summary>
     public readonly HashSet<(string, int)> CondemnedVtableSlots = new();
 
+    /// <summary>
+    /// (resolved method GlobalKey, 0x10-aligned slot) pairs proven mis-mapped. An INHERITED method sits at the same slot
+    /// in every derived type's vtable, so a divergence proven for one receiver holds for all of them — keying by the
+    /// method (not just the receiver type) propagates the retraction to sites on OTHER receiver types, including ones
+    /// only ever reached by unobservable tail-<c>jmp</c> dispatch (e.g. BaseInput.get_mousePosition across input modules).
+    /// </summary>
+    public readonly HashSet<(string, int)> CondemnedVtableMethods = new();
+
     private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
     private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
     private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)

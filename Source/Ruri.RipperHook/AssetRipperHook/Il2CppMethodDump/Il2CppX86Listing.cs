@@ -14,7 +14,8 @@ namespace Ruri.RipperHook.AR;
 /// </summary>
 internal static class Il2CppX86Listing
 {
-    private static ApplicationAnalysisContext _condemnationScannedApp;
+    private static ApplicationAnalysisContext _condemnationApp;
+    private static readonly HashSet<AssemblyAnalysisContext> _condemnationScanned = new();
 
     private static List<Instruction> DecodeInstructions(byte[] bytes, ulong start, bool is32)
     {
@@ -31,22 +32,23 @@ internal static class Il2CppX86Listing
     }
 
     /// <summary>
-    /// One-time per app: flow every Assembly-CSharp method so the register flow's consistency gate populates
-    /// <see cref="Il2CppTypeModel.CondemnedVtableSlots"/> BEFORE any method is rendered. A vtable slot proven mis-mapped
-    /// by one call site is mis-mapped at all of them, so pre-collecting the condemnations makes the retraction
-    /// order-independent and complete — a method rendered before its slot's proof still gets the honest fallback. Costs
-    /// one extra flow pass over the game code; per-method failures are swallowed (best-effort).
+    /// Lazily, once per assembly, flow EVERY method of the assembly a method being rendered belongs to, so the register
+    /// flow's consistency gate populates <see cref="Il2CppTypeModel.CondemnedVtableSlots"/>/<see cref="Il2CppTypeModel.CondemnedVtableMethods"/>
+    /// BEFORE any of that assembly's methods are rendered. A vtable slot/inherited method proven mis-mapped by one call
+    /// site is mis-mapped at all of them, so pre-collecting condemnations makes the retraction order-independent within
+    /// the assembly — a method rendered before its slot's proof, or one only ever reached by unobservable tail-jmp, still
+    /// gets the honest fallback. Per-assembly (not just Assembly-CSharp) so UI/Mirror/TMP etc. are covered too. Costs one
+    /// extra flow pass over each rendered assembly; per-method failures are swallowed (best-effort).
     /// </summary>
-    private static void EnsureCondemnationScan(ApplicationAnalysisContext app, Il2CppTypeModel model)
+    private static void EnsureCondemnationScan(ApplicationAnalysisContext app, Il2CppTypeModel model, MethodAnalysisContext current)
     {
-        if (ReferenceEquals(_condemnationScannedApp, app)) return;
-        _condemnationScannedApp = app; // set first: the scan calls only flow.Analyze(), never Render, so no reentrancy
+        if (!ReferenceEquals(_condemnationApp, app)) { _condemnationApp = app; _condemnationScanned.Clear(); }
+        AssemblyAnalysisContext assembly = current.DeclaringType?.DeclaringAssembly;
+        if (assembly == null || !_condemnationScanned.Add(assembly)) return; // scan each assembly exactly once (Add returns false if already present)
         try
         {
             bool is32 = LibCpp2IlMain.Binary.is32Bit;
-            foreach (AssemblyAnalysisContext assembly in app.Assemblies)
             {
-                if (assembly.CleanAssemblyName != "Assembly-CSharp") continue; // primary game code (where mis-mapped-slot callers live)
                 foreach (TypeAnalysisContext type in assembly.Types)
                 {
                     foreach (MethodAnalysisContext method in type.Methods)
@@ -59,7 +61,7 @@ internal static class Il2CppX86Listing
                             if (bytes.Length == 0) continue;
                             List<Instruction> insns = DecodeInstructions(bytes, method.UnderlyingPointer, is32);
                             if (insns.Count == 0) continue;
-                            new Il2CppRegisterFlow(app, method, insns, model).Analyze(); // side effect: populates CondemnedVtableSlots
+                            new Il2CppRegisterFlow(app, method, insns, model).Analyze(); // side effect: populates condemnation sets
                         }
                         catch { }
                     }
@@ -104,7 +106,7 @@ internal static class Il2CppX86Listing
         Il2CppTypeModel model = Il2CppTypeModel.Get(app);
         // 一次性预扫：先把「元数据 VTable 槽序与运行期不符」被证伪的 (类型,槽) 全部登记进 model.CondemnedVtableSlots，
         // 使某槽被任一方法证伪后，所有方法都一致降级成 T::class[]（与渲染顺序无关、确定性；根治而非逐处削）。
-        EnsureCondemnationScan(app, model);
+        EnsureCondemnationScan(app, model, method);
         Il2CppRegisterFlow flow = new(app, method, instructions, model);
         flow.Analyze();
 
