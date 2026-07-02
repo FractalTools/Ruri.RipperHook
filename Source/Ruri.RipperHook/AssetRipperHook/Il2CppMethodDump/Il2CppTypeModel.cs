@@ -30,6 +30,15 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _instanceFields = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
 
+    /// <summary>
+    /// (type name, 0x10-aligned vtable slot byte-offset) pairs proven mis-mapped by <c>Il2CppRegisterFlow</c> — a named
+    /// arrow whose result contradicted its declared return kind. Cpp2IL's metadata <c>VTable</c> ordering can disagree
+    /// with the runtime memory vtable at a given offset; once ANY call site proves a slot wrong, every other site of the
+    /// same (type, slot) is wrong too, so this app-wide set lets later methods skip the fabricated name up front (the
+    /// root cut, not per-site whittling). Populated + consulted by the flow; shared because <see cref="Get"/> is cached.
+    /// </summary>
+    public readonly HashSet<(string, int)> CondemnedVtableSlots = new();
+
     private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
     private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
     private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)
