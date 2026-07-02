@@ -357,22 +357,32 @@ internal sealed class Il2CppRegisterFlow
     /// From a vtable dispatch — either a fn-ptr load at <paramref name="arrowIndex"/> whose pointer is in
     /// <paramref name="fnReg"/> then a later <c>call fnReg</c>, or (when <paramref name="fnReg"/> is -1) the arrow
     /// instruction being itself an indirect <c>call [klass+disp]</c> — decide whether the call's result (<c>rax</c>)
-    /// contradicts the named slot's declared return <paramref name="kind"/>, before <c>rax</c> is redefined. Each test
-    /// is chosen so it can NEVER fire on a correctly-named method (so a good name is never downgraded):
+    /// contradicts the named slot's declared return <paramref name="kind"/>, before the result register is redefined.
+    /// Each test can only fire when the observed usage is impossible for the named kind (so a good name is never lost):
     /// <list type="bullet">
-    /// <item>Void / Scalar (bool/int/float/enum): <c>rax</c> stored full 64-bit (<c>mov [m],rax</c>) or dereferenced
-    /// (<c>[rax…]</c>) — void yields nothing and a scalar leaves a non-pointer value in rax, so neither can be a base.</item>
-    /// <item>Ref: offset-0 of <c>rax</c> read as a float (<c>movss/movsd xmm,[rax]</c>) — a real object's slot 0 is its
-    /// <c>Il2CppClass*</c>, never float data, so the result is actually a value/struct-return buffer.</item>
+    /// <item>Void / ScalarInt (bool/int/enum/char): <c>rax</c> dereferenced (<c>[rax…]</c>) or stored full 64-bit
+    /// (<c>mov [m],rax</c>) or passed as a call <c>this</c> — none is possible for nothing / a non-pointer integer; OR
+    /// <c>xmm0</c> consumed — the result would then be a float, not int/void.</item>
+    /// <item>ScalarFloat (float/double): result is in <c>xmm0</c>, so <c>rax</c> is garbage — any rax deref / full store /
+    /// use-as-<c>this</c> is impossible for it.</item>
+    /// <item>Ref: <c>[rax]</c> (slot-0 = <c>Il2CppClass*</c>) read as a float, or <c>xmm0</c> consumed — a reference is a
+    /// pointer in rax, never a float and never in xmm0.</item>
     /// <item>Struct (hidden-buffer pointer) / Pointer (IntPtr) / Unresolved: rax is legitimately a pointer — no test.</item>
     /// </list>
     /// Raw instruction shapes only (no dataflow state); small windows that bail on any intervening clobber/call.
     /// </summary>
     private bool DispatchResultContradicts(int arrowIndex, int fnReg, byte kind)
     {
-        bool voidOrScalar = kind is Il2CppTypeModel.ReturnKindVoid or Il2CppTypeModel.ReturnKindScalar;
+        // Result location per the x64 ABI: an integer/void leaves rax an integer or nothing; a float leaves it in xmm0
+        // (rax garbage); a reference leaves an object pointer in rax. Each test below can only fire when the actual usage
+        // is impossible for the named kind — so a correctly-named method is never downgraded.
+        // raxIntLike: result (if any) is a non-pointer in rax — void/int/bool. isFloat: in xmm0 (rax garbage). isRef:
+        // object pointer in rax. (bool joins raxIntLike for the pointer/xmm0 tests; only the `test al,al` bool-signal is
+        // suppressed for a genuine bool — see below.)
+        bool raxIntLike = kind is Il2CppTypeModel.ReturnKindVoid or Il2CppTypeModel.ReturnKindScalarInt or Il2CppTypeModel.ReturnKindBool;
+        bool isFloat = kind == Il2CppTypeModel.ReturnKindScalarFloat;
         bool isRef = kind == Il2CppTypeModel.ReturnKindRef;
-        if (!voidOrScalar && !isRef)
+        if (!raxIntLike && !isFloat && !isRef)
             return false; // struct buffer / IntPtr / unresolved — rax is a legitimate pointer, nothing to contradict
 
         int n = _instructions.Count;
@@ -398,20 +408,20 @@ internal sealed class Il2CppRegisterFlow
             if (callIdx < 0) return false;
         }
 
+        bool raxLive = true, xmm0Live = true;
         for (int j = callIdx + 1; j < n && j <= callIdx + 8; j++)
         {
             Instruction u = _instructions[j];
-            if (voidOrScalar)
+            if (raxLive && (raxIntLike || isFloat))
             {
-                // rax used as a memory base/index (dereferenced) — a void/scalar result is not a pointer.
+                // int/bool/void/float leaves no object pointer in rax — a deref or full-rax store is impossible for it.
                 if (u.MemoryBase.GetFullRegister() == Register.RAX || u.MemoryIndex.GetFullRegister() == Register.RAX)
                     return true;
-                // rax stored full 64-bit to memory — a managed reference a void/scalar method cannot have produced.
                 if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Memory
                     && u.Op1Kind == OpKind.Register && u.Op1Register == Register.RAX)
                     return true;
             }
-            else // isRef
+            else if (raxLive && isRef)
             {
                 // Reference return whose offset-0 is loaded as a float — impossible for a real object (slot 0 = klass ptr).
                 if ((u.Mnemonic is Mnemonic.Movss or Mnemonic.Movsd) && u.Op1Kind == OpKind.Memory
@@ -419,16 +429,41 @@ internal sealed class Il2CppRegisterFlow
                     && u.MemoryDisplacement64 == 0)
                     return true;
             }
-            // rax redefined/clobbered (incl. any further call) — stop this scan, but still try the `this`-of-call scan
-            // below (it survives the clobber once rax has been moved into rcx).
-            if ((_clobber[j] & (1 << 0)) != 0)
-                break;
+            // xmm0 holds the return ONLY for a float-returning method; for a void/int/bool/ref name, reading xmm0 as the
+            // result betrays a float-returning method mislabeled (e.g. Object.ToString/GetHashCode over a float getter).
+            if (xmm0Live && (raxIntLike || isRef) && ReadsXmm0(u))
+                return true;
+            // Result consumed as a bool (`test al,al` / `test <b>,al`) — but the named method does NOT return bool (a
+            // genuine bool return is ReturnKindBool, for which this test is idiomatic and must be ignored). Real: bool.
+            if (raxLive && kind != Il2CppTypeModel.ReturnKindBool
+                && u.Mnemonic == Mnemonic.Test && (u.Op0Register == Register.AL || u.Op1Register == Register.AL))
+                return true;
+
+            if (u.FlowControl is FlowControl.Call or FlowControl.IndirectCall or FlowControl.IndirectBranch)
+                break; // a call clobbers rax + xmm0; if the result wasn't consumed by now, it isn't observably here
+            if (raxLive && (_clobber[j] & (1 << 0)) != 0) raxLive = false; // rax redefined
+            if (xmm0Live && WritesXmm0(u)) xmm0Live = false;               // xmm0 redefined
+            if (!raxLive && !xmm0Live) break;
         }
-        // Void/scalar result passed as the `this` of a managed instance call (`mov rcx,rax; …; call Instance.Method`) —
-        // a `this` must be a valid object reference, which neither void (nothing) nor a scalar value can be. This survives
-        // rax being clobbered once it has been moved into rcx, so it is a separate forward scan.
-        return voidOrScalar && RaxBecomesThisOfManagedInstanceCall(callIdx);
+        // Void/int/bool/float result passed as the `this` of a managed instance call (`mov rcx,rax; …; call Instance.Method`)
+        // — a `this` must be a valid object reference, which none of them can be. Survives rax being clobbered once it has
+        // reached rcx, so it is a separate forward scan.
+        return (raxIntLike || isFloat) && RaxBecomesThisOfManagedInstanceCall(callIdx);
     }
+
+    /// <summary>xmm0 used as a source (the float return being consumed): as a source operand, or read-modified by a non-move op.</summary>
+    private static bool ReadsXmm0(in Instruction u)
+    {
+        if (u.Op1Register == Register.XMM0 || u.Op2Register == Register.XMM0)
+            return true; // `movaps xmm6,xmm0` / `movsd [m],xmm0` / `mulss xmm,xmm0`
+        return u.Op0Register == Register.XMM0 && !IsXmmPureWrite(u.Mnemonic); // `addss xmm0,x` reads xmm0; `movaps xmm0,x` does not
+    }
+
+    private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
+
+    private static bool IsXmmPureWrite(Mnemonic m)
+        => m is Mnemonic.Movss or Mnemonic.Movsd or Mnemonic.Movaps or Mnemonic.Movups
+            or Mnemonic.Movd or Mnemonic.Movq or Mnemonic.Movdqa or Mnemonic.Movdqu;
 
     private bool RaxBecomesThisOfManagedInstanceCall(int callIdx)
     {
@@ -675,8 +710,18 @@ internal sealed class Il2CppRegisterFlow
         {
             // Already proven mis-mapped for this (type, slot) elsewhere in the app — emit the honest fallback up front
             // (root cut: no arrow, no candidate), so every site reads consistently regardless of local evidence.
-            if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp))))
+            // Also condemn here from an arg-count contradiction on the MethodInfo-load form (`mov <reg>,[klass+slot+8]`):
+            // for a register-returned method (rcx=this) the MethodInfo trails the real args, so a 0-parameter method
+            // loads it into rdx. If a 0-param name loads it into r8/r9 (the arg1/arg2 slots) the real method takes
+            // integer arguments — the slot is mis-mapped. (Restricted to 0 params + non-struct return so the register
+            // mapping is unambiguous: float args go to xmm without shifting, only struct-returns shift rcx.)
+            if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp)))
+                || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register
+                    && (insn.Op0Register == Register.R8 || insn.Op0Register == Register.R9)
+                    && _model.GetVirtualParamCount(baseValue.Type, disp) == 0
+                    && _model.GetVirtualReturnKind(baseValue.Type, disp) is not (Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved)))
             {
+                _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
             }
             else
