@@ -38,20 +38,28 @@ internal readonly struct TrackedValue : IEquatable<TrackedValue>
     public readonly TrackedKind Kind;
     public readonly TypeAnalysisContext Type;
     public readonly string Alias;
+    // When this value is the (reference) result of a vtable dispatch, the (klass type name, 0x10-aligned slot) it came
+    // from — so if it is later stored into a field of an incompatible type, that slot can be condemned. Excluded from
+    // equality (like Alias), so the dataflow meet still converges.
+    public readonly string OriginTypeName;
+    public readonly int OriginSlot;
 
-    private TrackedValue(TrackedKind kind, TypeAnalysisContext type, string alias)
+    private TrackedValue(TrackedKind kind, TypeAnalysisContext type, string alias, string originTypeName = null, int originSlot = -1)
     {
         Kind = kind;
         Type = type;
         Alias = alias;
+        OriginTypeName = originTypeName;
+        OriginSlot = originSlot;
     }
 
     public static readonly TrackedValue Unknown = default;
     public static TrackedValue Ref(TypeAnalysisContext type, string alias) => new(TrackedKind.ManagedRef, type, alias);
+    public static TrackedValue RefFromVtable(TypeAnalysisContext type, string originTypeName, int originSlot) => new(TrackedKind.ManagedRef, type, null, originTypeName, originSlot);
     public static TrackedValue Info(TypeAnalysisContext type) => new(TrackedKind.TypeInfo, type, null);
     public static TrackedValue StaticBaseOf(TypeAnalysisContext type) => new(TrackedKind.StaticBase, type, null);
     public static TrackedValue KlassOf(TypeAnalysisContext type) => new(TrackedKind.Klass, type, null); // Il2CppClass* of an object (obtained by dereferencing it at offset 0)
-    public static TrackedValue Callee(TypeAnalysisContext returnType) => new(TrackedKind.Callee, returnType, null); // a loaded virtual function pointer; Type = its return type (materialized on `call`)
+    public static TrackedValue Callee(TypeAnalysisContext returnType, string originTypeName, int originSlot) => new(TrackedKind.Callee, returnType, null, originTypeName, originSlot); // a loaded virtual function pointer; Type = its return type (materialized on `call`); carries the slot it was loaded from
 
     public bool IsKnown => Kind != TrackedKind.Unknown;
     public bool Equals(TrackedValue other) => Kind == other.Kind && SameType(Type, other.Type);
@@ -469,6 +477,42 @@ internal sealed class Il2CppRegisterFlow
 
     private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
 
+    /// <summary>
+    /// True only when <paramref name="a"/> and <paramref name="b"/> are CONCRETE reference classes with no inheritance
+    /// relation (neither assignable to the other) and neither is System.Object — so a value of one cannot be stored into
+    /// a field of the other. Conservative: interfaces / arrays / generics / value types / Object all return false (a ref
+    /// legitimately fits an interface or Object field, and wrapped types are not reliably comparable), so this never
+    /// condemns a valid store.
+    /// </summary>
+    private static bool AreUnrelatedRefClasses(TypeAnalysisContext a, TypeAnalysisContext b)
+    {
+        if (a == null || b == null || a.Definition == null || b.Definition == null)
+            return false;
+        try
+        {
+            if (a.IsValueType || b.IsValueType || a.IsInterface || b.IsInterface)
+                return false;
+        }
+        catch { return false; }
+        if (a.FullName == "System.Object" || b.FullName == "System.Object")
+            return false;
+        return !IsSameOrBase(a, b) && !IsSameOrBase(b, a);
+    }
+
+    /// <summary>Is <paramref name="baseCandidate"/> the same class as, or a base class of, <paramref name="derived"/>?</summary>
+    private static bool IsSameOrBase(TypeAnalysisContext baseCandidate, TypeAnalysisContext derived)
+    {
+        for (TypeAnalysisContext t = derived; t != null;)
+        {
+            if (ReferenceEquals(t.Definition, baseCandidate.Definition)
+                || (t.FullName != null && t.FullName == baseCandidate.FullName))
+                return true;
+            try { t = t.BaseType; }
+            catch { return false; }
+        }
+        return false;
+    }
+
     private static bool IsXmmPureWrite(Mnemonic m)
         => m is Mnemonic.Movss or Mnemonic.Movsd or Mnemonic.Movaps or Mnemonic.Movups
             or Mnemonic.Movd or Mnemonic.Movq or Mnemonic.Movdqa or Mnemonic.Movdqu;
@@ -579,7 +623,22 @@ internal sealed class Il2CppRegisterFlow
             if (calleeReg >= 0 && state[calleeReg].Kind == TrackedKind.Callee && state[calleeReg].Type != null)
             {
                 isAlloc = true;
-                allocResult = TrackedValue.Ref(state[calleeReg].Type, null);
+                allocResult = TrackedValue.RefFromVtable(state[calleeReg].Type, state[calleeReg].OriginTypeName, state[calleeReg].OriginSlot);
+            }
+        }
+
+        // Direct vtable dispatch `call [klass+disp]` (IndirectCall) -> rax = the slot's (reference) return type, tagged with
+        // its origin slot. Computed BEFORE the clobber loop wipes the klass base register.
+        bool hasDirectVtableRef = false;
+        TrackedValue directVtableRef = TrackedValue.Unknown;
+        if (insn.FlowControl == FlowControl.IndirectCall && insn.Op0Kind == OpKind.Memory && insn.MemoryIndex == Register.None)
+        {
+            int klassBase = RegisterFlowUtil.GpIndex(insn.MemoryBase);
+            if (klassBase >= 0 && state[klassBase].Kind == TrackedKind.Klass && state[klassBase].Type != null
+                && _model.TryGetVirtualReturnType(state[klassBase].Type, (int)insn.MemoryDisplacement64, out TypeAnalysisContext dvret))
+            {
+                hasDirectVtableRef = true;
+                directVtableRef = TrackedValue.RefFromVtable(dvret, state[klassBase].Type.Name, SlotKey((int)insn.MemoryDisplacement64));
             }
         }
 
@@ -592,6 +651,11 @@ internal sealed class Il2CppRegisterFlow
         if (insn.FlowControl == FlowControl.Call)
         {
             state[0] = isAlloc ? allocResult : CallReturn(insn); // rax
+            return;
+        }
+        if (hasDirectVtableRef)
+        {
+            state[0] = directVtableRef; // rax = direct vtable dispatch's reference result
             return;
         }
 
@@ -652,9 +716,9 @@ internal sealed class Il2CppRegisterFlow
                     : TrackedValue.Unknown;
             case TrackedKind.TypeInfo when _staticFieldsOffset >= 0 && disp == _staticFieldsOffset:
                 return TrackedValue.StaticBaseOf(baseValue.Type);
-            // Loading a virtual function pointer from the vtable: remember its (reference) return type for the following `call`.
+            // Loading a virtual function pointer from the vtable: remember its (reference) return type + originating slot for the following `call`.
             case TrackedKind.Klass when !isLea && _model.TryGetVirtualReturnType(baseValue.Type, disp, out TypeAnalysisContext vret):
-                return TrackedValue.Callee(vret);
+                return TrackedValue.Callee(vret, baseValue.Type.Name, SlotKey(disp));
             default:
                 return TrackedValue.Unknown;
         }
@@ -702,6 +766,13 @@ internal sealed class Il2CppRegisterFlow
             else if (insn.MemoryIndex == Register.None && _model.TryGetInstanceField(baseValue.Type, disp, out FieldAnalysisContext field))
             {
                 access = Combine(baseValue.Alias, field.Name);
+                // Type-mismatch condemnation: a reference produced by a vtable call (rax carries its origin slot) stored
+                // into a field of an UNRELATED reference type — the returned type cannot be assigned there, so the slot's
+                // name is wrong (a ToString/getter mislabel over a type-specific getter). Condemn the originating slot.
+                if (isWrite && insn.Op1Register == Register.RAX && state[0].Kind == TrackedKind.ManagedRef
+                    && state[0].OriginTypeName != null
+                    && AreUnrelatedRefClasses(state[0].Type, field.FieldType))
+                    _model.CondemnedVtableSlots.Add((state[0].OriginTypeName, state[0].OriginSlot));
             }
         }
         else if (baseValue.Kind == TrackedKind.StaticBase && insn.MemoryIndex == Register.None
