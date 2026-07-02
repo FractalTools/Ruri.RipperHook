@@ -124,7 +124,7 @@ internal sealed class Il2CppRegisterFlow
     // kind: the named slot's return kind (Il2CppTypeModel.ReturnKind*) — selects the contradiction test that can never
     // fire on a correctly-named method (void/scalar: rax can't be dereferenced or full-width-stored; ref: its offset-0
     // can't be a float; struct/pointer: rax is legitimately a pointer, so no test).
-    private List<(int index, int fnReg, int disp, string typeName, byte kind)> _arrowRetractCandidates;
+    private List<(int index, int fnReg, int disp, string typeName, byte kind, string methodName)> _arrowRetractCandidates;
 
     public Il2CppRegisterFlow(ApplicationAnalysisContext app, MethodAnalysisContext method, List<Instruction> instructions, Il2CppTypeModel model)
     {
@@ -340,17 +340,19 @@ internal sealed class Il2CppRegisterFlow
         // as a managed reference. The slot's name is metadata, identical at every call site, so one proof condemns it for
         // the whole method; a slot never contradicted (e.g. a genuine void setter whose result is ignored) stays named.
         HashSet<(string, int)> condemned = null;
-        foreach ((int index, int fnReg, int disp, string typeName, byte kind) in _arrowRetractCandidates)
+        foreach ((int index, int fnReg, int disp, string typeName, byte kind, string methodName) in _arrowRetractCandidates)
         {
             if ((uint)index < (uint)_comments.Length && DispatchResultContradicts(index, fnReg, kind))
             {
                 (condemned ??= new()).Add((typeName, SlotKey(disp)));
-                _model.CondemnedVtableSlots.Add((typeName, SlotKey(disp))); // app-wide: condemn this slot for every later method too
+                _model.CondemnedVtableSlots.Add((typeName, SlotKey(disp)));      // app-wide: this slot on this receiver type
+                if (methodName != null)
+                    _model.CondemnedVtableMethods.Add((methodName, SlotKey(disp))); // and this inherited method at this slot, on any receiver
             }
         }
         if (condemned == null) return;
         // Phase 2: retract every arrow (call, fn-ptr load, and paired MethodInfo load) of a condemned (type, slot).
-        foreach ((int index, int _, int disp, string typeName, byte _) in _arrowRetractCandidates)
+        foreach ((int index, int _, int disp, string typeName, byte _, string _) in _arrowRetractCandidates)
         {
             if ((uint)index < (uint)_comments.Length && _comments[index] != null && _comments[index].StartsWith("-> ")
                 && condemned.Contains((typeName, SlotKey(disp))))
@@ -390,8 +392,14 @@ internal sealed class Il2CppRegisterFlow
         bool raxIntLike = kind is Il2CppTypeModel.ReturnKindVoid or Il2CppTypeModel.ReturnKindScalarInt or Il2CppTypeModel.ReturnKindBool;
         bool isFloat = kind == Il2CppTypeModel.ReturnKindScalarFloat;
         bool isRef = kind == Il2CppTypeModel.ReturnKindRef;
-        if (!raxIntLike && !isFloat && !isRef)
-            return false; // struct buffer / IntPtr / unresolved — rax is a legitimate pointer, nothing to contradict
+        bool isStruct = kind == Il2CppTypeModel.ReturnKindStruct;
+        // A bare 32-bit `eax`-as-value use is impossible for anything that does NOT return an int32 in eax (a Bool leaves
+        // its result in al and legitimately widens it). Catches struct/ref/float/void getters mislabeled over an int
+        // getter (e.g. Vector2 get_mouseScrollDelta whose result is a `cmp edi,eax` loop bound = the real touchCount:int).
+        bool eaxAsIntContradicts = kind is Il2CppTypeModel.ReturnKindVoid or Il2CppTypeModel.ReturnKindScalarFloat
+            or Il2CppTypeModel.ReturnKindRef or Il2CppTypeModel.ReturnKindStruct;
+        if (!raxIntLike && !isFloat && !isRef && !isStruct)
+            return false; // IntPtr / unresolved — rax is a legitimate pointer, nothing to contradict
 
         int n = _instructions.Count;
         int callIdx;
@@ -454,6 +462,11 @@ internal sealed class Il2CppRegisterFlow
             if (raxLive && kind != Il2CppTypeModel.ReturnKindBool
                 && u.Mnemonic == Mnemonic.Test && (u.Op0Register == Register.AL || u.Op1Register == Register.AL))
                 return true;
+            // Result consumed as a bare 32-bit int (`eax` read as a value: `cmp edi,eax`, `test eax,eax`, `add r,eax`, …)
+            // — impossible for a struct/ref/float/void return. So the real method returns int (e.g. touchCount vs the
+            // mislabeled Vector2 get_mouseScrollDelta). A struct's rax is a legit pointer, so this is its only rax signal.
+            if (raxLive && eaxAsIntContradicts && ReadsEax(u))
+                return true;
 
             if (u.FlowControl is FlowControl.Call or FlowControl.IndirectCall or FlowControl.IndirectBranch)
                 break; // a call clobbers rax + xmm0; if the result wasn't consumed by now, it isn't observably here
@@ -476,6 +489,17 @@ internal sealed class Il2CppRegisterFlow
     }
 
     private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
+
+    /// <summary>eax used as a 32-bit value operand (`cmp edi,eax` / `test eax,eax` / `mov reg,eax` / `add reg,eax` …) — the result consumed as a bare int. Pure writes to eax and the xor/sub-zero idioms are not reads.</summary>
+    private static bool ReadsEax(in Instruction u)
+    {
+        if ((u.Mnemonic is Mnemonic.Xor or Mnemonic.Sub) && u.Op0Register == Register.EAX && u.Op1Register == Register.EAX)
+            return false; // `xor eax,eax` / `sub eax,eax` = zero the register (discards, not reads, the result)
+        if (u.Op1Register == Register.EAX || u.Op2Register == Register.EAX)
+            return true;
+        return u.Op0Register == Register.EAX
+            && u.Mnemonic is not (Mnemonic.Mov or Mnemonic.Movzx or Mnemonic.Movsx or Mnemonic.Movsxd or Mnemonic.Lea); // those write eax without reading it
+    }
 
     /// <summary>A GlobalKey naming an <c>Equals(...)</c> method (any declaring type) — always takes at least one argument, so a 0-arg dispatch to it is impossible.</summary>
     private static bool IsEqualsMethodName(string name) => name != null && name.Contains(".Equals(");
@@ -807,6 +831,7 @@ internal sealed class Il2CppRegisterFlow
             // integer arguments — the slot is mis-mapped. (Restricted to 0 params + non-struct return so the register
             // mapping is unambiguous: float args go to xmm without shifting, only struct-returns shift rcx.)
             if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp)))
+                || _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp))) // this inherited method proven mis-mapped on another receiver
                 || ((disp & 0xF) == 8 && insn.Op0Kind == OpKind.Register
                     && (insn.Op0Register == Register.R8 || insn.Op0Register == Register.R9)
                     && _model.GetVirtualParamCount(baseValue.Type, disp) == 0
@@ -819,6 +844,7 @@ internal sealed class Il2CppRegisterFlow
                     && IsEqualsMethodName(virtualMethod)))
             {
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
+                _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
             }
             else if (IsObjectBaseMethodName(virtualMethod) && baseValue.Type.FullName != "System.Object")
@@ -845,7 +871,7 @@ internal sealed class Il2CppRegisterFlow
                     int fnReg = insn.FlowControl == FlowControl.IndirectCall ? -1 : RegisterFlowUtil.GpIndex(insn.Op0Register);
                     if (fnReg >= 0 || insn.FlowControl == FlowControl.IndirectCall)
                         (_arrowRetractCandidates ??= new()).Add((index, fnReg, disp, baseValue.Type.Name,
-                            _model.GetVirtualReturnKind(baseValue.Type, disp)));
+                            _model.GetVirtualReturnKind(baseValue.Type, disp), virtualMethod));
                 }
             }
         }
