@@ -409,7 +409,7 @@ internal sealed class Il2CppRegisterFlow
         }
 
         bool raxLive = true, xmm0Live = true;
-        for (int j = callIdx + 1; j < n && j <= callIdx + 8; j++)
+        for (int j = callIdx + 1; j < n && j <= callIdx + 16; j++)
         {
             Instruction u = _instructions[j];
             if (raxLive && (raxIntLike || isFloat))
@@ -419,6 +419,14 @@ internal sealed class Il2CppRegisterFlow
                     return true;
                 if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Memory
                     && u.Op1Kind == OpKind.Register && u.Op1Register == Register.RAX)
+                    return true;
+                // The FULL 64-bit result captured into a register (`mov reg64,rax`) — void has no result, an int/bool
+                // result is the 32-bit eax and a float is in xmm0, so a full-rax capture means the value is a 64-bit
+                // reference (it is then saved / passed as an argument / used as `this`). eax/al captures use 32/8-bit
+                // moves, so requiring the exact 64-bit rax source keeps genuine int/bool results from being flagged.
+                if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Register && u.Op1Register == Register.RAX
+                    && u.Op0Register != Register.RAX
+                    && u.Op0Register == u.Op0Register.GetFullRegister() && RegisterFlowUtil.GpIndex(u.Op0Register) >= 0)
                     return true;
             }
             else if (raxLive && isRef)
