@@ -544,6 +544,38 @@ internal sealed class Il2CppRegisterFlow
     }
 
     /// <summary>
+    /// Whether an argument's REFERENCE type contradicts the declared parameter type of the method named at the vtable
+    /// slot — a Ref-vs-Ref mislabel the receiver/return checks can't see (the wrong result flows in as an ARGUMENT, not a
+    /// receiver). At the dispatch `call [klass+slot]` (instance method: rcx=this), a non-float parameter i lands in the
+    /// integer register for position i+1 — rdx/r8/r9 — so if that register holds a reference whose concrete class is
+    /// unrelated to the named method's declared param i (AreUnrelatedRefClasses: excludes base/interface/Object, so a
+    /// derived arg or interface param never flags), the arguments fit a DIFFERENT method than the name (e.g.
+    /// NetworkManager slot named OnServerChangeScene(string) but called with a NetworkConnection = really
+    /// OnClientSceneChanged). Struct returns shift the sequence, so they are skipped.
+    /// </summary>
+    private bool ArgTypeContradicts(TypeAnalysisContext type, int disp, in Instruction insn, TrackedValue[] state)
+    {
+        if (insn.FlowControl != FlowControl.IndirectCall) // only the actual dispatch, where rdx/r8/r9 hold the arguments
+            return false;
+        if (_model.GetVirtualReturnKind(type, disp) is Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved)
+            return false; // hidden return-buffer takes rcx, shifting this→rdx and every arg +1 — ambiguous
+        System.ReadOnlySpan<Register> argRegisters = stackalloc Register[] { Register.RDX, Register.R8, Register.R9 };
+        for (int i = 0; i < argRegisters.Length; i++)
+        {
+            TypeAnalysisContext paramType = _model.GetVirtualParamType(type, disp, i);
+            if (paramType == null)
+                continue;
+            int argReg = RegisterFlowUtil.GpIndex(argRegisters[i]);
+            if (argReg < 0)
+                continue;
+            TrackedValue arg = state[argReg];
+            if (arg.Kind == TrackedKind.ManagedRef && arg.Type != null && AreUnrelatedRefClasses(arg.Type, paramType))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// For a tail-jmp forwarder (`_method` whose whole body is a tail dispatch through a vtable slot), whether the slot
     /// resolved to a method whose signature disagrees with <see cref="_method"/>'s — a pure forwarder forwards its own
     /// args to a same-signature method, so a parameter-count or return-kind difference means the slot is mis-mapped.
@@ -946,7 +978,8 @@ internal sealed class Il2CppRegisterFlow
             // so a mismatch with the named method's arity proves the slot is mis-mapped (see ArgCountContradicts).
             if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp)))
                 || _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp))) // this inherited method proven mis-mapped on another receiver
-                || ArgCountContradicts(baseValue.Type, disp, insn)) // MethodInfo register disagrees with the slot method's total param count
+                || ArgCountContradicts(baseValue.Type, disp, insn) // MethodInfo register disagrees with the slot method's total param count
+                || ArgTypeContradicts(baseValue.Type, disp, insn, state)) // an argument's reference type contradicts the slot method's declared parameter type
             {
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
                 _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));

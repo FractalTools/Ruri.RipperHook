@@ -51,6 +51,7 @@ internal sealed class Il2CppTypeModel
     private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
     private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)
     private readonly Dictionary<TypeAnalysisContext, sbyte[]> _vtableParamCounts = new(); // type → per-slot declared parameter count (-1 = unknown)
+    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[][]> _vtableParamTypes = new(); // type → per-slot resolved parameter types (leading params only; null slot/entry = unknown)
 
     // Return-value kind of a named vtable slot — lets a caller pick a contradiction test that can never fire on a
     // correctly-named method, keyed to WHERE the result lives per the x64 ABI. Void: nothing. ScalarInt (bool/int/
@@ -512,6 +513,7 @@ internal sealed class Il2CppTypeModel
         TypeAnalysisContext[] returns;
         byte[] kinds;
         sbyte[] paramCounts;
+        TypeAnalysisContext[][] paramTypes;
         try
         {
             MetadataUsage[] vtable = type.Definition.VTable;
@@ -519,6 +521,7 @@ internal sealed class Il2CppTypeModel
             returns = new TypeAnalysisContext[vtable.Length];
             kinds = new byte[vtable.Length];
             paramCounts = new sbyte[vtable.Length];
+            paramTypes = new TypeAnalysisContext[vtable.Length][];
             System.Array.Fill(paramCounts, (sbyte)-1);
             for (int i = 0; i < vtable.Length; i++)
             {
@@ -540,6 +543,21 @@ internal sealed class Il2CppTypeModel
                         {
                             names[i] = method.GlobalKey;
                             paramCounts[i] = method.parameterCount <= sbyte.MaxValue ? (sbyte)method.parameterCount : (sbyte)-1;
+                            // Resolve the leading (up to 4) declared parameter types so a call site can prove a wrong
+                            // vtable name by an argument whose type contradicts the named method's signature.
+                            try
+                            {
+                                Il2CppType[] rawParams = method.InternalParameterTypes;
+                                if (rawParams != null && rawParams.Length > 0)
+                                {
+                                    int take = rawParams.Length < 4 ? rawParams.Length : 4;
+                                    TypeAnalysisContext[] resolvedParams = new TypeAnalysisContext[take];
+                                    for (int p = 0; p < take; p++)
+                                        resolvedParams[p] = rawParams[p] != null ? type.DeclaringAssembly.ResolveIl2CppType(rawParams[p]) : null;
+                                    paramTypes[i] = resolvedParams;
+                                }
+                            }
+                            catch { }
                             if (method.RawReturnType != null)
                             {
                                 TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
@@ -557,11 +575,31 @@ internal sealed class Il2CppTypeModel
                 catch { }
             }
         }
-        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); kinds = System.Array.Empty<byte>(); paramCounts = System.Array.Empty<sbyte>(); }
+        catch { names = System.Array.Empty<string>(); returns = System.Array.Empty<TypeAnalysisContext>(); kinds = System.Array.Empty<byte>(); paramCounts = System.Array.Empty<sbyte>(); paramTypes = System.Array.Empty<TypeAnalysisContext[]>(); }
         _vtableNames[type] = names;
         _vtableReturns[type] = returns;
         _vtableReturnKinds[type] = kinds;
         _vtableParamCounts[type] = paramCounts;
+        _vtableParamTypes[type] = paramTypes;
+    }
+
+    /// <summary>
+    /// Resolved type of the <paramref name="paramIndex"/>-th declared parameter of the virtual method named at
+    /// <c>[klass + byteOffset]</c>, or null if unknown. Lets a call site prove a wrong vtable name from an argument whose
+    /// type contradicts the named method's signature (a NetworkConnection where the named method takes a string).
+    /// </summary>
+    public TypeAnalysisContext GetVirtualParamType(TypeAnalysisContext type, int byteOffset, int paramIndex)
+    {
+        if (VtableOffset < 0 || type?.Definition == null || paramIndex < 0)
+            return null;
+        int slot = VtableSlotFromOffset(byteOffset);
+        if (slot < 0)
+            return null;
+        EnsureVtable(type);
+        TypeAnalysisContext[][] all = _vtableParamTypes[type];
+        if (slot >= all.Length || all[slot] == null || paramIndex >= all[slot].Length)
+            return null;
+        return all[slot][paramIndex];
     }
 
     /// <summary>Declared parameter count of the virtual method named at <c>[klass + byteOffset]</c>, or -1 if unknown.</summary>
