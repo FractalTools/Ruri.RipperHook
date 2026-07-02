@@ -477,6 +477,15 @@ internal sealed class Il2CppRegisterFlow
 
     private static bool WritesXmm0(in Instruction u) => u.Op0Register == Register.XMM0;
 
+    /// <summary>A GlobalKey naming one of the four System.Object base virtuals (Equals/GetHashCode/ToString/Finalize) — the inherited names sitting at vtable slots 0-3.</summary>
+    private static bool IsObjectBaseMethodName(string name)
+    {
+        if (name == null)
+            return false;
+        string n = name.StartsWith("System.") ? name.Substring(7) : name; // GlobalKey may qualify with the namespace
+        return n == "Object.ToString()" || n == "Object.GetHashCode()" || n == "Object.Finalize()" || n.StartsWith("Object.Equals(");
+    }
+
     /// <summary>
     /// True only when <paramref name="a"/> and <paramref name="b"/> are CONCRETE reference classes with no inheritance
     /// relation (neither assignable to the other) and neither is System.Object — so a value of one cannot be stored into
@@ -801,6 +810,16 @@ internal sealed class Il2CppRegisterFlow
                     && _model.GetVirtualReturnKind(baseValue.Type, disp) is not (Il2CppTypeModel.ReturnKindStruct or Il2CppTypeModel.ReturnKindUnresolved)))
             {
                 _model.CondemnedVtableSlots.Add((baseValue.Type.Name, SlotKey(disp)));
+                access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
+            }
+            else if (IsObjectBaseMethodName(virtualMethod) && baseValue.Type.FullName != "System.Object")
+            {
+                // A System.Object base-slot name (Equals/GetHashCode/ToString/Finalize) resolved through a DERIVED type's
+                // vtable is an unreliable placeholder: the metadata VTable inherits the Object name at slots 0-3, but the
+                // runtime memory vtable at that byte offset is frequently a type-specific virtual (metadata-vs-runtime
+                // divergence, shown pervasive by adversarial audit). We cannot confirm the slot really is the inherited
+                // Object method, so emit the honest T::class[0xNN] fallback instead of a confident -> Object.X() guess
+                // (错标比漏标更糟). Kept only when the receiver genuinely IS System.Object (a boxed value), where 0-3 hold.
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
             }
             else
