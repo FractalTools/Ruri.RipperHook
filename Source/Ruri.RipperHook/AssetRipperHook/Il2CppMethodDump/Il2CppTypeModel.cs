@@ -241,6 +241,11 @@ internal sealed class Il2CppTypeModel
         {
             if (field.IsStatic != statics)
                 continue;
+            // A const (Literal) field is a compile-time constant with NO runtime storage; il2cpp reports it at a bogus
+            // offset 0, where it would shadow the type's real static field at 0 (e.g. String's const TrimHead/alignConst
+            // both at 0, hiding the actual String.Empty — so `str ?? string.Empty` mislabeled `String.TrimHead`).
+            if ((field.Attributes & System.Reflection.FieldAttributes.Literal) != 0)
+                continue;
             int offset;
             try { offset = field.Offset; }
             catch { continue; }
