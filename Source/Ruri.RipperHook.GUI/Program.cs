@@ -45,7 +45,15 @@ internal static class Program
         // persisted value at first read.
         WireModuleSettings(config, configPath);
 
+        int enabledHookCountBeforeApply = config.EnabledHooks.Count;
         Bootstrap.ApplyHooks(config);
+        // ApplyHooks self-heals the enabled-hook set (drops ids with no implementation).
+        // Persist the cleaned set so stale ghost ids don't linger on disk and resurface on
+        // the next launch / filtered-export restore.
+        if (config.EnabledHooks.Count != enabledHookCountBeforeApply)
+        {
+            config.Save(configPath);
+        }
 
 		Application.Run(new MainForm(config, configPath));
         return 0;
