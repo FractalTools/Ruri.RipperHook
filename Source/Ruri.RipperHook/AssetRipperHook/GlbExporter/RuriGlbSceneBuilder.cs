@@ -783,7 +783,11 @@ public static class RuriGlbSceneBuilder
 
     private readonly record struct MorphInstance(InstanceBuilder Instance, string[] ChannelNames);
 
-    /// <summary>把「animator 相对路径」查询映射到「prefab 根相对路径」字典上的零拷贝视图。</summary>
+    /// <summary>
+    /// 把「animator 相对路径」查询映射到「prefab 根相对路径」字典上的零拷贝视图。
+    /// 契约:只有 TryGetValue/ContainsKey/索引器做前缀映射;Keys/Values/枚举透传底层字典
+    /// (键是 prefab 根相对路径)——烘焙器只按键查,不要拿这个视图做枚举。
+    /// </summary>
     private sealed class PrefixedPathLookup<TValue> : IReadOnlyDictionary<string, TValue>
     {
         private readonly IReadOnlyDictionary<string, TValue> _inner;
