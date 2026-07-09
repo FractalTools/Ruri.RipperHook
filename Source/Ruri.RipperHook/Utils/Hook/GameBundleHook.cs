@@ -125,6 +125,27 @@ public class GameBundleHook : CommonHook, IHookModule
     public static ScanChunkNamesDelegate? ScanChunkNames;
 
     /// <summary>
+    /// Set by a VFS game hook: the COMBINED scan — one decrypt+parse pass per bundle that projects both the
+    /// CAB-map metadata (deps, ClassIDs) and the readable names (chunk-entry file name, AssetBundle
+    /// Container addressable paths). One pass over the game builds the RCM3 map that needs no sidecar;
+    /// <c>null</c> when no VFS hook is active (the builder then falls back to a generic per-file read).
+    /// </summary>
+    public delegate List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanChunkFullDelegate(string path);
+    public static ScanChunkFullDelegate? ScanChunkFull;
+
+    /// <summary>
+    /// Project one SerializedFile to the combined CAB-map row: metadata (deps + ClassIDs, see
+    /// <see cref="ReadSerializedMetadata"/>) plus the readable names (chunk-entry file name + Container
+    /// addressable paths, see <see cref="ReadContainerNames"/>) — one parse, both projections.
+    /// </summary>
+    public static (string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths) ReadFullMetadata(SerializedFile sf, string fallbackName)
+    {
+        (string cab, List<string> deps, List<int> classIds) = ReadSerializedMetadata(sf, fallbackName);
+        (_, _, List<string> paths) = ReadContainerNames(sf, fallbackName);
+        return (cab, fallbackName, deps, classIds, paths);
+    }
+
+    /// <summary>
     /// A factory that materialises ONLY the AssetBundle (142) object of a collection, returning <c>null</c>
     /// for every other class so <see cref="SerializedAssetCollection"/>.FromSerializedFile skips the heavy
     /// Mesh/AnimationClip/Texture payload reads. The AssetBundle Container already lists every asset's

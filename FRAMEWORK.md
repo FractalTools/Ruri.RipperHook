@@ -216,16 +216,16 @@ ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
 
 ## 12. CAB 虚拟文件 —— 名字索引 + bundle-granular 加载（按名导出资源+全依赖）
 
-把整个游戏当作一张 **CAB 依赖图**来按需取用，而不是一次性把 21 GB 全载进内存。两件磁盘产物，**两套并行的读写器（CLI `Ruri.RipperHook.CLI/Cli/CabMap.cs`（static、权威） + GUI `Ruri.RipperHook.GUI/Services/ExportCabMap.cs`）跨程序集各一份，格式 magic 必须同步**：
+把整个游戏当作一张 **CAB 依赖图**来按需取用，而不是一次性把 21 GB 全载进内存。**一件自包含磁盘产物**（旧两件套仍可读），**两套并行的读写器（CLI `Ruri.RipperHook.CLI/Cli/CabMap.cs`（static、权威） + GUI `Ruri.RipperHook.GUI/Services/ExportCabMap.cs`）跨程序集各一份，格式 magic 必须同步**：
 
 | 产物 | 格式 | 内容 |
 |---|---|---|
-| **CAB map** `<game>.cabmap` | RCM2 `0x52434D32` | CAB 名(hash) → (相对 .chk 路径, offset, 依赖 CAB[], 该 CAB 的 ClassID[])。CAB 间依赖图。`--build-cab-map` 生成；也兼容旧无头格式（无 ClassID）。 |
-| **名字索引** `<game>.names`（CAB map 旁路 sidecar） | RNM2 `0x524E4D32` | CAB → (**chunk 条目文件名**, AssetBundle Container 可读寻址路径[])。`--build-name-index` 生成。**CAB map 本身不动**。 |
+| **CAB map** `<game>.cabmap` | **RCM3 `0x52434D33`（现行，自包含）** | CAB 名(hash) → (相对 .chk 路径, **chunk 条目文件名**, 依赖 CAB[], ClassID[], **AssetBundle Container 可读寻址路径[]**)。依赖图 + 名字一个文件全有——读一个文件即可用虚拟文件浏览器访问所有依赖。`--build-cab-map` 单趟合并扫描生成（RCM2 的死字段 offset 已删）。 |
+| 旧格式兼容 | RCM2 `0x52434D32` + RNM2 `0x524E4D32` sidecar / 无头格式 | 读取端全兼容：RCM2 读到的 offset 被消费丢弃、名字回退 `.names` sidecar（CLI 在 `--names` 时对旧 map 自动补建一次）；无头格式无 ClassID。`--build-name-index` 仅为旧 RCM2 服务。 |
 
-**为什么要名字索引**：CAB map 全按内容 hash 索引，**没有任何可读名字**。可读名（`assets/beyond/arts/entity/actor/girl/pelica/…`）只活在每个 bundle 的 **AssetBundle(142) 对象的 Container** 里——必须实际加载、解析 bundle 才看得到。EndField 每个 CAB 100% 含一个 142 对象。
+**为什么名字要进 map**：CAB map 全按内容 hash 索引，可读名（`assets/beyond/…/chr_0004_pelica/…`）只活在每个 bundle 的 **AssetBundle(142) 对象的 Container** 里——必须实际加载、解析 bundle 才看得到。EndField 每个 CAB 100% 含一个 142 对象。旧方案存成 `.names` sidecar（两件套、两次扫描）；RCM3 把名字并进 map 本体、单趟合并扫描一次拿全。
 
-**名字扫描（廉价、有界内存）**：`GameBundleHook.AssetBundleOnlyFactory` 是个只物化 ClassID 142、其它类一律返 `null` 的 `AssetFactoryBase`，于是 `SerializedAssetCollection.FromSerializedFile`（反射调）只读那一个小对象，跳过 Mesh/AnimationClip/Texture 重负载。`GameBundleHook.ReadContainerNames(sf, fileName)` 回 `(cab=sf.NameFixed, fileName, 它的 Container 路径[])`，需要 `GameBundleHook.NameScanVersion`（EndField hook 设为 `endFieldClassVersion`）解析 142 的 source-gen 布局。`VirtualFileSystem.ScanChunk<T>(chkPath, project)` 是把原来的 `ScanChunkMetadata` 泛化出来的**单一**有界并行流式扫描器（逐 bundle 解密+解析+投影+即弃），`ScanChunkMetadata`/`ScanChunkNames` 都是它的薄包装；EndField hook 把 `GameBundleHook.ScanChunkNames = vfs.ScanChunkNames` 接上。258k CAB 全扫峰值内存 ~3.5 GB。
+**合并扫描（廉价、有界内存）**：`GameBundleHook.AssetBundleOnlyFactory` 是个只物化 ClassID 142、其它类一律返 `null` 的 `AssetFactoryBase`，于是 `SerializedAssetCollection.FromSerializedFile`（反射调）只读那一个小对象，跳过 Mesh/AnimationClip/Texture 重负载。`GameBundleHook.ReadFullMetadata(sf, fileName)` = `ReadSerializedMetadata`（deps+ClassID）+ `ReadContainerNames`（条目名+Container 路径）单趟双投影，需要 `GameBundleHook.NameScanVersion`（EndField hook 设为 `endFieldClassVersion`）解析 142 的 source-gen 布局。`VirtualFileSystem.ScanChunk<T>(chkPath, project)` 是**单一**有界并行流式扫描器（逐 bundle 解密+解析+投影+即弃），`ScanChunkMetadata`/`ScanChunkNames`/`ScanChunkFull` 都是它的薄包装；EndField hook 接 `GameBundleHook.ScanChunk/ScanChunkNames/ScanChunkFull`。258k CAB 全扫峰值内存 ~3.5 GB。
 
 **★最关键的坑：chunk 条目文件名 ≠ CAB 名，无法互转。** chunk 条目名 `fileInfo.fileName` = bundle 归档路径 `Data/Bundles/Windows/<initial|main>/<24位hex>.ab`；CAB 名 = `cab-<32位hex>`，来自 bundle **内部目录**里那个 SerializedFile 的 `NameFixed`（= `SpecialFileNames.FixFileIdentifier(内部名)`，小写）。二者是两套独立标识，`FixFileIdentifier(条目名)` 得到的是 `.ab` 路径不是 CAB。**所以名字索引必须给每个 CAB 记录它的 chunk 条目文件名**（连 Container 为空的 CAB 也记，否则 load 过滤拿不到它的条目名）——这是 RNM2 相比早期只存路径的关键加项。
 

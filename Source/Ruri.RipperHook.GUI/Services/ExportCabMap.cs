@@ -17,8 +17,9 @@ namespace Ruri.RipperHook.GUI.Services;
 /// </summary>
 internal sealed class ExportCabMap
 {
-    private const uint Magic = 0x52434D32; // "RCM2" — keep in sync with Ruri.RipperHook.CLI CabMap
-    private const uint NameMagic = 0x524E4D32; // "RNM2" — name-index sidecar, keep in sync with CLI CabMap
+    private const uint Magic2 = 0x52434D32; // "RCM2" (legacy) — keep in sync with Ruri.RipperHook.CLI CabMap
+    private const uint Magic3 = 0x52434D33; // "RCM3" (self-contained, names inline) — keep in sync with CLI CabMap
+    private const uint NameMagic = 0x524E4D32; // "RNM2" — legacy name-index sidecar, keep in sync with CLI CabMap
 
     private sealed record Entry(string RelativePath, List<string> Dependencies, List<int> ClassIds);
 
@@ -145,7 +146,9 @@ internal sealed class ExportCabMap
         using FileStream stream = File.OpenRead(path);
         using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
 
-        bool typed = stream.Length >= 4 && reader.ReadUInt32() == Magic;
+        uint magic = stream.Length >= 4 ? reader.ReadUInt32() : 0;
+        bool selfContained = magic == Magic3;
+        bool typed = selfContained || magic == Magic2;
         if (typed)
         {
             reader.ReadInt32(); // version
@@ -163,7 +166,15 @@ internal sealed class ExportCabMap
         {
             string cab = reader.ReadString();
             string relativePath = reader.ReadString();
-            reader.ReadInt64(); // offset (unused here)
+            string entryFileName = string.Empty;
+            if (selfContained)
+            {
+                entryFileName = reader.ReadString();
+            }
+            else
+            {
+                reader.ReadInt64(); // RCM2/legacy offset — dead field, consumed and dropped
+            }
             int depCount = reader.ReadInt32();
             List<string> deps = new(depCount);
             for (int j = 0; j < depCount; j++) deps.Add(reader.ReadString());
@@ -179,7 +190,18 @@ internal sealed class ExportCabMap
             {
                 classIds = [];
             }
+
             _entries[cab] = new Entry(relativePath, deps, classIds);
+
+            // RCM3 carries the names inline — the sidecar-loaded _nameIndex shape is filled directly,
+            // so every downstream consumer (browser rows, scoped closure) works unchanged.
+            if (selfContained)
+            {
+                int pathCount = reader.ReadInt32();
+                List<string> containerPaths = new(pathCount);
+                for (int j = 0; j < pathCount; j++) containerPaths.Add(reader.ReadString());
+                _nameIndex[cab] = new NameEntry(entryFileName, containerPaths);
+            }
         }
 
         foreach ((string cab, Entry e) in _entries)
@@ -261,14 +283,14 @@ internal sealed class ExportCabMap
     }
 
     /// <summary>
-    /// Build a typed map over <paramref name="rootFolder"/> (one file at a time) and write it to
-    /// <paramref name="outPath"/>. The caller must already have the right game hook applied so encrypted
-    /// bundles load. Returns the number of CABs indexed.
+    /// Build a self-contained (RCM3) map over <paramref name="rootFolder"/> — metadata AND readable names
+    /// in one combined scan pass — and write it to <paramref name="outPath"/>. The caller must already have
+    /// the right game hook applied so encrypted bundles load. Returns the number of CABs indexed.
     /// </summary>
     public static int Build(string rootFolder, string outPath)
     {
         string fullRoot = Path.GetFullPath(rootFolder);
-        Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, (Entry Entry, NameEntry Names)> entries = new(StringComparer.OrdinalIgnoreCase);
 
         // Scan mode: skip resource payloads in the VFS extractor, decrypting only CAB-hosting bundles. The
         // parallelism that matters lives inside the VFS extractor (one worker per inner bundle file), since
@@ -279,9 +301,9 @@ internal sealed class ExportCabMap
             foreach (string file in Directory.GetFiles(fullRoot, "*.*", SearchOption.AllDirectories))
             {
                 string relative = Path.GetRelativePath(fullRoot, file);
-                foreach ((string cab, List<string> deps, List<int> classIds) in ScanSerializedMetadata(file))
+                foreach ((string cab, string entryFileName, List<string> deps, List<int> classIds, List<string> paths) in ScanFullMetadata(file))
                 {
-                    entries[cab] = new Entry(relative, deps, classIds);
+                    entries[cab] = (new Entry(relative, deps, classIds), new NameEntry(entryFileName, paths));
                 }
             }
         }
@@ -295,19 +317,21 @@ internal sealed class ExportCabMap
         string relativeBase = Path.GetRelativePath(outDir, fullRoot);
         using FileStream stream = File.Create(outPath);
         using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
-        writer.Write(Magic);
-        writer.Write(2);
+        writer.Write(Magic3);
+        writer.Write(3);
         writer.Write(relativeBase);
         writer.Write(entries.Count);
-        foreach ((string cab, Entry e) in entries.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
+        foreach ((string cab, (Entry e, NameEntry names)) in entries.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
             writer.Write(cab);
             writer.Write(e.RelativePath);
-            writer.Write(0L);
+            writer.Write(names.FileName);
             writer.Write(e.Dependencies.Count);
             foreach (string d in e.Dependencies) writer.Write(d);
             writer.Write(e.ClassIds.Count);
             foreach (int c in e.ClassIds) writer.Write(c);
+            writer.Write(names.Paths.Count);
+            foreach (string p in names.Paths) writer.Write(p);
         }
         return entries.Count;
     }
@@ -325,11 +349,12 @@ internal sealed class ExportCabMap
     /// single AssetCollection or read any object's data. That per-asset data read plus the processor pass
     /// is the slow part of <c>LoadAndProcess</c> we deliberately skip. Keep in sync with the CLI CabMap.
     /// </summary>
-    private static List<(string Cab, List<string> Deps, List<int> ClassIds)> ScanSerializedMetadata(string file)
+    private static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanFullMetadata(string file)
     {
-        // Fast path: a VFS game hook (EndField) exposes a bounded-memory, parallel scan of the chunk's
-        // CAB-hosting bundles (VirtualFileSystem.ScanChunkMetadata), disposing each bundle as it goes.
-        if (GameBundleHook.ScanChunk is { } scanChunk)
+        // Fast path: a VFS game hook (EndField) exposes a bounded-memory, parallel COMBINED scan of the
+        // chunk's CAB-hosting bundles (VirtualFileSystem.ScanChunkFull — metadata + readable names in one
+        // decrypt+parse pass), disposing each bundle as it goes.
+        if (GameBundleHook.ScanChunkFull is { } scanChunk)
         {
             try
             {
@@ -343,8 +368,8 @@ internal sealed class ExportCabMap
         }
 
         // Fallback (non-VFS games): drive the hook's file-pre-initialize unpack if present, otherwise a
-        // direct scheme read, then project each SerializedFile's metadata; bundles are disposed as read.
-        List<(string, List<string>, List<int>)> result = new();
+        // direct scheme read, then project each SerializedFile; bundles are disposed as read.
+        List<(string, string, List<string>, List<int>, List<string>)> result = new();
         List<FileBase> fileStack = new();
 
         try
@@ -387,7 +412,7 @@ internal sealed class ExportCabMap
 
                 foreach (SerializedFile sf in serializedFiles)
                 {
-                    result.Add(GameBundleHook.ReadSerializedMetadata(sf, fallbackName));
+                    result.Add(GameBundleHook.ReadFullMetadata(sf, fallbackName));
                 }
             }
             catch (Exception ex)

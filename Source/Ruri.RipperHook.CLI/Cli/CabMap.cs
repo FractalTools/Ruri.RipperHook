@@ -10,24 +10,26 @@ using System.Text.RegularExpressions;
 namespace Ruri.RipperHook.CLI;
 
 /// <summary>
-/// CABMap (CAB name → relative file path + dependencies + the ClassIDs it contains) so the CLI can
-/// resolve, without loading the whole game into memory, exactly which on-disk files to hand AR for a
-/// given target. Build it ONCE over the whole game folder (one file at a time, low peak memory), then:
-///   * <see cref="ResolveDeps"/> — transitive dependency closure of some seed files (the old behaviour),
-///   * <see cref="ResolveByTypes"/> — every CAB that actually contains an asset of a wanted ClassID,
-///     plus their transitive dependencies. This is the "build map then precisely filter" path: e.g.
-///     export only shaders by loading just the shader-bearing bundles instead of the entire game.
+/// CABMap: CAB name → (relative file path, chunk-entry file name, dependencies, ClassIDs, readable
+/// AssetBundle Container addressable paths). One self-contained file — load it and the whole game is
+/// browsable by dependency graph AND by readable name, no sidecar needed. Build it ONCE over the whole
+/// game folder (single combined scan, bounded memory), then:
+///   * <see cref="ResolveDeps"/> — transitive dependency closure of some seed files,
+///   * <see cref="ResolveByTypes"/> — every CAB that contains an asset of a wanted ClassID (+ deps),
+///   * <see cref="ResolveByNames"/> — every CAB whose addressable path matches a regex (+ deps),
+///     including the chunk-entry names a scoped bundle-granular load must filter by.
 ///
-/// Format: a magic+version header, then base-folder, count, then per CAB
-/// { cab; relativePath; long offset; depCount; deps[]; classIdCount; classIds[] }.
-/// <see cref="Load"/> also still reads the older headerless format (no ClassIDs) the GUI Asset Browser
-/// writes — those just resolve to an empty type set.
+/// Format RCM3: magic+version, base-folder, count, then per CAB
+/// { cab; relativePath; entryFileName; depCount; deps[]; classIdCount; classIds[]; pathCount; paths[] }.
+/// <see cref="Load"/> also reads RCM2 (no names — offset field consumed and dropped) and the older
+/// headerless format; those two auto-load the "<c>.names</c>" RNM2 sidecar when present.
 /// </summary>
 internal static class CabMap
 {
-    private const uint Magic = 0x52434D32; // "RCM2"
+    private const uint Magic2 = 0x52434D32; // "RCM2" (legacy: offset field, no inline names)
+    private const uint Magic3 = 0x52434D33; // "RCM3" (self-contained: entry file name + container paths inline)
 
-    internal sealed record Entry(string RelativePath, long Offset, List<string> Dependencies, List<int> ClassIds);
+    internal sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
 
     public static int Build(string rootFolder, string outPath)
     {
@@ -60,9 +62,9 @@ internal static class CabMap
             {
                 scanned++;
                 string relativeFilePath = Path.GetRelativePath(fullRoot, file);
-                foreach ((string cab, List<string> deps, List<int> classIds) in ScanSerializedMetadata(file))
+                foreach ((string cab, string entryFileName, List<string> deps, List<int> classIds, List<string> paths) in ScanFullMetadata(file))
                 {
-                    entries[cab] = new Entry(relativeFilePath, 0, deps, classIds);
+                    entries[cab] = new Entry(relativeFilePath, entryFileName, deps, classIds, paths);
                 }
             }
         }
@@ -72,31 +74,26 @@ internal static class CabMap
         }
 
         Save(fullOut, fullRoot, entries);
-        Console.Error.WriteLine($"[CabMap] {scanned} files scanned, {entries.Count} CABs → {fullOut}");
+        int named = entries.Values.Count(static e => e.ContainerPaths.Count > 0);
+        Console.Error.WriteLine($"[CabMap] {scanned} files scanned, {entries.Count} CABs ({named} with addressable paths) → {fullOut}");
         return 0;
     }
 
     /// <summary>
-    /// Read only the SerializedFile METADATA of one on-disk file — CAB name, dependency identifiers and the
-    /// ClassIDs from its type table — WITHOUT materializing a single asset or running any processor.
+    /// Combined single-pass projection of one on-disk file: SerializedFile metadata (CAB name, deps,
+    /// ClassIDs) PLUS the readable names (chunk-entry file name, AssetBundle Container paths). Reads the
+    /// tiny AssetBundle object per CAB and nothing else — no other asset is materialized, no processor runs.
     ///
     /// EndField (and the other VFS games) wrap their SerializedFiles in encrypted, content-addressed chunk
     /// containers (a <c>.chk</c> indexed by a sibling <c>&lt;dir&gt;.blc</c> manifest); a bare
     /// <see cref="SchemeReader.LoadFile"/> only ever sees an opaque ResourceFile. The active game hook
-    /// installs <see cref="GameBundleHook.CustomFilePreInitialize"/> — the exact VFS-unpack step that
-    /// <c>GameBundle.InitializeFromPaths</c> runs: it turns a path into a stack of parsed
-    /// <see cref="FileBase"/> (decrypt + decompress + read SerializedFile metadata) but does NOT build a
-    /// single AssetCollection or read any object's data. That per-asset data read plus the processor pass
-    /// is the slow part of <c>LoadAndProcess</c> we deliberately skip here — the whole point of building
-    /// the map fast. We fall back to a direct scheme read when no game hook is active (plain bundles).
+    /// exposes <see cref="GameBundleHook.ScanChunkFull"/> — a bounded-memory, parallel scan that decrypts
+    /// only CAB-hosting bundles and disposes each right after projection. We fall back to driving
+    /// <see cref="GameBundleHook.CustomFilePreInitialize"/> (or a direct scheme read) per file otherwise.
     /// </summary>
-    internal static List<(string Cab, List<string> Deps, List<int> ClassIds)> ScanSerializedMetadata(string file)
+    internal static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanFullMetadata(string file)
     {
-        // Fast path: a VFS game hook (EndField) exposes a bounded-memory, parallel scan that decrypts and
-        // reads only the CAB-hosting bundles inside the chunk, disposing each as it goes — see
-        // VirtualFileSystem.ScanChunkMetadata. This is the difference between a ~10 min, 21 GB scan and a
-        // fast, flat-memory one on a game that packs >250k bundles into a handful of chunks.
-        if (GameBundleHook.ScanChunk is { } scanChunk)
+        if (GameBundleHook.ScanChunkFull is { } scanChunk)
         {
             try
             {
@@ -110,9 +107,9 @@ internal static class CabMap
         }
 
         // Fallback (non-VFS games): drive the hook's file-pre-initialize unpack if present, otherwise a
-        // direct scheme read, then project each resulting SerializedFile's metadata. Bundles are disposed
-        // as they are read so a whole-game scan stays flat.
-        List<(string, List<string>, List<int>)> result = new();
+        // direct scheme read, then project each resulting SerializedFile. Bundles are disposed as they are
+        // read so a whole-game scan stays flat.
+        List<(string, string, List<string>, List<int>, List<string>)> result = new();
         List<FileBase> fileStack = new();
 
         try
@@ -155,7 +152,7 @@ internal static class CabMap
 
                 foreach (SerializedFile sf in serializedFiles)
                 {
-                    result.Add(GameBundleHook.ReadSerializedMetadata(sf, fallbackName));
+                    result.Add(GameBundleHook.ReadFullMetadata(sf, fallbackName));
                 }
             }
             catch (Exception ex)
@@ -179,7 +176,9 @@ internal static class CabMap
         using FileStream stream = File.OpenRead(path);
         using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
 
-        bool typed = stream.Length >= 4 && reader.ReadUInt32() == Magic;
+        uint magic = stream.Length >= 4 ? reader.ReadUInt32() : 0;
+        bool selfContained = magic == Magic3;
+        bool typed = selfContained || magic == Magic2;
         if (typed)
         {
             reader.ReadInt32(); // version, reserved
@@ -198,7 +197,15 @@ internal static class CabMap
         {
             string cab = reader.ReadString();
             string relativePath = reader.ReadString();
-            long offset = reader.ReadInt64();
+            string entryFileName = string.Empty;
+            if (selfContained)
+            {
+                entryFileName = reader.ReadString();
+            }
+            else
+            {
+                reader.ReadInt64(); // RCM2/legacy offset — dead field, consumed and dropped
+            }
             int depCount = reader.ReadInt32();
             List<string> deps = new(depCount);
             for (int j = 0; j < depCount; j++) deps.Add(reader.ReadString());
@@ -214,9 +221,45 @@ internal static class CabMap
             {
                 classIds = [];
             }
-            entries[cab] = new Entry(relativePath, offset, deps, classIds);
+
+            List<string> containerPaths;
+            if (selfContained)
+            {
+                int pathCount = reader.ReadInt32();
+                containerPaths = new List<string>(pathCount);
+                for (int j = 0; j < pathCount; j++) containerPaths.Add(reader.ReadString());
+            }
+            else
+            {
+                containerPaths = [];
+            }
+            entries[cab] = new Entry(relativePath, entryFileName, deps, classIds, containerPaths);
         }
         return (baseFolder, entries);
+    }
+
+    /// <summary>True when the map carries its names inline (RCM3) — no sidecar needed.</summary>
+    public static bool HasInlineNames(Dictionary<string, Entry> entries)
+    {
+        foreach (Entry entry in entries.Values)
+        {
+            if (entry.EntryFileName.Length > 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Project a self-contained (RCM3) map to the name-index shape the resolvers consume.</summary>
+    public static Dictionary<string, NameEntry> NameIndexFromEntries(Dictionary<string, Entry> entries)
+    {
+        Dictionary<string, NameEntry> index = new(entries.Count, StringComparer.OrdinalIgnoreCase);
+        foreach ((string cab, Entry entry) in entries)
+        {
+            index[cab] = new NameEntry(entry.EntryFileName, entry.ContainerPaths);
+        }
+        return index;
     }
 
     /// <summary>
@@ -273,13 +316,12 @@ internal static class CabMap
 
     // ── name index (CAB → chunk-entry file name + its AssetBundle Container addressable paths) ─────
     //
-    // The CAB map keys everything by content hash; the readable names ("…/pelica/…") live only inside
-    // each bundle's AssetBundle Container. A name index is a sidecar — "<cabmap>.names" — built once by a
-    // bounded scan that reads ONLY the AssetBundle object per CAB, so the CAB map itself stays untouched
-    // (the user's whole point: use the map directly). Each CAB also records the chunk-entry file name that
-    // hosts it (e.g. Data/Bundles/Windows/main/<hash>.ab) — which differs from the inner CAB name — because
-    // a scoped load must filter chunk entries by THAT name. Pair a name match with the CAB map's dependency
-    // graph and you get "every asset called pelica, plus its full dependency closure".
+    // RCM3 maps carry these inline (NameIndexFromEntries). The RNM2 sidecar machinery below remains for
+    // legacy RCM2 maps: built once by a bounded scan that reads ONLY the AssetBundle object per CAB. Each
+    // CAB also records the chunk-entry file name that hosts it (e.g. Data/Bundles/Windows/main/<hash>.ab)
+    // — which differs from the inner CAB name — because a scoped load must filter chunk entries by THAT
+    // name. Pair a name match with the CAB map's dependency graph and you get "every asset called pelica,
+    // plus its full dependency closure".
 
     internal sealed record NameEntry(string FileName, List<string> Paths);
 
@@ -305,8 +347,8 @@ internal static class CabMap
 
     /// <summary>
     /// Build a name index over <paramref name="rootFolder"/> (one file at a time, bounded memory) and write
-    /// it to <paramref name="outPath"/>. The active game hook must be applied so encrypted bundles decrypt.
-    /// Returns the number of CABs with at least one readable container path.
+    /// it to <paramref name="outPath"/>. Only needed for legacy RCM2 maps — RCM3 maps carry names inline.
+    /// The active game hook must be applied so encrypted bundles decrypt. Returns the number of CABs indexed.
     /// </summary>
     public static int BuildNameIndex(string rootFolder, string outPath)
     {
@@ -548,19 +590,21 @@ internal static class CabMap
 
         using FileStream stream = File.Create(outPath);
         using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
-        writer.Write(Magic);
-        writer.Write(2); // version
+        writer.Write(Magic3);
+        writer.Write(3); // version
         writer.Write(relativeBase);
         writer.Write(entries.Count);
         foreach ((string cab, Entry e) in entries.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
             writer.Write(cab);
             writer.Write(e.RelativePath);
-            writer.Write(e.Offset);
+            writer.Write(e.EntryFileName);
             writer.Write(e.Dependencies.Count);
             foreach (string d in e.Dependencies) writer.Write(d);
             writer.Write(e.ClassIds.Count);
             foreach (int c in e.ClassIds) writer.Write(c);
+            writer.Write(e.ContainerPaths.Count);
+            foreach (string p in e.ContainerPaths) writer.Write(p);
         }
     }
 }

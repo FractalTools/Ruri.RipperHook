@@ -113,7 +113,10 @@ public static class RuriGlbSceneBuilder
             return;
         }
 
-        NodeBuilder node = parentNode is null ? new NodeBuilder(gameObject.Name) : parentNode.CreateNode(gameObject.Name);
+        // SharpGLTF 的 IsValidArmature 要求骨架树内节点名唯一,游戏层级常见重名(attach/effect 等)——
+        // 建树时确定性去重;蒙皮按 joint 索引、动画绑定按 Unity 路径字典,改名无损。
+        string nodeName = context.UniqueNodeName(gameObject.Name);
+        NodeBuilder node = parentNode is null ? new NodeBuilder(nodeName) : parentNode.CreateNode(nodeName);
         Vector3 localPosition = transform.LocalPosition_C4.CastToStruct();
         Quaternion localRotation = transform.LocalRotation_C4.CastToStruct();
         Vector3 localScale = transform.LocalScale_C4.CastToStruct();
@@ -203,7 +206,7 @@ public static class RuriGlbSceneBuilder
             }
 
             int slash = path.LastIndexOf('/');
-            string name = slash < 0 ? path : path[(slash + 1)..];
+            string name = context.UniqueNodeName(slash < 0 ? path : path[(slash + 1)..]);
             Vector3 position = Vector3.Zero;
             Quaternion rotation = Quaternion.Identity;
             Vector3 scale = Vector3.One;
@@ -392,11 +395,18 @@ public static class RuriGlbSceneBuilder
         {
             AvatarMuscleReferential? referential = null;
             IAvatar? avatar = animatorEntry.Animator.AvatarP;
-            if (avatar is not null)
+            if (avatar is null)
+            {
+                Logger.Info(LogCategory.Export, $"[GLB] animator '{animatorEntry.Animator.GetBestName()}' has no Avatar — humanoid baking unavailable");
+            }
+            else
             {
                 try
                 {
                     referential = AvatarMuscleReferential.TryCreate(avatar);
+                    Logger.Info(LogCategory.Export, referential is null
+                        ? $"[GLB] avatar '{avatar.GetBestName()}' carries no human rig (generic avatar) — humanoid baking skipped"
+                        : $"[GLB] avatar '{avatar.GetBestName()}': muscle referential with {referential.DrivenBones.Count} driven bones");
                 }
                 catch (Exception ex)
                 {
@@ -724,6 +734,27 @@ public static class RuriGlbSceneBuilder
         public Dictionary<string, MorphInstance> MorphInstances { get; } = new(StringComparer.Ordinal);
 
         private readonly Dictionary<IMesh, MeshData> _meshCache = new();
+        private readonly HashSet<string> _usedNodeNames = new(StringComparer.Ordinal);
+
+        public string UniqueNodeName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                name = "node";
+            }
+            if (_usedNodeNames.Add(name))
+            {
+                return name;
+            }
+            for (int i = 1; ; i++)
+            {
+                string candidate = $"{name}_{i}";
+                if (_usedNodeNames.Add(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
 
         public BuildContext(SceneBuilder scene, bool isScene)
         {
