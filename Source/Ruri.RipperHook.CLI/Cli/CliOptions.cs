@@ -51,6 +51,14 @@ internal sealed class CliOptions
     /// export shaders without loading every chk into memory. May be used without <c>--load</c>.
     /// </summary>
     public string[] LoadTypes { get; init; } = [];
+
+    /// <summary>
+    /// Set to write every loaded prefab hierarchy as one complete .glb (skeleton, skinned meshes,
+    /// materials+textures, morph targets, generic+humanoid animations) into this directory instead
+    /// of running the Unity-project export. <c>--names</c> also filters which prefabs are written.
+    /// The directory is never deleted — files are only added. Auto-enables the AR_GlbExporter hook.
+    /// </summary>
+    public string? ExportGlbPath { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -69,6 +77,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string?> BuildNameIndex { get; }
     public Option<string?> CabMap { get; }
     public Option<string[]> LoadTypes { get; }
+    public Option<string?> ExportGlb { get; }
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -127,6 +136,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         {
             AllowMultipleArgumentsPerToken = true,
         };
+        ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -149,6 +159,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             BuildNameIndex,
             CabMap,
             LoadTypes,
+            ExportGlb,
             Passthrough,
         };
         return root;
@@ -173,6 +184,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             BuildNameIndexPath = pr.GetValueForOption(BuildNameIndex),
             CabMapPath = pr.GetValueForOption(CabMap),
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
+            ExportGlbPath = pr.GetValueForOption(ExportGlb),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }

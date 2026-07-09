@@ -88,7 +88,12 @@ internal static class Program
         {
             config.EnabledHooks.Add("AR_TypeFilterExport_");
         }
-        if (opts.Hooks.Length > 0 || opts.LoadTypes.Length > 0)
+        // --export-glb needs the full-model GLB builder installed over GlbModelExporter.ExportModel.
+        if (opts.ExportGlbPath is { Length: > 0 })
+        {
+            config.EnabledHooks.Add("AR_GlbExporter_");
+        }
+        if (opts.Hooks.Length > 0 || opts.LoadTypes.Length > 0 || opts.ExportGlbPath is { Length: > 0 })
         {
             Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
         }
