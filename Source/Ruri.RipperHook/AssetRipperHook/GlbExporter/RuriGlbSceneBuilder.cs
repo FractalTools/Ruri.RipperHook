@@ -48,10 +48,18 @@ namespace Ruri.RipperHook.GlbExporter;
 /// </summary>
 public static class RuriGlbSceneBuilder
 {
-    public static SceneBuilder Build(IEnumerable<IUnityObjectBase> assets, bool isScene)
+    /// <summary>
+    /// Build a glTF scene from a prefab/scene hierarchy.
+    /// <paramref name="humanoidClipPool"/> is the loaded scope's muscle-based clips that no Animator
+    /// references directly: humanoid muscle curves are avatar-relative, plaintext-named and
+    /// path-hash-independent, so when a prefab carries a humanoid Avatar every such clip is baked with
+    /// that Avatar's muscle referential. Keep the pool scoped to one character (the name closure) so a
+    /// character's rig doesn't get another character's motion. Null/empty = only Animator-referenced clips.
+    /// </summary>
+    public static SceneBuilder Build(IEnumerable<IUnityObjectBase> assets, bool isScene, IReadOnlyList<IAnimationClip>? humanoidClipPool = null)
     {
         SceneBuilder scene = new();
-        BuildContext context = new(scene, isScene);
+        BuildContext context = new(scene, isScene, humanoidClipPool);
 
         foreach (IUnityObjectBase asset in assets)
         {
@@ -430,7 +438,15 @@ public static class RuriGlbSceneBuilder
                 }
             }
 
-            foreach (IAnimationClip clip in CollectClips(animatorEntry.Animator))
+            // Animator-referenced clips (generic path-hash curves need the controller association);
+            // then, for a humanoid rig, every avatar-portable muscle clip in the scope's pool.
+            IEnumerable<IAnimationClip> clips = CollectClips(animatorEntry.Animator);
+            if (referential is not null && context.HumanoidClipPool.Count > 0)
+            {
+                clips = clips.Concat(context.HumanoidClipPool);
+            }
+
+            foreach (IAnimationClip clip in clips)
             {
                 if (!context.SeenClips.Add(clip))
                 {
@@ -757,6 +773,8 @@ public static class RuriGlbSceneBuilder
         public HashSet<IAnimationClip> SeenClips { get; } = new();
         public Dictionary<string, MorphInstance> MorphInstances { get; } = new(StringComparer.Ordinal);
 
+        public IReadOnlyList<IAnimationClip> HumanoidClipPool { get; }
+
         private readonly Dictionary<IMesh, MeshData> _meshCache = new();
         private readonly HashSet<string> _usedNodeNames = new(StringComparer.Ordinal);
 
@@ -780,10 +798,11 @@ public static class RuriGlbSceneBuilder
             }
         }
 
-        public BuildContext(SceneBuilder scene, bool isScene)
+        public BuildContext(SceneBuilder scene, bool isScene, IReadOnlyList<IAnimationClip>? humanoidClipPool)
         {
             Scene = scene;
             IsScene = isScene;
+            HumanoidClipPool = humanoidClipPool ?? Array.Empty<IAnimationClip>();
         }
 
         public bool TryGetOrMakeMeshData(IMesh mesh, out MeshData meshData)
