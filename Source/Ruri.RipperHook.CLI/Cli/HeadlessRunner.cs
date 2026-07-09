@@ -85,15 +85,23 @@ internal static class HeadlessRunner
                 if (options.Names.Length > 0)
                 {
                     // Find every CAB whose AssetBundle Container has a path matching --names (e.g. pelica),
-                    // then load that CAB plus its whole dependency closure. The name index is a sidecar built
-                    // once over the game folder; the CAB map itself is never modified.
-                    string nameIndexPath = CabMap.NameIndexPath(cabMapPath);
-                    if (!CabMap.IsNameIndexCurrent(nameIndexPath))
+                    // then load that CAB plus its whole dependency closure. A self-contained (RCM3) map
+                    // carries the names inline; only a legacy RCM2 map needs the sidecar (auto-built once).
+                    Dictionary<string, CabMap.NameEntry> nameIndex;
+                    if (CabMap.HasInlineNames(entries))
                     {
-                        Console.Error.WriteLine($"[Ruri.CLI] name index missing/stale → building once over '{baseFolder}' (reads each bundle's AssetBundle Container; may take minutes)...");
-                        CabMap.BuildNameIndex(baseFolder, nameIndexPath);
+                        nameIndex = CabMap.NameIndexFromEntries(entries);
                     }
-                    Dictionary<string, CabMap.NameEntry> nameIndex = CabMap.LoadNameIndex(nameIndexPath);
+                    else
+                    {
+                        string nameIndexPath = CabMap.NameIndexPath(cabMapPath);
+                        if (!CabMap.IsNameIndexCurrent(nameIndexPath))
+                        {
+                            Console.Error.WriteLine($"[Ruri.CLI] legacy map without inline names → building sidecar once over '{baseFolder}' (reads each bundle's AssetBundle Container; may take minutes)...");
+                            CabMap.BuildNameIndex(baseFolder, nameIndexPath);
+                        }
+                        nameIndex = CabMap.LoadNameIndex(nameIndexPath);
+                    }
                     string[] byName = CabMap.ResolveByNames(baseFolder, entries, nameIndex, options.Names, out int matchedCabs, out HashSet<string> loadFilter);
                     foreach (string f in byName) resolved.Add(f);
                     loadFilterFileNames = loadFilter;
