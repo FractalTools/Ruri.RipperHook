@@ -20,5 +20,5 @@ public enum GameType
     AR_Il2CppMethodDump,
     AR_DisassemblyExporter,
     AR_TypeFilterExport,
-    AR_GlbAnimExport,
+    AR_GlbExporter,
 }

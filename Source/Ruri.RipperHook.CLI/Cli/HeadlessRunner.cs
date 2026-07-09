@@ -166,6 +166,19 @@ internal static class HeadlessRunner
                 return 4;
             }
 
+            // GLB 直出模式:每个 prefab 层级一个完整 .glb,不跑 Unity 工程导出、不删目标目录。
+            if (options.ExportGlbPath is { Length: > 0 } glbPath)
+            {
+                (int glbExported, int glbFailed) = Ruri.RipperHook.GlbExporter.GlbBatchExporter.ExportPrefabs(
+                    gameData, glbPath, options.Names);
+                SummaryStatus glbStatus = glbFailed == 0
+                    ? (glbExported > 0 ? SummaryStatus.Ok : SummaryStatus.Error)
+                    : SummaryStatus.Partial;
+                EmitJson(glbStatus, options, totalAssets, byType, glbExported, [], glbPath,
+                    glbExported == 0 ? "No prefab hierarchy matched --names for GLB export." : null);
+                return glbStatus == SummaryStatus.Ok ? 0 : (glbExported > 0 ? 2 : 4);
+            }
+
             if (options.ExportPath == null)
             {
                 EmitJson(SummaryStatus.Ok, options, totalAssets, byType, 0, [], null, null);
