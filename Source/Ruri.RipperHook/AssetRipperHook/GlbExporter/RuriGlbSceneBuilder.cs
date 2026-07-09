@@ -273,8 +273,24 @@ public static class RuriGlbSceneBuilder
             {
                 Logger.Warning(LogCategory.Export, $"[GLB] '{renderer.GetBestName()}': {missing}/{boneCount} bones missing from hierarchy, skin will be partially rigid");
             }
-            // 用关节节点的世界变换(= 绑定姿势层级)反推逆绑定矩阵,避开 Unity bindpose 的矩阵约定坑。
-            instance = context.Scene.AddSkinnedMesh(meshBuilder, Matrix4x4.Identity, jointNodes);
+            // Unity 蒙皮顶点在 MESH 空间,不是世界空间——必须用网格自带的 m_BindPose(mesh→bone 逆绑定,
+            // AR CastToStruct 已转成行向量约定)镜像进 glTF 空间(C·B·C)。用关节世界变换反推只在
+            // 网格空间恰好等于世界空间时成立,角色 rig 带轴向旋转时网格会横躺 90°。
+            Matrix4x4[]? bindPose = meshData.BindPose;
+            if (bindPose is not null && bindPose.Length == boneCount)
+            {
+                (NodeBuilder, Matrix4x4)[] joints = new (NodeBuilder, Matrix4x4)[boneCount];
+                for (int i = 0; i < boneCount; i++)
+                {
+                    joints[i] = (jointNodes[i], MirrorTransform(bindPose[i]));
+                }
+                instance = context.Scene.AddSkinnedMesh(meshBuilder, joints);
+            }
+            else
+            {
+                // 兜底:网格没有 bindpose 时退回关节世界反推(要求层级处于绑定姿势)。
+                instance = context.Scene.AddSkinnedMesh(meshBuilder, Matrix4x4.Identity, jointNodes);
+            }
         }
         else
         {
@@ -665,6 +681,14 @@ public static class RuriGlbSceneBuilder
             return Enumerable.Range(renderer.StaticBatchInfo_C25.FirstSubMesh, renderer.StaticBatchInfo_C25.SubMeshCount).ToArray();
         }
         return Array.Empty<int>();
+    }
+
+    /// <summary>Unity→glTF 的镜像基变换共轭:C·M·C,C=diag(-1,1,1)(行向量约定,C 自逆)。</summary>
+    private static readonly Matrix4x4 MirrorScale = Matrix4x4.CreateScale(-1f, 1f, 1f);
+
+    private static Matrix4x4 MirrorTransform(Matrix4x4 unityRowMatrix)
+    {
+        return MirrorScale * unityRowMatrix * MirrorScale;
     }
 
     // Unity 欧拉(度,ZXY 内旋)→四元数。
