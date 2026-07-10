@@ -17,11 +17,20 @@ namespace Ruri.RipperHook.GlbExporter;
 /// Unity humanoid muscle referential extracted from an Avatar: per driven human bone the Axes
 /// (preQ/postQ/sgn/limit), the TOS transform path and the normalized rest pose.
 /// Muscle math is a 1:1 port of the validated Blender-side solver
-/// (RuriRipperImporter/humanoid_retarget.py:188-204,267-331): a normalized muscle value in [-1,1]
-/// scales to a radian angle via the per-axis limit and sign, the three axes compose as
-/// swing(Y,Z) * twist(X), and the bone's animated local rotation is rest * (postQ * st * postQ^-1),
-/// so muscle=0 lands exactly on the prefab rest. The hips are driven by RootT/RootQ instead
-/// (body pose in the animation-root frame; MotionT carries the extracted root motion).
+/// (RuriRipperImporter/humanoid_retarget.py, ``_axes_local``): a normalized muscle value in
+/// [-1,1] scales to a radian angle via the per-axis limit and sign, the three axes compose as
+/// swing(Y,Z) * twist(X), and the bone's animated local rotation is
+/// rest * (preQ * st * postQ^-1), with an EXTRA leading inv(normRest) for the bones flagged in
+/// <see cref="NeedsNormRestCorrectionSlots"/> only -- see that field and ``LocalDelta`` for why
+/// this is per-bone, not universal. The hips are driven by RootT/RootQ instead (body pose in
+/// the animation-root frame; MotionT carries the extracted root motion) -- <b>this hips path is
+/// known-wrong as of 2026-07-10</b> (see FRAMEWORK.md §13 "根运动坑"): Unity ground truth shows
+/// the Hips bone's own rest local rotation is exact identity and its animated local delta is
+/// small, but RootT/RootQ read directly as "hips local delta" produce a value that does not
+/// match Unity's actual Hips local transform at all -- these two channels most likely belong on
+/// the Animator's own GameObject (one level above the skeleton), not on the Hips bone itself.
+/// Not yet fixed in either language; mirrored here 1:1 with the still-broken Python behavior
+/// per the port's own "match Python's current state, don't silently diverge" rule.
 /// </summary>
 public sealed class AvatarMuscleReferential
 {
@@ -33,6 +42,47 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>muscle attribute string -> (bone slot, dof axis 0=X twist / 1=Y / 2=Z)。</summary>
     private static readonly Dictionary<string, (int Slot, int Axis)> MuscleDofTable = BuildMuscleDofTable();
+
+    /// <summary>
+    /// Bone slots whose LocalDelta needs an extra leading inv(normRest) on top of the base
+    /// preQ*swingTwist*postQ^-1 sandwich (humanoid_retarget.py's
+    /// ``_NEEDS_NORM_REST_CORRECTION``, same set, same derivation method). Empirically derived
+    /// by sampling live Unity Editor ground truth (AnimationMode.SampleAnimationClip +
+    /// Animator.GetBoneTransform on a real Avatar+clip) for 15 body bones across 11 frames each
+    /// and finding the exact split where each side of the correction is needed: forcing it on
+    /// for an unflagged bone (Spine/Chest/UpperChest/Left arm+leg) regresses that bone from
+    /// under-10-degree error to 170-315 degrees; omitting it for a flagged bone (Neck/Head/
+    /// Shoulders/Right arm+leg) regresses that bone from ~0 degrees to 15-120 degrees. No single
+    /// avatar-local quantity (muscle sign, preQ/postQ magnitude, L/R side alone) predicts the
+    /// split, so this is NOT a formula bug being papered over -- it looks like a fixed property
+    /// of Unity's internal normalized-skeleton template (same reference for every avatar), which
+    /// is why it is keyed by bone role rather than computed from this avatar's own data.
+    /// Validated directly: Neck, Head, Left/RightShoulder, Right{Upper,Lower}Arm,
+    /// Right{Upper,Lower}Leg, Left/RightHand (marginal but consistent both sides). Validated NOT
+    /// needed: Spine, Chest, UpperChest, Left{Upper,Lower}Arm, Left{Upper,Lower}Leg. Extrapolated
+    /// (no ground truth available) by matching the nearest validated bone in the same kinematic
+    /// chain: Right{Foot,Toes} follow RightLowerLeg; Left{Foot,Toes} follow LeftLowerLeg;
+    /// Left/RightEye and Jaw follow Head; all finger phalanges follow their own hand.
+    /// Known residual even with this correction applied: RightUpperArm still averages ~44
+    /// degrees off on the validation clip -- every combination of swing-composition order,
+    /// per-axis sign, and preQ/postQ swap tried failed to close this further, left as an open,
+    /// documented gap.
+    /// </summary>
+    private static readonly HashSet<int> NeedsNormRestCorrectionSlots = BuildNeedsNormRestCorrectionSlots();
+
+    /// <summary>
+    /// "Forearm Twist In-Out" needs its angle negated relative to what its own sgn already
+    /// encodes -- validated bilaterally (Left AND Right forearm both need it, average error
+    /// ~19deg -> ~8deg across 11 frames), unlike the analogous "Lower Leg Twist In-Out" which
+    /// needs no such flip. Root cause not isolated (ruled out: swing composition order,
+    /// preQ/postQ swap, the norm_rest correction above); kept as a targeted, ground-truth
+    /// validated correction on the specific muscle (humanoid_retarget.py's
+    /// ``_TWIST_SIGN_FLIP``, same set).
+    /// </summary>
+    private static readonly HashSet<string> TwistSignFlipMuscles = new(StringComparer.Ordinal)
+    {
+        "Left Forearm Twist In-Out", "Right Forearm Twist In-Out",
+    };
 
     private readonly MuscleBone?[] _bones = new MuscleBone?[TotalSlots];
     private readonly List<MuscleBone> _drivenBones = new();
@@ -135,8 +185,9 @@ public sealed class AvatarMuscleReferential
             normRest = ToQuaternion(pose.X[nodeIndex].Q);
         }
 
+        bool needsCorrection = NeedsNormRestCorrectionSlots.Contains(slot);
         MuscleBone bone = axes is null
-            ? new MuscleBone(path.String, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero, normRest)
+            ? new MuscleBone(path.String, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero, normRest, needsCorrection)
             : new MuscleBone(
                 path.String,
                 ToQuaternion(axes.PreQ),
@@ -144,26 +195,27 @@ public sealed class AvatarMuscleReferential
                 GetSgn(axes),
                 GetLimit(axes, min: true),
                 GetLimit(axes, min: false),
-                normRest);
+                normRest,
+                needsCorrection);
         bones[slot] = bone;
         driven.Add(bone);
     }
 
     /// <summary>
     /// Compose the bone's muscle rotation as a bind-relative delta in its local frame:
-    /// inv(normRest) * preQ * swingTwist(angles) * inv(postQ)
-    /// (humanoid_retarget.py:377-410 `_axes_local`, as corrected against live Unity
-    /// Mecanim ground truth). preQ and postQ are NOT interchangeable -- on a real rig
-    /// they differ by 60-180+ degrees per bone, so the sandwich is asymmetric, not a
-    /// similarity-transform conjugation by postQ alone. The leading inv(normRest)
-    /// cancels the avatar's own normalized-skeleton rest baseline that preQ*inv(postQ)
-    /// otherwise bakes into the delta at muscle=0 -- omitting it looks fine on bones
-    /// where that baseline happens to be small (e.g. LowerLeg) but produces a wildly
-    /// wrong, ~180-degree-off delta on bones where it isn't (e.g. UpperLeg, preQ/postQ
-    /// differ by ~184 degrees there). Verified via Editor AnimationMode.SampleAnimationClip
-    /// on a real humanoid Avatar+clip across all four leg bones at multiple frames --
-    /// smooth, mirror-symmetric, NaN-free output is NOT sufficient evidence of correctness
-    /// for this class of bug; only comparing against Unity's own computed bone rotation is.
+    /// preQ * swingTwist(angles) * inv(postQ), with an extra leading inv(normRest) for bones
+    /// flagged in <see cref="MuscleBone.NeedsNormRestCorrection"/> only
+    /// (humanoid_retarget.py's ``_axes_local``, same formula, same per-bone flag).
+    /// preQ and postQ are NOT interchangeable -- on a real rig they differ by 60-280+ degrees
+    /// per bone, so the sandwich is asymmetric, not a similarity-transform conjugation by
+    /// postQ alone. At muscle=0 this reduces to the fixed per-bone constant preQ*inv(postQ)
+    /// (or inv(normRest)*preQ*inv(postQ) where flagged) -- NOT identity in general, and NOT
+    /// always equal to the character's own FBX/prefab rest; see
+    /// <see cref="NeedsNormRestCorrectionSlots"/> for why that's a real property of Unity's
+    /// avatar system rather than a bug. Verified via Editor AnimationMode.SampleAnimationClip
+    /// on a real humanoid Avatar+clip across 15 body bones at 11 frames each -- smooth,
+    /// mirror-symmetric, NaN-free output is NOT sufficient evidence of correctness for this
+    /// class of bug; only comparing against Unity's own computed bone rotation is.
     /// The caller composes this onto the bone's rest local rotation (rest * delta).
     /// </summary>
     public static Quaternion LocalDelta(MuscleBone bone, Func<string, float?> muscleLookup)
@@ -190,8 +242,17 @@ public sealed class AvatarMuscleReferential
                 default: angleZ = angle; break;
             }
         }
+        if (bone.GetDofMuscle(0) is string twistMuscle && TwistSignFlipMuscles.Contains(twistMuscle))
+        {
+            angleX = -angleX;
+        }
         Quaternion swingTwist = SwingTwist(angleX, angleY, angleZ);
-        return Quaternion.Inverse(bone.NormalizedRest) * bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
+        Quaternion delta = bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
+        if (bone.NeedsNormRestCorrection)
+        {
+            delta = Quaternion.Inverse(bone.NormalizedRest) * delta;
+        }
+        return delta;
     }
 
     /// <summary>
@@ -383,6 +444,27 @@ public sealed class AvatarMuscleReferential
         }
         return table;
     }
+
+    /// <summary>Builds the slot set for <see cref="NeedsNormRestCorrectionSlots"/> -- see that
+    /// field's doc comment for the ground-truth derivation and the extrapolation rules for the
+    /// untested bones (feet/toes/eyes/jaw/fingers).</summary>
+    private static HashSet<int> BuildNeedsNormRestCorrectionSlots()
+    {
+        HashSet<int> slots = new()
+        {
+            (int)BoneType.Neck, (int)BoneType.Head, (int)BoneType.LeftEye, (int)BoneType.RightEye, (int)BoneType.Jaw,
+            (int)BoneType.LeftShoulder, (int)BoneType.RightShoulder,
+            (int)BoneType.RightUpperArm, (int)BoneType.RightLowerArm,
+            (int)BoneType.RightUpperLeg, (int)BoneType.RightLowerLeg, (int)BoneType.RightFoot, (int)BoneType.RightToes,
+            (int)BoneType.LeftHand, (int)BoneType.RightHand,
+        };
+        for (int i = 0; i < FingerSlotsPerHand; i++)
+        {
+            slots.Add(LeftFingerBase + i);
+            slots.Add(RightFingerBase + i);
+        }
+        return slots;
+    }
 }
 
 /// <summary>One human bone the muscle referential drives: its Axes plus the TOS transform path.</summary>
@@ -394,14 +476,18 @@ public sealed class MuscleBone
     public Vector3 Sgn { get; }
     public Vector3 LimitMin { get; }
     public Vector3 LimitMax { get; }
-    /// <summary>Normalized-skeleton rest rotation (diagnostic only; baking rests on the prefab pose).</summary>
+    /// <summary>Avatar's normalized-skeleton rest rotation; see <see cref="AvatarMuscleReferential.NeedsNormRestCorrectionSlots"/>
+    /// for which bones actually apply it in LocalDelta (not universal).</summary>
     public Quaternion NormalizedRest { get; }
     public bool IsHips { get; internal set; }
+    /// <summary>Whether LocalDelta applies inv(NormalizedRest) for this bone. See
+    /// <see cref="AvatarMuscleReferential.NeedsNormRestCorrectionSlots"/>.</summary>
+    public bool NeedsNormRestCorrection { get; }
 
     private readonly string?[] _dofMuscles = new string?[3];
 
     internal MuscleBone(string path, Quaternion preQ, Quaternion postQ, Vector3 sgn,
-        Vector3 limitMin, Vector3 limitMax, Quaternion normalizedRest)
+        Vector3 limitMin, Vector3 limitMax, Quaternion normalizedRest, bool needsNormRestCorrection)
     {
         Path = path;
         PreQ = preQ;
@@ -410,6 +496,7 @@ public sealed class MuscleBone
         LimitMin = limitMin;
         LimitMax = limitMax;
         NormalizedRest = normalizedRest;
+        NeedsNormRestCorrection = needsNormRestCorrection;
     }
 
     internal void SetDofMuscle(int axis, string muscle) => _dofMuscles[axis] = muscle;
