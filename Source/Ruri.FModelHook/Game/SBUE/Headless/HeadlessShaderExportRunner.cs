@@ -41,6 +41,13 @@ public static class HeadlessShaderExportRunner
         // master archive's 261k-shader decompile is a multi-hour job; this lets
         // a fast --decompile-only iterate afterwards against the full cache).
         public bool SkipDecompile { get; init; }
+        // Mount (full AppSettings-driven AES key set + mappings — the SAME
+        // provider the shader export path uses, unlike --export-map-direct's
+        // single-key mount which can't handle a game with 1000+ dynamic keys),
+        // print every file path containing this substring, then return WITHOUT
+        // touching the shader-archive pipeline at all. Asset discovery: find a
+        // SkeletalMesh/material/texture's package path before exporting it.
+        public string? FindAssetSubstring { get; init; }
         public Action<string> Log { get; init; } = _ => { };
         public Action<string> LogError { get; init; } = _ => { };
     }
@@ -53,12 +60,14 @@ public static class HeadlessShaderExportRunner
         public string ProjectName { get; set; } = string.Empty;
     }
 
-    public static RunResult Run(Options options)
+    // Shared mount sequence (native codecs -> provider -> AES keys -> mappings
+    // -> virtual paths) used by every headless entry point that needs the SAME
+    // full AppSettings-driven provider — shader export (Run), asset discovery
+    // (--find-asset), and direct asset export (ExportAssetPackages) all funnel
+    // through this so a game needing 1000+ dynamic keys mounts identically
+    // regardless of which command is invoked.
+    private static AbstractVfsFileProvider MountProvider(HeadlessGameConfig cfg, Action<string> log, Action<string> logError, out bool mappingsLoaded)
     {
-        HeadlessGameConfig cfg = options.Config;
-        Action<string> log = options.Log;
-        Action<string> logError = options.LogError;
-
         if (cfg.HasUnsupportedVersioning)
             logError("[Headless] WARNING: this game's settings carry custom version/option/map-struct overrides which the headless mount does not yet replicate. Mount may misparse — fall back to the GUI if assets fail to load.");
 
@@ -83,12 +92,34 @@ public static class HeadlessShaderExportRunner
         // 4. Mappings — MANDATORY for UE5 IoStore material packages. Without a
         //    .usmap every material LoadPackage throws MappingException and the
         //    scan extracts zero materials (every shader -> UnknownMaterial).
-        bool mappingsLoaded = LoadMappings(provider, cfg, log, logError);
+        mappingsLoaded = LoadMappings(provider, cfg, log, logError);
 
         // Resolve /Game/ virtual aliases so package lookups by content path
         // succeed regardless of the on-disk mount-point spelling.
         try { provider.LoadVirtualPaths(); }
         catch (Exception ex) { logError($"[Headless] LoadVirtualPaths failed (continuing): {ex.Message}"); }
+
+        return provider;
+    }
+
+    public static RunResult Run(Options options)
+    {
+        HeadlessGameConfig cfg = options.Config;
+        Action<string> log = options.Log;
+        Action<string> logError = options.LogError;
+
+        AbstractVfsFileProvider provider = MountProvider(cfg, log, logError, out bool mappingsLoaded);
+
+        if (!string.IsNullOrWhiteSpace(options.FindAssetSubstring))
+        {
+            var matches = provider.Files.Keys
+                .Where(k => k.IndexOf(options.FindAssetSubstring!, StringComparison.OrdinalIgnoreCase) >= 0)
+                .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            log($"[Headless] --find-asset '{options.FindAssetSubstring}': {matches.Count} match(es).");
+            foreach (string m in matches) log($"[Headless]   {m}");
+            return new RunResult { MappingsLoaded = mappingsLoaded, ProjectName = provider.ProjectName ?? string.Empty };
+        }
 
         // 5. Drive the shared per-archive pipeline over every matching
         //    .ushaderbytecode entry.
@@ -166,6 +197,75 @@ public static class HeadlessShaderExportRunner
         };
     }
 
+    public sealed class ExportAssetResult
+    {
+        public int PackagesLoaded { get; set; }
+        public int ExportsWritten { get; set; }
+        public int ExportsSkippedUnsupported { get; set; }
+        public bool MappingsLoaded { get; set; }
+    }
+
+    // Direct single/multi-asset export — mesh + material + texture, no shader
+    // pipeline involved at all. Mounts through the SAME full AppSettings-driven
+    // provider as Run/--find-asset, loads each given package, and for every
+    // export CUE4Parse-Conversion's own `Exporter` class supports (the EXACT
+    // same dispatch FModel's GUI "Export" button uses — UAnimSequence/
+    // UAnimMontage/UAnimComposite/UMaterialInterface/USkeletalMesh/USkeleton/
+    // UStaticMesh/ALandscapeProxy) writes it to `outputDir`. A SkeletalMesh
+    // export cascades into its own referenced materials + their textures
+    // automatically (`MeshExporter`/`MaterialExporter2` internals); packages
+    // with no supported export (Blueprints, DataTables, UI assets that aren't
+    // textures) are counted as skipped, not treated as an error.
+    public static ExportAssetResult ExportAssetPackages(HeadlessGameConfig cfg, IReadOnlyList<string> packagePaths, string outputDir, CUE4Parse_Conversion.ExporterOptions exportOptions, Action<string> log, Action<string> logError)
+    {
+        AbstractVfsFileProvider provider = MountProvider(cfg, log, logError, out bool mappingsLoaded);
+        var result = new ExportAssetResult { MappingsLoaded = mappingsLoaded };
+        var outDir = new DirectoryInfo(outputDir);
+        Directory.CreateDirectory(outputDir);
+
+        foreach (string packagePath in packagePaths)
+        {
+            CUE4Parse.UE4.Assets.IPackage package;
+            try
+            {
+                package = provider.LoadPackage(packagePath);
+                result.PackagesLoaded++;
+            }
+            catch (Exception ex)
+            {
+                logError($"[Headless] --export-asset: failed to load '{packagePath}': {ex.GetType().Name}: {ex.Message}");
+                continue;
+            }
+
+            foreach (CUE4Parse.UE4.Assets.Exports.UObject export in package.GetExports())
+            {
+                try
+                {
+                    var exporter = new CUE4Parse_Conversion.Exporter(export, exportOptions);
+                    if (exporter.TryWriteToDir(outDir, out string label, out string savedFilePath))
+                    {
+                        result.ExportsWritten++;
+                        log($"[Headless] --export-asset: wrote {label} -> {savedFilePath}");
+                    }
+                    else
+                    {
+                        logError($"[Headless] --export-asset: '{export.Name}' ({export.ExportType}) from '{packagePath}' failed to write.");
+                    }
+                }
+                catch (NotSupportedException)
+                {
+                    result.ExportsSkippedUnsupported++;
+                }
+                catch (Exception ex)
+                {
+                    logError($"[Headless] --export-asset: '{export.Name}' ({export.ExportType}) from '{packagePath}' threw: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        return result;
+    }
+
     private static bool IsTargetArchive(GameFile file, Options options)
     {
         if (!file.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase)) return false;
@@ -213,7 +313,23 @@ public static class HeadlessShaderExportRunner
         }
         catch (Exception ex) { logError($"[Headless] Zlib init failed: {ex.Message}"); }
 
-        log("[Headless] Native codecs initialised (Oodle + Zlib).");
+        // Detex — BC/ASTC/ETC block-compression decoder needed to write
+        // texture pixels as PNG. The shader-export path never touches this
+        // (it never decodes texture bytes), so it stayed uninitialized until
+        // --export-asset needed it: every texture-bearing export (any
+        // material, since MaterialExporter2 decodes its referenced textures)
+        // threw "Detex decompression failed: not initialized" without this.
+        // `LoadDll` extracts the embedded resource DLL if the cached copy is
+        // missing (no network download needed, unlike Oodle/Zlib).
+        try
+        {
+            string detexPath = Path.Combine(dataDir, CUE4Parse_Conversion.Textures.BC.DetexHelper.DLL_NAME);
+            CUE4Parse_Conversion.Textures.BC.DetexHelper.LoadDll(detexPath);
+            CUE4Parse_Conversion.Textures.BC.DetexHelper.Initialize(detexPath);
+        }
+        catch (Exception ex) { logError($"[Headless] Detex init failed: {ex.Message}"); }
+
+        log("[Headless] Native codecs initialised (Oodle + Zlib + Detex).");
     }
 
     private static bool LoadMappings(AbstractVfsFileProvider provider, HeadlessGameConfig cfg, Action<string> log, Action<string> logError)

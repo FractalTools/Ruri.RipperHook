@@ -74,6 +74,14 @@ public static class Program
             return RunExportMapDirect(opts);
         }
 
+        // Direct single/multi-asset export (mesh + material + texture) via the
+        // full AppSettings-driven mount (needed for games with 1000+ dynamic
+        // keys that --export-map-direct's single-key mount can't handle).
+        if (opts.ExportAssetPaths.Count > 0)
+        {
+            return RunExportAsset(opts);
+        }
+
         // Headless shader export+decompile. Builds a CUE4Parse provider straight
         // from the --game-config AppSettings (all AES dynamic keys + mappings +
         // version) and runs the full export+decompile pipeline with NO FModel
@@ -236,6 +244,7 @@ public static class Program
                 SplitVariants = splitVariants,
                 SkipDecompile = opts.ExportOnly,
                 ListArchivesOnly = opts.ListArchives,
+                FindAssetSubstring = opts.FindAsset,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });
@@ -245,6 +254,67 @@ public static class Program
         catch (Exception ex)
         {
             HookLogger.LogFailure($"[Headless] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
+            return 1;
+        }
+    }
+
+    // Direct single/multi-asset export: mesh + material + texture for one or
+    // more package paths (e.g. found via --find-asset), via CUE4Parse-
+    // Conversion's own `Exporter` class — the EXACT dispatch FModel's GUI
+    // "Export" action uses, so a USkeletalMesh cascades into its referenced
+    // materials + their decoded PNG textures automatically. Uses the full
+    // AppSettings-driven mount (same as the shader export path), unlike
+    // --export-map-direct's single-AES-key mount which can't handle a game
+    // with 1000+ dynamic keys.
+    private static int RunExportAsset(CliOptions opts)
+    {
+        string? configPath = opts.GameConfig;
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+#if DEBUG
+            configPath = Path.Combine(appData, "FModel", "AppSettings_Debug.json");
+#else
+            configPath = Path.Combine(appData, "FModel", "AppSettings.json");
+#endif
+        }
+        if (!File.Exists(configPath))
+        {
+            HookLogger.LogFailure($"[ExportAsset] --game-config not found: {configPath}. Pass --game-config <AppSettings.json>.");
+            return 2;
+        }
+
+        HeadlessGameConfig cfg;
+        try
+        {
+            cfg = HeadlessGameConfig.Load(configPath);
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[ExportAsset] Failed to parse config {configPath}: {ex.Message}");
+            return 2;
+        }
+
+        string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
+            ? Path.Combine(AppContext.BaseDirectory, "ExportAssetOutput")
+            : opts.ExportOut!;
+        HookLogger.Log($"[ExportAsset] {opts.ExportAssetPaths.Count} package(s) -> {outputDirectory}");
+
+        try
+        {
+            HeadlessShaderExportRunner.ExportAssetResult result = HeadlessShaderExportRunner.ExportAssetPackages(
+                cfg,
+                opts.ExportAssetPaths,
+                outputDirectory,
+                new ExporterOptions(),
+                HookLogger.Log,
+                HookLogger.LogFailure);
+            HookLogger.LogSuccess($"[ExportAsset] Done. packages-loaded={result.PackagesLoaded} exports-written={result.ExportsWritten} skipped-unsupported={result.ExportsSkippedUnsupported} mappings={result.MappingsLoaded}");
+            return result.ExportsWritten > 0 ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[ExportAsset] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
             return 1;
         }
     }
