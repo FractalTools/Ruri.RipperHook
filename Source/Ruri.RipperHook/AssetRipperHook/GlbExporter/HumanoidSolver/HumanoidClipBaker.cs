@@ -10,10 +10,13 @@ namespace Ruri.RipperHook.GlbExporter;
 /// <summary>
 /// Bakes a humanoid clip's muscle/root float curves into per-bone glTF rotation/translation
 /// tracks, sampled at the clip's SampleRate. Sampling and composition are a 1:1 port of the
-/// validated Blender-side baker (RuriRipperImporter/animation_builder.py:228-295 `_bake_muscles`):
-/// non-hips bones get rest * delta on the prefab rest pose, the hips get RootT-MotionT plus
-/// RootQ pre-multiplying their rest orientation, and the extracted root motion (MotionT/MotionQ)
-/// is baked onto the animator root node so the composed total always equals RootT/RootQ.
+/// validated Blender-side baker (RuriRipperImporter/animation_builder.py `_bake_muscles`):
+/// non-hips bones get their muscle-driven absolute local rotation directly (see
+/// AvatarMuscleReferential.LocalRotation -- not a delta, not composed with the prefab rest),
+/// the hips get RootT-MotionT plus RootQ pre-multiplying their rest orientation (known-wrong,
+/// see AvatarMuscleReferential's class doc comment), and the extracted root motion
+/// (MotionT/MotionQ) is baked onto the animator root node so the composed total always equals
+/// RootT/RootQ.
 /// </summary>
 public static class HumanoidClipBaker
 {
@@ -70,7 +73,7 @@ public static class HumanoidClipBaker
             }
             else
             {
-                trackCount += BakeMuscleBone(bone, node, rest, values, channelIndex, sampleRate, frameCount, trackName);
+                trackCount += BakeMuscleBone(bone, node, values, channelIndex, sampleRate, frameCount, trackName);
             }
         }
 
@@ -78,7 +81,7 @@ public static class HumanoidClipBaker
         return trackCount;
     }
 
-    private static int BakeMuscleBone(MuscleBone bone, NodeBuilder node, UnityLocalTransform rest,
+    private static int BakeMuscleBone(MuscleBone bone, NodeBuilder node,
         float[,] values, Dictionary<string, int> channelIndex, float sampleRate, int frameCount, string trackName)
     {
         // 该骨骼三轴肌肉都不在 clip 里就没有可烘的数据(保持 rest,不写轨道)。
@@ -101,10 +104,11 @@ public static class HumanoidClipBaker
         for (int f = 0; f < frameCount; f++)
         {
             int frame = f;
-            Quaternion delta = AvatarMuscleReferential.LocalDelta(bone,
+            // LocalRotation IS the bone's absolute local rotation for the frame already --
+            // not a delta, not composed with rest (animation_builder.py's _bake_muscles,
+            // non-hips branch, current revision).
+            Quaternion animLocal = AvatarMuscleReferential.LocalRotation(bone,
                 attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null);
-            // anim_quat = rest_quat * delta(animation_builder.py:287)。
-            Quaternion animLocal = rest.Rotation * delta;
             rotation.SetPoint(f / sampleRate, GlbCoordinateConversion.ToGltfQuaternionConvert(animLocal));
         }
         return 1;
