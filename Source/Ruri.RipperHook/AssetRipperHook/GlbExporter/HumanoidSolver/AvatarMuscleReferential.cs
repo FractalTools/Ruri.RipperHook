@@ -6,8 +6,10 @@ using AssetRipper.SourceGenerated.Subclasses.Axes;
 using AssetRipper.SourceGenerated.Subclasses.Hand;
 using AssetRipper.SourceGenerated.Subclasses.Human;
 using AssetRipper.SourceGenerated.Subclasses.Skeleton;
+using AssetRipper.SourceGenerated.Subclasses.SkeletonPose;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Float;
 using AssetRipper.SourceGenerated.Subclasses.Vector4Float;
+using AssetRipper.SourceGenerated.Subclasses.Xform;
 
 namespace Ruri.RipperHook.GlbExporter;
 
@@ -23,15 +25,26 @@ namespace Ruri.RipperHook.GlbExporter;
 /// revisions of this formula (a per-bone ``normRest`` table validated against contaminated
 /// ground truth, then a per-bone character-rest division that algebraically canceled to a
 /// no-op once wired into the real call site) and why each one's own validation didn't catch it.
-/// The hips are driven by RootT/RootQ instead (body pose in the animation-root frame; MotionT
-/// carries the extracted root motion) -- <b>this hips path is known-wrong as of 2026-07-10</b>
-/// (see FRAMEWORK.md §13 "根运动坑"): Unity ground truth shows the Hips bone's own rest local
-/// rotation is exact identity and its animated local delta is small, but RootT/RootQ read
-/// directly as "hips local delta" produce a value that does not match Unity's actual Hips local
-/// transform at all -- these two channels most likely belong on the Animator's own GameObject
-/// (one level above the skeleton), not on the Hips bone itself. Not yet fixed in either
-/// language; mirrored here 1:1 with the still-broken Python behavior per the port's own "match
-/// Python's current state, don't silently diverge" rule.
+/// RootT/RootQ do NOT drive the hips directly: they are Unity's internal
+/// mecanim::human::Human "root reference" -- a mass-weighted center of mass across the 25 body
+/// bones (RootT) and an orientation frame built from the shoulder/hip bone positions (RootQ),
+/// relative to the same quantities computed once from the avatar's rest pose. Both were
+/// confirmed by decompiling Unity's own native HumanComputeBoneMassCenter/
+/// HumanComputeOrientation/HumanSetupAxes (IDA Pro on Unity.dll) and validated against live
+/// Unity ground truth (Animator + AnimationClip.SampleAnimation on a real walk-cycle clip): the
+/// orientation-frame formula matches Unity's own rest-pose computation to 0.00002 degrees, and
+/// the resulting hips rotation and (Y, X) position track live Unity output to a few degrees /
+/// centimeters across a full multi-frame gait cycle. See <see cref="BodyTransform"/> for the
+/// full derivation (a provisional FK with hips forced to the origin/identity, whose mass-center
+/// and orientation are solved against RootT/RootQ for the hips' true transform).
+///
+/// KNOWN LIMITATION: clips authored without a separate MotionT/MotionQ curve (ground-projected
+/// root motion) still bake full world-space walking progress into RootT itself; since that
+/// motion belongs on the character's root GameObject rather than on the hips, this shows up as
+/// drift along the walk direction when no MotionT curve exists to subtract it back out first.
+/// This is the same class of issue the MotionT subtraction in <see cref="BodyTransform"/>
+/// already exists for -- a pre-existing limitation for MotionT-less clips, not a regression
+/// introduced by this formula.
 /// </summary>
 public sealed class AvatarMuscleReferential
 {
@@ -43,6 +56,32 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>muscle attribute string -> (bone slot, dof axis 0=X twist / 1=Y / 2=Z)。</summary>
     private static readonly Dictionary<string, (int Slot, int Axis)> MuscleDofTable = BuildMuscleDofTable();
+
+    /// <summary>
+    /// Port of mecanim::human::HumanComputeBoneMassCenter's per-body-slot table: most bones use
+    /// the midpoint of their own and an adjacent bone's provisional position. Any body slot not
+    /// listed here (feet, hands, toes, eyes, head, jaw) uses its own provisional position
+    /// directly, matching HumanComputeBoneMassCenter's default case (see
+    /// humanoid_retarget.py's ``_MASS_CENTER_FORMULA``, same table).
+    /// </summary>
+    private static readonly Dictionary<BoneType, (BoneType Neighbor, float Weight)[]> MassCenterFormula = new()
+    {
+        [BoneType.Hips] = new[] { (BoneType.LeftUpperLeg, 1f / 3f), (BoneType.RightUpperLeg, 1f / 3f), (BoneType.Spine, 1f / 3f) },
+        [BoneType.LeftUpperLeg] = new[] { (BoneType.LeftUpperLeg, 0.5f), (BoneType.LeftLowerLeg, 0.5f) },
+        [BoneType.RightUpperLeg] = new[] { (BoneType.RightUpperLeg, 0.5f), (BoneType.RightLowerLeg, 0.5f) },
+        [BoneType.LeftLowerLeg] = new[] { (BoneType.LeftLowerLeg, 0.5f), (BoneType.LeftFoot, 0.5f) },
+        [BoneType.RightLowerLeg] = new[] { (BoneType.RightLowerLeg, 0.5f), (BoneType.RightFoot, 0.5f) },
+        [BoneType.Spine] = new[] { (BoneType.Spine, 0.5f), (BoneType.Chest, 0.5f) },
+        [BoneType.Chest] = new[] { (BoneType.Chest, 0.5f), (BoneType.UpperChest, 0.5f) },
+        [BoneType.UpperChest] = new[] { (BoneType.UpperChest, 0.25f), (BoneType.Neck, 0.25f), (BoneType.LeftShoulder, 0.25f), (BoneType.RightShoulder, 0.25f) },
+        [BoneType.Neck] = new[] { (BoneType.Neck, 0.5f), (BoneType.Head, 0.5f) },
+        [BoneType.LeftShoulder] = new[] { (BoneType.LeftShoulder, 0.5f), (BoneType.LeftUpperArm, 0.5f) },
+        [BoneType.RightShoulder] = new[] { (BoneType.RightShoulder, 0.5f), (BoneType.RightUpperArm, 0.5f) },
+        [BoneType.LeftUpperArm] = new[] { (BoneType.LeftUpperArm, 0.5f), (BoneType.LeftLowerArm, 0.5f) },
+        [BoneType.RightUpperArm] = new[] { (BoneType.RightUpperArm, 0.5f), (BoneType.RightLowerArm, 0.5f) },
+        [BoneType.LeftLowerArm] = new[] { (BoneType.LeftLowerArm, 0.5f), (BoneType.LeftHand, 0.5f) },
+        [BoneType.RightLowerArm] = new[] { (BoneType.RightLowerArm, 0.5f), (BoneType.RightHand, 0.5f) },
+    };
 
     /// <summary>
     /// "Forearm Twist In-Out" needs its angle negated relative to what its own sgn already
@@ -60,6 +99,13 @@ public sealed class AvatarMuscleReferential
 
     private readonly MuscleBone?[] _bones = new MuscleBone?[TotalSlots];
     private readonly List<MuscleBone> _drivenBones = new();
+
+    // Root-motion (hips) reconstruction inputs -- see the class doc comment and BodyTransform.
+    private float[] _humanBoneMass = Array.Empty<float>();
+    private Quaternion _qRest = Quaternion.Identity;
+    private int[] _nodeParent = Array.Empty<int>();
+    private Vector3[] _nodeRestT = Array.Empty<Vector3>();
+    private Quaternion[] _nodeRestQ = Array.Empty<Quaternion>();
 
     public MuscleBone? Hips { get; private init; }
 
@@ -120,6 +166,34 @@ public sealed class AvatarMuscleReferential
         AvatarMuscleReferential referential = new(hips);
         bones.CopyTo(referential._bones, 0);
         referential._drivenBones.AddRange(driven);
+
+        referential._humanBoneMass = new float[human.HumanBoneMass.Count];
+        for (int i = 0; i < human.HumanBoneMass.Count; i++)
+        {
+            referential._humanBoneMass[i] = human.HumanBoneMass[i];
+        }
+        referential._qRest = ToQuaternion(human.RootX.Q);
+
+        int nodeCount = skeleton.Node.Count;
+        referential._nodeParent = new int[nodeCount];
+        referential._nodeRestT = new Vector3[nodeCount];
+        referential._nodeRestQ = new Quaternion[nodeCount];
+        ISkeletonPose skeletonPose = human.SkeletonPose.Data;
+        for (int i = 0; i < nodeCount; i++)
+        {
+            referential._nodeParent[i] = skeleton.Node[i].ParentId;
+            if (i < skeletonPose.X.Count)
+            {
+                IXform xform = skeletonPose.X[i];
+                referential._nodeRestT[i] = ToXformTranslation(xform);
+                referential._nodeRestQ[i] = ToQuaternion(xform.Q);
+            }
+            else
+            {
+                referential._nodeRestQ[i] = Quaternion.Identity;
+            }
+        }
+
         return referential;
     }
 
@@ -153,9 +227,10 @@ public sealed class AvatarMuscleReferential
         }
 
         MuscleBone bone = axes is null
-            ? new MuscleBone(path.String, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
+            ? new MuscleBone(path.String, nodeIndex, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
             : new MuscleBone(
                 path.String,
+                nodeIndex,
                 ToQuaternion(axes.PreQ),
                 ToQuaternion(axes.PostQ),
                 GetSgn(axes),
@@ -215,13 +290,21 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// The hips' local position+rotation from the clip's Root curves, or null when the clip
-    /// carries no root translation channels (humanoid_retarget.py:304-331 `body_transform`).
-    /// RootT is the body position in the animation-root frame; MotionT is the extracted root
-    /// motion, so the hips' root-local offset is RootT - MotionT and the global flight belongs
-    /// to the root node (baked separately from MotionT/MotionQ).
+    /// The hips' own FULL absolute local position+rotation for this frame, reconstructed from
+    /// the clip's Root curves, or null when the clip carries no root translation channels
+    /// (humanoid_retarget.py's ``body_transform``, same formula). This is NOT a delta -- used
+    /// directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and RootT/
+    /// RootQ are NOT the hips' own transform (see the class doc comment): they are the avatar's
+    /// mass-center/orientation reference, so recovering the hips' transform means building a
+    /// PROVISIONAL pose with the hips forced to the origin/identity (every other body bone at
+    /// its frame's absolute local rotation), then solving the rigid transform that makes the
+    /// provisional pose's mass-center/orientation match RootT/RootQ:
+    /// mass_center(actual) = T + R @ mass_center(provisional),
+    /// orientation(actual) = R @ orientation(provisional).
+    /// MotionT is the ground-projected root motion; subtracting it here (as before) removes
+    /// that same rigid drift from the mass-center target.
     /// </summary>
-    public static (Vector3 Position, Quaternion Rotation)? BodyTransform(Func<string, float?> muscleLookup)
+    public (Vector3 Position, Quaternion Rotation)? BodyTransform(Func<string, float?> muscleLookup)
     {
         float? tx = muscleLookup("RootT.x");
         float? ty = muscleLookup("RootT.y");
@@ -233,17 +316,200 @@ public sealed class AvatarMuscleReferential
         float mx = muscleLookup("MotionT.x") ?? 0f;
         float my = muscleLookup("MotionT.y") ?? 0f;
         float mz = muscleLookup("MotionT.z") ?? 0f;
-        Vector3 position = new((tx ?? 0f) - mx, (ty ?? 0f) - my, (tz ?? 0f) - mz);
+        Vector3 rootT = new((tx ?? 0f) - mx, (ty ?? 0f) - my, (tz ?? 0f) - mz);
 
         float? qw = muscleLookup("RootQ.w");
-        Quaternion rotation = qw is null
+        Quaternion rootQ = qw is null
             ? Quaternion.Identity
             : Quaternion.Normalize(new Quaternion(
                 muscleLookup("RootQ.x") ?? 0f,
                 muscleLookup("RootQ.y") ?? 0f,
                 muscleLookup("RootQ.z") ?? 0f,
                 qw.Value));
-        return (position, rotation);
+
+        (Vector3 Pos, Quaternion Rot)?[] fk = ProvisionalFk(muscleLookup);
+        if (fk[(int)BoneType.LeftUpperArm] is null || fk[(int)BoneType.RightUpperArm] is null
+            || fk[(int)BoneType.LeftUpperLeg] is null || fk[(int)BoneType.RightUpperLeg] is null)
+        {
+            return (rootT, rootQ); // avatar too incomplete to solve; best-effort fallback
+        }
+
+        Quaternion qProvisional = ComputeOrientation(fk);
+        Vector3 massCenterProvisional = ComputeMassCenter(fk);
+
+        Quaternion rHips = Quaternion.Normalize(rootQ * _qRest * Quaternion.Inverse(qProvisional));
+        Vector3 tHips = rootT - Vector3.Transform(massCenterProvisional, rHips);
+        return (tHips, rHips);
+    }
+
+    /// <summary>
+    /// Every body bone's world position+rotation for this frame, treating the hips as sitting at
+    /// the origin with identity rotation (see <see cref="BodyTransform"/>). Walks the raw
+    /// skeleton node hierarchy (not just human-to-human parenting) since some human bones'
+    /// immediate parent is an unmapped intermediate node.
+    /// </summary>
+    private (Vector3 Pos, Quaternion Rot)?[] ProvisionalFk(Func<string, float?> muscleLookup)
+    {
+        Quaternion?[] localRot = new Quaternion?[BodySlots];
+        for (int slot = 0; slot < BodySlots; slot++)
+        {
+            if (_bones[slot] is { IsHips: false } bone)
+            {
+                localRot[slot] = LocalRotation(bone, muscleLookup);
+            }
+        }
+
+        int hipsNode = Hips?.NodeIndex ?? -1;
+        Dictionary<int, int> nodeToSlot = new();
+        for (int slot = 0; slot < BodySlots; slot++)
+        {
+            if (_bones[slot] is { } b)
+            {
+                nodeToSlot[b.NodeIndex] = slot;
+            }
+        }
+
+        Dictionary<int, (Vector3, Quaternion)> memo = new();
+        (Vector3, Quaternion) Solve(int nodeIndex)
+        {
+            if (memo.TryGetValue(nodeIndex, out (Vector3, Quaternion) cached))
+            {
+                return cached;
+            }
+            if (nodeIndex == hipsNode || nodeIndex < 0)
+            {
+                (Vector3, Quaternion) origin = (Vector3.Zero, Quaternion.Identity);
+                memo[nodeIndex] = origin;
+                return origin;
+            }
+            int parentIndex = nodeIndex < _nodeParent.Length ? _nodeParent[nodeIndex] : -1;
+            (Vector3 parentPos, Quaternion parentRot) = Solve(parentIndex);
+            Quaternion rot = nodeToSlot.TryGetValue(nodeIndex, out int slot) && localRot[slot] is { } lr
+                ? lr
+                : _nodeRestQ[nodeIndex];
+            Vector3 worldPos = parentPos + Vector3.Transform(_nodeRestT[nodeIndex], parentRot);
+            Quaternion worldRot = Quaternion.Normalize(parentRot * rot);
+            (Vector3, Quaternion) result = (worldPos, worldRot);
+            memo[nodeIndex] = result;
+            return result;
+        }
+
+        (Vector3 Pos, Quaternion Rot)?[] fk = new (Vector3, Quaternion)?[BodySlots];
+        for (int slot = 0; slot < BodySlots; slot++)
+        {
+            if (_bones[slot] is { } b)
+            {
+                fk[slot] = Solve(b.NodeIndex);
+            }
+        }
+        return fk;
+    }
+
+    /// <summary>
+    /// Port of mecanim::human::HumanComputeBoneMassCenter's per-body-slot table; see
+    /// <see cref="MassCenterFormula"/>.
+    /// </summary>
+    private static Vector3 MassCenterOf(BoneType type, (Vector3 Pos, Quaternion Rot)?[] fk)
+    {
+        if (!MassCenterFormula.TryGetValue(type, out (BoneType Neighbor, float Weight)[]? formula))
+        {
+            return fk[(int)type]!.Value.Pos;
+        }
+        Vector3 total = Vector3.Zero;
+        foreach ((BoneType neighbor, float weight) in formula)
+        {
+            total += fk[(int)neighbor]!.Value.Pos * weight;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Port of the mass-weighted center-of-mass loop in
+    /// mecanim::human::HumanSetupAxes/RetargetTo.
+    /// </summary>
+    private Vector3 ComputeMassCenter((Vector3 Pos, Quaternion Rot)?[] fk)
+    {
+        Vector3 total = Vector3.Zero;
+        float totalMass = 0f;
+        for (int slot = 0; slot < BodySlots; slot++)
+        {
+            if (fk[slot] is null || slot >= _humanBoneMass.Length)
+            {
+                continue;
+            }
+            float mass = _humanBoneMass[slot];
+            if (mass < 0f)
+            {
+                continue;
+            }
+            total += MassCenterOf((BoneType)slot, fk) * mass;
+            totalMass += mass;
+        }
+        return total * (1f / totalMass);
+    }
+
+    /// <summary>
+    /// Port of mecanim::human::HumanComputeOrientation: the body's orientation frame from the
+    /// shoulder-center/hip-center world positions. Matches Unity's own rest-pose computation of
+    /// this same formula to 0.00002 degrees (validated against m_RootX.q).
+    /// </summary>
+    private static Quaternion ComputeOrientation((Vector3 Pos, Quaternion Rot)?[] fk)
+    {
+        Vector3 leftUpperArm = fk[(int)BoneType.LeftUpperArm]!.Value.Pos;
+        Vector3 rightUpperArm = fk[(int)BoneType.RightUpperArm]!.Value.Pos;
+        Vector3 leftUpperLeg = fk[(int)BoneType.LeftUpperLeg]!.Value.Pos;
+        Vector3 rightUpperLeg = fk[(int)BoneType.RightUpperLeg]!.Value.Pos;
+
+        Vector3 shoulderCenter = (rightUpperArm + leftUpperArm) * 0.5f;
+        Vector3 hipCenter = (leftUpperLeg + rightUpperLeg) * 0.5f;
+        Vector3 up = Vector3.Normalize(shoulderCenter - hipCenter);
+        Vector3 right = Vector3.Normalize((rightUpperArm - leftUpperArm) + (rightUpperLeg - leftUpperLeg));
+        Vector3 forward = Vector3.Normalize(Vector3.Cross(right, up));
+        return MatrixToQuaternion(right, up, forward);
+    }
+
+    /// <summary>3x3 rotation matrix (given as its 3 columns, each a world-space unit vector for a
+    /// local axis) -> quaternion, Shepperd's method.</summary>
+    private static Quaternion MatrixToQuaternion(Vector3 colX, Vector3 colY, Vector3 colZ)
+    {
+        float m00 = colX.X, m10 = colX.Y, m20 = colX.Z;
+        float m01 = colY.X, m11 = colY.Y, m21 = colY.Z;
+        float m02 = colZ.X, m12 = colZ.Y, m22 = colZ.Z;
+        float trace = m00 + m11 + m22;
+        float w, x, y, z;
+        if (trace > 0f)
+        {
+            float s = 0.5f / MathF.Sqrt(trace + 1f);
+            w = 0.25f / s;
+            x = (m21 - m12) * s;
+            y = (m02 - m20) * s;
+            z = (m10 - m01) * s;
+        }
+        else if (m00 > m11 && m00 > m22)
+        {
+            float s = 2f * MathF.Sqrt(1f + m00 - m11 - m22);
+            w = (m21 - m12) / s;
+            x = 0.25f * s;
+            y = (m01 + m10) / s;
+            z = (m02 + m20) / s;
+        }
+        else if (m11 > m22)
+        {
+            float s = 2f * MathF.Sqrt(1f + m11 - m00 - m22);
+            w = (m02 - m20) / s;
+            x = (m01 + m10) / s;
+            y = 0.25f * s;
+            z = (m12 + m21) / s;
+        }
+        else
+        {
+            float s = 2f * MathF.Sqrt(1f + m22 - m00 - m11);
+            w = (m10 - m01) / s;
+            x = (m02 + m20) / s;
+            y = (m12 + m21) / s;
+            z = 0.25f * s;
+        }
+        return Quaternion.Normalize(new Quaternion(x, y, z, w));
     }
 
     /// <summary>
@@ -319,6 +585,13 @@ public sealed class AvatarMuscleReferential
     }
 
     private static Vector3 ToVector3(IVector3Float? v) => v is null ? Vector3.Zero : new Vector3(v.X, v.Y, v.Z);
+
+    /// <summary>``math::trsX``'s translation is versioned (Vector3 vs Vector4 layout), same
+    /// version-guard shape as GetSgn/GetLimit above.</summary>
+    private static Vector3 ToXformTranslation(IXform xform)
+    {
+        return xform.Has_T3() ? ToVector3(xform.T3) : new Vector3(xform.T4!.X, xform.T4.Y, xform.T4.Z);
+    }
 
     /// <summary>
     /// Body rows mirror RuriRipperImporter/humanoid_retarget.py:_MUSCLE_DOF (validated against IK
@@ -409,6 +682,7 @@ public sealed class AvatarMuscleReferential
 public sealed class MuscleBone
 {
     public string Path { get; }
+    public int NodeIndex { get; }
     public Quaternion PreQ { get; }
     public Quaternion PostQ { get; }
     public Vector3 Sgn { get; }
@@ -418,10 +692,11 @@ public sealed class MuscleBone
 
     private readonly string?[] _dofMuscles = new string?[3];
 
-    internal MuscleBone(string path, Quaternion preQ, Quaternion postQ, Vector3 sgn,
+    internal MuscleBone(string path, int nodeIndex, Quaternion preQ, Quaternion postQ, Vector3 sgn,
         Vector3 limitMin, Vector3 limitMax)
     {
         Path = path;
+        NodeIndex = nodeIndex;
         PreQ = preQ;
         PostQ = postQ;
         Sgn = sgn;
