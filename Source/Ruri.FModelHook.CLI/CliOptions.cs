@@ -20,6 +20,15 @@ internal sealed class CliOptions
     // multi-GB export — IoStore archives are virtual VFS entries, not loose
     // files, so they can't be listed from disk.
     public bool ListArchives { get; set; }
+    // Mount (full AppSettings key set) and print every file path containing
+    // this substring, then exit — no shader export/decompile at all. Asset
+    // discovery: find a SkeletalMesh/material/texture's package path.
+    public string? FindAsset { get; set; }
+    // Mount (full AppSettings key set) and directly export the given package
+    // path(s) — mesh + material + texture, via CUE4Parse-Conversion's own
+    // Exporter (same path FModel's GUI "Export" uses). Repeatable; also
+    // accepts a comma-separated list in one flag.
+    public List<string> ExportAssetPaths { get; } = new();
     public bool Help { get; set; }
     public bool? SplitVariants { get; set; } // null = leave persisted setting alone
     public List<string> Hooks { get; } = new();
@@ -100,6 +109,17 @@ internal sealed class CliOptions
                     break;
                 case "--list-archives":
                     opts.ListArchives = true;
+                    break;
+                case "--find-asset":
+                    if (i + 1 < args.Length) { opts.FindAsset = args[i + 1]; i++; }
+                    break;
+                case "--export-asset":
+                    if (i + 1 < args.Length)
+                    {
+                        foreach (string tok in args[i + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            opts.ExportAssetPaths.Add(tok);
+                        i++;
+                    }
                     break;
                 case "--split-variants":
                     opts.SplitVariants = true;
@@ -211,6 +231,12 @@ internal sealed class CliOptions
         "  --skip-global         Skip the engine-internal Global shader archive.",
         "  --list-archives       Mount the provider and print every target archive (name +",
         "                        size, respecting --skip-global/--archive-filter), then exit.",
+        "  --find-asset SUBSTR   Mount the provider (full AppSettings key set) and print every",
+        "                        file path containing SUBSTR, then exit — no shader export.",
+        "  --export-asset PATH   Mount (full AppSettings key set) and directly export the given",
+        "                        package path(s) — mesh + material + texture, via the same",
+        "                        Exporter FModel's GUI \"Export\" uses. Comma-separated / repeatable.",
+        "                        Use with --export-out to set the output directory.",
         "  --split-variants      Emit EVERY per-stage variant as a sibling .hlsl file.",
         "  --no-split-variants   Keep only the primary variant inline in the .shader (default).",
         "  --export-only         Build cache + sidecars + .ushaderlib but SKIP decompile.",
