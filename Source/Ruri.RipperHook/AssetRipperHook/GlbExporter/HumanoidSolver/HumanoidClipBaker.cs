@@ -11,12 +11,10 @@ namespace Ruri.RipperHook.GlbExporter;
 /// Bakes a humanoid clip's muscle/root float curves into per-bone glTF rotation/translation
 /// tracks, sampled at the clip's SampleRate. Sampling and composition are a 1:1 port of the
 /// validated Blender-side baker (RuriRipperImporter/animation_builder.py `_bake_muscles`):
-/// non-hips bones get their muscle-driven absolute local rotation directly (see
-/// AvatarMuscleReferential.LocalRotation -- not a delta, not composed with the prefab rest),
-/// the hips get RootT-MotionT plus RootQ pre-multiplying their rest orientation (known-wrong,
-/// see AvatarMuscleReferential's class doc comment), and the extracted root motion
-/// (MotionT/MotionQ) is baked onto the animator root node so the composed total always equals
-/// RootT/RootQ.
+/// every driven bone -- hips included -- gets its FULL absolute local transform for the frame
+/// directly (see AvatarMuscleReferential.LocalRotation/BodyTransform -- neither is a delta, and
+/// neither composes with the prefab rest), and the extracted root motion (MotionT/MotionQ) is
+/// baked onto the animator root node so the composed total always equals RootT/RootQ.
 /// </summary>
 public static class HumanoidClipBaker
 {
@@ -69,7 +67,7 @@ public static class HumanoidClipBaker
 
             if (bone.IsHips)
             {
-                trackCount += BakeHips(node, rest, values, channelIndex, sampleRate, frameCount, trackName);
+                trackCount += BakeHips(referential, node, rest, values, channelIndex, sampleRate, frameCount, trackName);
             }
             else
             {
@@ -114,7 +112,7 @@ public static class HumanoidClipBaker
         return 1;
     }
 
-    private static int BakeHips(NodeBuilder node, UnityLocalTransform rest,
+    private static int BakeHips(AvatarMuscleReferential referential, NodeBuilder node, UnityLocalTransform rest,
         float[,] values, Dictionary<string, int> channelIndex, float sampleRate, int frameCount, string trackName)
     {
         if (!channelIndex.ContainsKey("RootT.x") && !channelIndex.ContainsKey("RootT.y")
@@ -128,13 +126,15 @@ public static class HumanoidClipBaker
         for (int f = 0; f < frameCount; f++)
         {
             int frame = f;
-            (Vector3 position, Quaternion bodyRotation) = AvatarMuscleReferential.BodyTransform(
+            // BodyTransform IS the hips' absolute local transform for the frame already --
+            // not a delta, not composed with rest (animation_builder.py's _bake_muscles,
+            // is_hips branch, current revision).
+            (Vector3 position, Quaternion bodyRotation) = referential.BodyTransform(
                 attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null)
-                ?? (rest.Position, Quaternion.Identity);
+                ?? (rest.Position, rest.Rotation);
             float time = f / sampleRate;
             translation.SetPoint(time, GlbCoordinateConversion.ToGltfVector3Convert(position));
-            // body 旋转在动画根坐标系里,前乘 hips 的 rest 朝向(animation_builder.py:268-279)。
-            rotation.SetPoint(time, GlbCoordinateConversion.ToGltfQuaternionConvert(bodyRotation * rest.Rotation));
+            rotation.SetPoint(time, GlbCoordinateConversion.ToGltfQuaternionConvert(bodyRotation));
         }
         return 1;
     }
