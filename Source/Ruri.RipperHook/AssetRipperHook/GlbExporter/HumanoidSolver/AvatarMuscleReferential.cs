@@ -18,13 +18,17 @@ namespace Ruri.RipperHook.GlbExporter;
 /// (preQ/postQ/sgn/limit) and the TOS transform path.
 /// Muscle math is a 1:1 port of the validated Blender-side solver
 /// (RuriRipperImporter/humanoid_retarget.py, ``_axes_local``): a normalized muscle value in
-/// [-1,1] scales to a radian angle via the per-axis limit and sign, the three axes compose as
-/// swing(Y,Z) * twist(X), and ``preQ * swingTwist * postQ^-1`` (see ``LocalRotation``) IS the
-/// bone's FULL absolute local rotation for the frame -- not a delta, and not composed with or
-/// divided by any rest quaternion; see ``LocalRotation`` for the two wrong intermediate
-/// revisions of this formula (a per-bone ``normRest`` table validated against contaminated
-/// ground truth, then a per-bone character-rest division that algebraically canceled to a
-/// no-op once wired into the real call site) and why each one's own validation didn't catch it.
+/// [-1,1] scales to a radian angle via the per-axis limit and sign, the three axes compose via
+/// Unity's own tan-half-angle (Rodrigues parameter) formula (see ``SwingTwist``), and
+/// ``preQ * swingTwist * postQ^-1`` (see ``LocalRotation``) IS the bone's FULL absolute local
+/// rotation for the frame -- not a delta, and not composed with or divided by any rest
+/// quaternion; see ``LocalRotation`` for the two wrong intermediate revisions of this formula (a
+/// per-bone ``normRest`` table validated against contaminated ground truth, then a per-bone
+/// character-rest division that algebraically canceled to a no-op once wired into the real call
+/// site) and why each one's own validation didn't catch it, and see ``SwingTwist`` for a THIRD,
+/// independent bug found later: the swing/twist COMPOSITION itself was a plain sequential
+/// product of a combined-axis swing and a separate twist, which only agrees with Unity in the
+/// small-angle limit and diverges sharply for larger swings.
 /// RootT/RootQ do NOT drive the hips directly: they are Unity's internal
 /// mecanim::human::Human "root reference" -- a mass-weighted center of mass across the 25 body
 /// bones (RootT) and an orientation frame built from the shoulder/hip bone positions (RootQ),
@@ -84,17 +88,27 @@ public sealed class AvatarMuscleReferential
     };
 
     /// <summary>
-    /// "Forearm Twist In-Out" needs its angle negated relative to what its own sgn already
-    /// encodes -- validated bilaterally (Left AND Right forearm both need it, average error
-    /// ~19deg -> ~8deg across 11 frames on top of the formula in ``LocalRotation``), unlike the
-    /// analogous "Lower Leg Twist In-Out" which needs no such flip. Root cause not isolated
-    /// (ruled out: swing composition order, preQ/postQ swap); kept as a targeted, ground-truth
-    /// validated correction on the specific muscle (humanoid_retarget.py's
-    /// ``_TWIST_SIGN_FLIP``, same set).
+    /// The four limb segments (upper/lower arm, upper/lower leg) apply their own twist-DOF
+    /// (axis 0) muscle at HALF the angle every other twist-driven bone
+    /// (Spine/Chest/UpperChest/Neck/Head) uses at the same muscle value -- the torso/head
+    /// chain's twist scales 1:1 with <see cref="MuscleAngle"/>'s output, the four limb bones'
+    /// does not, on both sides, uniformly. Root-caused by reading Unity ground truth directly:
+    /// isolated the same muscle value (0.4) on eight different bones via
+    /// HumanPoseHandler.SetHumanPose, measured each one's actual rotation angle against
+    /// MuscleAngle's prediction, and the ratio was exactly 1.0000 for
+    /// Spine/Chest/UpperChest/Neck/Head and exactly 0.5000 for every limb segment (both sides).
+    ///
+    /// This supersedes an earlier "Forearm Twist In-Out needs its angle negated" patch (found
+    /// under the OLD, wrong swing-composition formula -- see <see cref="SwingTwist"/> -- as a
+    /// targeted fix for a symptom of two compounding bugs at once, without isolating either
+    /// one). Re-tested after fixing swing composition: a plain 0.5x scale, no sign flip at all,
+    /// matches Unity to &lt;0.05 degrees on combined twist+swing/stretch forearm poses
+    /// (humanoid_retarget.py's ``_HALF_TWIST_BONES``, same set).
     /// </summary>
-    private static readonly HashSet<string> TwistSignFlipMuscles = new(StringComparer.Ordinal)
+    private static readonly HashSet<BoneType> HalfTwistBones = new()
     {
-        "Left Forearm Twist In-Out", "Right Forearm Twist In-Out",
+        BoneType.LeftUpperArm, BoneType.RightUpperArm, BoneType.LeftLowerArm, BoneType.RightLowerArm,
+        BoneType.LeftUpperLeg, BoneType.RightUpperLeg, BoneType.LeftLowerLeg, BoneType.RightLowerLeg,
     };
 
     private readonly MuscleBone?[] _bones = new MuscleBone?[TotalSlots];
@@ -227,10 +241,11 @@ public sealed class AvatarMuscleReferential
         }
 
         MuscleBone bone = axes is null
-            ? new MuscleBone(path.String, nodeIndex, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
+            ? new MuscleBone(path.String, nodeIndex, slot, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
             : new MuscleBone(
                 path.String,
                 nodeIndex,
+                slot,
                 ToQuaternion(axes.PreQ),
                 ToQuaternion(axes.PostQ),
                 GetSgn(axes),
@@ -253,9 +268,13 @@ public sealed class AvatarMuscleReferential
     /// Verified against live Unity Mecanim ground truth (Editor
     /// AnimationMode.SampleAnimationClip + Animator.GetBoneTransform on a real humanoid
     /// Avatar+clip) across 18 body bones at 11 frames each (187 samples): grand-average error
-    /// 4.93 degrees with this exact formula used directly, no per-bone table, no rest division
-    /// of any kind. See the class-level doc comment for two earlier, wrong versions of this
-    /// method and why each one's own validation was invalid or pointless.
+    /// 4.93 degrees with the pre/post-Q sandwich used directly, no per-bone table, no rest
+    /// division of any kind -- BUT that validation happened to exercise mostly single-DOF-at-a-
+    /// time poses, so it did not catch the separate swing/twist composition bug fixed in
+    /// <see cref="SwingTwist"/> (small at low swing angles, 40-85 degrees once two swing axes
+    /// are simultaneously large, e.g. arms/legs mid-stride). See the class-level doc comment for
+    /// two earlier, wrong versions of THIS method (the pre/post-Q sandwich) and why each one's
+    /// own validation was invalid or pointless.
     /// </summary>
     public static Quaternion LocalRotation(MuscleBone bone, Func<string, float?> muscleLookup)
     {
@@ -281,9 +300,9 @@ public sealed class AvatarMuscleReferential
                 default: angleZ = angle; break;
             }
         }
-        if (bone.GetDofMuscle(0) is string twistMuscle && TwistSignFlipMuscles.Contains(twistMuscle))
+        if (HalfTwistBones.Contains((BoneType)bone.Slot))
         {
-            angleX = -angleX;
+            angleX *= 0.5f;
         }
         Quaternion swingTwist = SwingTwist(angleX, angleY, angleZ);
         return bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
@@ -574,20 +593,32 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Compose three per-axis angles into a quaternion as swing(Y,Z) * twist(X)
-    /// (humanoid_retarget.py:195-204 `_swing_twist`).
+    /// Compose three per-axis angles into a quaternion via Unity's own tan-half-angle
+    /// (Rodrigues parameter) formula: tx,ty,tz = tan(angle/2) per axis, then
+    /// normalize(1, tx, ty + tx*tz, tz - tx*ty) as (w,x,y,z)
+    /// (humanoid_retarget.py's `_swing_twist`, same formula). This is NOT
+    /// ``swing(Y,Z) * twist(X)`` (a plain sequential product of a combined-axis swing and a
+    /// separate twist) -- that only agrees with Unity in the small-angle limit and diverges
+    /// sharply as the swing grows, since twist and swing couple through the cross terms below,
+    /// and twist-free swing itself is the raw per-axis tan-half pair (ty, tz), not a single
+    /// combined axis-angle rotation around (0, angleY, angleZ).
+    ///
+    /// Reverse-engineered by reading (not guessing) Unity.dll's own ``math::FromAxes_2`` (IDA
+    /// Pro decompilation, the kZYRoll case all 25 human body bones use): it computes halfTan of
+    /// the muscle-scaled angle vector, then combines the X (twist) lane with the Y/Z (swing)
+    /// lanes via exactly these cross terms before normalizing the whole 4-vector as a
+    /// quaternion. Verified bit-exact (5 decimal places) against live Unity ground truth
+    /// (HumanPoseHandler.SetHumanPose, SaionNanae avatar, LeftUpperArm, several two-axis muscle
+    /// combinations) -- the previous combined-axis-angle formula matched single-axis-only ground
+    /// truth perfectly (no cross term to get wrong) but diverged 5-85 degrees the moment two
+    /// axes were simultaneously non-zero.
     /// </summary>
     private static Quaternion SwingTwist(float angleX, float angleY, float angleZ)
     {
-        Quaternion twist = Quaternion.CreateFromAxisAngle(Vector3.UnitX, angleX);
-        Vector3 swingAxis = new(0f, angleY, angleZ);
-        float swingAngle = swingAxis.Length();
-        if (swingAngle <= 1e-9f)
-        {
-            return twist;
-        }
-        Quaternion swing = Quaternion.CreateFromAxisAngle(swingAxis * (1f / swingAngle), swingAngle);
-        return swing * twist;
+        float tx = MathF.Tan(angleX * 0.5f);
+        float ty = MathF.Tan(angleY * 0.5f);
+        float tz = MathF.Tan(angleZ * 0.5f);
+        return Quaternion.Normalize(new Quaternion(tx, ty + tx * tz, tz - tx * ty, 1f));
     }
 
     private static float GetComponent(Vector3 v, int index) => index switch { 0 => v.X, 1 => v.Y, _ => v.Z };
@@ -734,6 +765,10 @@ public sealed class MuscleBone
 {
     public string Path { get; }
     public int NodeIndex { get; }
+    /// <summary>BoneType enum value for body slots, or the extended finger slot number
+    /// (LeftFingerBase/RightFingerBase-relative) for finger bones -- see
+    /// AvatarMuscleReferential.HalfTwistBones for why this needs to travel with the bone.</summary>
+    public int Slot { get; }
     public Quaternion PreQ { get; }
     public Quaternion PostQ { get; }
     public Vector3 Sgn { get; }
@@ -743,11 +778,12 @@ public sealed class MuscleBone
 
     private readonly string?[] _dofMuscles = new string?[3];
 
-    internal MuscleBone(string path, int nodeIndex, Quaternion preQ, Quaternion postQ, Vector3 sgn,
+    internal MuscleBone(string path, int nodeIndex, int slot, Quaternion preQ, Quaternion postQ, Vector3 sgn,
         Vector3 limitMin, Vector3 limitMax)
     {
         Path = path;
         NodeIndex = nodeIndex;
+        Slot = slot;
         PreQ = preQ;
         PostQ = postQ;
         Sgn = sgn;
