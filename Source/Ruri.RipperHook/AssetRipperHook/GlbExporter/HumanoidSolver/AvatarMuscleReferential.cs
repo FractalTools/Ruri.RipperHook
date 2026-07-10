@@ -335,7 +335,7 @@ public sealed class AvatarMuscleReferential
         float rootX = keepPositionXz ? fullX : 0f;
         float rootY = keepPositionY ? fullY : 0f;
         float rootZ = keepPositionXz ? fullZ : 0f;
-        Vector3 rootT = new(rootX, rootY, rootZ);
+        Vector3 rootTSimple = new(rootX, rootY, rootZ);
         Vector3 motionT = new(fullX - rootX, fullY - rootY, fullZ - rootZ);
 
         float? qw = muscleLookup("RootQ.w");
@@ -357,10 +357,25 @@ public sealed class AvatarMuscleReferential
         {
             // Extract only the yaw (Y-axis) twist component -- drop it, keep any residual
             // swing (lean/tilt), the same swing-twist shape LocalRotation already uses.
+            //
+            // Composition order matters: in the baked scene the root object's rotation is
+            // the OUTER transform and the hips' local rotation is INNER (world = motionQ *
+            // rHips, standard parent-then-child composition), so recovering fullQ from that
+            // product needs rootQ = inverse(motionQ) * fullQ -- NOT fullQ * inverse(motionQ),
+            // which solves the decomposition for the opposite (hips-outer) composition order
+            // and silently produces a wrong residual rotation whenever fullQ and twistY don't
+            // commute (i.e. whenever there is also swing/lean, exactly the walking-with-
+            // natural-gait-lean case). This showed up visually as feet not meeting the ground.
             Quaternion twistY = Quaternion.Normalize(new Quaternion(0f, fullQ.Y, 0f, fullQ.W));
-            rootQ = Quaternion.Normalize(fullQ * Quaternion.Inverse(twistY));
+            rootQ = Quaternion.Normalize(Quaternion.Inverse(twistY) * fullQ);
             motionQ = twistY;
         }
+        // rootTSimple is expressed in the same (unrotated) frame as fullT; since the object's
+        // rotation (motionQ) sits between it and the hips in the scene composition, the hips'
+        // own position must be counter-rotated by the same amount so world = motionQ *
+        // (rootT + ...) recomposes back to rootTSimple exactly (see the rotation comment above
+        // for why order matters here).
+        Vector3 rootT = Vector3.Transform(rootTSimple, Quaternion.Inverse(motionQ));
         (Vector3, Quaternion) motion = (motionT, motionQ);
 
         (Vector3 Pos, Quaternion Rot)?[] fk = ProvisionalFk(muscleLookup);
