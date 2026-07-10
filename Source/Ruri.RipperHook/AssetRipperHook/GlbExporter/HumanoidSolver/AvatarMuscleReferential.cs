@@ -291,20 +291,33 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>
     /// The hips' own FULL absolute local position+rotation for this frame, reconstructed from
-    /// the clip's Root curves, or null when the clip carries no root translation channels
-    /// (humanoid_retarget.py's ``body_transform``, same formula). This is NOT a delta -- used
-    /// directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and RootT/
-    /// RootQ are NOT the hips' own transform (see the class doc comment): they are the avatar's
-    /// mass-center/orientation reference, so recovering the hips' transform means building a
-    /// PROVISIONAL pose with the hips forced to the origin/identity (every other body bone at
-    /// its frame's absolute local rotation), then solving the rigid transform that makes the
-    /// provisional pose's mass-center/orientation match RootT/RootQ:
+    /// the clip's Root curves, plus whatever root motion was extracted onto the character's own
+    /// root object, or null when the clip carries no root translation channels
+    /// (humanoid_retarget.py's ``body_transform``, same formula). The hips value is NOT a delta
+    /// -- used directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and
+    /// RootT/RootQ are NOT the hips' own transform (see the class doc comment): they are the
+    /// avatar's mass-center/orientation reference, so recovering the hips' transform means
+    /// building a PROVISIONAL pose with the hips forced to the origin/identity (every other body
+    /// bone at its frame's absolute local rotation), then solving the rigid transform that makes
+    /// the provisional pose's mass-center/orientation match RootT/RootQ:
     /// mass_center(actual) = T + R @ mass_center(provisional),
     /// orientation(actual) = R @ orientation(provisional).
     /// MotionT is the ground-projected root motion; subtracting it here (as before) removes
     /// that same rigid drift from the mass-center target.
+    ///
+    /// ``keepPositionXz``/``keepPositionY``/``keepOrientation`` mirror the clip's own
+    /// ``MuscleClipInfo.KeepOriginalPosition{Xz,Y}``/``KeepOriginalOrientation``. When a setting
+    /// is False, Unity extracts that component as root motion belonging to the character's root
+    /// GameObject rather than the hips (confirmed by decompiling
+    /// mecanim::animation::EvaluateRootMotion/GetClipX/GetCycleX on Unity.dll, validated against
+    /// live Unity ground truth). The returned ``Motion`` is exactly that extracted amount (zero
+    /// for any axis where the corresponding ``keep*`` is True) -- the caller MUST bake it onto
+    /// the character's root object separately (see <see cref="HumanoidClipBaker"/>) or the
+    /// character will animate its stride in place with no actual locomotion.
     /// </summary>
-    public (Vector3 Position, Quaternion Rotation)? BodyTransform(Func<string, float?> muscleLookup)
+    public (Vector3 Position, Quaternion Rotation, (Vector3 Position, Quaternion Rotation) Motion)? BodyTransform(
+        Func<string, float?> muscleLookup, bool keepPositionXz = true, bool keepPositionY = true,
+        bool keepOrientation = true)
     {
         float? tx = muscleLookup("RootT.x");
         float? ty = muscleLookup("RootT.y");
@@ -316,22 +329,45 @@ public sealed class AvatarMuscleReferential
         float mx = muscleLookup("MotionT.x") ?? 0f;
         float my = muscleLookup("MotionT.y") ?? 0f;
         float mz = muscleLookup("MotionT.z") ?? 0f;
-        Vector3 rootT = new((tx ?? 0f) - mx, (ty ?? 0f) - my, (tz ?? 0f) - mz);
+        float fullX = (tx ?? 0f) - mx;
+        float fullY = (ty ?? 0f) - my;
+        float fullZ = (tz ?? 0f) - mz;
+        float rootX = keepPositionXz ? fullX : 0f;
+        float rootY = keepPositionY ? fullY : 0f;
+        float rootZ = keepPositionXz ? fullZ : 0f;
+        Vector3 rootT = new(rootX, rootY, rootZ);
+        Vector3 motionT = new(fullX - rootX, fullY - rootY, fullZ - rootZ);
 
         float? qw = muscleLookup("RootQ.w");
-        Quaternion rootQ = qw is null
+        Quaternion fullQ = qw is null
             ? Quaternion.Identity
             : Quaternion.Normalize(new Quaternion(
                 muscleLookup("RootQ.x") ?? 0f,
                 muscleLookup("RootQ.y") ?? 0f,
                 muscleLookup("RootQ.z") ?? 0f,
                 qw.Value));
+        Quaternion rootQ;
+        Quaternion motionQ;
+        if (keepOrientation)
+        {
+            rootQ = fullQ;
+            motionQ = Quaternion.Identity;
+        }
+        else
+        {
+            // Extract only the yaw (Y-axis) twist component -- drop it, keep any residual
+            // swing (lean/tilt), the same swing-twist shape LocalRotation already uses.
+            Quaternion twistY = Quaternion.Normalize(new Quaternion(0f, fullQ.Y, 0f, fullQ.W));
+            rootQ = Quaternion.Normalize(fullQ * Quaternion.Inverse(twistY));
+            motionQ = twistY;
+        }
+        (Vector3, Quaternion) motion = (motionT, motionQ);
 
         (Vector3 Pos, Quaternion Rot)?[] fk = ProvisionalFk(muscleLookup);
         if (fk[(int)BoneType.LeftUpperArm] is null || fk[(int)BoneType.RightUpperArm] is null
             || fk[(int)BoneType.LeftUpperLeg] is null || fk[(int)BoneType.RightUpperLeg] is null)
         {
-            return (rootT, rootQ); // avatar too incomplete to solve; best-effort fallback
+            return (rootT, rootQ, motion); // avatar too incomplete to solve; best-effort fallback
         }
 
         Quaternion qProvisional = ComputeOrientation(fk);
@@ -339,7 +375,7 @@ public sealed class AvatarMuscleReferential
 
         Quaternion rHips = Quaternion.Normalize(rootQ * _qRest * Quaternion.Inverse(qProvisional));
         Vector3 tHips = rootT - Vector3.Transform(massCenterProvisional, rHips);
-        return (tHips, rHips);
+        return (tHips, rHips, motion);
     }
 
     /// <summary>

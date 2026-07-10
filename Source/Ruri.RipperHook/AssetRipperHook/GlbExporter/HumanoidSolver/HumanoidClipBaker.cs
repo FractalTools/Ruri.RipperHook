@@ -32,6 +32,13 @@ public static class HumanoidClipBaker
             return 0;
         }
 
+        // Whichever Root axes the clip doesn't "keep original" for are extracted as root
+        // motion belonging to the character's root, not the hips -- see
+        // AvatarMuscleReferential.BodyTransform's doc comment.
+        bool keepPositionXz = clip.MuscleClipInfo_C74?.KeepOriginalPositionXZ ?? true;
+        bool keepPositionY = clip.MuscleClipInfo_C74?.KeepOriginalPositionY ?? true;
+        bool keepOrientation = clip.MuscleClipInfo_C74?.KeepOriginalOrientation ?? true;
+
         float sampleRate = clip.SampleRate_C74 > 0f ? clip.SampleRate_C74 : 60f;
         float duration = 0f;
         foreach ((_, HermiteCurve curve) in channels)
@@ -57,6 +64,15 @@ public static class HumanoidClipBaker
         }
 
         int trackCount = 0;
+        // Root motion BodyTransform() extracts (whichever axes keepPositionXz/Y/keepOrientation
+        // are False) belongs on the character's own root object, not the hips -- collected here
+        // while baking the hips bone below, then baked onto the root node afterward. Defaults to
+        // identity (matches an object with no root-motion track).
+        Vector3[] motionPositions = new Vector3[frameCount];
+        Quaternion[] motionRotations = new Quaternion[frameCount];
+        Array.Fill(motionRotations, Quaternion.Identity);
+        bool hasMotion = false;
+
         foreach (MuscleBone bone in referential.DrivenBones)
         {
             if (!nodeByPath.TryGetValue(bone.Path, out NodeBuilder? node)
@@ -67,7 +83,9 @@ public static class HumanoidClipBaker
 
             if (bone.IsHips)
             {
-                trackCount += BakeHips(referential, node, rest, values, channelIndex, sampleRate, frameCount, trackName);
+                trackCount += BakeHips(referential, node, rest, values, channelIndex, sampleRate, frameCount,
+                    trackName, keepPositionXz, keepPositionY, keepOrientation,
+                    motionPositions, motionRotations, out hasMotion);
             }
             else
             {
@@ -76,6 +94,13 @@ public static class HumanoidClipBaker
         }
 
         trackCount += BakeRootMotion(nodeByPath, values, channelIndex, sampleRate, frameCount, trackName);
+
+        bool extracting = !keepPositionXz || !keepPositionY || !keepOrientation;
+        if (hasMotion && extracting && nodeByPath.TryGetValue(string.Empty, out NodeBuilder? root))
+        {
+            trackCount += BakeSynthesizedRootMotion(root, motionPositions, motionRotations, sampleRate,
+                frameCount, trackName);
+        }
         return trackCount;
     }
 
@@ -113,8 +138,11 @@ public static class HumanoidClipBaker
     }
 
     private static int BakeHips(AvatarMuscleReferential referential, NodeBuilder node, UnityLocalTransform rest,
-        float[,] values, Dictionary<string, int> channelIndex, float sampleRate, int frameCount, string trackName)
+        float[,] values, Dictionary<string, int> channelIndex, float sampleRate, int frameCount, string trackName,
+        bool keepPositionXz, bool keepPositionY, bool keepOrientation,
+        Vector3[] motionPositions, Quaternion[] motionRotations, out bool hasMotion)
     {
+        hasMotion = false;
         if (!channelIndex.ContainsKey("RootT.x") && !channelIndex.ContainsKey("RootT.y")
             && !channelIndex.ContainsKey("RootT.z"))
         {
@@ -129,14 +157,48 @@ public static class HumanoidClipBaker
             // BodyTransform IS the hips' absolute local transform for the frame already --
             // not a delta, not composed with rest (animation_builder.py's _bake_muscles,
             // is_hips branch, current revision).
-            (Vector3 position, Quaternion bodyRotation) = referential.BodyTransform(
-                attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null)
-                ?? (rest.Position, rest.Rotation);
+            var result = referential.BodyTransform(
+                attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null,
+                keepPositionXz, keepPositionY, keepOrientation);
+            Vector3 position;
+            Quaternion bodyRotation;
+            if (result is null)
+            {
+                position = rest.Position;
+                bodyRotation = rest.Rotation;
+            }
+            else
+            {
+                (position, bodyRotation, (Vector3 motionPos, Quaternion motionRot)) = result.Value;
+                motionPositions[f] = motionPos;
+                motionRotations[f] = motionRot;
+                hasMotion = true;
+            }
             float time = f / sampleRate;
             translation.SetPoint(time, GlbCoordinateConversion.ToGltfVector3Convert(position));
             rotation.SetPoint(time, GlbCoordinateConversion.ToGltfQuaternionConvert(bodyRotation));
         }
         return 1;
+    }
+
+    /// <summary>
+    /// Bakes root motion body_transform() computed on the fly (no separate MotionT/MotionQ
+    /// curve exists) onto the animator root node -- the synthesized-data counterpart to
+    /// <see cref="BakeRootMotion"/>, whose composed total with the hips' own value always
+    /// equals the RootT/RootQ curves passed to BodyTransform (see its doc comment).
+    /// </summary>
+    private static int BakeSynthesizedRootMotion(NodeBuilder root, Vector3[] motionPositions,
+        Quaternion[] motionRotations, float sampleRate, int frameCount, string trackName)
+    {
+        SharpGLTF.Animations.CurveBuilder<Vector3> translation = root.UseTranslation(trackName);
+        SharpGLTF.Animations.CurveBuilder<Quaternion> rotation = root.UseRotation(trackName);
+        for (int f = 0; f < frameCount; f++)
+        {
+            float time = f / sampleRate;
+            translation.SetPoint(time, GlbCoordinateConversion.ToGltfVector3Convert(motionPositions[f]));
+            rotation.SetPoint(time, GlbCoordinateConversion.ToGltfQuaternionConvert(motionRotations[f]));
+        }
+        return 2;
     }
 
     /// <summary>
