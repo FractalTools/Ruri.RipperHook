@@ -237,15 +237,40 @@ internal sealed class UnifiedMaterialReader
         return SelectUniformExpressionSet(materialEntry, shaderPlatform);
     }
 
-    // Iterates every (libraryShaderMapHash, MaterialShaderMapContent.Shaders[])
-    // tuple across every material. The on-disk LIBRARY hash (SHA1) is what
+    // Iterates every (libraryShaderMapHash, ParameterMapInfo-by-ResourceIndex)
+    // tuple across every material. The on-disk LIBRARY hash is what
     // `ShaderMapInfo.ShaderMapHash` carries — it's NOT the cook-internal
-    // `CookedShaderMapIdHash` (those diverge for IoStore cooks). We get the
-    // library hash from the SAME material's `PackageShaderMapHashes` list,
-    // paired by position with `LoadedShaderMaps[i]`. UE writes both arrays
-    // in the same platform order, so index i in one matches index i in the
-    // other.
-    public IEnumerable<(string LibraryShaderMapHash, JsonElement ShadersArray)> EnumerateShaderMapShaders()
+    // `CookedShaderMapIdHash` (those diverge for IoStore cooks; see
+    // `UnifiedShaderMapMetadata.ResourceHash`'s doc comment). Resolution order
+    // per shader-map entry:
+    //   1. `ResourceHash` — the SAME field the material-linking bridge
+    //      (Pass 030 Tier 1/Tier 2, Pass 050) already treats as authoritative:
+    //      it IS the archive's `ShaderMapHashes` value for bShareCode cooks,
+    //      independent of array position. Correct for every IoStore cook.
+    //   2. `PackageShaderMapHashes[i]` (positional pairing with
+    //      `LoadedShaderMaps[i]`) — kept as a fallback for shader-maps whose
+    //      `ResourceHash` didn't survive extraction, but this pairing is only
+    //      as reliable as UE's array-order guarantee between the two lists.
+    //   3. `CookedShaderMapIdHash` / `ShaderContentHash` — last resort, only
+    //      matches non-IoStore cooks where the internal and on-disk hashes
+    //      happen to agree.
+    //
+    // Per-shader lookup is keyed by `ResourceIndex` (the shader's cooker-
+    // assigned slot within its owning shader-map, 0..NumShaders-1) rather than
+    // walking the JSON arrays by POSITION. This matters because a bShareCode
+    // material's base `MaterialShaderMapContent.Shaders[]` is genuinely empty
+    // — verified empirically, the frozen memory image is real (20-38KB, not
+    // truncated) but UE nests every actual VS/PS/etc under
+    // `OrderedMeshShaderMaps[i].Shaders[]` (one bucket per vertex-factory
+    // permutation) instead. Concatenating those buckets by ARRAY POSITION
+    // would only accidentally line up with the archive's own per-map ordering;
+    // `ResourceIndex` is the value both sides actually agree on —
+    // `ShaderMapMember.RelativeIndex`'s own doc comment already states
+    // "0..NumShaders-1, == metadata ResourceIndex". Folding both `Shaders[]`
+    // and every `OrderedMeshShaderMaps[i].Shaders[]` bucket into ONE
+    // ResourceIndex-keyed dictionary makes the join correct regardless of
+    // which bucket a cook happens to populate.
+    public IEnumerable<(string LibraryShaderMapHash, Dictionary<int, JsonElement> ParameterMapInfoByResourceIndex)> EnumerateShaderMapShaders()
     {
         if (_materialInterfaces == null) yield break;
         foreach (KeyValuePair<string, JsonElement> kvp in _materialInterfaces)
@@ -258,8 +283,7 @@ internal sealed class UnifiedMaterialReader
                 continue;
             }
             // PackageShaderMapHashes is OPTIONAL (older cooks don't write it
-            // per-material). Fall back to the cook-internal hash when missing
-            // — Pass165's join just won't match in that case, which we accept.
+            // per-material) and only used as a positional fallback below.
             List<string?> packageHashes = new();
             if (materialEntry.TryGetProperty("PackageShaderMapHashes", out JsonElement pkgHashes)
                 && pkgHashes.ValueKind == JsonValueKind.Array)
@@ -273,9 +297,11 @@ internal sealed class UnifiedMaterialReader
             foreach (JsonElement shaderMap in loadedMaps.EnumerateArray())
             {
                 if (shaderMap.ValueKind != JsonValueKind.Object) { i++; continue; }
-                string? libraryHash = i < packageHashes.Count ? packageHashes[i] : null;
-                // Fallback to internal hash so the join CAN succeed for
-                // non-IoStore cooks where the internal/on-disk hashes agree.
+                string? libraryHash = ReadString(shaderMap, "ResourceHash");
+                if (string.IsNullOrWhiteSpace(libraryHash))
+                {
+                    libraryHash = i < packageHashes.Count ? packageHashes[i] : null;
+                }
                 if (string.IsNullOrWhiteSpace(libraryHash))
                 {
                     libraryHash = ReadString(shaderMap, "CookedShaderMapIdHash")
@@ -285,10 +311,38 @@ internal sealed class UnifiedMaterialReader
                 if (string.IsNullOrWhiteSpace(libraryHash)) continue;
                 if (!shaderMap.TryGetProperty("MaterialShaderMapContent", out JsonElement content)
                     || content.ValueKind != JsonValueKind.Object) continue;
-                if (!content.TryGetProperty("Shaders", out JsonElement shaders)
-                    || shaders.ValueKind != JsonValueKind.Array) continue;
-                yield return (libraryHash, shaders);
+
+                var byResourceIndex = new Dictionary<int, JsonElement>();
+                CollectShadersByResourceIndex(content, byResourceIndex);
+                if (content.TryGetProperty("OrderedMeshShaderMaps", out JsonElement meshMaps)
+                    && meshMaps.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement meshMap in meshMaps.EnumerateArray())
+                    {
+                        if (meshMap.ValueKind == JsonValueKind.Object) CollectShadersByResourceIndex(meshMap, byResourceIndex);
+                    }
+                }
+                if (byResourceIndex.Count == 0) continue;
+                yield return (libraryHash, byResourceIndex);
             }
+        }
+    }
+
+    // Reads a container's `Shaders[]` array (works for both the top-level
+    // `MaterialShaderMapContent` and each `OrderedMeshShaderMaps[i]` entry —
+    // both carry a `Shaders` property of the same shape) and indexes every
+    // entry's `ParameterMapInfo` by its `ResourceIndex`. Shaders without a
+    // `ParameterMapInfo` (e.g. a placeholder for an unfrozen pointer slot) are
+    // skipped, not added as an empty entry.
+    private static void CollectShadersByResourceIndex(JsonElement container, Dictionary<int, JsonElement> result)
+    {
+        if (!container.TryGetProperty("Shaders", out JsonElement shaders) || shaders.ValueKind != JsonValueKind.Array) return;
+        foreach (JsonElement shader in shaders.EnumerateArray())
+        {
+            if (shader.ValueKind != JsonValueKind.Object) continue;
+            if (!shader.TryGetProperty("ResourceIndex", out JsonElement riEl) || riEl.ValueKind != JsonValueKind.Number) continue;
+            if (!shader.TryGetProperty("ParameterMapInfo", out JsonElement pmi) || pmi.ValueKind != JsonValueKind.Object) continue;
+            result[riEl.GetInt32()] = pmi;
         }
     }
 

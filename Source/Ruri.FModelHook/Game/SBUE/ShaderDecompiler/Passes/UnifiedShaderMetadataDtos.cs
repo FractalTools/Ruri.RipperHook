@@ -23,7 +23,7 @@ internal sealed class UnifiedShaderMetadataRoot
     // symbols. The game-version guard alone can't catch this — the game is the
     // same, only the tool changed. Bump `CurrentCacheFormatVersion` on any
     // such change.
-    public const int CurrentCacheFormatVersion = 7;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit; 6=+top-level MaterialResourceHashes bridge (Tier 1 hash->material) + MaterialScanComplete marker; bridge candidate set = container-header packages ∪ M_/MI_/MF_/MPC_/MAT_ prefixed; 7=cap MaterialResourceHashes to 16 materials/hash + Tier 2 enrich one representative material per hash
+    public const int CurrentCacheFormatVersion = 9;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit; 6=+top-level MaterialResourceHashes bridge (Tier 1 hash->material) + MaterialScanComplete marker; bridge candidate set = container-header packages ∪ M_/MI_/MF_/MPC_/MAT_ prefixed; 7=cap MaterialResourceHashes to 16 materials/hash + Tier 2 enrich one representative material per hash; 8=restore lean Shaders[].ParameterMapInfo (Tier 2 enrich only, small set); 9=+OrderedMeshShaderMaps[].Shaders[] (this cook's REAL per-shader graph — base Shaders[] is empty for bShareCode materials, verified empirically) + ResourceIndex/TypeHash/VertexFactoryTypeHash on every emitted UnifiedShader; Pass165's join is now ResourceIndex-keyed instead of positional array-order
     public int CacheFormatVersion { get; set; }
 
     // FModel's `EGame` enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")

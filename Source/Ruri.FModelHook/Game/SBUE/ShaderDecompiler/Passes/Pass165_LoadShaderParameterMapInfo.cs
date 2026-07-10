@@ -22,6 +22,13 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 // matches them by ORDER (or by SIZE when the seed has them) to build the
 // final `$Globals` ConstantBufferParameter.
 //
+// The join is keyed by `ResourceIndex` (`ShaderMapMember.RelativeIndex`),
+// NOT by walking a JSON array positionally — see
+// `UnifiedMaterialReader.EnumerateShaderMapShaders` for why: a bShareCode
+// material's per-shader graph lives under `OrderedMeshShaderMaps[i].
+// Shaders[]`, not the base `Shaders[]`, and only ResourceIndex is guaranteed
+// to agree with the archive's own per-map ordering.
+//
 // Tolerant of missing pieces: shader-maps that aren't in unified (rare,
 // e.g. Niagara-only archives) just skip — the rewriter falls back to its
 // current behaviour (anonymous `_Globals_m0[N]` flat array).
@@ -46,21 +53,16 @@ internal static class Pass165_LoadShaderParameterMapInfo
         }
 
         int joined = 0, withParamMap = 0;
-        foreach ((string mapHash, JsonElement shaders) in state.UnifiedMaterialReader.EnumerateShaderMapShaders())
+        foreach ((string mapHash, Dictionary<int, JsonElement> paramMapByResourceIndex) in state.UnifiedMaterialReader.EnumerateShaderMapShaders())
         {
             if (!mapsByHash.TryGetValue(mapHash, out ShaderMapInfo? map)) continue;
-            int j = 0;
-            foreach (JsonElement shader in shaders.EnumerateArray())
+            foreach (ShaderMapMember member in map.Members)
             {
-                if (shader.ValueKind != JsonValueKind.Object) { j++; continue; }
-                if (j >= map.Members.Count) break;
-                int archiveIndex = map.Members[j].ArchiveShaderIndex;
-                j++;
-                if (archiveIndex < 0) continue;
+                if (member.ArchiveShaderIndex < 0) continue;
                 joined++;
-                if (shader.TryGetProperty("ParameterMapInfo", out JsonElement pmi) && pmi.ValueKind == JsonValueKind.Object)
+                if (paramMapByResourceIndex.TryGetValue(member.RelativeIndex, out JsonElement pmi))
                 {
-                    state.ShaderParameterMapInfoByArchiveIndex[archiveIndex] = pmi.Clone();
+                    state.ShaderParameterMapInfoByArchiveIndex[member.ArchiveShaderIndex] = pmi.Clone();
                     withParamMap++;
                 }
             }

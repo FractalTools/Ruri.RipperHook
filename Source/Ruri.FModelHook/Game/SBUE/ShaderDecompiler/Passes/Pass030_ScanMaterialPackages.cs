@@ -765,40 +765,41 @@ internal static class Pass030_ScanMaterialPackages
     // backward-compatible deserialize of older files; re-add this builder if a
     // future reader genuinely needs the frozen image.
 
-    // Only the two fields any decompile-side reader actually consumes are
-    // emitted: `UniformExpressionSet` (material parameter names / preshader
-    // data) and `Shaders[]` (Pass 165 joins it by ARRAY ORDER to attach each
-    // shader's ParameterMapInfo — see BuildShader, which now emits only that).
-    // The dropped arrays (`ShaderTypeHashes`, `ShaderPermutations`,
-    // `ShaderPipelines`, `OrderedMeshShaderMaps`) plus the per-shader binding
-    // detail were the dominant size of the unified file — on the master cook
-    // (23k materials, each with 100s of shaders) they ballooned it to 11GB+,
-    // which made the warm-cache read (Pass 005) and the decompile-side read
-    // (Pass 140/160) pathologically slow. None of them is read anywhere
-    // downstream. ShaderPipelines/OrderedMeshShaderMaps shaders are NOT folded
-    // into `Shaders[]` because Pass165 joins against the on-disk shader-map's
-    // primary Shaders[] order only.
+    // `UniformExpressionSet` carries the material parameter names / preshader
+    // data the .shader `Properties` block needs — always emitted.
+    //
+    // `Shaders[]` (base `FShaderMapContent.Shaders`) is emitted for
+    // completeness but is EMPTY for this cook's bShareCode materials —
+    // verified empirically (frozen memory-image blob is 20-38KB of real
+    // bytes, not truncated/zero, yet the base-class Shaders/ShaderTypes/
+    // ShaderPermutations/ShaderHash arrays all deserialize to zero length).
+    // UE nests the REAL per-shader graph under `OrderedMeshShaderMaps[i]`
+    // instead: each entry is itself a `FShaderMapContent` subclass
+    // (`FMeshMaterialShaderMap`, one per vertex-factory permutation this
+    // material compiled against) carrying its OWN Shaders/ShaderTypes/
+    // ShaderPermutations — confirmed non-empty (a VAT character material's
+    // OrderedMeshShaderMaps[0] alone held 23-51 real FShader entries with
+    // populated `ParameterMapInfo.LooseParameterBuffers`). THIS is what
+    // Pass 050's `AppendShaderTruthRecords` already has a loop for (it just
+    // had nothing to read before `BuildMeshShaderMap` existed) and what
+    // Pass 165/Pass 180's $Globals reconciliation needs.
+    //
+    // Per-shader cost stays lean: `BuildShader` only populates ResourceIndex
+    // (the Pass 050 dictionary join key)/TypeHash/VertexFactoryTypeHash/
+    // ParameterMapInfo — `Bindings` (full per-parameter byte-offset detail)
+    // stays dropped, that was the dominant size on the OLD full-provider
+    // material scan (23k materials × 100s of shaders, 11GB+). That scan is
+    // gone: Pass 030's Tier 2 enrich only fully-loads the materials the
+    // CURRENT archive references (see BuildMaterialContexts), so the
+    // persisted unified file's material set is bounded by exports, not by
+    // the whole game.
     private static UnifiedShaderContent BuildShaderContent(FMaterialShaderMapContent content, FShaderMapPointerTable? pointerTable)
     {
-        // ONLY `UniformExpressionSet` is emitted — it carries the material
-        // parameter names + preshader data that the .shader `Properties` block
-        // needs. `Shaders[]` (per-shader `ParameterMapInfo`) was ALSO dropped:
-        // on the master cook (23k materials × 100s of shaders) it was the bulk
-        // of the unified file, pushing it to 3GB+ — and any unified that large
-        // is UNUSABLE downstream, because the decompile-side readers
-        // (`UnifiedMaterialReader.LoadFromFile`, Pass 140) materialise the whole
-        // document and a >2GB JSON exceeds .NET's single-string / JsonDocument
-        // limits (observed: "Insufficient memory", then dxil-spirv -4 from the
-        // starved native heap). The cost is that Pass 165's $Globals byte-offset
-        // join goes quiet, so loose `$Globals` members fall back to the
-        // anonymous `_Globals_m0[N]` form — a contained symbol-QUALITY
-        // regression, not a material-LINKAGE one. TODO(top-tier): restore it by
-        // writing per-shader ParameterMapInfo into the per-archive
-        // `.stableinfo.json` sidecar (Pass 165 already joins per-archive), which
-        // keeps the cross-library unified file lean.
         return new UnifiedShaderContent
         {
             UniformExpressionSet = BuildUniformExpressionSet(content.MaterialCompilationOutput?.UniformExpressionSet),
+            Shaders = content.Shaders?.Select(BuildShader).ToList() ?? new List<UnifiedShader>(),
+            OrderedMeshShaderMaps = content.OrderedMeshShaderMaps?.Select(m => m == null ? new UnifiedOrderedMeshShaderMap() : BuildMeshShaderMap(m)).ToList() ?? new List<UnifiedOrderedMeshShaderMap>(),
         };
     }
 
@@ -1011,16 +1012,54 @@ internal static class Pass030_ScanMaterialPackages
         };
     }
 
-    // Slimmed: only `ParameterMapInfo` is emitted (the one field Pass 165
-    // reads — it joins by array order, so the per-shader index/hash/binding
-    // detail is unnecessary). Dropping `Bindings` + the hashes off every
-    // shader is the bulk of the unified-file size reduction. `pointerTable` is
-    // no longer needed (it only fed the dropped type-hash resolution).
+    // Emits ResourceIndex/TypeHash/VertexFactoryTypeHash/ParameterMapInfo —
+    // everything Pass 050's `AppendShaderTruthRecords` and Pass 165's join key
+    // on. `Bindings` (per-parameter byte-offset detail beyond the loose-buffer
+    // summary ParameterMapInfo already carries) stays dropped — it was the
+    // dominant size contributor on the old full-provider scan and nothing
+    // downstream reads it. `ResourceIndex` is the CRITICAL field: it's the
+    // shader's slot within its OWNING shader-map (0..NumShaders-1), assigned
+    // by the cooker — NOT the array position in whichever CUE4Parse list
+    // (`content.Shaders` vs `content.OrderedMeshShaderMaps[i].Shaders`) it
+    // happens to live in. Pass 050 already keys its truth dictionary on this
+    // value (`BuildTruthByResourceIndex`), so populating it here is what makes
+    // that ALREADY-WRITTEN matching logic work instead of silently matching
+    // nothing.
     private static UnifiedShader BuildShader(FShader shader)
     {
         return new UnifiedShader
         {
-            ParameterMapInfo = BuildShaderParameterMapInfo(shader.ParameterMapInfo)
+            ResourceIndex = shader.ResourceIndex,
+            NumInstructions = shader.NumInstructions,
+            SortKey = shader.SortKey,
+            TypeHash = ResolveIndexedTypeHash(shader.Type),
+            VertexFactoryTypeHash = ResolveIndexedTypeHash(shader.VFType),
+            ParameterMapInfo = BuildShaderParameterMapInfo(shader.ParameterMapInfo),
+        };
+    }
+
+    // Builds the per-vertex-factory shader collection. THIS is where a
+    // material's real per-shader graph lives for this cook — the outer
+    // `content.Shaders[]` (base `FShaderMapContent.Shaders`) is empty here;
+    // UE nests the actual VS/PS/etc per vertex-factory permutation under
+    // `FMaterialShaderMapContent.OrderedMeshShaderMaps[i]` (itself a
+    // `FShaderMapContent` subclass carrying its OWN Shaders/ShaderTypes/
+    // ShaderPermutations arrays), confirmed empirically: a VAT character
+    // material's OrderedMeshShaderMaps[0] alone carried 23-51 real FShader
+    // entries with non-empty ParameterMapInfo.LooseParameterBuffers, while
+    // the outer content.Shaders was always length 0. `ReadArrayOfPtrs` can
+    // leave individual slots null (unfrozen pointer) — those become a blank
+    // placeholder UnifiedShader so positional alignment with ShaderTypes[]/
+    // ShaderPermutations[] is preserved for the Math.Min-bounded pairing in
+    // AppendShaderTruthRecords.
+    private static UnifiedOrderedMeshShaderMap BuildMeshShaderMap(FMeshMaterialShaderMap meshMap)
+    {
+        return new UnifiedOrderedMeshShaderMap
+        {
+            VertexFactoryType = new UnifiedHashName { Hash = ResolveIndexedTypeHash(meshMap.VertexFactoryTypeName) },
+            ShaderTypes = meshMap.ShaderTypes?.Select(t => new UnifiedHashName { Hash = ResolveIndexedTypeHash(t) }).ToList() ?? new List<UnifiedHashName>(),
+            ShaderPermutations = meshMap.ShaderPermutations?.ToList() ?? new List<int>(),
+            Shaders = meshMap.Shaders?.Select(s => s == null ? new UnifiedShader() : BuildShader(s)).ToList() ?? new List<UnifiedShader>(),
         };
     }
 
