@@ -151,8 +151,20 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>
     /// Compose the bone's muscle rotation as a bind-relative delta in its local frame:
-    /// postQ * swingTwist(angles) * postQ^-1 (humanoid_retarget.py:280-297 `_axes_local`).
-    /// The caller composes it onto the bone's rest local rotation (rest * delta).
+    /// inv(normRest) * preQ * swingTwist(angles) * inv(postQ)
+    /// (humanoid_retarget.py:377-410 `_axes_local`, as corrected against live Unity
+    /// Mecanim ground truth). preQ and postQ are NOT interchangeable -- on a real rig
+    /// they differ by 60-180+ degrees per bone, so the sandwich is asymmetric, not a
+    /// similarity-transform conjugation by postQ alone. The leading inv(normRest)
+    /// cancels the avatar's own normalized-skeleton rest baseline that preQ*inv(postQ)
+    /// otherwise bakes into the delta at muscle=0 -- omitting it looks fine on bones
+    /// where that baseline happens to be small (e.g. LowerLeg) but produces a wildly
+    /// wrong, ~180-degree-off delta on bones where it isn't (e.g. UpperLeg, preQ/postQ
+    /// differ by ~184 degrees there). Verified via Editor AnimationMode.SampleAnimationClip
+    /// on a real humanoid Avatar+clip across all four leg bones at multiple frames --
+    /// smooth, mirror-symmetric, NaN-free output is NOT sufficient evidence of correctness
+    /// for this class of bug; only comparing against Unity's own computed bone rotation is.
+    /// The caller composes this onto the bone's rest local rotation (rest * delta).
     /// </summary>
     public static Quaternion LocalDelta(MuscleBone bone, Func<string, float?> muscleLookup)
     {
@@ -179,7 +191,7 @@ public sealed class AvatarMuscleReferential
             }
         }
         Quaternion swingTwist = SwingTwist(angleX, angleY, angleZ);
-        return bone.PostQ * swingTwist * Quaternion.Inverse(bone.PostQ);
+        return Quaternion.Inverse(bone.NormalizedRest) * bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
     }
 
     /// <summary>
