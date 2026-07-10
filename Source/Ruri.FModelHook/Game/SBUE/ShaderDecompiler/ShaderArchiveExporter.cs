@@ -28,7 +28,7 @@ internal static class ShaderArchiveExporter
     // `.stableinfo.json` sidecars are derived from it). Returns true when the
     // library was exported (decompile failures are logged but don't flip the
     // result — the library + sidecars are still useful on their own).
-    public static bool ProcessArchive(ExportPipelineState state, GameFile entry, string exportBasePath, bool splitVariants, bool skipDecompile = false)
+    public static bool ProcessArchive(ExportPipelineState state, GameFile entry, string exportBasePath, bool splitVariants, bool skipDecompile = false, string? materialFilter = null)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (entry is null) throw new ArgumentNullException(nameof(entry));
@@ -81,7 +81,7 @@ internal static class ShaderArchiveExporter
         }
         try
         {
-            DecompileLibraryInProcess(state, exportBasePath, splitVariants);
+            DecompileLibraryInProcess(state, exportBasePath, splitVariants, materialFilter);
         }
         catch (Exception ex)
         {
@@ -91,7 +91,7 @@ internal static class ShaderArchiveExporter
         return true;
     }
 
-    private static void DecompileLibraryInProcess(ExportPipelineState state, string exportBasePath, bool splitVariants)
+    private static void DecompileLibraryInProcess(ExportPipelineState state, string exportBasePath, bool splitVariants, string? materialFilter)
     {
         string libraryPath = exportBasePath + ".ushaderlib";
         if (!File.Exists(libraryPath)) return;
@@ -104,7 +104,13 @@ internal static class ShaderArchiveExporter
             LibraryPath = libraryPath,
             OutputDirectory = outputDir,
             UnifiedMetadataPath = File.Exists(unifiedMetadataPath) ? unifiedMetadataPath : null,
-            RecreateOutputDirectory = true,
+            MaterialFilter = materialFilter,
+            // Pass180 itself only wipes the output dir when unfiltered — a
+            // material-filtered run is additive (keeps whatever a prior
+            // full/other-filter run already emitted into the SAME shared
+            // Decompiled/<library> folder) rather than nuking it for a
+            // narrow incremental re-run.
+            RecreateOutputDirectory = string.IsNullOrWhiteSpace(materialFilter),
             SplitVariantsToHlslFiles = splitVariants,
             Log = state.Log,
             LogError = state.LogError,

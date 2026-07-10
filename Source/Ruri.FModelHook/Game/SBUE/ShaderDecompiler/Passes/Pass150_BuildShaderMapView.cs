@@ -116,10 +116,7 @@ internal static class Pass150_BuildShaderMapView
     private static void BuildView(PipelineState state)
     {
         ShaderLibrary lib = state.Library!;
-        string? normalizedFilter = string.IsNullOrWhiteSpace(state.Options.MaterialFilter)
-            ? null
-            : state.Options.MaterialFilter!.Replace('\\', '/');
-        HashSet<string> filterVariants = MaterialPathVariants.Build(normalizedFilter);
+        HashSet<string> filterVariants = MaterialPathVariants.BuildFilterSet(state.Options.MaterialFilter);
 
         int mapCount = Math.Min(lib.ShaderMapEntries.Length, lib.ShaderMapHashes.Count);
         for (int mapIndex = 0; mapIndex < mapCount; mapIndex++)

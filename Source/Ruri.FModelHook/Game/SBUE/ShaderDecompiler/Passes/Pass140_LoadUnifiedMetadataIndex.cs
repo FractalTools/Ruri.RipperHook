@@ -89,10 +89,7 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             state.GameVersionEnum = root.GameVersionEnum!;
         }
 
-        string? normalizedFilter = string.IsNullOrWhiteSpace(state.Options.MaterialFilter)
-            ? null
-            : state.Options.MaterialFilter!.Replace('\\', '/');
-        HashSet<string> filterVariants = MaterialPathVariants.Build(normalizedFilter);
+        HashSet<string> filterVariants = MaterialPathVariants.BuildFilterSet(state.Options.MaterialFilter);
 
         if (root.PackageShaderMapHashes != null)
         {
@@ -330,6 +327,27 @@ internal static class Pass140_LoadUnifiedMetadataIndex
 // pass and the symbol-source readers (Pass 060) need it.
 internal static class MaterialPathVariants
 {
+    // Splits a `--material-filter` value on comma/semicolon and unions each
+    // token's spelling-variant set — so one CLI flag can target several exact
+    // material paths in one decompile pass (e.g. every parent-template path a
+    // set of instance materials resolved to via ShareCode's shared-permutation
+    // reuse), matching the comma-separated convention every other CLI filter
+    // (archive-name, etc.) already uses. Each token still needs an EXACT (or
+    // spelling-variant) match — this is NOT a substring/contains search.
+    public static HashSet<string> BuildFilterSet(string? filterValue)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(filterValue)) return result;
+
+        foreach (string token in filterValue.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string trimmed = token.Trim().Replace('\\', '/');
+            if (trimmed.Length == 0) continue;
+            result.UnionWith(Build(trimmed));
+        }
+        return result;
+    }
+
     public static HashSet<string> Build(string? materialPath)
     {
         HashSet<string> result = new(StringComparer.OrdinalIgnoreCase);
