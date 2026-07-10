@@ -82,6 +82,13 @@ public static class Program
             return RunExportAsset(opts);
         }
 
+        // Targeted lookup: which .ushaderbytecode archive owns a specific
+        // material's shaders. No shader pipeline touched at all.
+        if (opts.FindShaderForMaterialPaths.Count > 0)
+        {
+            return RunFindShaderForMaterial(opts);
+        }
+
         // Headless shader export+decompile. Builds a CUE4Parse provider straight
         // from the --game-config AppSettings (all AES dynamic keys + mappings +
         // version) and runs the full export+decompile pipeline with NO FModel
@@ -245,6 +252,7 @@ public static class Program
                 SkipDecompile = opts.ExportOnly,
                 ListArchivesOnly = opts.ListArchives,
                 FindAssetSubstring = opts.FindAsset,
+                MaterialFilter = opts.MaterialFilter,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });
@@ -266,6 +274,55 @@ public static class Program
     // AppSettings-driven mount (same as the shader export path), unlike
     // --export-map-direct's single-AES-key mount which can't handle a game
     // with 1000+ dynamic keys.
+    // Targeted lookup: for each given material package path, resolve its
+    // inline ResourceHash then report which mounted .ushaderbytecode
+    // archive(s) contain a shader-map with that hash. The fast, incremental
+    // way to find WHICH archive to point --archive-filter/--material-filter
+    // at, without a full Tier1 bridge scan or blindly decompiling every
+    // archive to find one material's shaders.
+    private static int RunFindShaderForMaterial(CliOptions opts)
+    {
+        string? configPath = opts.GameConfig;
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+#if DEBUG
+            configPath = Path.Combine(appData, "FModel", "AppSettings_Debug.json");
+#else
+            configPath = Path.Combine(appData, "FModel", "AppSettings.json");
+#endif
+        }
+        if (!File.Exists(configPath))
+        {
+            HookLogger.LogFailure($"[FindShader] --game-config not found: {configPath}. Pass --game-config <AppSettings.json>.");
+            return 2;
+        }
+
+        HeadlessGameConfig cfg;
+        try
+        {
+            cfg = HeadlessGameConfig.Load(configPath);
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[FindShader] Failed to parse config {configPath}: {ex.Message}");
+            return 2;
+        }
+
+        try
+        {
+            var locations = HeadlessShaderExportRunner.FindShaderArchivesForMaterials(cfg, opts.FindShaderForMaterialPaths, HookLogger.Log, HookLogger.LogFailure);
+            int withArchive = locations.Count(l => l.ArchivePaths.Count > 0);
+            HookLogger.LogSuccess($"[FindShader] Done. shader-maps-found={locations.Count} with-archive={withArchive}");
+            return withArchive > 0 ? 0 : 3;
+        }
+        catch (Exception ex)
+        {
+            HookLogger.LogFailure($"[FindShader] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
+            return 1;
+        }
+    }
+
     private static int RunExportAsset(CliOptions opts)
     {
         string? configPath = opts.GameConfig;
@@ -302,11 +359,16 @@ public static class Program
 
         try
         {
+            // UEFormat (.uemodel/.uetexture) is the default mesh format — user
+            // has the io_import_ueformat Blender plugin for it and does NOT
+            // want ActorX (.psk/.pskx). MaterialFormat left at the library
+            // default (AllLayersNoRef, JSON) since that's format-independent.
+            var exportOptions = new ExporterOptions { MeshFormat = EMeshFormat.UEFormat };
             HeadlessShaderExportRunner.ExportAssetResult result = HeadlessShaderExportRunner.ExportAssetPackages(
                 cfg,
                 opts.ExportAssetPaths,
                 outputDirectory,
-                new ExporterOptions(),
+                exportOptions,
                 HookLogger.Log,
                 HookLogger.LogFailure);
             HookLogger.LogSuccess($"[ExportAsset] Done. packages-loaded={result.PackagesLoaded} exports-written={result.ExportsWritten} skipped-unsupported={result.ExportsSkippedUnsupported} mappings={result.MappingsLoaded}");

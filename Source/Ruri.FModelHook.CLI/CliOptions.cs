@@ -29,6 +29,17 @@ internal sealed class CliOptions
     // Exporter (same path FModel's GUI "Export" uses). Repeatable; also
     // accepts a comma-separated list in one flag.
     public List<string> ExportAssetPaths { get; } = new();
+    // Mount and, for each given material package path, resolve its inline
+    // ResourceHash then report which mounted .ushaderbytecode archive(s)
+    // contain a shader-map with that hash — the fast, targeted way to find
+    // which archive to decompile for one specific material, without a full
+    // Tier1 bridge scan or a multi-hour full-archive decompile.
+    public List<string> FindShaderForMaterialPaths { get; } = new();
+    // Narrows the headless shader-export decompile OUTPUT to shader-maps
+    // belonging to this material (path substring match). Additive: does NOT
+    // wipe the shared Decompiled/<library> output folder, so repeated
+    // incremental --material-filter runs (or one after a full run) coexist.
+    public string? MaterialFilter { get; set; }
     public bool Help { get; set; }
     public bool? SplitVariants { get; set; } // null = leave persisted setting alone
     public List<string> Hooks { get; } = new();
@@ -120,6 +131,17 @@ internal sealed class CliOptions
                             opts.ExportAssetPaths.Add(tok);
                         i++;
                     }
+                    break;
+                case "--find-shader-for-material":
+                    if (i + 1 < args.Length)
+                    {
+                        foreach (string tok in args[i + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            opts.FindShaderForMaterialPaths.Add(tok);
+                        i++;
+                    }
+                    break;
+                case "--material-filter":
+                    if (i + 1 < args.Length) { opts.MaterialFilter = args[i + 1]; i++; }
                     break;
                 case "--split-variants":
                     opts.SplitVariants = true;
@@ -237,6 +259,13 @@ internal sealed class CliOptions
         "                        package path(s) — mesh + material + texture, via the same",
         "                        Exporter FModel's GUI \"Export\" uses. Comma-separated / repeatable.",
         "                        Use with --export-out to set the output directory.",
+        "  --find-shader-for-material PATH",
+        "                        Mount and report which .ushaderbytecode archive(s) contain the",
+        "                        given material's shader-maps (comma-separated / repeatable).",
+        "  --material-filter TOK Narrow the shader-export decompile OUTPUT to shader-maps whose",
+        "                        material path contains TOK. Additive (doesn't wipe prior output)",
+        "                        — combine with --archive-filter for a fast, incremental decompile",
+        "                        of one material instead of a whole (possibly huge) archive.",
         "  --split-variants      Emit EVERY per-stage variant as a sibling .hlsl file.",
         "  --no-split-variants   Keep only the primary variant inline in the .shader (default).",
         "  --export-only         Build cache + sidecars + .ushaderlib but SKIP decompile.",
