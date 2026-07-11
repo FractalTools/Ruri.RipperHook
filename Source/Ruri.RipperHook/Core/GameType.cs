@@ -6,7 +6,6 @@ public enum GameType
     Arknights,
     EndField,
     GirlsFrontline2,
-    Houkai,
     StarRail,
     PunishingGrayRaven,
     AzurPromilia,
