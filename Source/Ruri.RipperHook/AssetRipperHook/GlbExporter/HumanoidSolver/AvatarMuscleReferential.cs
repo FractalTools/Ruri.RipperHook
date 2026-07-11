@@ -88,27 +88,32 @@ public sealed class AvatarMuscleReferential
     };
 
     /// <summary>
-    /// The four limb segments (upper/lower arm, upper/lower leg) apply their own twist-DOF
-    /// (axis 0) muscle at HALF the angle every other twist-driven bone
-    /// (Spine/Chest/UpperChest/Neck/Head) uses at the same muscle value -- the torso/head
-    /// chain's twist scales 1:1 with <see cref="MuscleAngle"/>'s output, the four limb bones'
-    /// does not, on both sides, uniformly. Root-caused by reading Unity ground truth directly:
-    /// isolated the same muscle value (0.4) on eight different bones via
-    /// HumanPoseHandler.SetHumanPose, measured each one's actual rotation angle against
-    /// MuscleAngle's prediction, and the ratio was exactly 1.0000 for
-    /// Spine/Chest/UpperChest/Neck/Head and exactly 0.5000 for every limb segment (both sides).
-    ///
-    /// This supersedes an earlier "Forearm Twist In-Out needs its angle negated" patch (found
-    /// under the OLD, wrong swing-composition formula -- see <see cref="SwingTwist"/> -- as a
-    /// targeted fix for a symptom of two compounding bugs at once, without isolating either
-    /// one). Re-tested after fixing swing composition: a plain 0.5x scale, no sign flip at all,
-    /// matches Unity to &lt;0.05 degrees on combined twist+swing/stretch forearm poses
-    /// (humanoid_retarget.py's ``_HALF_TWIST_BONES``, same set).
+    /// The 8 fixed (parent, child, avatar-configurable factor) pairs
+    /// <c>mecanim::human::TwistSolve</c> processes, in Unity's exact order, after every bone's
+    /// own independent muscle solve (IDA Pro decompilation of Unity.dll -- read directly, not
+    /// guessed: an isolated single-bone test with only that bone's own muscles active can only
+    /// ever observe the "rescale this bone's own twist" half of what TwistSolve does, never the
+    /// child-compensation half, which needs the PARENT's twist muscle active and the CHILD's own
+    /// resulting rotation read back -- this is exactly why the original "Forearm Twist In-Out
+    /// needs its angle negated" and later "limb twist needs 0.5x" patches, both derived from
+    /// single-bone isolation tests, were each real but incomplete). Each pair rescales the
+    /// PARENT's own twist angle by the factor (default 0.5 for all four, confirmed for this
+    /// avatar) and adjusts the CHILD's local rotation to keep the child's WORLD orientation
+    /// exactly unchanged -- see <see cref="BodyLocalQuats"/> for the derivation and where this is
+    /// applied (humanoid_retarget.py's ``_TWIST_SOLVE_PAIRS``, same set and order). Order matters:
+    /// e.g. LeftLowerArm is a CHILD in the first pair and a PARENT in the second, applied
+    /// sequentially.
     /// </summary>
-    private static readonly HashSet<BoneType> HalfTwistBones = new()
+    private static readonly (BoneType Parent, BoneType Child, Func<AvatarMuscleReferential, float> Factor)[] TwistSolvePairs =
     {
-        BoneType.LeftUpperArm, BoneType.RightUpperArm, BoneType.LeftLowerArm, BoneType.RightLowerArm,
-        BoneType.LeftUpperLeg, BoneType.RightUpperLeg, BoneType.LeftLowerLeg, BoneType.RightLowerLeg,
+        (BoneType.LeftLowerArm, BoneType.LeftHand, r => r._foreArmTwist),
+        (BoneType.LeftUpperArm, BoneType.LeftLowerArm, r => r._armTwist),
+        (BoneType.RightLowerArm, BoneType.RightHand, r => r._foreArmTwist),
+        (BoneType.RightUpperArm, BoneType.RightLowerArm, r => r._armTwist),
+        (BoneType.LeftLowerLeg, BoneType.LeftFoot, r => r._legTwist),
+        (BoneType.LeftUpperLeg, BoneType.LeftLowerLeg, r => r._upperLegTwist),
+        (BoneType.RightLowerLeg, BoneType.RightFoot, r => r._legTwist),
+        (BoneType.RightUpperLeg, BoneType.RightLowerLeg, r => r._upperLegTwist),
     };
 
     private readonly MuscleBone?[] _bones = new MuscleBone?[TotalSlots];
@@ -120,6 +125,13 @@ public sealed class AvatarMuscleReferential
     private int[] _nodeParent = Array.Empty<int>();
     private Vector3[] _nodeRestT = Array.Empty<Vector3>();
     private Quaternion[] _nodeRestQ = Array.Empty<Quaternion>();
+
+    // TwistSolve parent<->child redistribution factors (see TwistSolvePairs/BodyLocalQuats) --
+    // avatar-configurable per mecanim::human::TwistSolve, default 0.5 for all four.
+    private float _armTwist = 0.5f;
+    private float _foreArmTwist = 0.5f;
+    private float _upperLegTwist = 0.5f;
+    private float _legTwist = 0.5f;
 
     public MuscleBone? Hips { get; private init; }
 
@@ -187,6 +199,10 @@ public sealed class AvatarMuscleReferential
             referential._humanBoneMass[i] = human.HumanBoneMass[i];
         }
         referential._qRest = ToQuaternion(human.RootX.Q);
+        referential._armTwist = human.ArmTwist;
+        referential._foreArmTwist = human.ForeArmTwist;
+        referential._upperLegTwist = human.UpperLegTwist;
+        referential._legTwist = human.LegTwist;
 
         int nodeCount = skeleton.Node.Count;
         referential._nodeParent = new int[nodeCount];
@@ -258,8 +274,10 @@ public sealed class AvatarMuscleReferential
     /// <summary>
     /// The bone's FULL absolute local rotation for this frame:
     /// preQ * swingTwist(angles) * inv(postQ) (humanoid_retarget.py's ``_axes_local``, same
-    /// formula). This is NOT a delta and is NOT identity at muscle=0 -- it already IS the
-    /// answer the caller wants in place of the bone's rest local rotation, with no further
+    /// formula), WITHOUT Unity's TwistSolve parent&lt;-&gt;child redistribution (see
+    /// <see cref="BodyLocalQuats"/> for the corrected, final version every caller outside this
+    /// class should use). This is NOT a delta and is NOT identity at muscle=0 -- it already IS
+    /// the answer the caller wants in place of the bone's rest local rotation, with no further
     /// composition or division by any rest quaternion (character's own, or the avatar's
     /// ``m_SkeletonPose`` "normalized rest") needed or correct. preQ and postQ are NOT
     /// interchangeable -- on a real rig they differ by 60-280+ degrees per bone, so the
@@ -271,12 +289,16 @@ public sealed class AvatarMuscleReferential
     /// 4.93 degrees with the pre/post-Q sandwich used directly, no per-bone table, no rest
     /// division of any kind -- BUT that validation happened to exercise mostly single-DOF-at-a-
     /// time poses, so it did not catch the separate swing/twist composition bug fixed in
-    /// <see cref="SwingTwist"/> (small at low swing angles, 40-85 degrees once two swing axes
+    /// <see cref="SwingTwist"/> or the TwistSolve parent&lt;-&gt;child redistribution fixed in
+    /// <see cref="BodyLocalQuats"/> (both small at low swing angles, large once two swing axes
     /// are simultaneously large, e.g. arms/legs mid-stride). See the class-level doc comment for
     /// two earlier, wrong versions of THIS method (the pre/post-Q sandwich) and why each one's
     /// own validation was invalid or pointless.
     /// </summary>
     public static Quaternion LocalRotation(MuscleBone bone, Func<string, float?> muscleLookup)
+        => ComposeFromAngles(bone, ComputeAngles(bone, muscleLookup));
+
+    private static (float X, float Y, float Z) ComputeAngles(MuscleBone bone, Func<string, float?> muscleLookup)
     {
         float angleX = 0f, angleY = 0f, angleZ = 0f;
         for (int dof = 0; dof < 3; dof++)
@@ -300,12 +322,58 @@ public sealed class AvatarMuscleReferential
                 default: angleZ = angle; break;
             }
         }
-        if (HalfTwistBones.Contains((BoneType)bone.Slot))
-        {
-            angleX *= 0.5f;
-        }
-        Quaternion swingTwist = SwingTwist(angleX, angleY, angleZ);
+        return (angleX, angleY, angleZ);
+    }
+
+    private static Quaternion ComposeFromAngles(MuscleBone bone, (float X, float Y, float Z) angles)
+    {
+        Quaternion swingTwist = SwingTwist(angles.X, angles.Y, angles.Z);
         return bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
+    }
+
+    /// <summary>
+    /// Every body/finger bone's local rotation this referential drives (hips excluded --
+    /// <see cref="BodyTransform"/> reconstructs its actual transform separately) for this
+    /// frame's muscle values, WITH Unity's TwistSolve parent&lt;-&gt;child twist redistribution
+    /// applied (see <see cref="TwistSolvePairs"/> for the mechanism and IDA source). Keyed by
+    /// <see cref="MuscleBone.Slot"/>.
+    ///
+    /// Derivation of the child compensation (algebraic necessity, not curve-fit):
+    /// child_world = parent_world * child_local must hold both before and after the parent's
+    /// local rotation changes by delta = inverse(parent_local_old) * parent_local_new (only the
+    /// parent's OWN local changes; its ancestors don't) -- parent_world_new = parent_world_old *
+    /// delta, so preserving child_world requires child_local_new = inverse(delta) *
+    /// child_local_old. Uses this class's own already-validated <see cref="SwingTwist"/>/pre-post-Q
+    /// formula for the parent's before/after local rotation (validated exact against live Unity
+    /// ground truth) as the basis for delta, rather than re-deriving Unity's internal
+    /// math::ToAxes/SkeletonAlign bit-for-bit.
+    /// </summary>
+    public Dictionary<int, Quaternion> BodyLocalQuats(Func<string, float?> muscleLookup)
+    {
+        Dictionary<int, Quaternion> quats = new();
+        for (int slot = 0; slot < TotalSlots; slot++)
+        {
+            if (slot == (int)BoneType.Hips || _bones[slot] is not { } bone)
+            {
+                continue;
+            }
+            quats[slot] = LocalRotation(bone, muscleLookup);
+        }
+
+        foreach ((BoneType parent, BoneType child, Func<AvatarMuscleReferential, float> factorOf) in TwistSolvePairs)
+        {
+            if (_bones[(int)parent] is not { } parentBone || !quats.TryGetValue((int)parent, out Quaternion parentOld)
+                || !quats.TryGetValue((int)child, out Quaternion childOld))
+            {
+                continue;
+            }
+            (float x, float y, float z) = ComputeAngles(parentBone, muscleLookup);
+            Quaternion parentNew = ComposeFromAngles(parentBone, (x * factorOf(this), y, z));
+            Quaternion delta = Quaternion.Normalize(Quaternion.Inverse(parentOld) * parentNew);
+            quats[(int)parent] = parentNew;
+            quats[(int)child] = Quaternion.Normalize(Quaternion.Inverse(delta) * childOld);
+        }
+        return quats;
     }
 
     /// <summary>
@@ -420,12 +488,13 @@ public sealed class AvatarMuscleReferential
     /// </summary>
     private (Vector3 Pos, Quaternion Rot)?[] ProvisionalFk(Func<string, float?> muscleLookup)
     {
+        Dictionary<int, Quaternion> bodyQuats = BodyLocalQuats(muscleLookup);
         Quaternion?[] localRot = new Quaternion?[BodySlots];
         for (int slot = 0; slot < BodySlots; slot++)
         {
-            if (_bones[slot] is { IsHips: false } bone)
+            if (_bones[slot] is { IsHips: false } && bodyQuats.TryGetValue(slot, out Quaternion q))
             {
-                localRot[slot] = LocalRotation(bone, muscleLookup);
+                localRot[slot] = q;
             }
         }
 
