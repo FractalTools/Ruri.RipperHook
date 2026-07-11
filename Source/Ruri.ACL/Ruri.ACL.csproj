@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Ruri.ACL</RootNamespace>
+    <AssemblyName>Ruri.ACL</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <!-- ACL's original C++ uses uint32_t offset/bit-rate arithmetic where wraparound is well-defined
+         and load-bearing (ptr_offset32, bit accumulation, etc). Must stay unchecked to match 1:1. -->
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+</Project>
