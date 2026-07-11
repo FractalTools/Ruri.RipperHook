@@ -2,14 +2,15 @@
 public enum CustomEngineType : byte
 {
     // Based RazTools
-    Genshit,
-    Houkai,
-    StarRail,
-    ZenlessZoneZero,
-	
+    // Numeric values are pinned: they double as folder names under the external TypeTree
+    // pipeline (see FRAMEWORK.md §10). Houkai=1 retired; do not renumber StarRail/ExAstris/EndField.
+    Genshit = 0,
+    StarRail = 2,
+    ZenlessZoneZero = 3,
+
 	// FractalTools
-    ExAstris,
-    EndField,
+    ExAstris = 4,
+    EndField = 5,
 
     Max = 255,
 }

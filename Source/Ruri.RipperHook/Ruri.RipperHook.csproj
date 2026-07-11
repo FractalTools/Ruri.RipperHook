@@ -65,17 +65,7 @@
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Yaml\AssetRipper.Yaml.csproj" />
 		<ProjectReference Include="..\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj" />
 		<ProjectReference Include="..\Ruri.Hook\Ruri.Hook.csproj" />
-	</ItemGroup>
-
-	<ItemGroup Condition="'$(PureRelease)' != 'true'">
-		<ContentWithTargetPath Include="Libraries\ACL.Houkai.dll">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-			<TargetPath>ACL.Houkai.dll</TargetPath>
-		</ContentWithTargetPath>
-		<ContentWithTargetPath Include="Libraries\ACL.EndField.dll">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-			<TargetPath>ACL.EndField.dll</TargetPath>
-		</ContentWithTargetPath>
+		<ProjectReference Include="..\Ruri.ACL\Ruri.ACL.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
