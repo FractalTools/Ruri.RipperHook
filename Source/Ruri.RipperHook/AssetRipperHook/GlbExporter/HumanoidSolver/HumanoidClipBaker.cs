@@ -73,6 +73,18 @@ public static class HumanoidClipBaker
         Array.Fill(motionRotations, Quaternion.Identity);
         bool hasMotion = false;
 
+        // Every non-hips bone's rotation for every frame, WITH Unity's TwistSolve
+        // parent<->child redistribution already applied (AvatarMuscleReferential.BodyLocalQuats)
+        // -- computed once per frame here rather than once per (bone, frame) below, since
+        // TwistSolve needs several bones' rotations together, not one at a time.
+        Dictionary<int, Quaternion>[] bodyQuatsByFrame = new Dictionary<int, Quaternion>[frameCount];
+        for (int f = 0; f < frameCount; f++)
+        {
+            int frame = f;
+            bodyQuatsByFrame[f] = referential.BodyLocalQuats(
+                attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null);
+        }
+
         foreach (MuscleBone bone in referential.DrivenBones)
         {
             if (!nodeByPath.TryGetValue(bone.Path, out NodeBuilder? node)
@@ -89,7 +101,7 @@ public static class HumanoidClipBaker
             }
             else
             {
-                trackCount += BakeMuscleBone(bone, node, values, channelIndex, sampleRate, frameCount, trackName);
+                trackCount += BakeMuscleBone(bone, node, channelIndex, bodyQuatsByFrame, sampleRate, frameCount, trackName);
             }
         }
 
@@ -104,8 +116,8 @@ public static class HumanoidClipBaker
         return trackCount;
     }
 
-    private static int BakeMuscleBone(MuscleBone bone, NodeBuilder node,
-        float[,] values, Dictionary<string, int> channelIndex, float sampleRate, int frameCount, string trackName)
+    private static int BakeMuscleBone(MuscleBone bone, NodeBuilder node, Dictionary<string, int> channelIndex,
+        Dictionary<int, Quaternion>[] bodyQuatsByFrame, float sampleRate, int frameCount, string trackName)
     {
         // 该骨骼三轴肌肉都不在 clip 里就没有可烘的数据(保持 rest,不写轨道)。
         bool hasAnyMuscle = false;
@@ -126,12 +138,11 @@ public static class HumanoidClipBaker
         SharpGLTF.Animations.CurveBuilder<Quaternion> rotation = node.UseRotation(trackName);
         for (int f = 0; f < frameCount; f++)
         {
-            int frame = f;
-            // LocalRotation IS the bone's absolute local rotation for the frame already --
-            // not a delta, not composed with rest (animation_builder.py's _bake_muscles,
-            // non-hips branch, current revision).
-            Quaternion animLocal = AvatarMuscleReferential.LocalRotation(bone,
-                attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null);
+            // BodyLocalQuats IS the bone's absolute local rotation for the frame already,
+            // WITH TwistSolve's parent<->child redistribution applied -- not a delta, not
+            // composed with rest (animation_builder.py's _bake_muscles, non-hips branch,
+            // current revision).
+            Quaternion animLocal = bodyQuatsByFrame[f][bone.Slot];
             rotation.SetPoint(f / sampleRate, GlbCoordinateConversion.ToGltfQuaternionConvert(animLocal));
         }
         return 1;
