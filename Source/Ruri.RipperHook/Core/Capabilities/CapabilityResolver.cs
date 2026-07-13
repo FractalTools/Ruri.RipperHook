@@ -91,15 +91,20 @@ public static class CapabilityResolver
 
     private static void ApplyRetargetCapabilities(List<MethodInfo> methods, int engineBuild, HookRegistry registry)
     {
+        // Each retarget attribute is its own slot. A method carrying several (one handler for two
+        // AnimationClip type-versions, one version getter answering both DefaultVersion and
+        // TargetVersion) contributes one slot per attribute and, in every case in this codebase,
+        // wins all of them -- nothing else competes for its slots -- so the winning methods, applied
+        // once each via ApplyManualHooks (which installs all of a method's attributes), reproduce the
+        // hand-written set exactly. The last-wins dedup guard in ReflectionExtensions is the backstop
+        // if a future method ever won only some of its slots.
         List<MethodInfo> winners = methods
-            .Where(static m =>
-                m.GetCustomAttribute<RetargetMethodAttribute>() is not null ||
-                m.GetCustomAttribute<RetargetMethodFuncAttribute>() is not null ||
-                m.GetCustomAttribute<RetargetMethodCtorFuncAttribute>() is not null)
-            .GroupBy(RetargetSlot)
-            .Select(slot => ResolveWinner(slot, engineBuild))
+            .SelectMany(m => RetargetSlots(m).Select(slot => (Slot: slot, Method: m)))
+            .GroupBy(static entry => entry.Slot)
+            .Select(slot => ResolveWinner(slot.Select(static e => e.Method), engineBuild))
             .Where(static m => m is not null)
             .Select(static m => m!)
+            .Distinct()
             .ToList();
 
         if (winners.Count > 0)
@@ -109,23 +114,26 @@ public static class CapabilityResolver
     }
 
     // The natural competing key for a retarget capability is the original method it patches --
-    // two capabilities only ever compete when they target the exact same source method.
-    private static (string SourceType, string MethodName) RetargetSlot(MethodInfo method)
+    // two capabilities only ever compete when they target the exact same source method. A method
+    // with several retarget attributes yields one slot per attribute (it patches several originals).
+    private static IEnumerable<(string SourceType, string MethodName)> RetargetSlots(MethodInfo method)
     {
-        if (method.GetCustomAttribute<RetargetMethodAttribute>() is { } retarget)
+        foreach (RetargetMethodAttribute retarget in method.GetCustomAttributes<RetargetMethodAttribute>())
         {
-            return (
+            yield return (
                 retarget.SourceType?.FullName ?? retarget.SourceTypeName ?? throw MissingSourceType(method),
                 retarget.SourceMethodName ?? throw MissingSourceMethodName(method));
         }
-        if (method.GetCustomAttribute<RetargetMethodFuncAttribute>() is { } retargetFunc)
+        foreach (RetargetMethodFuncAttribute retargetFunc in method.GetCustomAttributes<RetargetMethodFuncAttribute>())
         {
-            return (
+            yield return (
                 retargetFunc.SourceType.FullName ?? throw MissingSourceType(method),
                 retargetFunc.SourceMethodName ?? throw MissingSourceMethodName(method));
         }
-        RetargetMethodCtorFuncAttribute ctorFunc = method.GetCustomAttribute<RetargetMethodCtorFuncAttribute>()!;
-        return (ctorFunc.SourceType.FullName ?? throw MissingSourceType(method), ".ctor");
+        foreach (RetargetMethodCtorFuncAttribute ctorFunc in method.GetCustomAttributes<RetargetMethodCtorFuncAttribute>())
+        {
+            yield return (ctorFunc.SourceType.FullName ?? throw MissingSourceType(method), ".ctor");
+        }
     }
 
     private static InvalidOperationException MissingSourceType(MethodInfo method) =>
