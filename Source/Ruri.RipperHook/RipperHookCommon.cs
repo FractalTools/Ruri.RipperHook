@@ -7,6 +7,7 @@ using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated;
 using Ruri.Hook;
 using Ruri.RipperHook.Core;
+using Ruri.RipperHook.Core.Capabilities;
 
 namespace Ruri.RipperHook;
 
@@ -20,7 +21,7 @@ public abstract class RipperHookCommon : RuriHook
     protected RipperHookCommon()
     {
     }
-    
+
     public override void Initialize()
     {
         base.Initialize(); // Calls InitAttributeHook
@@ -39,6 +40,15 @@ public abstract class RipperHookCommon : RuriHook
         module.OnApply();
         Registry.ApplyTypeHooks(module.GetType());
     }
+
+    /// <summary>
+    /// Resolves and installs every <see cref="SinceAttribute"/>-tagged capability declared for
+    /// <paramref name="game"/> at <paramref name="engineBuild"/> (see
+    /// <see cref="CapabilityResolver"/>) -- the data-driven replacement for hand-listing
+    /// AddMethodHook/RegisterModule calls per version. A version whose resolved capability set is
+    /// identical to another's needs no call of its own beyond this one.
+    /// </summary>
+    protected void ApplyCapabilities(GameType game, int engineBuild) => CapabilityResolver.Apply(game, engineBuild, Registry);
 
     protected override void InitAttributeHook()
     {

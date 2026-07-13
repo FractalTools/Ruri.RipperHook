@@ -116,11 +116,16 @@ internal static class Program
         var allHooks = Hook.RuriHook.GetAvailableHooks();
         foreach (var (_, attr) in allHooks)
         {
-            string canonical = $"{attr.GameName}_{attr.Version}";
-            if (string.Equals(Canonicalize(canonical), target, StringComparison.OrdinalIgnoreCase))
-                return canonical;
+            // Check every id this attribute answers to (its own version plus any
+            // AlsoCoversVersions alias), not just its primary declared version -- otherwise
+            // --hook EndField_1.3.3 would never resolve to the 1.2.4 class that covers it.
+            foreach (string candidate in Hook.RuriHook.BuildHookIds(attr))
+            {
+                if (string.Equals(Canonicalize(candidate), target, StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+            }
             if (string.Equals(attr.GameName, id, StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(attr.Version))
-                return canonical;
+                return $"{attr.GameName}_{attr.Version}";
         }
         return id;
     }

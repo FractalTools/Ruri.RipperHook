@@ -123,13 +123,51 @@ namespace Ruri.Hook
                 }
             }
 
-            return hooks.OrderBy(x => x.Attribute.GameName).ThenBy(x => x.Attribute.Version).ToList();
+            List<(Type Type, GameHookAttribute Attribute)> ordered = hooks.OrderBy(x => x.Attribute.GameName).ThenBy(x => x.Attribute.Version).ToList();
+            ValidateNoIdCollisions(ordered);
+            return ordered;
+        }
+
+        // A hook id must resolve to exactly one implementation. Without this, two classes (or one
+        // class's declared version colliding with another's alias) could silently register the same
+        // selectable id, and whichever happened to be enumerated last would win with no diagnostic --
+        // the same class of "nobody would notice" mistake the duplicate-hook guard in
+        // ReflectionExtensions exists to catch, one layer up.
+        private static void ValidateNoIdCollisions(List<(Type Type, GameHookAttribute Attribute)> hooks)
+        {
+            var collisions = hooks
+                .SelectMany(hook => BuildHookIds(hook.Attribute).Select(id => (Id: id, hook.Type)))
+                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Select(x => x.Type).Distinct().Count() > 1);
+
+            foreach (var collision in collisions)
+            {
+                string offenders = string.Join(", ", collision.Select(x => x.Type.FullName).Distinct());
+                throw new InvalidOperationException($"[RuriHook] hook id '{collision.Key}' is claimed by more than one implementation: {offenders}. A hook id must resolve to exactly one class.");
+            }
         }
 
         public static string BuildHookId(GameHookAttribute attribute)
         {
             ArgumentNullException.ThrowIfNull(attribute);
             return $"{attribute.GameName}_{attribute.Version}";
+        }
+
+        /// <summary>
+        /// Every id <paramref name="attribute"/> answers to: its primary <see cref="BuildHookId"/>
+        /// plus one more per entry in <see cref="GameHookAttribute.AlsoCoversVersions"/> -- so a
+        /// version whose resolved behavior is identical to another's shows up as its own listed,
+        /// selectable hook without needing its own class.
+        /// </summary>
+        public static IEnumerable<string> BuildHookIds(GameHookAttribute attribute)
+        {
+            ArgumentNullException.ThrowIfNull(attribute);
+            yield return BuildHookId(attribute);
+
+            foreach (string alsoCoversVersion in attribute.AlsoCoversVersions)
+            {
+                yield return $"{attribute.GameName}_{alsoCoversVersion}";
+            }
         }
 
         public static void ApplyHooks(HookConfig config)
@@ -139,7 +177,7 @@ namespace Ruri.Hook
             lock (LifecycleSyncRoot)
             {
                 List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
-                HashSet<string> availableHookIds = new(availableHooks.Select(static hook => BuildHookId(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
+                HashSet<string> availableHookIds = new(availableHooks.SelectMany(static hook => BuildHookIds(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
 
                 // Self-heal the persisted config: drop any enabled-hook id that has no
                 // implementation in this build (a hook that was renamed or deleted, e.g. an
@@ -166,10 +204,12 @@ namespace Ruri.Hook
 
                 foreach (var (type, attr) in availableHooks)
                 {
-                    string hookId = BuildHookId(attr);
-                    if (desiredHookIds.Contains(hookId))
+                    foreach (string hookId in BuildHookIds(attr))
                     {
-                        ApplyHookCore(hookId, type);
+                        if (desiredHookIds.Contains(hookId))
+                        {
+                            ApplyHookCore(hookId, type);
+                        }
                     }
                 }
             }
@@ -186,7 +226,7 @@ namespace Ruri.Hook
             {
                 foreach (var (type, attr) in GetAvailableHooks())
                 {
-                    if (string.Equals(BuildHookId(attr), hookId, StringComparison.OrdinalIgnoreCase))
+                    if (BuildHookIds(attr).Any(id => string.Equals(id, hookId, StringComparison.OrdinalIgnoreCase)))
                     {
                         return ApplyHookCore(hookId, type);
                     }

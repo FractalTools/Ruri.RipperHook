@@ -21,7 +21,11 @@ namespace Ruri.Hook.Utils
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static BindingFlags AnyBindFlag()
         {
-            return BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+            // FlattenHierarchy is required for a derived type's GetMethods(explicitFlags) to include
+            // a base class's *static* members (instance members are always included regardless of
+            // this flag). Without it, a hook class that inherits a shared static [RetargetMethod]
+            // from a common base never has that method discovered by Registry.ApplyTypeHooks(GetType()).
+            return BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -52,25 +56,67 @@ namespace Ruri.Hook.Utils
 
         #region Method Reflection
 
+        // Guards against the same original method being IL-hooked twice within one hook activation --
+        // e.g. an own-declared method that Registry.ApplyTypeHooks(GetType()) already found being
+        // re-submitted via AddMethodHook, or (after the FlattenHierarchy fix above) an inherited
+        // static surfacing from two different scan entry points. Policy is LAST WINS: a repeat
+        // registration disposes the previously-installed hook and installs its own, rather than being
+        // silently dropped. This matters beyond "identical duplicate is wasteful" -- RuriHook.
+        // InitAttributeHook runs Registry.ApplyTypeHooks(GetType()) (auto-discovery, including
+        // inherited statics after the flag fix) BEFORE processing the hand-curated AddMethodHook list,
+        // so when a version's explicit list intentionally supersedes something auto-discovery also
+        // finds (a newer override of an inherited base hook, the exact EndField TagIDToName /
+        // Safe_TagIDToName shape), the deliberate, later registration must be the one left standing.
+        // Cleared per hook activation, mirroring HookManager's own scope lifecycle.
+        private static readonly Dictionary<MethodBase, IDisposable> _funcHookedSources = new();
+        private static readonly Dictionary<MethodBase, IDisposable> _ctorFuncHookedSources = new();
+        private static readonly Dictionary<(MethodBase Source, bool IsBefore, bool IsReturn), IDisposable> _callHookedSources = new();
+
+        public static void ClearAppliedHookGuards()
+        {
+            _funcHookedSources.Clear();
+            _ctorFuncHookedSources.Clear();
+            _callHookedSources.Clear();
+        }
+
+        private static void SupersedePrevious<TKey>(Dictionary<TKey, IDisposable> registered, TKey key, string srcDescription)
+        {
+            if (registered.Remove(key, out IDisposable? previous))
+            {
+                HookLogger.LogRaw($"    [!] {srcDescription} already hooked this activation -- superseding the earlier hook");
+                previous.Dispose();
+            }
+        }
+
         public static void RetargetCallFunc(Func<ILContext, bool> func, MethodInfo srcMethod)
         {
+            SupersedePrevious(_funcHookedSources, srcMethod, $"{srcMethod.DeclaringType?.Name}.{srcMethod.Name}");
+
             var hookDest = new ILContext.Manipulator(il =>
             {
                 if (!func(il))
                     throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
             });
-            HookManager.Register(new ILHook(srcMethod, hookDest));
+            var hook = new ILHook(srcMethod, hookDest);
+            HookManager.Register(hook);
+            _funcHookedSources[srcMethod] = hook;
+            HookManager.RegisterCleanup(() => _funcHookedSources.Remove(srcMethod));
             HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {func.Method.Name}");
         }
 
         public static void RetargetCallCtorFunc(Func<ILContext, bool> func, ConstructorInfo srcMethod)
         {
+            SupersedePrevious(_ctorFuncHookedSources, srcMethod, $"{srcMethod.DeclaringType?.Name}.{srcMethod.Name}");
+
             var hookDest = new ILContext.Manipulator(il =>
             {
                 if (!func(il))
                     throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
             });
-            HookManager.Register(new ILHook(srcMethod, hookDest));
+            var hook = new ILHook(srcMethod, hookDest);
+            HookManager.Register(hook);
+            _ctorFuncHookedSources[srcMethod] = hook;
+            HookManager.RegisterCleanup(() => _ctorFuncHookedSources.Remove(srcMethod));
             HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {func.Method.Name}");
         }
 
@@ -81,6 +127,9 @@ namespace Ruri.Hook.Utils
         /// </summary>
         public static void RetargetCall(MethodInfo srcMethod, MethodInfo targetMethod, int maxArgIndex = 1, bool isBefore = true, bool isReturn = true)
         {
+            var callKey = (srcMethod, isBefore, isReturn);
+            SupersedePrevious(_callHookedSources, callKey, $"{srcMethod.DeclaringType?.Name}.{srcMethod.Name}");
+
             var hookDest = new ILContext.Manipulator(il =>
             {
                 var ilCursor = new ILCursor(il);
@@ -122,8 +171,11 @@ namespace Ruri.Hook.Utils
                     inject();
             });
 
-            HookManager.Register(new ILHook(srcMethod, hookDest));
-            
+            var callHook = new ILHook(srcMethod, hookDest);
+            HookManager.Register(callHook);
+            _callHookedSources[callKey] = callHook;
+            HookManager.RegisterCleanup(() => _callHookedSources.Remove(callKey));
+
             if (targetMethod.Name != "Universal_ReadRelease")
             {
                 HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {targetMethod.Name}");

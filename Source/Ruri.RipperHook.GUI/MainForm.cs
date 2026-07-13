@@ -691,8 +691,8 @@ public partial class MainForm : Form
 
 		foreach ((Type _, GameHookAttribute attribute) in _availableHooks)
 		{
-			string hookId = $"{attribute.GameName}_{attribute.Version}";
-			if (enabled.Contains(hookId) && attribute is RipperHookAttribute ripperAttribute)
+			if (attribute is RipperHookAttribute ripperAttribute
+				&& Hook.RuriHook.BuildHookIds(attribute).Any(enabled.Contains))
 			{
 				return ripperAttribute.GameType;
 			}
@@ -1670,14 +1670,22 @@ public partial class MainForm : Form
 			TreeNode gameNode = new(gameName);
 			foreach ((Type _, GameHookAttribute attr) in hooks)
 			{
-				string hookId = $"{attr.GameName}_{attr.Version}";
-				string versionText = string.IsNullOrWhiteSpace(attr.Version) ? "Default" : attr.Version;
-				if (!string.IsNullOrWhiteSpace(attr.BaseEngineVersion))
+				// One tree node per id this attribute answers to -- its own declared version plus
+				// any AlsoCoversVersions alias (e.g. EndField 1.2.4 also covering 1.3.3) -- each
+				// independently selectable and resolving to the same underlying class.
+				foreach (string hookId in Hook.RuriHook.BuildHookIds(attr))
 				{
-					versionText += $" [Based on {attr.BaseEngineVersion}]";
+					string version = hookId.Length > attr.GameName.Length + 1
+						? hookId[(attr.GameName.Length + 1)..]
+						: attr.Version;
+					string versionText = string.IsNullOrWhiteSpace(version) ? "Default" : version;
+					if (!string.IsNullOrWhiteSpace(attr.BaseEngineVersion))
+					{
+						versionText += $" [Based on {attr.BaseEngineVersion}]";
+					}
+					TreeNode versionNode = new(versionText) { Tag = hookId };
+					gameNode.Nodes.Add(versionNode);
 				}
-				TreeNode versionNode = new(versionText) { Tag = hookId };
-				gameNode.Nodes.Add(versionNode);
 			}
 			hookTreeView.Nodes.Add(gameNode);
 			// 游戏节点纯粹是分组标签 —— 一个游戏只能装一个版本, 根节点摆个 checkbox 会让用户以为可以一键全勾.
