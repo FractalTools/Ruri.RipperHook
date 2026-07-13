@@ -337,6 +337,50 @@ internal sealed class ExportCabMap
     }
 
     /// <summary>
+    /// Build the optional name-index sidecar next to the CABMap: CAB -> chunk-entry file name + readable
+    /// AssetBundle Container paths. Virtual Asset List uses this to show/search names instead of CAB hashes.
+    /// </summary>
+    public static int BuildNameIndex(string rootFolder, string outPath)
+    {
+        string fullRoot = Path.GetFullPath(rootFolder);
+        Dictionary<string, NameEntry> index = new(StringComparer.OrdinalIgnoreCase);
+
+        GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
+        try
+        {
+            foreach (string file in Directory.GetFiles(fullRoot, "*.*", SearchOption.AllDirectories))
+            {
+                foreach ((string cab, string fileName, List<string> paths) in ScanContainerNames(file))
+                {
+                    index[cab] = new NameEntry(fileName, paths);
+                }
+            }
+        }
+        finally
+        {
+            GameBundleHook.ScanIncludeFile = null;
+        }
+
+        string outDir = Path.GetDirectoryName(Path.GetFullPath(outPath))!;
+        Directory.CreateDirectory(outDir);
+        using FileStream stream = File.Create(outPath);
+        using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
+        writer.Write(NameMagic);
+        writer.Write(index.Count);
+        foreach ((string cab, NameEntry entry) in index.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            writer.Write(cab);
+            writer.Write(entry.FileName);
+            writer.Write(entry.Paths.Count);
+            foreach (string path in entry.Paths)
+            {
+                writer.Write(path);
+            }
+        }
+        return index.Count;
+    }
+
+    /// <summary>
     /// Read only the SerializedFile METADATA of one on-disk file — CAB name, dependency identifiers and the
     /// ClassIDs from its type table — WITHOUT materializing a single asset or running any processor.
     ///
@@ -425,6 +469,71 @@ internal sealed class ExportCabMap
             }
         }
 
+        return result;
+    }
+
+    private static List<(string Cab, string FileName, List<string> Paths)> ScanContainerNames(string file)
+    {
+        if (GameBundleHook.ScanChunkNames is { } scanChunk)
+        {
+            try
+            {
+                return scanChunk(file);
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[NameIndex] Scan '{file}': {ex.GetType().Name}: {ex.Message}");
+                return new();
+            }
+        }
+
+        List<(string, string, List<string>)> result = new();
+        List<FileBase> fileStack = new();
+        try
+        {
+            GameBundleHook.FilePreInitializeDelegate? preInitialize = GameBundleHook.CustomFilePreInitialize;
+            if (preInitialize is not null)
+            {
+                preInitialize(new GameBundle(), new[] { file }, fileStack, LocalFileSystem.Instance, null);
+            }
+            else
+            {
+                fileStack.Add(SchemeReader.LoadFile(file, LocalFileSystem.Instance));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Verbose(LogCategory.Import, $"[NameIndex] Unpack '{file}': {ex.GetType().Name}: {ex.Message}");
+            return result;
+        }
+
+        string fallbackName = Path.GetFileName(file);
+        foreach (FileBase fileBase in fileStack)
+        {
+            try
+            {
+                if (fileBase is SerializedFile single)
+                {
+                    result.Add(GameBundleHook.ReadContainerNames(single, fallbackName));
+                }
+                else if (fileBase is FileContainer container)
+                {
+                    container.ReadContentsRecursively();
+                    foreach (SerializedFile sf in container.FetchSerializedFiles())
+                    {
+                        result.Add(GameBundleHook.ReadContainerNames(sf, fallbackName));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Verbose(LogCategory.Import, $"[NameIndex] Read '{file}': {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                (fileBase as IDisposable)?.Dispose();
+            }
+        }
         return result;
     }
 }

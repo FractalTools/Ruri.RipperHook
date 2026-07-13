@@ -208,9 +208,25 @@ public partial class MainForm
 		SetStatus(string.Format(RuriLocalization.CabMapBuilding, gameFolder));
 		try
 		{
-			int cabs = await Task.Run(() => ExportCabMap.Build(gameFolder, outPath));
-			_exportMap.Load(outPath);
-			SetStatus(string.Format(RuriLocalization.CabMapBuilt, cabs, outPath));
+			List<ExportCabMap.CabRow> rows = [];
+			int cabs = 0;
+			string namesPath = ExportCabMap.NameIndexPath(outPath);
+			await Task.Run(() =>
+			{
+				cabs = ExportCabMap.Build(gameFolder, outPath);
+				ExportCabMap.BuildNameIndex(gameFolder, namesPath);
+				_exportMap.Load(outPath);
+				if (File.Exists(namesPath))
+				{
+					_exportMap.LoadNames(namesPath);
+				}
+				rows = _exportMap.EnumerateCabRows()
+					.OrderBy(static r => r.ContainerPaths.Count > 0 ? r.ContainerPaths[0] : r.Cab, StringComparer.OrdinalIgnoreCase)
+					.ToList();
+			});
+			string nameState = _exportMap.HasNames ? RuriLocalization.CabMapNamesLoaded : RuriLocalization.CabMapNamesMissing;
+			SetStatus(string.Format(RuriLocalization.CabMapBuilt, cabs, outPath) + " " + nameState);
+			ShowVirtualRows(rows);
 		}
 		catch (Exception ex)
 		{
