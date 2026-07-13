@@ -243,7 +243,10 @@ internal static class HeadlessRunner
         var list = new List<string>(hooks.Count);
         foreach (var (_, attr) in hooks)
         {
-            list.Add($"{attr.GameName}_{attr.Version}");
+            // BuildHookIds, not just the primary id -- a class whose attribute carries
+            // AlsoCoversVersions (e.g. EndField 1.2.4 also covering the byte-identical 1.3.3)
+            // must list every alias id it answers to, not just its own declared version.
+            list.AddRange(Ruri.Hook.RuriHook.BuildHookIds(attr));
         }
 
         var summary = new
