@@ -69,6 +69,45 @@ public class GameBundleHook : CommonHook, IHookModule
     /// </summary>
     public static Func<string, bool>? LoadIncludeFile;
 
+    // ── raw VFS file access + scene-placement discovery (non-Unity-CAB payloads) ──────────────────
+    //
+    // Every delegate below is deliberately typed in primitives/tuples only, NEVER a concrete game-hook
+    // type (VirtualFileSystem, SceneChunkReader, Beyond.Gameplay.Streaming.*, ...) — this file lives
+    // OUTSIDE AssetRipperGameHook/ and must keep compiling when that whole tree is stripped (the
+    // "Pure" build: $(PureRelease)==true removes AssetRipperGameHook/**/*.cs entirely, see
+    // Ruri.RipperHook.csproj). Same reasoning as ScanChunk/ScanChunkNames/ScanChunkFull above; the
+    // actual implementation lives in AssetRipperGameHook/UnityHypergryph/EndField/Utils/StreamingScene/
+    // EndfieldSceneBridge.cs and is wired in by the concrete game hook (e.g. EndField_1_2_4_Hook),
+    // exactly like those three delegates are.
+
+    /// <summary>One VFS-packed file's metadata, as a plain tuple (no concrete game-hook type):
+    /// original name, its hash, its EVFSBlockType name, decrypted length, and which .chk hosts it.</summary>
+    public delegate IEnumerable<(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath)> EnumerateVfsFilesDelegate(string[] vfsRoots, string[]? blockTypeFilter);
+    /// <summary>Set by a VFS game hook: enumerate every file across the given VFS roots (priority order,
+    /// see <see cref="LoadIncludeFile"/>-style layered-root reasoning), of ANY block type -- not just
+    /// Unity-CAB-shaped entries. <c>null</c> when no VFS hook is active.</summary>
+    public static EnumerateVfsFilesDelegate? EnumerateVfsFiles;
+
+    /// <summary>Set by a VFS game hook: extract + decrypt one VFS-packed file's raw bytes by its exact
+    /// original name, trying the given roots in priority order with fallback (a hot-update overlay can
+    /// list a file it never duplicated). <c>null</c> when no VFS hook is active.</summary>
+    public delegate byte[] ExtractVfsFileDelegate(string[] vfsRoots, string fileName);
+    public static ExtractVfsFileDelegate? ExtractVfsFile;
+
+    /// <summary>Set by a VFS game hook: every distinct map name with streaming-chunk scene data across
+    /// the given VFS roots. <c>null</c> when no VFS hook is active.</summary>
+    public delegate string[] EnumerateSceneMapsDelegate(string[] vfsRoots);
+    public static EnumerateSceneMapsDelegate? EnumerateSceneMaps;
+
+    /// <summary>One mesh-bearing scene-entity placement, as a plain tuple (no concrete game-hook type):
+    /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, source chunk file
+    /// name, whether a ground-truth-verified transform source was found, and the transform itself
+    /// (identity/zero when HasTransform is false -- treat as "don't place", not "place at the origin").</summary>
+    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName);
+    /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement for a map's
+    /// streaming chunks. <c>null</c> when no VFS hook is active.</summary>
+    public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
+
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each

@@ -8,8 +8,6 @@
 		<AssemblyName>Ruri.RipperHook</AssemblyName>
 		<TargetFramework>net10.0-windows</TargetFramework>
 		<InternalsAssemblyNames>AssetRipper.SourceGenerated;Ruri.SourceGenerated;AssetRipper.Export.Modules.Models</InternalsAssemblyNames>
-		<!-- ProjectReference 默认用 ref assembly 编译,会绕过 IgnoresAccessChecksToGenerator 重写的实现程序集;
-		     关掉它让 Csc 直接吃 ReferencePath,internal 提权才对 AssetRipper.Export.Modules.Models 生效。 -->
 		<CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
 		<Configurations>Debug;Release</Configurations>
 	</PropertyGroup>
@@ -46,6 +44,7 @@
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
 		<PackageReference Include="Oodle.NET" Version="2.2.0" />
+		<PackageReference Include="Google.FlatBuffers" Version="25.2.10" />
 	</ItemGroup>
 
 	<ItemDefinitionGroup Condition="'$(PureRelease)' == 'true'">

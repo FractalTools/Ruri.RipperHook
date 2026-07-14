@@ -574,6 +574,66 @@ public static class CabMap
         return (resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(), loadFilterFileNames);
     }
 
+    /// <summary>
+    /// Inverted index from normalized addressable container path → every CAB whose
+    /// <see cref="Entry.ContainerPaths"/> includes it. Normalization = lowercase + strip any
+    /// "##subObjectName" suffix. A scene-placement's asset path (resolved via StringPathHash, see
+    /// RipperBlenderBridge.DiscoverScenePlacements) references a specific named sub-object inside a
+    /// multi-object FBX (e.g. "...model.fbx##some_mesh"); Entry.ContainerPaths records only the
+    /// container-level FBX path (what Unity's AssetBundle.Container actually stores), never the
+    /// sub-object suffix. Confirmed empirically against the real game: 446/446 distinct
+    /// base01_lv001 scene-placement asset paths resolve with exactly this rule, 0 exceptions —
+    /// this is not a fuzzy/heuristic match, it's the one transformation the data actually needs.
+    /// </summary>
+    public static Dictionary<string, List<string>> BuildContainerPathIndex(Dictionary<string, Entry> entries)
+    {
+        Dictionary<string, List<string>> index = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string cab, Entry entry) in entries)
+        {
+            foreach (string path in entry.ContainerPaths)
+            {
+                string key = NormalizeContainerPath(path);
+                if (!index.TryGetValue(key, out List<string>? cabs))
+                {
+                    cabs = new List<string>();
+                    index[key] = cabs;
+                }
+                cabs.Add(cab);
+            }
+        }
+        return index;
+    }
+
+    private static string NormalizeContainerPath(string path)
+    {
+        int hashIdx = path.IndexOf("##", StringComparison.Ordinal);
+        return (hashIdx >= 0 ? path[..hashIdx] : path).ToLowerInvariant();
+    }
+
+    /// <summary>Resolve a set of addressable paths (e.g. scene-placement AssetPaths) to the CAB names
+    /// that host them, against an already-built <see cref="BuildContainerPathIndex"/> result -- use
+    /// this overload when resolving many path sets against the same loaded cabmap, to build the index
+    /// once. Paths with no match are silently skipped; a caller checking coverage should compare its
+    /// input count against how many resolved.</summary>
+    public static string[] ResolveCabsForPaths(Dictionary<string, List<string>> containerPathIndex, IEnumerable<string> containerPaths)
+    {
+        HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in containerPaths)
+        {
+            if (containerPathIndex.TryGetValue(NormalizeContainerPath(path), out List<string>? matches))
+            {
+                foreach (string cab in matches) cabs.Add(cab);
+            }
+        }
+        return cabs.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>One-shot convenience overload of <see cref="ResolveCabsForPaths(Dictionary{string, List{string}}, IEnumerable{string})"/>
+    /// that builds the index internally. Prefer the pre-built-index overload when resolving more than
+    /// one path set against the same <paramref name="entries"/>.</summary>
+    public static string[] ResolveCabsForPaths(Dictionary<string, Entry> entries, IEnumerable<string> containerPaths)
+        => ResolveCabsForPaths(BuildContainerPathIndex(entries), containerPaths);
+
     private static Dictionary<string, List<string>> BuildPathIndex(Dictionary<string, Entry> entries)
     {
         Dictionary<string, List<string>> pathToCabs = new(StringComparer.OrdinalIgnoreCase);

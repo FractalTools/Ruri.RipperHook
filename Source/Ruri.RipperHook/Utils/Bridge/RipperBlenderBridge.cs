@@ -7,6 +7,7 @@ using AssetRipper.SourceGenerated;
 using Ruri.Hook.Config;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -79,6 +80,17 @@ public static class RipperBlenderBridge
         return rows;
     }
 
+    /// <summary>Resolve a set of addressable container paths (e.g. <see cref="DiscoverScenePlacements"/>'
+    /// <see cref="ScenePlacementDto.AssetPath"/> values) to the CAB names that host them, via
+    /// <see cref="CabMap.ResolveCabsForPaths(Dictionary{string, CabMap.Entry}, IEnumerable{string})"/>.
+    /// Paths with no match are silently skipped -- compare the input count against the result to check
+    /// coverage.</summary>
+    public static string[] ResolveCabsForPaths(CabMapHandle map, string[] containerPaths)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return CabMap.ResolveCabsForPaths(map.Entries, containerPaths);
+    }
+
     /// <summary>
     /// Resolve the seed CABs' full dependency closure, load exactly those bundles, run AssetRipper's real
     /// Unity-project exporter against an <see cref="InMemoryFileSystem"/> (the same exporter that backs
@@ -118,6 +130,65 @@ public static class RipperBlenderBridge
 
         return Partition(memoryFileSystem.Files);
     }
+
+    // ── raw VFS access + scene-placement discovery ──────────────────────────────────────────────────
+    //
+    // All four methods below are thin conversions over GameBundleHook's generic (primitive/tuple-typed)
+    // delegates -- never touching VirtualFileSystem/SceneChunkReader/EcsBlobDecoder or any other
+    // concrete Endfield type directly. The real implementation lives in AssetRipperGameHook/
+    // UnityHypergryph/EndField/Utils/StreamingScene/EndfieldSceneBridge.cs, which a VFS game hook wires
+    // into those delegates (mirroring the existing ScanChunk/ScanChunkNames/ScanChunkFull pattern).
+    // This file lives OUTSIDE AssetRipperGameHook/ and must keep compiling when that whole tree is
+    // stripped ($(PureRelease)==true in Ruri.RipperHook.csproj) -- a concrete reference here would break
+    // that build the same way GameBundleHook.ActiveVfs (a typed field, since removed) did.
+
+    /// <summary>
+    /// Enumerate every file recorded in every .blc manifest across <paramref name="vfsRoots"/> (priority
+    /// order, e.g. [Persistent/VFS, StreamingAssets/VFS] -- a hot-update overlay's listing wins over the
+    /// base client's when both list the same file), of ANY block type -- not just the Unity-CAB-shaped
+    /// entries <see cref="ImportCabs"/> resolves through. This does not extract/decrypt any payload, only
+    /// reads the (small, CRC-verified) file tables, so scanning the whole VFS tree is cheap.
+    /// <paramref name="blockTypeFilter" /> is an optional set of block-type names (e.g. "Streaming",
+    /// "ExtendData") to pre-filter by, to avoid materializing every non-relevant entry.
+    /// </summary>
+    public static VfsFileDto[] EnumerateVfsFiles(string[] vfsRoots, string[]? blockTypeFilter = null) =>
+        VfsFuncOrThrow(GameBundleHook.EnumerateVfsFiles)(vfsRoots, blockTypeFilter)
+            .Select(f => new VfsFileDto(f.FileName, f.FileNameHash, f.BlockType, f.Length, f.ChkPath))
+            .ToArray();
+
+    /// <summary>
+    /// Extract + decrypt one VFS-packed file's raw bytes by its exact original name (as returned by
+    /// <see cref="EnumerateVfsFiles"/>'s <see cref="VfsFileDto.FileName"/>), trying <paramref name="vfsRoots"/>
+    /// in priority order with fallback (a hot-update overlay can list a chunk it never duplicated because
+    /// that patch didn't change it; confirmed against the real game -- see EndfieldSceneBridge.cs).
+    /// </summary>
+    public static byte[] ExtractVfsFile(string[] vfsRoots, string fileName) =>
+        VfsFuncOrThrow(GameBundleHook.ExtractVfsFile)(vfsRoots, fileName);
+
+    /// <summary>Every distinct map name with streaming-chunk data across <paramref name="vfsRoots"/>
+    /// (i.e. every "&lt;map&gt;" in "Data/Streaming/PC/&lt;map&gt;/Streaming/*.bytes").</summary>
+    public static string[] EnumerateSceneMaps(string[] vfsRoots) =>
+        VfsFuncOrThrow(GameBundleHook.EnumerateSceneMaps)(vfsRoots);
+
+    /// <summary>
+    /// Discover every mesh-bearing entity placement for <paramref name="mapName"/>'s STREAMING chunks
+    /// (Data/Streaming/PC/&lt;map&gt;/Streaming/*.bytes -- static world geometry/props/colliders), across
+    /// <paramref name="vfsRoots"/> in priority order. Cheap: only the hash LUT + chunk files are
+    /// extracted/decoded, no dependency closure is resolved and no CAB is loaded -- the caller resolves
+    /// AssetPath -> CAB separately (see <see cref="ResolveCabsForPaths"/>) only for whichever placements
+    /// it actually wants to import. See EndfieldSceneBridge.DiscoverScenePlacements for the full
+    /// implementation notes (transform-resolution priority, the STREAMING-vs-DynamicStreaming scope
+    /// boundary, and the ReverseNotes.md caveat on Mono/Proxy entities).
+    /// </summary>
+    public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName) =>
+        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName)
+            .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
+                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz))
+            .ToArray();
+
+    private static T VfsFuncOrThrow<T>(T? func) where T : class =>
+        func ?? throw new InvalidOperationException(
+            "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files)
     {
@@ -216,6 +287,21 @@ public sealed class CabMapHandle
 
 /// <summary>One browsable row — mirrors the WinForms "Virtual Asset List" columns 1:1.</summary>
 public sealed record CabRowDto(string Cab, string Name, string Container, string TypeNames, string Source, int DependencyCount);
+
+/// <summary>One file inside the VFS, as returned by <see cref="RipperBlenderBridge.EnumerateVfsFiles"/> — its
+/// exact original name (the lookup key <see cref="RipperBlenderBridge.ExtractVfsFile"/> takes), its
+/// EVFSBlockType name (e.g. "Streaming", "ExtendData"), its decrypted length, and which .chk it lives in
+/// (informational only; callers extract by name, not by chunk path).</summary>
+public sealed record VfsFileDto(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath);
+
+/// <summary>One mesh-bearing entity placement discovered by <see cref="RipperBlenderBridge.DiscoverScenePlacements"/>.
+/// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.
+/// HasTransform false means no ground-truth-verified transform source was found for this entity (see the
+/// method's doc comment); Px..Sz are all zero/identity in that case and callers should treat this as "don't
+/// place," not "place at the origin."</summary>
+public sealed record ScenePlacementDto(
+    string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform,
+    float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz);
 
 /// <summary>
 /// The in-memory import payload for a resolved selection: Unity-project YAML text and texture PNG bytes,
