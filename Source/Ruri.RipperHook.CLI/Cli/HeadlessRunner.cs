@@ -9,6 +9,7 @@ using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using Newtonsoft.Json;
+using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.CLI;
