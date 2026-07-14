@@ -35,8 +35,8 @@ internal sealed class FilterDialog : Form
 		ClientSize = new Size(760, 380);
 		MinimumSize = new Size(660, 300);
 
-		Label intro = new() { Text = "Display rows matching these conditions:", Dock = DockStyle.Top, Height = 20, Padding = new Padding(6, 8, 6, 0) };
-		Label heading = new() { Text = "(no Include rule ⇒ show all; any matching Exclude rule always wins)", Dock = DockStyle.Top, Height = 18, Padding = new Padding(6, 0, 6, 4), ForeColor = SystemColors.GrayText };
+		Label intro = new() { Text = "Display rows matching ALL these conditions:", Dock = DockStyle.Top, Height = 20, Padding = new Padding(6, 8, 6, 0) };
+		Label heading = new() { Text = "(no rules ⇒ show all; every enabled rule must hold)", Dock = DockStyle.Top, Height = 18, Padding = new Padding(6, 0, 6, 4), ForeColor = SystemColors.GrayText };
 
 		// Top section: a flexible [Field][Relation][Value] then [Action] row filling the left, with
 		// Add/Remove stacked in a fixed-width column on the right -- the Process Monitor arrangement.
