@@ -2,19 +2,23 @@ using System.Drawing;
 
 namespace Ruri.RipperHook.GUI;
 
-// Process-Monitor-style filter editor opened from the top menu. Build a rule from
-// [Field] [Relation] [Value] then [Include/Exclude] and Add it; stack any number of rules freely
-// (Type contains Animation → Include, Type contains Mesh → Exclude, Container is pelica, …). Edits the
-// shared rule list in place and calls back to re-apply both asset lists live (non-modal).
+// Process-Monitor-style filter editor opened from the top menu, laid out to match Process Monitor's own
+// Filter dialog 1:1: a two-line instruction header, a [Field][Relation][Value] then [Include/Exclude]
+// builder row with Add/Remove stacked in a fixed-width column to its right (not squeezed into the same
+// flow as the combo boxes -- that was the bug: a WrapContents=false FlowLayoutPanel whose six controls'
+// combined natural width exceeded the default client width, clipping "Add" off the right edge until the
+// window was manually widened), a rules grid below, and actions along the bottom. Non-modal and
+// live-apply (edits the shared rule list in place and calls back to re-apply both asset lists
+// immediately), so the bottom row is Close/Clear rather than Process Monitor's OK/Cancel/Apply.
 internal sealed class FilterDialog : Form
 {
 	private readonly List<MainForm.FilterRule> _rules;
 	private readonly Action _onChanged;
 
-	private readonly ComboBox _field = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
-	private readonly ComboBox _relation = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-	private readonly ComboBox _value = new() { Width = 240 };
-	private readonly ComboBox _action = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
+	private readonly ComboBox _field = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+	private readonly ComboBox _relation = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+	private readonly ComboBox _value = new() { Dock = DockStyle.Fill };
+	private readonly ComboBox _action = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
 	private readonly ListView _rulesView = new();
 	private string[] _types;
 	private bool _suppressCheck;
@@ -28,12 +32,43 @@ internal sealed class FilterDialog : Form
 		Text = "Filter";
 		FormBorderStyle = FormBorderStyle.SizableToolWindow;
 		StartPosition = FormStartPosition.CenterParent;
-		ClientSize = new Size(640, 320);
-		MinimumSize = new Size(520, 240);
+		ClientSize = new Size(760, 380);
+		MinimumSize = new Size(660, 300);
 
-		Label heading = new() { Text = "Display rows matching these rules (no Include rule ⇒ show all; Exclude wins):", Dock = DockStyle.Top, Height = 22, Padding = new Padding(4, 4, 4, 0) };
+		Label intro = new() { Text = "Display rows matching these conditions:", Dock = DockStyle.Top, Height = 20, Padding = new Padding(6, 8, 6, 0) };
+		Label heading = new() { Text = "(no Include rule ⇒ show all; any matching Exclude rule always wins)", Dock = DockStyle.Top, Height = 18, Padding = new Padding(6, 0, 6, 4), ForeColor = SystemColors.GrayText };
 
-		FlowLayoutPanel builder = new() { Dock = DockStyle.Top, Height = 34, WrapContents = false, Padding = new Padding(2) };
+		// Top section: a flexible [Field][Relation][Value] then [Action] row filling the left, with
+		// Add/Remove stacked in a fixed-width column on the right -- the Process Monitor arrangement.
+		// TableLayoutPanel (not FlowLayoutPanel) so the Value cell can be given a Percent column style
+		// and genuinely absorb the leftover width on resize instead of a fixed pixel guess.
+		TableLayoutPanel top = new()
+		{
+			Dock = DockStyle.Top,
+			Height = 60,
+			ColumnCount = 2,
+			RowCount = 1,
+			Padding = new Padding(6, 2, 6, 2),
+		};
+		top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+		top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88f));
+
+		// Dock=Top (not Fill) + an explicit short Height: this row sits at 25px regardless of how tall
+		// the sibling button-stack cell is, so all five controls (including the "then" label) stay
+		// vertically aligned with each other instead of the label centering within the taller cell the
+		// two stacked Add/Remove buttons need.
+		TableLayoutPanel builder = new()
+		{
+			Dock = DockStyle.Top,
+			Height = 25,
+			ColumnCount = 5,
+			RowCount = 1,
+		};
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118f));  // Field
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128f));  // Relation
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));   // Value -- flexes with the dialog
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42f));   // "then"
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96f));  // Action
 		_field.Items.AddRange(MainForm.FilterColumns);
 		_field.SelectedIndex = 0;
 		_field.SelectedIndexChanged += (_, _) => UpdateValueItems();
@@ -41,36 +76,49 @@ internal sealed class FilterDialog : Form
 		_relation.SelectedIndex = 2; // contains
 		_action.Items.AddRange(["Include", "Exclude"]);
 		_action.SelectedIndex = 0;
-		Label then = new() { Text = "then", AutoSize = true, Margin = new Padding(6, 8, 2, 1) };
-		Button add = new() { Text = "Add", AutoSize = true, Margin = new Padding(4, 1, 1, 1) };
+		Label then = new() { Text = "then", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+		builder.Controls.Add(_field, 0, 0);
+		builder.Controls.Add(_relation, 1, 0);
+		builder.Controls.Add(_value, 2, 0);
+		builder.Controls.Add(then, 3, 0);
+		builder.Controls.Add(_action, 4, 0);
+
+		// Add above Remove, matching Process Monitor's button stack exactly.
+		FlowLayoutPanel buttonStack = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(6, 2, 0, 0) };
+		Button add = new() { Text = "Add", Width = 78, Height = 24, Margin = new Padding(0, 0, 0, 4) };
 		add.Click += (_, _) => AddFromBuilder();
-		builder.Controls.AddRange([_field, _relation, _value, then, _action, add]);
+		Button remove = new() { Text = "Remove", Width = 78, Height = 24, Margin = new Padding(0) };
+		remove.Click += (_, _) => RemoveSelected();
+		buttonStack.Controls.Add(add);
+		buttonStack.Controls.Add(remove);
+
+		top.Controls.Add(builder, 0, 0);
+		top.Controls.Add(buttonStack, 1, 0);
 
 		_rulesView.Dock = DockStyle.Fill;
 		_rulesView.View = View.Details;
 		_rulesView.CheckBoxes = true;
 		_rulesView.FullRowSelect = true;
 		_rulesView.HideSelection = false;
-		_rulesView.Columns.Add("Column", 90);
-		_rulesView.Columns.Add("Relation", 100);
-		_rulesView.Columns.Add("Value", 300);
+		_rulesView.Columns.Add("Column", 100);
+		_rulesView.Columns.Add("Relation", 110);
+		_rulesView.Columns.Add("Value", 320);
 		_rulesView.Columns.Add("Action", 80);
 		_rulesView.ItemChecked += RulesView_ItemChecked;
 		_rulesView.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete) { e.Handled = true; RemoveSelected(); } };
 
-		FlowLayoutPanel actions = new() { Dock = DockStyle.Bottom, Height = 34, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(2) };
+		FlowLayoutPanel actions = new() { Dock = DockStyle.Bottom, Height = 40, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(6) };
 		Button close = new() { Text = "Close", AutoSize = true, Margin = new Padding(2) };
 		close.Click += (_, _) => Hide();
 		Button clear = new() { Text = "Clear all", AutoSize = true, Margin = new Padding(2) };
 		clear.Click += (_, _) => { _rules.Clear(); RefreshFromRules(); _onChanged(); };
-		Button remove = new() { Text = "Remove", AutoSize = true, Margin = new Padding(2) };
-		remove.Click += (_, _) => RemoveSelected();
-		actions.Controls.AddRange([close, clear, remove]);
+		actions.Controls.AddRange([close, clear]);
 
 		Controls.Add(_rulesView);
 		Controls.Add(actions);
-		Controls.Add(builder);
+		Controls.Add(top);
 		Controls.Add(heading);
+		Controls.Add(intro);
 
 		UpdateValueItems();
 		RefreshFromRules();
