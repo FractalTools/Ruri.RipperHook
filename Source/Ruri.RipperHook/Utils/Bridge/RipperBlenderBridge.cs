@@ -183,7 +183,7 @@ public static class RipperBlenderBridge
     public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName) =>
         VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName)
             .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
-                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz))
+                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths))
             .ToArray();
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
@@ -298,10 +298,13 @@ public sealed record VfsFileDto(string FileName, long FileNameHash, string Block
 /// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.
 /// HasTransform false means no ground-truth-verified transform source was found for this entity (see the
 /// method's doc comment); Px..Sz are all zero/identity in that case and callers should treat this as "don't
-/// place," not "place at the origin."</summary>
+/// place," not "place at the origin." MaterialAssetPaths is this entity's own resolved material(s) -- same
+/// hash-LUT source as AssetPath, just the sibling AssetType==1 property entries instead of ==2; empty when
+/// the entity carries none or none resolved.</summary>
 public sealed record ScenePlacementDto(
     string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform,
-    float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz);
+    float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz,
+    string[] MaterialAssetPaths);
 
 /// <summary>
 /// The in-memory import payload for a resolved selection: Unity-project YAML text and texture PNG bytes,
