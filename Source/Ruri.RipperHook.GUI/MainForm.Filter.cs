@@ -6,10 +6,11 @@ namespace Ruri.RipperHook.GUI;
 
 // Process-Monitor-equivalent filtering shared by both asset lists (loaded "Asset List" + "Virtual Asset List").
 // Rules — [Field] [Relation] [Value] then Include/Exclude — live in one shared list edited from a small dialog
-// opened via the top "Filter" menu; right-click a row for one-click Include/Exclude of its values. A row shows
-// when it matches the tab's quick search, matches no enabled Exclude rule, and — if any Include rule exists —
-// matches at least one. No rules ⇒ everything shows. Folding Type into the rules (Type contains Animation →
-// Include, Type contains Mesh → Exclude) replaces the old single/multi-select Type dropdown.
+// opened via the top "Filter" menu; right-click a row for one-click Include/Exclude of its values. Every enabled
+// rule is a required constraint: Include(X) means the row MUST match X, Exclude(X) means the row must NOT match
+// X. A row shows only when it matches the tab's quick search AND satisfies every enabled rule. No rules ⇒
+// everything shows. Folding Type into the rules (Type contains Animation → Include, Type contains Mesh →
+// Exclude) replaces the old single/multi-select Type dropdown.
 public partial class MainForm
 {
 	internal enum FilterRelation { Is, IsNot, Contains, Excludes, BeginsWith, EndsWith, LessThan, MoreThan, Matches, NotMatches }
@@ -126,23 +127,20 @@ public partial class MainForm
 			if (!any) return false;
 		}
 
-		bool hasInclude = false;
-		bool includeMatched = false;
 		foreach (FilterRule rule in _filterRules)
 		{
 			if (!rule.Enabled) continue;
 			bool match = RelationMatches(value(rule.Column), rule.Relation, rule.Value);
 			if (rule.Include)
 			{
-				hasInclude = true;
-				includeMatched |= match;
+				if (!match) return false;
 			}
 			else if (match)
 			{
 				return false;
 			}
 		}
-		return !hasInclude || includeMatched;
+		return true;
 	}
 
 	private static bool RelationMatches(string value, FilterRelation relation, string filter)
