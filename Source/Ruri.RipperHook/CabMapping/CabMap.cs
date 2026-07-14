@@ -7,7 +7,7 @@ using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Ruri.RipperHook.CLI;
+namespace Ruri.RipperHook.CabMapping;
 
 /// <summary>
 /// CABMap: CAB name → (relative file path, chunk-entry file name, dependencies, ClassIDs, readable
@@ -17,19 +17,21 @@ namespace Ruri.RipperHook.CLI;
 ///   * <see cref="ResolveDeps"/> — transitive dependency closure of some seed files,
 ///   * <see cref="ResolveByTypes"/> — every CAB that contains an asset of a wanted ClassID (+ deps),
 ///   * <see cref="ResolveByNames"/> — every CAB whose addressable path matches a regex (+ deps),
-///     including the chunk-entry names a scoped bundle-granular load must filter by.
+///     including the chunk-entry names a scoped bundle-granular load must filter by,
+///   * <see cref="ResolveScopedClosure"/> — same as ResolveByNames' closure step, but seeded directly
+///     by known CAB names (no regex) — what a Blender-side browser selection resolves through.
 ///
 /// Format RCM3: magic+version, base-folder, count, then per CAB
 /// { cab; relativePath; entryFileName; depCount; deps[]; classIdCount; classIds[]; pathCount; paths[] }.
 /// <see cref="Load"/> also reads RCM2 (no names — offset field consumed and dropped) and the older
 /// headerless format; those two auto-load the "<c>.names</c>" RNM2 sidecar when present.
 /// </summary>
-internal static class CabMap
+public static class CabMap
 {
     private const uint Magic2 = 0x52434D32; // "RCM2" (legacy: offset field, no inline names)
     private const uint Magic3 = 0x52434D33; // "RCM3" (self-contained: entry file name + container paths inline)
 
-    internal sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
+    public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
 
     public static int Build(string rootFolder, string outPath)
     {
@@ -323,7 +325,7 @@ internal static class CabMap
     // name. Pair a name match with the CAB map's dependency graph and you get "every asset called pelica,
     // plus its full dependency closure".
 
-    internal sealed record NameEntry(string FileName, List<string> Paths);
+    public sealed record NameEntry(string FileName, List<string> Paths);
 
     private const uint NameMagic = 0x524E4D32; // "RNM2" (v2 adds the per-CAB chunk-entry file name)
 
@@ -546,6 +548,30 @@ internal static class CabMap
             }
         }
         return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>
+    /// Same closure step as <see cref="ResolveByNames"/>, seeded directly by known CAB names instead of a
+    /// regex match — what a Blender-side browser selection (rows already identify their CAB names exactly)
+    /// resolves through. Returns the on-disk files hosting the closure and the chunk-entry file names a
+    /// scoped bundle-granular load must filter by.
+    /// </summary>
+    public static (string[] Files, HashSet<string> LoadFilterFileNames) ResolveScopedClosure(string baseFolder, Dictionary<string, Entry> entries, IEnumerable<string> seedCabNames)
+    {
+        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> closureCabs = new(StringComparer.OrdinalIgnoreCase);
+        Queue<string> seeds = new(seedCabNames);
+        Bfs(baseFolder, entries, seeds, resultFiles, closureCabs);
+
+        HashSet<string> loadFilterFileNames = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string cab in closureCabs)
+        {
+            if (entries.TryGetValue(cab, out Entry? entry) && !string.IsNullOrEmpty(entry.EntryFileName))
+            {
+                loadFilterFileNames.Add(entry.EntryFileName);
+            }
+        }
+        return (resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(), loadFilterFileNames);
     }
 
     private static Dictionary<string, List<string>> BuildPathIndex(Dictionary<string, Entry> entries)

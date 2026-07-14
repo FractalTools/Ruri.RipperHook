@@ -4,6 +4,7 @@ using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
 using Ruri.Hook.Config;
 using Ruri.RipperHook;
+using Ruri.RipperHook.CabMapping;
 
 namespace Ruri.RipperHook.CLI;
 
