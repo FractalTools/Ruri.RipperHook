@@ -101,9 +101,12 @@ public class GameBundleHook : CommonHook, IHookModule
 
     /// <summary>One mesh-bearing scene-entity placement, as a plain tuple (no concrete game-hook type):
     /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, source chunk file
-    /// name, whether a ground-truth-verified transform source was found, and the transform itself
-    /// (identity/zero when HasTransform is false -- treat as "don't place", not "place at the origin").</summary>
-    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName);
+    /// name, whether a ground-truth-verified transform source was found, the transform itself
+    /// (identity/zero when HasTransform is false -- treat as "don't place", not "place at the origin"),
+    /// and the entity's own resolved material asset path(s) (empty array if it has none or none resolved
+    /// -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1 instead of ==2,
+    /// so no separate lookup mechanism, no naming-convention guess).</summary>
+    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName);
     /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement for a map's
     /// streaming chunks. <c>null</c> when no VFS hook is active.</summary>
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
