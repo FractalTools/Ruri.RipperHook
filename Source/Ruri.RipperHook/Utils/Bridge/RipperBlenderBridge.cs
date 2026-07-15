@@ -27,6 +27,22 @@ public static class RipperBlenderBridge
     private static bool _loggingConfigured;
 
     /// <summary>
+    /// Every hook id (<c>GameName_Version</c>, e.g. "EndField_1.3.3") compiled into this build, discovered
+    /// via <see cref="Ruri.Hook.RuriHook.GetAvailableHooks"/> reflection over already-loaded assemblies --
+    /// no <see cref="Initialize"/> call required first, since hook discovery only needs this DLL's own
+    /// assembly (which carries every <c>AssetRipperGameHook</c> hook type) to already be loaded, which it
+    /// is by the time a caller can reach this static class at all. This is what an in-process caller (the
+    /// Blender addon's Hook picker) should populate its selectable hook list from, instead of hardcoding
+    /// or free-typing ids.
+    /// </summary>
+    public static string[] ListAvailableHooks() =>
+        Ruri.Hook.RuriHook.GetAvailableHooks()
+            .Select(h => $"{h.Attribute.GameName}_{h.Attribute.Version}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    /// <summary>
     /// One-call bootstrap: assembly resolver, a stderr logger sink (AssetRipper logging is a black hole
     /// with no sink attached), and every hook in <paramref name="enabledHookIds"/> (e.g. "EndField_1.3.3").
     /// Safe to call more than once per process — the resolver install and hook application are both
@@ -139,7 +155,7 @@ public static class RipperBlenderBridge
         InMemoryFileSystem memoryFileSystem = new();
         handler.Export(gameData, "mem:/out", memoryFileSystem);
 
-        return Partition(memoryFileSystem.Files);
+        return Partition(memoryFileSystem.Files, map.Entries, seedCabNames);
     }
 
     // ── raw VFS access + scene-placement discovery ──────────────────────────────────────────────────
@@ -208,12 +224,20 @@ public static class RipperBlenderBridge
         func ?? throw new InvalidOperationException(
             "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
 
-    private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files)
+    private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
+        Dictionary<string, CabMap.Entry> entries, string[] seedCabNames)
     {
         Dictionary<string, string> documents = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> textures = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> other = new(StringComparer.OrdinalIgnoreCase);
         List<string> roots = new();
+        // Normalized export path -> guid, used ONLY to resolve each seed CAB's own root below (see
+        // SeedRoots) -- not part of the returned payload itself. AssetRipper's OriginalPathProcessor
+        // sets every asset's export path (asset.OriginalPath, "Assets/<...>") straight from the SAME
+        // AssetBundle.Container addressable-path key CabMap.Entry.ContainerPaths is itself built from
+        // (see AssetRipper.Processing/Scenes/OriginalPathProcessor.cs's SetOriginalPaths) -- so a seed
+        // CAB's own ContainerPaths entries key into this map directly, no name/identity guessing.
+        Dictionary<string, string> pathToGuid = new(StringComparer.OrdinalIgnoreCase);
         UTF8Encoding utf8 = new(false);
 
         foreach ((string path, byte[] bytes) in files)
@@ -233,6 +257,7 @@ public static class RipperBlenderBridge
                 other[path] = bytes;
                 continue;
             }
+            pathToGuid[NormalizeExportPath(path)] = guid;
             if (IsPng(bytes))
             {
                 textures[guid] = bytes;
@@ -246,7 +271,41 @@ public static class RipperBlenderBridge
             }
         }
 
-        return new ClosureResult(documents, textures, other, roots.ToArray());
+        Dictionary<string, string> seedRoots = new(StringComparer.Ordinal);
+        foreach (string seedCab in seedCabNames)
+        {
+            if (!entries.TryGetValue(seedCab, out CabMap.Entry? entry))
+            {
+                continue;
+            }
+            foreach (string containerPath in entry.ContainerPaths)
+            {
+                if (pathToGuid.TryGetValue(NormalizeExportPath(containerPath), out string? guid))
+                {
+                    seedRoots[seedCab] = guid;
+                    break;
+                }
+            }
+        }
+
+        return new ClosureResult(documents, textures, other, roots.ToArray(), seedRoots);
+    }
+
+    /// <summary>Normalizes an export-side path ("mem:/out/Assets/beyond/.../x.prefab") or a
+    /// cabmap-side <see cref="CabMap.Entry.ContainerPaths"/> entry ("assets/beyond/.../x.prefab",
+    /// no "mem:/out/" prefix) to the same comparable key: anchored at "Assets/" (dropping any export
+    /// root prefix), "##subObjectName" suffix stripped (mirrors CabMap's own container-path
+    /// normalization), lowercased.</summary>
+    private static string NormalizeExportPath(string path)
+    {
+        int hashIdx = path.IndexOf("##", StringComparison.Ordinal);
+        string trimmed = hashIdx >= 0 ? path[..hashIdx] : path;
+        int assetsIdx = trimmed.IndexOf("Assets/", StringComparison.OrdinalIgnoreCase);
+        if (assetsIdx >= 0)
+        {
+            trimmed = trimmed[assetsIdx..];
+        }
+        return trimmed.ToLowerInvariant();
     }
 
     private static readonly Regex GuidPattern = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
@@ -327,18 +386,27 @@ public sealed record ScenePlacementDto(
 /// <summary>
 /// The in-memory import payload for a resolved selection: Unity-project YAML text and texture PNG bytes,
 /// both GUID-keyed (matching the {fileID, guid} cross-references already embedded in the YAML text
-/// itself), plus anything else the exporter wrote that isn't a recognized text/image pair, and the GUIDs
-/// of the top-level (.prefab) assets that should actually be imported.
+/// itself), plus anything else the exporter wrote that isn't a recognized text/image pair, the GUIDs
+/// of the top-level (.prefab) assets that should actually be imported, and -- for each requested seed
+/// CAB name that resolved to its own exported asset -- that seed's own guid (<see cref="SeedRoots"/>).
+/// A single seed CAB's closure routinely resolves to MORE than one root .prefab (e.g. an actor prefab
+/// pulling in a separate portrait/"uimodel" variant as a second top-level asset); SeedRoots is how a
+/// caller identifies WHICH of <see cref="Roots"/> is the one it actually asked for, directly through the
+/// cabmap's own CAB-name/addressable-path identity (see RipperBlenderBridge.Partition/NormalizeExportPath)
+/// -- never by comparing display names or GameObject names, which Unity gives no guarantee equal each
+/// other even for a single unambiguous seed.
 /// </summary>
 public sealed record ClosureResult(
     IReadOnlyDictionary<string, string> Documents,
     IReadOnlyDictionary<string, byte[]> Textures,
     IReadOnlyDictionary<string, byte[]> OtherFiles,
-    string[] Roots)
+    string[] Roots,
+    IReadOnlyDictionary<string, string> SeedRoots)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
         new Dictionary<string, byte[]>(),
-        Array.Empty<string>());
+        Array.Empty<string>(),
+        new Dictionary<string, string>());
 }
