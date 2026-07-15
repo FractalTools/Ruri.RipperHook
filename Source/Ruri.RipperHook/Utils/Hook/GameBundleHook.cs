@@ -111,6 +111,14 @@ public class GameBundleHook : CommonHook, IHookModule
     /// streaming chunks. <c>null</c> when no VFS hook is active.</summary>
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
 
+    /// <summary>Set by a VFS game hook: binary/vtable-level schema-drift diagnostic -- one report line
+    /// per FlatBuffers table type, flagging any type where the live game's data declares more fields
+    /// than the currently-compiled bindings know how to read (see EndfieldSceneBridge.
+    /// DiagnoseSchemaDrift's doc comment for why this is the only way to detect that gap).
+    /// <c>null</c> when no VFS hook is active.</summary>
+    public delegate string[] DiagnoseSchemaDriftDelegate(string[] vfsRoots, string mapName);
+    public static DiagnoseSchemaDriftDelegate? DiagnoseSchemaDrift;
+
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each
