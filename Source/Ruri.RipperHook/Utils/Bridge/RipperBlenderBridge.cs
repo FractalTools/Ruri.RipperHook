@@ -91,6 +91,17 @@ public static class RipperBlenderBridge
         return CabMap.ResolveCabsForPaths(map.Entries, containerPaths);
     }
 
+    /// <summary>Pure in-memory dependency-closure CAB-name enumeration for the given seed CABs -- see
+    /// <see cref="CabMap.ResolveClosureCabNames"/>. No VFS decrypt, no AssetRipper export; just the
+    /// already-loaded cabmap's own dependency graph. Pair with <see cref="EnumerateRows"/>' own
+    /// TypeNames (already loaded per CAB) to answer "does this prefab's closure include an
+    /// AnimationClip" without resolving/exporting anything.</summary>
+    public static string[] ResolveClosureCabNames(CabMapHandle map, string[] seedCabNames)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return CabMap.ResolveClosureCabNames(map.Entries, seedCabNames);
+    }
+
     /// <summary>
     /// Resolve the seed CABs' full dependency closure, load exactly those bundles, run AssetRipper's real
     /// Unity-project exporter against an <see cref="InMemoryFileSystem"/> (the same exporter that backs
@@ -185,6 +196,13 @@ public static class RipperBlenderBridge
             .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
                 p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths))
             .ToArray();
+
+    /// <summary>Binary/vtable-level schema-drift diagnostic for <paramref name="mapName"/>'s streaming
+    /// chunks -- one report line per FlatBuffers table type, flagging any type where the live game's
+    /// data declares more fields than our (1.2.4-era) generated bindings know how to read, plus sample
+    /// raw dumps of the extra field bytes. See EndfieldSceneBridge.DiagnoseSchemaDrift's doc comment.</summary>
+    public static string[] DiagnoseSchemaDrift(string[] vfsRoots, string mapName) =>
+        VfsFuncOrThrow(GameBundleHook.DiagnoseSchemaDrift)(vfsRoots, mapName);
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(

@@ -574,6 +574,22 @@ public static class CabMap
         return (resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(), loadFilterFileNames);
     }
 
+    /// <summary>Pure in-memory dependency-closure CAB-NAME enumeration -- no VFS decrypt, no
+    /// AssetRipper export, not even a File.Exists probe (baseFolder passed empty skips that check
+    /// in <see cref="Bfs"/>). Just the transitive Entry.Dependencies graph walk, the exact same BFS
+    /// <see cref="ResolveScopedClosure"/> itself uses, except this returns WHICH CABs are reachable
+    /// instead of resolving them to files. Entry.ClassIds is already loaded in memory for every one
+    /// of them -- for "does this prefab's closure include an AnimationClip" style questions, that's
+    /// everything needed; no reason to pay for a full closure export just to answer that.</summary>
+    public static string[] ResolveClosureCabNames(Dictionary<string, Entry> entries, IEnumerable<string> seedCabNames)
+    {
+        HashSet<string> unusedFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> closureCabs = new(StringComparer.OrdinalIgnoreCase);
+        Queue<string> seeds = new(seedCabNames);
+        Bfs(string.Empty, entries, seeds, unusedFiles, closureCabs);
+        return closureCabs.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     /// <summary>
     /// Inverted index from normalized addressable container path → every CAB whose
     /// <see cref="Entry.ContainerPaths"/> includes it. Normalization = lowercase + strip any
