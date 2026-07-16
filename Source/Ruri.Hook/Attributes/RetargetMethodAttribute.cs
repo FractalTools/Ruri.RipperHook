@@ -47,7 +47,7 @@ namespace Ruri.Hook.Attributes
         public Type[]? MethodParameters { get; }
         public Type? SourceType { get; }
         public string? SourceTypeName { get; }
-        public string SourceMethodName { get; }
+        public string? SourceMethodName { get; }
         
         // Defaults to true (Prefix) and true (Return immediate)
         public bool IsBefore { get; } = true;

@@ -3,11 +3,11 @@ using System;
 namespace Ruri.Hook.Attributes
 {
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-    public class GameHookAttribute : Attribute
+    public abstract class GameHookAttribute : Attribute
     {
-        public virtual string GameName { get; }
-        public virtual string Version { get; }
-        public virtual string BaseEngineVersion { get; }
+        public abstract string GameName { get; }
+        public abstract string Version { get; }
+        public abstract string BaseEngineVersion { get; }
 
         /// <summary>
         /// Extra version strings this same class also answers to, for a version whose resolved
