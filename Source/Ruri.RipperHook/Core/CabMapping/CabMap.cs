@@ -154,7 +154,11 @@ public static class CabMap
 
                 foreach (SerializedFile sf in serializedFiles)
                 {
-                    result.Add(GameBundleHook.ReadFullMetadata(sf, fallbackName));
+                    // Per-asset virtual-row expansion for non-bundled files (one row per named
+                    // Mesh/AnimationClip/Texture/... instead of one opaque row per container file)
+                    // -- see GameBundleHook.ReadFullMetadataRows. Bundled files come back as the
+                    // single container-path row they always were.
+                    result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, fallbackName));
                 }
             }
             catch (Exception ex)

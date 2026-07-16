@@ -461,6 +461,23 @@ public static class RipperBlenderBridge
             {
                 continue;
             }
+
+            // Per-asset virtual row ("<hostFile>::<pathID>", see GameBundleHook.ReadFullMetadataRows):
+            // its ContainerPaths[0] is the asset's own m_Name and ClassIds[0] its real class. The
+            // exporter names the output file from the SAME m_Name field (GetUniqueFileName <-
+            // GetBestName), so stem+class-extension is a same-field round trip, not a heterogeneous
+            // display-name guess.
+            if (seedCab.Contains(GameBundleHook.AssetRowSeparator, StringComparison.Ordinal)
+                && entry.ContainerPaths.Count == 1 && entry.ClassIds.Count == 1)
+            {
+                string? assetGuid = ResolveAssetRowGuid(pathToGuid, entry.ContainerPaths[0], entry.ClassIds[0]);
+                if (assetGuid is not null)
+                {
+                    seedRoots[seedCab] = assetGuid;
+                }
+                continue;
+            }
+
             foreach (string containerPath in entry.ContainerPaths)
             {
                 if (pathToGuid.TryGetValue(NormalizeExportPath(containerPath), out string? guid))
@@ -496,6 +513,55 @@ public static class RipperBlenderBridge
 
         return new ClosureResult(documents, textures, other, roots.ToArray(), seedRoots, clipGuidsByCab,
             sceneRoots.ToArray());
+    }
+
+    /// <summary>Resolve a per-asset virtual row (asset m_Name + ClassID) to its exported guid: scan the
+    /// export's path->guid table for files whose stem equals the name, preferring one whose extension
+    /// matches the class (AssetRipper's per-class output extensions, mirroring ExportCollection.
+    /// GetExportExtension). Unique-stem hits with a foreign extension still count (a class this table
+    /// doesn't list exports as ".asset" anyway); ambiguous stems without an extension match resolve to
+    /// nothing rather than to a guess.</summary>
+    private static string? ResolveAssetRowGuid(Dictionary<string, string> pathToGuid, string assetName, int classId)
+    {
+        string wantStem = assetName.ToLowerInvariant();
+        string? wantExt = classId switch
+        {
+            (int)ClassIDType.AnimationClip => ".anim",
+            (int)ClassIDType.Material => ".mat",
+            (int)ClassIDType.Shader => ".shader",
+            (int)ClassIDType.AnimatorController => ".controller",
+            (int)ClassIDType.Texture2D or (int)ClassIDType.Cubemap => ".png",
+            (int)ClassIDType.GameObject => ".prefab",
+            (int)ClassIDType.MonoScript => ".cs",
+            (int)ClassIDType.AudioClip => null, // exporter emits the source container format (.ogg/.wav/...)
+            _ => ".asset",
+        };
+
+        string? extMatch = null;
+        string? stemMatch = null;
+        int stemMatches = 0;
+        foreach ((string path, string guid) in pathToGuid)
+        {
+            int slash = path.LastIndexOf('/');
+            ReadOnlySpan<char> leaf = slash >= 0 ? path.AsSpan(slash + 1) : path.AsSpan();
+            int dot = leaf.LastIndexOf('.');
+            ReadOnlySpan<char> stem = dot >= 0 ? leaf[..dot] : leaf;
+            if (!stem.Equals(wantStem, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            if (wantExt is not null && dot >= 0 && leaf[dot..].Equals(wantExt, StringComparison.Ordinal))
+            {
+                if (extMatch is not null)
+                {
+                    return null; // two same-named same-class assets -- refuse to guess
+                }
+                extMatch = guid;
+            }
+            stemMatch = guid;
+            stemMatches++;
+        }
+        return extMatch ?? (stemMatches == 1 ? stemMatch : null);
     }
 
     /// <summary>Normalizes an export-side path (actually "mem:/out\ExportedProject\Assets\beyond\...\x.prefab"
