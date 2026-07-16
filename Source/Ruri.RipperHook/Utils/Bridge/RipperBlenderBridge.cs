@@ -1,9 +1,12 @@
+using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
+using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
+using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using Ruri.Hook.Config;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
@@ -25,6 +28,22 @@ namespace Ruri.RipperHook.Bridge;
 public static class RipperBlenderBridge
 {
     private static bool _loggingConfigured;
+
+    /// <summary>
+    /// Every hook id (<c>GameName_Version</c>, e.g. "EndField_1.3.3") compiled into this build, discovered
+    /// via <see cref="Ruri.Hook.RuriHook.GetAvailableHooks"/> reflection over already-loaded assemblies --
+    /// no <see cref="Initialize"/> call required first, since hook discovery only needs this DLL's own
+    /// assembly (which carries every <c>AssetRipperGameHook</c> hook type) to already be loaded, which it
+    /// is by the time a caller can reach this static class at all. This is what an in-process caller (the
+    /// Blender addon's Hook picker) should populate its selectable hook list from, instead of hardcoding
+    /// or free-typing ids.
+    /// </summary>
+    public static string[] ListAvailableHooks() =>
+        Ruri.Hook.RuriHook.GetAvailableHooks()
+            .Select(h => $"{h.Attribute.GameName}_{h.Attribute.Version}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     /// <summary>
     /// One-call bootstrap: assembly resolver, a stderr logger sink (AssetRipper logging is a black hole
@@ -61,6 +80,14 @@ public static class RipperBlenderBridge
         return new CabMapHandle(cabMapPath, baseFolder, entries);
     }
 
+    /// <summary>Per-row cap on the joined Container display/search string. A non-bundled
+    /// resources.assets row can carry tens of thousands of harvested asset names (see
+    /// GameBundleHook.HarvestAssetNames) -- joining ALL of them into every row's search string would
+    /// multiply the browser's memory by orders of magnitude for no search benefit past this point.
+    /// The truncation is explicit in the string itself (never silent), and the full name list stays
+    /// intact in the map/Entry for programmatic use.</summary>
+    private const int MaxContainerJoinChars = 16384;
+
     /// <summary>Every CAB in the map, projected to the flat browsable row shape (Name/Container/Type/Source/Deps).</summary>
     public static CabRowDto[] EnumerateRows(CabMapHandle map)
     {
@@ -72,12 +99,31 @@ public static class RipperBlenderBridge
             rows[i++] = new CabRowDto(
                 Cab: cab,
                 Name: DisplayName(entry.ContainerPaths),
-                Container: string.Join("  |  ", entry.ContainerPaths),
+                Container: JoinContainerPaths(entry.ContainerPaths),
                 TypeNames: TypeNames(entry.ClassIds),
                 Source: entry.RelativePath,
                 DependencyCount: entry.Dependencies.Count);
         }
         return rows;
+    }
+
+    private static string JoinContainerPaths(IReadOnlyList<string> containerPaths)
+    {
+        StringBuilder sb = new();
+        for (int i = 0; i < containerPaths.Count; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append("  |  ");
+            }
+            if (sb.Length + containerPaths[i].Length > MaxContainerJoinChars)
+            {
+                sb.Append($"…(+{containerPaths.Count - i} more names)");
+                break;
+            }
+            sb.Append(containerPaths[i]);
+        }
+        return sb.ToString();
     }
 
     /// <summary>Resolve a set of addressable container paths (e.g. <see cref="DiscoverScenePlacements"/>'
@@ -103,6 +149,75 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>
+    /// For a CAB that hosts AnimationClips (and typically nothing else), find EVERY CAB carrying an Avatar
+    /// (ClassID 90) in the clip's dependency neighborhood, nearest first -- the assets a standalone clip
+    /// import co-loads so (a) AssetRipper's own AnimationClipConverter can restore the clips' hashed curve
+    /// paths to real transform-path strings (confirmed against the real game: a clip CAB alone has NO
+    /// dependencies, its exported curve paths come out as "path_0x&lt;CRC32&gt;_&lt;suffix&gt;"
+    /// placeholders; co-seeding the rig-FBX CAB flips every one of them to a full "Root/Bip001/..."
+    /// string, byte-identical to what a whole-character export produces), and (b) the caller can build a
+    /// humanoid muscle retargeter from the rig's REAL Avatar.
+    /// Returns ALL candidates (BFS order, capped) rather than the first hit, because the neighborhood
+    /// routinely contains multiple Avatar assets of very different quality -- confirmed against the real
+    /// game: pelica's battle rig neighborhood surfaces a 7KB stub Avatar (empty m_TOS, all-zero m_ID,
+    /// no usable skeleton) BEFORE the real 334KB SK_actor_pelica_01Avatar (full m_TOS + muscle
+    /// referential). WHICH one is usable is a content question the caller answers by trying to build a
+    /// retargeter from each in order -- name/size heuristics here would be exactly the kind of guessing
+    /// this bridge exists to avoid.
+    /// Search shape mirrors the data's real topology (verified via harness): the Avatar is never among the
+    /// clip's reverse dependents themselves (those are the AnimatorController, then the character prefabs)
+    /// -- it lives in the FORWARD closure of those dependents. So: breadth-first over reverse dependents
+    /// (nearest first, pure in-memory cabmap graph), scanning each one's forward closure for Avatar-classed
+    /// CABs. Empty when the clip has no Avatar anywhere in its neighborhood. Cheap: the reverse adjacency
+    /// index is built once per loaded map (lazily, cached on the handle).
+    /// </summary>
+    public static string[] FindAssociatedAvatarCabs(CabMapHandle map, string clipCabName, int maxCandidates = 4)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        Dictionary<string, List<string>> reverse = map.ReverseIndex;
+
+        List<string> found = new();
+        HashSet<string> foundSet = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> visited = new(StringComparer.OrdinalIgnoreCase) { clipCabName };
+        Queue<string> queue = new();
+        queue.Enqueue(clipCabName);
+        while (queue.Count > 0 && found.Count < maxCandidates)
+        {
+            string current = queue.Dequeue();
+            if (!reverse.TryGetValue(current, out List<string>? dependents))
+            {
+                continue;
+            }
+            foreach (string dependent in dependents)
+            {
+                if (!visited.Add(dependent))
+                {
+                    continue;
+                }
+                foreach (string cab in CabMap.ResolveClosureCabNames(map.Entries, new[] { dependent }))
+                {
+                    if (map.Entries.TryGetValue(cab, out CabMap.Entry? entry)
+                        && entry.ClassIds.Contains((int)ClassIDType.Avatar)
+                        && foundSet.Add(cab))
+                    {
+                        found.Add(cab);
+                        if (found.Count >= maxCandidates)
+                        {
+                            break;
+                        }
+                    }
+                }
+                if (found.Count >= maxCandidates)
+                {
+                    break;
+                }
+                queue.Enqueue(dependent);
+            }
+        }
+        return found.ToArray();
+    }
+
+    /// <summary>
     /// Resolve the seed CABs' full dependency closure, load exactly those bundles, run AssetRipper's real
     /// Unity-project exporter against an <see cref="InMemoryFileSystem"/> (the same exporter that backs
     /// the CLI's --export and the GUI's project export — byte-identical output, just memory-backed instead
@@ -123,7 +238,8 @@ public static class RipperBlenderBridge
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
         settings.ExportSettings.ShaderExportMode = ShaderExportMode.Decompile;
-        ExportHandler handler = new(settings);
+        ClipCaptureExporter clipCapture = new();
+        BridgeExportHandler handler = new(settings, clipCapture);
 
         GameData gameData;
         GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0 ? name => loadFilterFileNames.Contains(name) : null;
@@ -139,7 +255,76 @@ public static class RipperBlenderBridge
         InMemoryFileSystem memoryFileSystem = new();
         handler.Export(gameData, "mem:/out", memoryFileSystem);
 
-        return Partition(memoryFileSystem.Files);
+        return Partition(memoryFileSystem.Files, map.Entries, seedCabNames, clipCapture.Captured);
+    }
+
+    /// <summary>
+    /// <see cref="ExportHandler"/> whose only delta is surfacing the <see cref="ExportHandler.BeforeExport"/>
+    /// extension point (upstream's own customization seam -- "Needed for the premium edition") to register
+    /// <see cref="ClipCaptureExporter"/> on the freshly-built <see cref="ProjectExporter"/>. Pure composition
+    /// over AssetRipper's public exporter stack; no AOP hook, so this works identically under every hook
+    /// configuration (including none) and in the $(PureRelease) build that strips AssetRipperGameHook/.
+    /// </summary>
+    private sealed class BridgeExportHandler : ExportHandler
+    {
+        private readonly ClipCaptureExporter _clipCapture;
+
+        public BridgeExportHandler(FullConfiguration settings, ClipCaptureExporter clipCapture) : base(settings)
+        {
+            _clipCapture = clipCapture;
+        }
+
+        protected override void BeforeExport(ProjectExporter projectExporter) =>
+            projectExporter.OverrideExporter<IAnimationClip>(_clipCapture, allowInheritance: true);
+    }
+
+    /// <summary>
+    /// Decorator over AssetRipper's own <see cref="DefaultYamlExporter"/> that records, for every
+    /// AnimationClip it exports, WHICH source collection (CAB) the asset came from and the exact file path
+    /// the exporter actually wrote (including any name-collision uniquification suffix). This is the
+    /// cabmap-identity bridge for clips: a clip's CAB container path is its host FBX
+    /// ("...a_x_01.fbx") while its exported file is named after the clip's own m_Name
+    /// ("...A_x_ACL.anim") -- confirmed against the real game, the two stems genuinely differ, so no
+    /// path/name normalization can join them after the fact. The asset object itself is the only thing
+    /// that carries both identities (asset.Collection.Name == the cabmap's CAB key), and the export call
+    /// is the only point where that asset meets its final output path -- so capture exactly there.
+    /// TryCreateCollection mirrors DefaultYamlExporter's body verbatim, just with THIS exporter installed
+    /// on the collection so the collection's ExportInner routes back through the capturing Export below.
+    /// </summary>
+    private sealed class ClipCaptureExporter : IAssetExporter
+    {
+        private readonly DefaultYamlExporter _inner = new();
+
+        /// <summary>(lowercased CAB name, exported file path) per exported AnimationClip.</summary>
+        public List<(string Cab, string Path)> Captured { get; } = new();
+
+        public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
+        {
+            exportCollection = new AssetExportCollection<IUnityObjectBase>(this, asset);
+            return true;
+        }
+
+        public bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
+        {
+            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path));
+            return _inner.Export(container, asset, path, fileSystem);
+        }
+
+        public void Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback)
+        {
+            Export(container, asset, path, fileSystem);
+            callback?.Invoke(container, asset, path, fileSystem);
+        }
+
+        public bool Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem) =>
+            _inner.Export(container, assets, path, fileSystem);
+
+        public void Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback) =>
+            _inner.Export(container, assets, path, fileSystem, callback);
+
+        public AssetType ToExportType(IUnityObjectBase asset) => _inner.ToExportType(asset);
+
+        public bool ToUnknownExportType(Type type, out AssetType assetType) => _inner.ToUnknownExportType(type, out assetType);
     }
 
     // ── raw VFS access + scene-placement discovery ──────────────────────────────────────────────────
@@ -208,12 +393,22 @@ public static class RipperBlenderBridge
         func ?? throw new InvalidOperationException(
             "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
 
-    private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files)
+    private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
+        Dictionary<string, CabMap.Entry> entries, string[] seedCabNames,
+        List<(string Cab, string Path)> capturedClips)
     {
         Dictionary<string, string> documents = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> textures = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> other = new(StringComparer.OrdinalIgnoreCase);
         List<string> roots = new();
+        List<string> sceneRoots = new();
+        // Normalized export path -> guid, used ONLY to resolve each seed CAB's own root below (see
+        // SeedRoots) -- not part of the returned payload itself. AssetRipper's OriginalPathProcessor
+        // sets every asset's export path (asset.OriginalPath, "Assets/<...>") straight from the SAME
+        // AssetBundle.Container addressable-path key CabMap.Entry.ContainerPaths is itself built from
+        // (see AssetRipper.Processing/Scenes/OriginalPathProcessor.cs's SetOriginalPaths) -- so a seed
+        // CAB's own ContainerPaths entries key into this map directly, no name/identity guessing.
+        Dictionary<string, string> pathToGuid = new(StringComparer.OrdinalIgnoreCase);
         UTF8Encoding utf8 = new(false);
 
         foreach ((string path, byte[] bytes) in files)
@@ -233,6 +428,7 @@ public static class RipperBlenderBridge
                 other[path] = bytes;
                 continue;
             }
+            pathToGuid[NormalizeExportPath(path)] = guid;
             if (IsPng(bytes))
             {
                 textures[guid] = bytes;
@@ -244,9 +440,149 @@ public static class RipperBlenderBridge
             {
                 roots.Add(guid);
             }
+            else if (path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
+            {
+                // A non-bundled build's GameObject hierarchies (level0/level1/... -- the actual
+                // level + character models) export as SCENE files, not prefabs; without this the
+                // whole scene body silently vanished from the importable roots (confirmed against
+                // a real plain 2019.4 player build: the level closure exported 33 shared SFX
+                // .prefabs and the level itself as Assets/Scenes/level0.unity -- "imported fine",
+                // zero level geometry). A scene document is the same GameObject/Transform/renderer
+                // document stream a .prefab is, so the same importer consumes it.
+                roots.Add(guid);
+                sceneRoots.Add(guid);
+            }
         }
 
-        return new ClosureResult(documents, textures, other, roots.ToArray());
+        Dictionary<string, string> seedRoots = new(StringComparer.Ordinal);
+        foreach (string seedCab in seedCabNames)
+        {
+            if (!entries.TryGetValue(seedCab, out CabMap.Entry? entry))
+            {
+                continue;
+            }
+
+            // Per-asset virtual row ("<hostFile>::<pathID>", see GameBundleHook.ReadFullMetadataRows):
+            // its ContainerPaths[0] is the asset's own m_Name and ClassIds[0] its real class. The
+            // exporter names the output file from the SAME m_Name field (GetUniqueFileName <-
+            // GetBestName), so stem+class-extension is a same-field round trip, not a heterogeneous
+            // display-name guess.
+            if (seedCab.Contains(GameBundleHook.AssetRowSeparator, StringComparison.Ordinal)
+                && entry.ContainerPaths.Count == 1 && entry.ClassIds.Count == 1)
+            {
+                string? assetGuid = ResolveAssetRowGuid(pathToGuid, entry.ContainerPaths[0], entry.ClassIds[0]);
+                if (assetGuid is not null)
+                {
+                    seedRoots[seedCab] = assetGuid;
+                }
+                continue;
+            }
+
+            foreach (string containerPath in entry.ContainerPaths)
+            {
+                if (pathToGuid.TryGetValue(NormalizeExportPath(containerPath), out string? guid))
+                {
+                    seedRoots[seedCab] = guid;
+                    break;
+                }
+            }
+            if (seedRoots.ContainsKey(seedCab))
+            {
+                continue;
+            }
+            // Non-bundled seed (no addressable container path exists anywhere): its own GameObject
+            // hierarchy exports as a scene named after the serialized FILE itself
+            // (SceneDefinitionProcessor derives the scene name from the file name), so the seed's
+            // identity join is "assets/scenes/<cab>.unity" -- still the cabmap's own key, no
+            // display-name guessing.
+            if (entry.ContainerPaths.Count == 0
+                && pathToGuid.TryGetValue($"assets/scenes/{seedCab.ToLowerInvariant()}.unity", out string? sceneGuid))
+            {
+                seedRoots[seedCab] = sceneGuid;
+            }
+        }
+
+        // ClipCaptureExporter recorded (CAB, actual exported path) per AnimationClip; the .meta pass above
+        // already mapped every exported path to its guid, so the join here is exact -- the SAME path string
+        // the exporter wrote, not a reconstruction, so name-collision uniquification suffixes can't desync it.
+        Dictionary<string, string[]> clipGuidsByCab = capturedClips
+            .Select(c => (c.Cab, Guid: pathToGuid.GetValueOrDefault(NormalizeExportPath(c.Path))))
+            .Where(c => c.Guid is not null)
+            .GroupBy(c => c.Cab, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.Guid!).Distinct().ToArray(), StringComparer.Ordinal);
+
+        return new ClosureResult(documents, textures, other, roots.ToArray(), seedRoots, clipGuidsByCab,
+            sceneRoots.ToArray());
+    }
+
+    /// <summary>Resolve a per-asset virtual row (asset m_Name + ClassID) to its exported guid: scan the
+    /// export's path->guid table for files whose stem equals the name, preferring one whose extension
+    /// matches the class (AssetRipper's per-class output extensions, mirroring ExportCollection.
+    /// GetExportExtension). Unique-stem hits with a foreign extension still count (a class this table
+    /// doesn't list exports as ".asset" anyway); ambiguous stems without an extension match resolve to
+    /// nothing rather than to a guess.</summary>
+    private static string? ResolveAssetRowGuid(Dictionary<string, string> pathToGuid, string assetName, int classId)
+    {
+        string wantStem = assetName.ToLowerInvariant();
+        string? wantExt = classId switch
+        {
+            (int)ClassIDType.AnimationClip => ".anim",
+            (int)ClassIDType.Material => ".mat",
+            (int)ClassIDType.Shader => ".shader",
+            (int)ClassIDType.AnimatorController => ".controller",
+            (int)ClassIDType.Texture2D or (int)ClassIDType.Cubemap => ".png",
+            (int)ClassIDType.GameObject => ".prefab",
+            (int)ClassIDType.MonoScript => ".cs",
+            (int)ClassIDType.AudioClip => null, // exporter emits the source container format (.ogg/.wav/...)
+            _ => ".asset",
+        };
+
+        string? extMatch = null;
+        string? stemMatch = null;
+        int stemMatches = 0;
+        foreach ((string path, string guid) in pathToGuid)
+        {
+            int slash = path.LastIndexOf('/');
+            ReadOnlySpan<char> leaf = slash >= 0 ? path.AsSpan(slash + 1) : path.AsSpan();
+            int dot = leaf.LastIndexOf('.');
+            ReadOnlySpan<char> stem = dot >= 0 ? leaf[..dot] : leaf;
+            if (!stem.Equals(wantStem, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            if (wantExt is not null && dot >= 0 && leaf[dot..].Equals(wantExt, StringComparison.Ordinal))
+            {
+                if (extMatch is not null)
+                {
+                    return null; // two same-named same-class assets -- refuse to guess
+                }
+                extMatch = guid;
+            }
+            stemMatch = guid;
+            stemMatches++;
+        }
+        return extMatch ?? (stemMatches == 1 ? stemMatch : null);
+    }
+
+    /// <summary>Normalizes an export-side path (actually "mem:/out\ExportedProject\Assets\beyond\...\x.prefab"
+    /// on Windows -- backslashes throughout, plus an "ExportedProject\" segment neither the cabmap side nor
+    /// the old forward-slash-only doc comment here accounted for; confirmed via a direct dump of
+    /// InMemoryFileSystem.Files' actual keys, not assumed) or a cabmap-side <see cref="CabMap.Entry.ContainerPaths"/>
+    /// entry ("assets/beyond/.../x.prefab", forward slashes, no export-root prefix) to the same comparable
+    /// key: backslashes normalized to forward slashes first (so "Assets/" search works on both sides
+    /// regardless of Path.DirectorySeparatorChar), anchored at "Assets/" (dropping any export root prefix),
+    /// "##subObjectName" suffix stripped (mirrors CabMap's own container-path normalization), lowercased.</summary>
+    private static string NormalizeExportPath(string path)
+    {
+        string slashed = path.Replace('\\', '/');
+        int hashIdx = slashed.IndexOf("##", StringComparison.Ordinal);
+        string trimmed = hashIdx >= 0 ? slashed[..hashIdx] : slashed;
+        int assetsIdx = trimmed.IndexOf("Assets/", StringComparison.OrdinalIgnoreCase);
+        if (assetsIdx >= 0)
+        {
+            trimmed = trimmed[assetsIdx..];
+        }
+        return trimmed.ToLowerInvariant();
     }
 
     private static readonly Regex GuidPattern = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
@@ -295,6 +631,35 @@ public sealed class CabMapHandle
     public string BaseFolder { get; }
     public Dictionary<string, CabMap.Entry> Entries { get; }
 
+    private Dictionary<string, List<string>>? _reverseIndex;
+
+    /// <summary>dependency CAB -> the CABs that directly depend on it, built lazily once per handle
+    /// (~1M edges over a full EndField map, sub-second) -- backs
+    /// <see cref="RipperBlenderBridge.FindAssociatedAvatarCab"/>'s nearest-first reverse walk.</summary>
+    internal Dictionary<string, List<string>> ReverseIndex
+    {
+        get
+        {
+            if (_reverseIndex is null)
+            {
+                Dictionary<string, List<string>> reverse = new(StringComparer.OrdinalIgnoreCase);
+                foreach ((string cab, CabMap.Entry entry) in Entries)
+                {
+                    foreach (string dep in entry.Dependencies)
+                    {
+                        if (!reverse.TryGetValue(dep, out List<string>? list))
+                        {
+                            reverse[dep] = list = new List<string>();
+                        }
+                        list.Add(cab);
+                    }
+                }
+                _reverseIndex = reverse;
+            }
+            return _reverseIndex;
+        }
+    }
+
     internal CabMapHandle(string cabMapPath, string baseFolder, Dictionary<string, CabMap.Entry> entries)
     {
         CabMapPath = cabMapPath;
@@ -327,18 +692,38 @@ public sealed record ScenePlacementDto(
 /// <summary>
 /// The in-memory import payload for a resolved selection: Unity-project YAML text and texture PNG bytes,
 /// both GUID-keyed (matching the {fileID, guid} cross-references already embedded in the YAML text
-/// itself), plus anything else the exporter wrote that isn't a recognized text/image pair, and the GUIDs
-/// of the top-level (.prefab) assets that should actually be imported.
+/// itself), plus anything else the exporter wrote that isn't a recognized text/image pair, the GUIDs
+/// of the top-level (.prefab) assets that should actually be imported, and -- for each requested seed
+/// CAB name that resolved to its own exported asset -- that seed's own guid (<see cref="SeedRoots"/>).
+/// A single seed CAB's closure routinely resolves to MORE than one root .prefab (e.g. an actor prefab
+/// pulling in a separate portrait/"uimodel" variant as a second top-level asset); SeedRoots is how a
+/// caller identifies WHICH of <see cref="Roots"/> is the one it actually asked for, directly through the
+/// cabmap's own CAB-name/addressable-path identity (see RipperBlenderBridge.Partition/NormalizeExportPath)
+/// -- never by comparing display names or GameObject names, which Unity gives no guarantee equal each
+/// other even for a single unambiguous seed.
+/// <see cref="ClipGuidsByCab"/> is the same identity principle applied to AnimationClips: lowercased
+/// CAB name -> the exported clip guid(s) that CAB hosts, captured asset-side during export
+/// (<see cref="RipperBlenderBridge.ClipCaptureExporter"/>) because a clip CAB's addressable path is its
+/// host FBX while the exported .anim is named after the clip's own m_Name -- one CAB can host several
+/// clips, hence guid array. This is how a caller translates a cheaply-discovered clip CAB row (cabmap
+/// metadata only, no export yet) into the real clip documents once the closure HAS been exported,
+/// without any display-name/m_Name matching.
 /// </summary>
 public sealed record ClosureResult(
     IReadOnlyDictionary<string, string> Documents,
     IReadOnlyDictionary<string, byte[]> Textures,
     IReadOnlyDictionary<string, byte[]> OtherFiles,
-    string[] Roots)
+    string[] Roots,
+    IReadOnlyDictionary<string, string> SeedRoots,
+    IReadOnlyDictionary<string, string[]> ClipGuidsByCab,
+    string[] SceneRoots)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
         new Dictionary<string, byte[]>(),
+        Array.Empty<string>(),
+        new Dictionary<string, string>(),
+        new Dictionary<string, string[]>(),
         Array.Empty<string>());
 }

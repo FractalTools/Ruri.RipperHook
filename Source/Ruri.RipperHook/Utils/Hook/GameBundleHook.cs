@@ -8,6 +8,7 @@ using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.AssetCreation;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly.Managers;
+using AssetRipper.IO.Endian;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.ResourceFiles;
@@ -51,10 +52,21 @@ public class GameBundleHook : CommonHook, IHookModule
         if (n.EndsWith(".ab", StringComparison.OrdinalIgnoreCase)) return true;
         if (n.Contains("/bundles/", StringComparison.OrdinalIgnoreCase)) return true;
         string leaf = n.Contains('/') ? n[(n.LastIndexOf('/') + 1)..] : n;
+        // .resS/.resource are raw payload siblings, not SerializedFiles -- keep them excluded even
+        // though their base names start with "sharedassets"/"level".
+        if (leaf.EndsWith(".resS", StringComparison.OrdinalIgnoreCase)
+            || leaf.EndsWith(".resource", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
         return leaf.StartsWith("CAB-", StringComparison.OrdinalIgnoreCase)
             || leaf.StartsWith("level", StringComparison.OrdinalIgnoreCase)
             || leaf.StartsWith("sharedassets", StringComparison.OrdinalIgnoreCase)
-            || leaf.Equals("globalgamemanagers", StringComparison.OrdinalIgnoreCase);
+            || leaf.StartsWith("globalgamemanagers", StringComparison.OrdinalIgnoreCase)
+            || leaf.StartsWith("resources.assets", StringComparison.OrdinalIgnoreCase)
+            || leaf.EndsWith(".assets", StringComparison.OrdinalIgnoreCase)
+            || leaf.Equals("data.unity3d", StringComparison.OrdinalIgnoreCase)
+            || leaf.Equals("mainData", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -194,6 +206,152 @@ public class GameBundleHook : CommonHook, IHookModule
         (_, _, List<string> paths) = ReadContainerNames(sf, fallbackName);
         return (cab, fallbackName, deps, classIds, paths);
     }
+
+    /// <summary>Separator between a host file's CAB name and an asset PathID in a per-asset virtual
+    /// row's key ("sharedassets0.assets::1234"). "::" never occurs in a real CAB/file name.</summary>
+    public const string AssetRowSeparator = "::";
+
+    /// <summary>
+    /// <see cref="ReadFullMetadata"/> plus per-ASSET expansion for non-bundled files: when a
+    /// SerializedFile has NO AssetBundle Container (a plain player build's level0/
+    /// sharedassetsN.assets/resources.assets — nothing bundled, so no addressable path exists
+    /// anywhere), every named asset it hosts (<see cref="HarvestAssetNames"/>) becomes its OWN
+    /// browsable row: key "&lt;hostCab&gt;::&lt;pathID&gt;", name = the asset's actual m_Name, class =
+    /// its actual ClassID, and a single dependency edge back to the host file -- so the dependency
+    /// closure of an asset row resolves to exactly the host file + its real transitive deps, and a
+    /// browser shows one row per Mesh/AnimationClip/Texture/Material instead of one opaque row per
+    /// 10k-asset container file. The host row itself is kept (whole-file import stays possible) with
+    /// no name list of its own -- the names live on the asset rows.
+    /// </summary>
+    public static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ReadFullMetadataRows(SerializedFile sf, string fallbackName)
+    {
+        (string cab, string fileName, List<string> deps, List<int> classIds, List<string> paths) =
+            ReadFullMetadata(sf, fallbackName);
+        List<(string, string, List<string>, List<int>, List<string>)> rows = new()
+        {
+            (cab, fileName, deps, classIds, paths),
+        };
+        if (paths.Count > 0)
+        {
+            return rows; // bundled: the container paths already name everything
+        }
+        foreach ((long pathId, int classId, string name) in HarvestAssetNames(sf))
+        {
+            rows.Add(($"{cab}{AssetRowSeparator}{pathId}", fileName,
+                new List<string> { cab }, new List<int> { classId }, new List<string> { name }));
+        }
+        return rows;
+    }
+
+    // ── named-asset harvest (non-bundled SerializedFiles: level0/sharedassets/resources.assets) ────
+    //
+    // A plain player build has no AssetBundle objects at all, so ReadContainerNames yields nothing and
+    // the whole file would surface as one opaque hash-named row. But every named asset's serialized data
+    // *carries its own m_Name* — for the NamedObject family it is literally the first field (aligned
+    // length-prefixed UTF-8), and for the two important exceptions (GameObject, MonoBehaviour) it sits at
+    // a layout offset derivable from the file's format generation + Unity version. Reading it needs no
+    // TypeTree and no asset materialization: ObjectInfo.ObjectData already exposes each object's raw byte
+    // window, so the harvest is one strictly-validated string peek per object — O(object count), zero
+    // per-object allocation beyond the accepted names.
+
+    /// <summary>
+    /// Every readable asset in a SerializedFile, from the assets' own m_Name fields: (PathID, ClassID,
+    /// Name) per named object. Strict validation (sane length, printable strict UTF-8) makes the
+    /// leading-string peek self-rejecting for nameless classes (components/managers start with a PPtr
+    /// whose fileID bytes fail the length check), so no per-class whitelist is needed beyond the
+    /// GameObject/MonoBehaviour layout special cases. PathID is what gives each harvested asset a
+    /// browsable identity of its own (see CabMap's per-asset virtual rows for non-bundled files).
+    /// </summary>
+    public static List<(long PathId, int ClassId, string Name)> HarvestAssetNames(SerializedFile sf)
+    {
+        List<(long, int, string)> assets = new();
+        bool bigEndian = sf.EndianType == EndianType.BigEndian;
+        int pathIdSize = ObjectInfo.IsLongID(sf.Generation) ? 8 : 4;
+        int pptrSize = sizeof(int) + pathIdSize;
+        // GameObject.m_Component entries: 5.5+ is a bare PPtr; earlier carries a leading class-id int32.
+        int componentEntrySize = sf.Version.GreaterThanOrEquals(5, 5) ? pptrSize : sizeof(int) + pptrSize;
+
+        foreach (ObjectInfo objectInfo in sf.Objects)
+        {
+            ReadOnlySpan<byte> data = objectInfo.ObjectData;
+            int classId = objectInfo.TypeID < 0 ? (int)ClassIDType.MonoBehaviour : objectInfo.TypeID;
+            int offset;
+            switch (classId)
+            {
+                case (int)ClassIDType.GameObject:
+                {
+                    // m_Component array, m_Layer, m_Name.
+                    if (data.Length < sizeof(int))
+                    {
+                        continue;
+                    }
+                    int count = ReadInt32(data, 0, bigEndian);
+                    long afterArray = sizeof(int) + (long)count * componentEntrySize;
+                    if (count < 0 || count > 0x10000 || afterArray + sizeof(int) >= data.Length)
+                    {
+                        continue;
+                    }
+                    offset = (int)afterArray + sizeof(int); // + m_Layer
+                    break;
+                }
+                case (int)ClassIDType.MonoBehaviour:
+                    // m_GameObject PPtr, m_Enabled u8 + 3 align, m_Script PPtr, m_Name.
+                    offset = pptrSize + sizeof(int) + pptrSize;
+                    break;
+                default:
+                    offset = 0; // NamedObject family: m_Name is the first field; others self-reject below
+                    break;
+            }
+
+            string? name = TryReadAlignedString(data, offset, bigEndian);
+            if (name is not null)
+            {
+                assets.Add((objectInfo.FileID, classId, name));
+            }
+        }
+        return assets;
+    }
+
+    private static int ReadInt32(ReadOnlySpan<byte> data, int offset, bool bigEndian) => bigEndian
+        ? System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data[offset..])
+        : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data[offset..]);
+
+    /// <summary>
+    /// Read a Unity aligned length-prefixed string at <paramref name="offset"/>, returning <c>null</c>
+    /// unless it validates as a plausible asset name: length 1..255 and in-bounds, no ASCII control
+    /// characters, and strictly valid UTF-8 (any malformed byte sequence rejects the whole candidate) —
+    /// what makes the offset-0 peek safe to attempt on every class without a whitelist.
+    /// </summary>
+    private static string? TryReadAlignedString(ReadOnlySpan<byte> data, int offset, bool bigEndian)
+    {
+        if (offset < 0 || offset + sizeof(int) > data.Length)
+        {
+            return null;
+        }
+        int length = ReadInt32(data, offset, bigEndian);
+        if (length <= 0 || length > 255 || offset + sizeof(int) + length > data.Length)
+        {
+            return null;
+        }
+        ReadOnlySpan<byte> bytes = data.Slice(offset + sizeof(int), length);
+        foreach (byte b in bytes)
+        {
+            if (b < 0x20 || b == 0x7F)
+            {
+                return null;
+            }
+        }
+        try
+        {
+            return StrictUtf8.GetString(bytes);
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            return null;
+        }
+    }
+
+    private static readonly System.Text.UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
 
     /// <summary>
     /// A factory that materialises ONLY the AssetBundle (142) object of a collection, returning <c>null</c>
