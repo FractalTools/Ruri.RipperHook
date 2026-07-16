@@ -53,6 +53,12 @@ jobs:
         # so AssetRipper\nuget.config wouldn't exist anyway.
         run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -m:1
 
+      - name: Build FModelHook CLI
+        shell: pwsh
+        # Sibling exe project (not referenced by the GUI project), shares the GUI's
+        # output folder -- must be built explicitly or its .exe never gets produced.
+        run: dotnet build "Source\Ruri.FModelHook.CLI\Ruri.FModelHook.CLI.csproj" -c $env:BUILD_CONFIGURATION -m:1
+
       - name: Upload FModelHook artifact
         uses: actions/upload-artifact@v4
         with:
@@ -94,6 +100,15 @@ jobs:
         # AssetRipper\nuget.config only declares SamboyDev and silently shadows nuget.org
         # when passed via --configfile, causing NU1101 for public packages like
         # K4os.Compression.LZ4 / SharpCompress / Microsoft.NET.ILLink.Tasks.
+        run: dotnet build -c Release -p:PureRelease=true
+
+      - name: Build RipperHook CLI
+        working-directory: Source/Ruri.RipperHook.CLI
+        shell: cmd
+        # Sibling exe project (not referenced by the GUI project), shares the GUI's
+        # output folder -- must be built explicitly or its .exe never gets produced.
+        # Same -p:PureRelease=true as the GUI build so both share the AssetRipperGameHook
+        # strip + Release project-reference config (see Ruri.RipperHook.csproj).
         run: dotnet build -c Release -p:PureRelease=true
 
       - name: Upload Pure RipperHook artifact
