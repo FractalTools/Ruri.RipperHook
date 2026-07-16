@@ -38,9 +38,9 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// <summary>
     /// Live-read from the persisted ShaderDecompilerSettings snapshot
     /// (loaded at host startup, mutated by the host's settings UI).
-    /// When true, multi-variant stages get their HLSL bodies emitted to
-    /// sibling `<shaderStem>/<variantKey>.hlsl` files and the `.shader`
-    /// references them via `#include`. When false (default), variants
+    /// When true (default), multi-variant stages get their HLSL bodies
+    /// emitted to sibling `<shaderStem>/<variantKey>.hlsl` files and the
+    /// `.shader` references them via `#include`. When false, variants
     /// stay inline inside the `.shader` file under their
     /// `#if defined(KEYWORD)` blocks. Single-variant stages always inline.
     /// </summary>

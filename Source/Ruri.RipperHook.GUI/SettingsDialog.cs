@@ -217,7 +217,7 @@ internal sealed class SettingsDialog : Form
             Margin = new Padding(0, 4, 0, 4),
         };
         new ToolTip().SetToolTip(splitVariants,
-            "Off (default): every variant body stays inline in one .shader. On: multi-variant stages emit <stem>/<key>.hlsl + #include distributors. Flip on for huge URP/HDRP shaders where a single .shader file is too big for Unity's importer.");
+            "On (default): multi-variant stages emit <stem>/<key>.hlsl + #include distributors. Off: every variant body stays inline in one .shader. Flip off only for small single/few-variant shaders where per-file splitting is unnecessary overhead.");
         subOptions.Controls.Add(splitVariants);
 
         ruriShaderHook.CheckedChanged += (_, _) =>
