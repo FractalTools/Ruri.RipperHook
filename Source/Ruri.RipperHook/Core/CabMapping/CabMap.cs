@@ -300,8 +300,14 @@ public static class CabMap
     /// <summary>
     /// Every on-disk file that hosts a CAB containing an asset of one of <paramref name="targetClassIds"/>,
     /// plus the transitive dependencies of those CABs. The "precise filter" path — load just these.
+    /// Also resolves <paramref name="loadFilterFileNames"/>, the chunk-entry file names of the closure —
+    /// same bundle-granular filter <see cref="ResolveByNames"/> already builds. Without it a matched chunk
+    /// gets extracted whole: EndField packs 100k+ bundles per .chk, and "contains a Shader" (plus deps)
+    /// resolves to entire massive chunks just as often as it does small ones — confirmed empirically
+    /// (one real chunk: 108064/108064 bundles extracted for a type-only, non-granular load, OOM before
+    /// export even started).
     /// </summary>
-    public static string[] ResolveByTypes(string baseFolder, Dictionary<string, Entry> entries, IReadOnlySet<int> targetClassIds)
+    public static string[] ResolveByTypes(string baseFolder, Dictionary<string, Entry> entries, IReadOnlySet<int> targetClassIds, out HashSet<string> loadFilterFileNames)
     {
         HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
         Queue<string> seeds = new();
@@ -315,8 +321,19 @@ public static class CabMap
             }
         }
 
-        Bfs(baseFolder, entries, seeds, resultFiles);
-        Console.Error.WriteLine($"[CabMap] type filter: {seedCabs} CABs host the target type(s) → {resultFiles.Count} file(s) (with dependencies)");
+        HashSet<string> closureCabs = new(StringComparer.OrdinalIgnoreCase);
+        Bfs(baseFolder, entries, seeds, resultFiles, closureCabs);
+
+        loadFilterFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string cab in closureCabs)
+        {
+            if (entries.TryGetValue(cab, out Entry? entry) && !string.IsNullOrEmpty(entry.EntryFileName))
+            {
+                loadFilterFileNames.Add(entry.EntryFileName);
+            }
+        }
+
+        Console.Error.WriteLine($"[CabMap] type filter: {seedCabs} CABs host the target type(s) → {resultFiles.Count} file(s) (with dependencies), {loadFilterFileNames.Count} bundle(s) in the load filter");
         return resultFiles.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
