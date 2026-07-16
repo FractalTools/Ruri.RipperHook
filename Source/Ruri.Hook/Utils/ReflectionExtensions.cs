@@ -8,7 +8,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
 
 using Ruri.Hook.Core;
 
@@ -79,7 +78,7 @@ namespace Ruri.Hook.Utils
             _callHookedSources.Clear();
         }
 
-        private static void SupersedePrevious<TKey>(Dictionary<TKey, IDisposable> registered, TKey key, string srcDescription)
+        private static void SupersedePrevious<TKey>(Dictionary<TKey, IDisposable> registered, TKey key, string srcDescription) where TKey : notnull
         {
             if (registered.Remove(key, out IDisposable? previous))
             {
@@ -95,7 +94,7 @@ namespace Ruri.Hook.Utils
             var hookDest = new ILContext.Manipulator(il =>
             {
                 if (!func(il))
-                    throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
+                    throw new Exception($"Hook {srcMethod.DeclaringType?.Name}.{srcMethod.Name} Fail");
             });
             var hook = new ILHook(srcMethod, hookDest);
             HookManager.Register(hook);
@@ -111,7 +110,7 @@ namespace Ruri.Hook.Utils
             var hookDest = new ILContext.Manipulator(il =>
             {
                 if (!func(il))
-                    throw new Exception($"Hook {srcMethod.DeclaringType.Name}.{srcMethod.Name} Fail");
+                    throw new Exception($"Hook {srcMethod.DeclaringType?.Name}.{srcMethod.Name} Fail");
             });
             var hook = new ILHook(srcMethod, hookDest);
             HookManager.Register(hook);
@@ -190,7 +189,7 @@ namespace Ruri.Hook.Utils
 
         private class ReferenceEqualityComparer : IEqualityComparer<object>
         {
-            public new bool Equals(object x, object y) => ReferenceEquals(x, y);
+            public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
             public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
             public static readonly ReferenceEqualityComparer Instance = new();
         }
@@ -206,7 +205,7 @@ namespace Ruri.Hook.Utils
             DeepCopyFields(src, dst, context);
         }
 
-        private static object DeepCopy(object srcObj, Type targetType, Dictionary<object, object> context)
+        private static object? DeepCopy(object? srcObj, Type targetType, Dictionary<object, object> context)
         {
             if (srcObj == null) return null;
 
@@ -240,7 +239,7 @@ namespace Ruri.Hook.Utils
 
             if (typeof(IList).IsAssignableFrom(srcType) && typeof(IList).IsAssignableFrom(targetType))
             {
-                var dstList = (IList)CreateInstance(targetType);
+                var dstList = (IList)(CreateInstance(targetType)!);
                 context[srcObj] = dstList;
 
                 var srcList = (IList)srcObj;
@@ -259,7 +258,7 @@ namespace Ruri.Hook.Utils
 
             if (typeof(IDictionary).IsAssignableFrom(srcType) && typeof(IDictionary).IsAssignableFrom(targetType))
             {
-                var dstDict = (IDictionary)CreateInstance(targetType);
+                var dstDict = (IDictionary)(CreateInstance(targetType)!);
                 context[srcObj] = dstDict;
 
                 var srcDict = (IDictionary)srcObj;
@@ -272,12 +271,12 @@ namespace Ruri.Hook.Utils
                 {
                     var newKey = DeepCopy(entry.Key, keyType, context);
                     var newValue = DeepCopy(entry.Value, valueType, context);
-                    dstDict.Add(newKey, newValue);
+                    dstDict.Add(newKey!, newValue);
                 }
                 return dstDict;
             }
 
-            var newDstObj = CreateInstance(targetType);
+            var newDstObj = CreateInstance(targetType)!;
             context[srcObj] = newDstObj; 
 
             DeepCopyFields(srcObj, newDstObj, context);
@@ -320,16 +319,17 @@ namespace Ruri.Hook.Utils
             return _fieldCache.GetOrAdd(type, t =>
             {
                 var fields = new List<FieldInfo>();
-                while (t != null && t != typeof(object))
+                Type? current = t;
+                while (current != null && current != typeof(object))
                 {
-                    fields.AddRange(t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
-                    t = t.BaseType;
+                    fields.AddRange(current.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
+                    current = current.BaseType;
                 }
                 return fields.ToArray();
             });
         }
 
-        private static object CreateInstance(Type type)
+        private static object? CreateInstance(Type type)
         {
             try
             {
@@ -339,7 +339,7 @@ namespace Ruri.Hook.Utils
             {
                 try
                 {
-                    return FormatterServices.GetUninitializedObject(type);
+                    return RuntimeHelpers.GetUninitializedObject(type);
                 }
                 catch
                 {

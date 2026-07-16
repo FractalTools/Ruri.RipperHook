@@ -30,6 +30,6 @@ namespace Ruri.Hook.Attributes
 
         public Type[]? MethodParameters { get; }
         public Type SourceType { get; }
-        public string SourceMethodName { get; }
+        public string? SourceMethodName { get; }
     }
 }
