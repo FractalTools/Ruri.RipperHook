@@ -7,6 +7,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<AssemblyName>Ruri.RipperHook</AssemblyName>
 		<TargetFramework>net10.0-windows</TargetFramework>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<InternalsAssemblyNames>AssetRipper.SourceGenerated;Ruri.SourceGenerated;AssetRipper.Export.Modules.Models</InternalsAssemblyNames>
 		<CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
 		<Configurations>Debug;Release</Configurations>
