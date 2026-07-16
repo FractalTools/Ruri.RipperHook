@@ -199,21 +199,48 @@ public class GameBundleHook : CommonHook, IHookModule
     /// Project one SerializedFile to the combined CAB-map row: metadata (deps + ClassIDs, see
     /// <see cref="ReadSerializedMetadata"/>) plus the readable names (chunk-entry file name + Container
     /// addressable paths, see <see cref="ReadContainerNames"/>) — one parse, both projections.
-    /// A file with NO AssetBundle Container (a plain player build's level0/sharedassetsN.assets/
-    /// resources.assets/globalgamemanagers — nothing bundled, so no addressable path exists anywhere)
-    /// instead gets its readable names by harvesting the actual m_Name of every named asset it hosts
-    /// (<see cref="HarvestAssetNames"/>) — same browse/search/dependency-closure support as bundled
-    /// games, the identity is just the asset's own name instead of a bundle path.
     /// </summary>
     public static (string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths) ReadFullMetadata(SerializedFile sf, string fallbackName)
     {
         (string cab, List<string> deps, List<int> classIds) = ReadSerializedMetadata(sf, fallbackName);
         (_, _, List<string> paths) = ReadContainerNames(sf, fallbackName);
-        if (paths.Count == 0)
-        {
-            paths = HarvestAssetNames(sf);
-        }
         return (cab, fallbackName, deps, classIds, paths);
+    }
+
+    /// <summary>Separator between a host file's CAB name and an asset PathID in a per-asset virtual
+    /// row's key ("sharedassets0.assets::1234"). "::" never occurs in a real CAB/file name.</summary>
+    public const string AssetRowSeparator = "::";
+
+    /// <summary>
+    /// <see cref="ReadFullMetadata"/> plus per-ASSET expansion for non-bundled files: when a
+    /// SerializedFile has NO AssetBundle Container (a plain player build's level0/
+    /// sharedassetsN.assets/resources.assets — nothing bundled, so no addressable path exists
+    /// anywhere), every named asset it hosts (<see cref="HarvestAssetNames"/>) becomes its OWN
+    /// browsable row: key "&lt;hostCab&gt;::&lt;pathID&gt;", name = the asset's actual m_Name, class =
+    /// its actual ClassID, and a single dependency edge back to the host file -- so the dependency
+    /// closure of an asset row resolves to exactly the host file + its real transitive deps, and a
+    /// browser shows one row per Mesh/AnimationClip/Texture/Material instead of one opaque row per
+    /// 10k-asset container file. The host row itself is kept (whole-file import stays possible) with
+    /// no name list of its own -- the names live on the asset rows.
+    /// </summary>
+    public static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ReadFullMetadataRows(SerializedFile sf, string fallbackName)
+    {
+        (string cab, string fileName, List<string> deps, List<int> classIds, List<string> paths) =
+            ReadFullMetadata(sf, fallbackName);
+        List<(string, string, List<string>, List<int>, List<string>)> rows = new()
+        {
+            (cab, fileName, deps, classIds, paths),
+        };
+        if (paths.Count > 0)
+        {
+            return rows; // bundled: the container paths already name everything
+        }
+        foreach ((long pathId, int classId, string name) in HarvestAssetNames(sf))
+        {
+            rows.Add(($"{cab}{AssetRowSeparator}{pathId}", fileName,
+                new List<string> { cab }, new List<int> { classId }, new List<string> { name }));
+        }
+        return rows;
     }
 
     // ── named-asset harvest (non-bundled SerializedFiles: level0/sharedassets/resources.assets) ────
@@ -228,16 +255,16 @@ public class GameBundleHook : CommonHook, IHookModule
     // per-object allocation beyond the accepted names.
 
     /// <summary>
-    /// Every distinct readable asset name in a SerializedFile, from the assets' own m_Name fields.
-    /// Strict validation (sane length, printable strict UTF-8) makes the leading-string peek
-    /// self-rejecting for nameless classes (components/managers start with a PPtr whose fileID bytes
-    /// fail the length check), so no per-class whitelist is needed beyond the GameObject/MonoBehaviour
-    /// layout special cases.
+    /// Every readable asset in a SerializedFile, from the assets' own m_Name fields: (PathID, ClassID,
+    /// Name) per named object. Strict validation (sane length, printable strict UTF-8) makes the
+    /// leading-string peek self-rejecting for nameless classes (components/managers start with a PPtr
+    /// whose fileID bytes fail the length check), so no per-class whitelist is needed beyond the
+    /// GameObject/MonoBehaviour layout special cases. PathID is what gives each harvested asset a
+    /// browsable identity of its own (see CabMap's per-asset virtual rows for non-bundled files).
     /// </summary>
-    public static List<string> HarvestAssetNames(SerializedFile sf)
+    public static List<(long PathId, int ClassId, string Name)> HarvestAssetNames(SerializedFile sf)
     {
-        List<string> names = new();
-        HashSet<string> seen = new(StringComparer.Ordinal);
+        List<(long, int, string)> assets = new();
         bool bigEndian = sf.EndianType == EndianType.BigEndian;
         int pathIdSize = ObjectInfo.IsLongID(sf.Generation) ? 8 : 4;
         int pptrSize = sizeof(int) + pathIdSize;
@@ -277,12 +304,12 @@ public class GameBundleHook : CommonHook, IHookModule
             }
 
             string? name = TryReadAlignedString(data, offset, bigEndian);
-            if (name is not null && seen.Add(name))
+            if (name is not null)
             {
-                names.Add(name);
+                assets.Add((objectInfo.FileID, classId, name));
             }
         }
-        return names;
+        return assets;
     }
 
     private static int ReadInt32(ReadOnlySpan<byte> data, int offset, bool bigEndian) => bigEndian
