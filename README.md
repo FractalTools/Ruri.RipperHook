@@ -4,6 +4,10 @@
 
 最终目标是把异构来源的数据统一收敛成 Unity 数据表示(YAML / Unity 对象语义),交给 AssetRipper 已有的浏览、导出、后处理流程继续消费。Shader 链路是这条路线上当前最明确的先行落点。
 
+## 下游:喂给 Blender
+
+本仓库产出的标准 Unity YAML,是 [RuriRipperImporter](https://github.com/ShiyumeMeguri/RuriRipperImporter) Blender 插件的直接输入——该插件零依赖解析 Unity 原生 `Force Text` 序列化文本,把网格、真实骨架、材质与动画 clip 原样重建进 Blender,不经过 FBX 转换、不重新绑骨、不丢顶点流。这条管线服务于角色建模、绑骨、MMD 风格动画等 3D 内容创作工作流:Ruri-RipperHook 负责让来源各异的资产(不同游戏引擎版本、不同发行商的自定义容器格式)最终都能落成同一份干净的 Unity 项目结构,Blender 插件只需要认识"标准 Unity YAML"这一种形态。
+
 ## 项目定位
 
 Ruri-RipperHook **不是**:
@@ -69,6 +73,7 @@ public class MyHook : RipperHookCommon
 
 ## 适用场景
 
+- 为 Blender / MMD 等 3D 创作流程准备干净、可直接导入的 Unity 项目资产(网格、材质、骨架、动画)
 - 给已有解包工具链补齐读取或导出短板,而不想直接 fork
 - 把零散的导出流程修补整理为可组合、可复用的模块
 - 在多个工具之间共用一套 shader / 网格 / prefab 处理逻辑
