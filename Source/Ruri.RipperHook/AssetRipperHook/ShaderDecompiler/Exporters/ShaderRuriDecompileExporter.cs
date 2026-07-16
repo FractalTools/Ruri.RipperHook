@@ -79,6 +79,19 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         GPUPlatform.Vulkan,
     };
 
+    /// <summary>
+    /// Fast-iteration mode: decompile only the first successfully-decoded variant per
+    /// (SubShader, Pass, Stage) slot instead of every keyword permutation. A decompiler bug
+    /// almost always reproduces identically across a shader's variants (same structure, different
+    /// #if branches enabled) -- exporting all of them just multiplies wall-clock time for the same
+    /// diagnostic signal during a fix-rebuild-retry loop. Off by default (full export keeps every
+    /// variant, which is what a final/complete export needs); toggled via
+    /// <c>RURI_SHADER_FAST_ITERATION=1</c> so a CLI batch run can flip it without touching the
+    /// persisted <see cref="ShaderDecompilerSettings"/>.
+    /// </summary>
+    public static bool OneVariantPerProgramSlot { get; set; } =
+        Environment.GetEnvironmentVariable("RURI_SHADER_FAST_ITERATION") == "1";
+
     public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
     {
         IShader shader = (IShader)asset;
@@ -230,6 +243,11 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                 payload,
                 shader.Name,
                 shader.Collection.Version));
+
+            if (OneVariantPerProgramSlot)
+            {
+                break;
+            }
         }
     }
 

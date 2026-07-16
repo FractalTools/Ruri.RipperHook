@@ -81,7 +81,10 @@ internal static class HeadlessRunner
                         EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"No --load-types resolved (got: {string.Join(",", options.LoadTypes)})");
                         return 1;
                     }
-                    foreach (string f in CabMap.ResolveByTypes(baseFolder, entries, typeIds)) resolved.Add(f);
+                    string[] typeFiles = CabMap.ResolveByTypes(baseFolder, entries, typeIds, out HashSet<string> typeLoadFilter);
+                    foreach (string f in typeFiles) resolved.Add(f);
+                    loadFilterFileNames ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (string f in typeLoadFilter) loadFilterFileNames.Add(f);
                 }
                 if (options.Names.Length > 0)
                 {
