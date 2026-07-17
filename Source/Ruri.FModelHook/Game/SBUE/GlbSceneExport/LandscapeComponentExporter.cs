@@ -29,7 +29,7 @@ using ImageSharpImage = SixLabors.ImageSharp.Image;
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 // Full-fidelity landscape exporter. Routes the proxy through CUE4Parse's
-// verified ALandscapeProxy.TryConvert path (MeshConverter.cs:573-838) so the
+// ALandscapeProxy.TryConvert path (MeshConverter.cs:573-838) so the
 // per-component vertex/normal/tangent/UV/vertex-color streams are produced
 // byte-for-byte identically to FModel's "Save Landscape" output, then folds the
 // resulting CStaticMesh into a SharpGLTF MeshBuilder via the exact same
@@ -63,7 +63,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //   * Geometry conversion (cm -> m + Z-up -> Y-up) lives inside
 //     Gltf.ExportStaticMeshSections, which the static-mesh pipeline also
 //     relies on. The node matrix is built with SceneTransform.NodeMatrix so
-//     the placement convention (N = W, FModel's verified Transform.Matrix) is
+//     the placement convention (N = W, FModel's Transform.Matrix) is
 //     identical to the static-mesh path. No parallel coordinate convention
 //     exists.
 //
@@ -77,7 +77,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //   * The DirectX-normal sidecar ("NormalMap_DX.png") is always produced by
 //     TryConvert and always carried through (every byte preserved).
 //   * Landscape GUID file (`Guid_<guid>`) is emitted alongside so a downstream
-//     re-link still has the original FGuid available — verbatim parity with
+//     re-link still has the original FGuid available — same record shape as
 //     CUE4Parse LandscapeExporter.cs:108.
 //
 // Materials:
@@ -184,18 +184,18 @@ public sealed class LandscapeComponentExporter : IComponentExporter
         // like FModel Renderer.CalculateTransform.
         Transform proxyRootWorldTransform = ResolveProxyRootWorldTransform(proxy, placed.WorldTransform, context);
 
-        // Run the verified converter once. ELandscapeExportFlags.All produces
-        // the mesh, the L16 heightmap, AND the SKBitmap weightmap dictionary
-        // (+ the DirectX normal map) in a single parallel pass — every byte
-        // the cooked landscape carries is materialised here.
+        // Run the converter once. ELandscapeExportFlags.All produces the mesh,
+        // the L16 heightmap, AND the SKBitmap weightmap dictionary (+ the
+        // DirectX normal map) in a single parallel pass — every byte the cooked
+        // landscape carries is materialised here.
         CStaticMesh? convertedMesh;
         Dictionary<string, ImageSharpImage> heightMaps;
         Dictionary<string, SKBitmap> weightMaps;
         try
         {
-            // ALandscapeProxy.TryConvert (MeshConverter.cs:573) — the verified
-            // path. Re-running it here keeps the geometry byte-identical to
-            // LandscapeExporter (which calls the same method internally).
+            // ALandscapeProxy.TryConvert (MeshConverter.cs:573). Re-running it
+            // here keeps the geometry byte-identical to LandscapeExporter
+            // (which calls the same method internally).
             if (!proxy.TryConvert(
                     components,
                     ELandscapeExportFlags.All,
@@ -250,8 +250,8 @@ public sealed class LandscapeComponentExporter : IComponentExporter
                 context.Options);
         }
 
-        // Compose the node matrix (N = W, FModel's verified placement matrix)
-        // via SceneTransform.NodeMatrix exactly like the static-mesh path. This
+        // Compose the node matrix (N = W, FModel's placement matrix) via
+        // SceneTransform.NodeMatrix exactly like the static-mesh path. This
         // is THE bridge that pairs the byte-identical mesh export with the
         // byte-identical proxy placement.
         Matrix4x4 nodeMatrix = SceneTransform.NodeMatrix(proxyRootWorldTransform);
@@ -399,7 +399,7 @@ public sealed class LandscapeComponentExporter : IComponentExporter
             return baseTransform;
         }
 
-        // SceneTransform.CalculateTransform is the verified Renderer
+        // SceneTransform.CalculateTransform mirrors the Renderer
         // CalculateTransform (Renderer.cs:676-690). It folds RelativeLocation,
         // RelativeRotation, RelativeScale3D, and the AttachParent chain into a
         // single Transform whose Matrix is the proxy's world matrix.
@@ -462,8 +462,8 @@ public sealed class LandscapeComponentExporter : IComponentExporter
 
     private static void WriteLandscapeGuidRecord(ALandscapeProxy proxy, string landscapeRoot, string proxyName, GlbSceneContext context)
     {
-        // 1:1 of LandscapeExporter.cs:108. Filename has no extension; payload is
-        // the GUID's string form encoded as UTF-8.
+        // Matches LandscapeExporter.cs:108. Filename has no extension; payload
+        // is the GUID's string form encoded as UTF-8.
         string guidFilePath = Path.Combine(landscapeRoot, "Guid_" + proxy.LandscapeGuid);
         try
         {

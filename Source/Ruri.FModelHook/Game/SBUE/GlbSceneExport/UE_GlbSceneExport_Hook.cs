@@ -23,8 +23,8 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
 {
     // Default-on, toggleable (via Hooks > Enabled Hooks...) interactive hook
     // that adds "Export GLB Scene" to the asset-list right-click menu for
-    // .umap selections. It reuses FModel's verified world preview LOGIC
-    // (WorldActorCollector + WorldGlbExporter port Renderer.LoadWorld /
+    // .umap selections. It reuses FModel's world preview LOGIC
+    // (WorldActorCollector + WorldGlbExporter follow Renderer.LoadWorld /
     // WorldMesh / CalculateTransform) but, unlike the preview, also resolves
     // World Partition content so the whole map exports — not just the handful
     // of actors cooked into the top-level .umap.

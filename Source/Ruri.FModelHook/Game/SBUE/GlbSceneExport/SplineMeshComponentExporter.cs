@@ -13,46 +13,38 @@ using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Faithful 1:1 port of USplineMeshComponent CPU deformation, materialised as a
+// Applies USplineMeshComponent CPU deformation, materialised as a
 // per-placement deformed UStaticMesh that flows through the SAME
 // GlbSceneContext.AddRigidMesh -> BuildMesh -> Gltf.ExportStaticMeshSections
 // pipeline the StaticMeshComponentExporter uses. Geometry bytes therefore stay
-// byte-identical to "FModel Save Model" output for the deformed slice
+// identical to the straight static-mesh export for the deformed slice
 // positions/normals/tangents, just like the straight-static path does for
 // undeformed meshes.
 //
-// Ground-truth sources (READ AND MIRRORED LINE BY LINE):
-//   * CUE4Parse FSplineMeshParams.cs:65-83 — SplineEvalPos/SplineEvalTangent/
-//     SplineEvalDir (cubic Hermite). DO NOT re-derive the Hermite coefficients;
-//     call SplineParams.SplineEvalPos / SplineEvalTangent / SplineEvalDir.
-//   * CUE4Parse USplineMeshComponent.cs:104-181 — CalcSliceTransform /
+// Deformation model:
+//   * Spline position/tangent/direction come from the cubic-Hermite evaluators
+//     SplineParams.SplineEvalPos / SplineEvalTangent / SplineEvalDir; the
+//     Hermite coefficients are not re-derived here.
+//   * The per-slice transform is spline.CalcSliceTransform /
 //     CalcSliceTransformAtSplineOffset (SmoothStep, BaseXVec=SplineUpDir^SplineDir,
 //     BaseYVec=SplineDir^BaseXVec, sliceOffset/roll/scale lerp, 3-axis FTransform
-//     basis switch). DO NOT re-implement; call spline.CalcSliceTransform.
-//   * CUE4Parse MeshConverter.cs:154-160 — the verified CPU per-vertex
-//     deformation: read distanceAlong=GetAxisValueRef(pos, ForwardAxis); compute
-//     sliceTransform; SetAxisValueRef(pos, ForwardAxis, 0); pos =
-//     sliceTransform.TransformPosition(pos). This is the byte-for-byte CPU
-//     identical algorithm to UE 5.7.4
-//     Engine/Private/Components/SplineMeshComponent.cpp:1013 (collision export
-//     path: `Vertex = CalcSliceTransform(GetAxisValueRef(Vertex, ForwardAxis))
-//     .TransformPosition(Vertex * Mask)` where Mask zeros the forward axis).
-//   * UE 5.7.4 Engine/Shaders/Private/SplineMeshCommon.ush:240-258
-//     (SplineMeshDeformLocalPosNormalTangent) — the GPU truth confirms that
-//     normal AND tangent rotate by the slice's rotation matrix (no scale). The
-//     CUE4Parse CPU port has a "TODO normals" at MeshConverter.cs:154 and skips
-//     this rotation; we deliberately include it because the task mandates
-//     "位置/法线/切线都按 slice 变换旋转". The rotation source is
-//     sliceTransform.TransformVectorNoScale (FTransform.cs:400, pure rotation,
-//     matches the shader's `mul(LocalNormal, SliceRot)`).
+//     basis switch).
+//   * Per-vertex deformation: read distanceAlong = GetAxisValueRef(pos,
+//     ForwardAxis); compute sliceTransform; SetAxisValueRef(pos, ForwardAxis, 0);
+//     pos = sliceTransform.TransformPosition(pos), where the forward axis is
+//     masked to zero.
+//   * Normal AND tangent rotate by the slice's rotation matrix (no scale) via
+//     sliceTransform.TransformVectorNoScale (pure rotation). This matches the
+//     GPU spline-mesh deform path and satisfies the requirement that
+//     位置/法线/切线都按 slice 变换旋转.
 //
 // Why a cloned UStaticMesh instead of a separate SharpGLTF pipeline:
 //   GlbSceneContext.AddRigidMesh's public surface only accepts a UStaticMesh
-//   and is intentionally frozen per the cell contract. The faithful way to
-//   land deformed geometry inside the SAME .glb part files (so the spline
-//   actor's render contribution is not banished to a sidecar file) is to feed
-//   the existing BuildMesh path a UStaticMesh whose RenderData LOD0
-//   PositionVertexBuffer / VertexBuffer.UV already carry the bent attributes.
+//   and is intentionally frozen per the cell contract. To land deformed
+//   geometry inside the SAME .glb part files (so the spline actor's render
+//   contribution is not banished to a sidecar file), the existing BuildMesh
+//   path is fed a UStaticMesh whose RenderData LOD0 PositionVertexBuffer /
+//   VertexBuffer.UV already carry the bent attributes.
 //   The bend is deterministic from (mesh.LightingGuid, SplineParams.GetSHAHash),
 //   so identical bends across multiple placements share one MeshBuilder via
 //   the context's mesh cache; different bends emit distinct MeshBuilders.
@@ -115,10 +107,9 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
             return;
         }
 
-        // OverrideMaterials handling mirrors the verified Renderer path
-        // (Renderer.cs:642-652) byte-for-byte through
-        // StaticMeshComponentExporter.BuildOverrideMaterialLists. Doing it
-        // identically here keeps the mesh-share key contributions consistent
+        // OverrideMaterials handling mirrors the FModel Renderer path
+        // through StaticMeshComponentExporter.BuildOverrideMaterialLists. Doing
+        // it identically here keeps the mesh-share key contributions consistent
         // across the two exporters: an overridden bent mesh + a bent mesh with
         // no overrides yield distinct MeshBuilders inside GlbSceneContext,
         // exactly like the straight-static path does for ISM placements.
@@ -128,15 +119,14 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
             out IReadOnlyList<string> overrideMaterialPathNames);
 
         // The deformed positions are expressed in the spline component's
-        // LOCAL space (same convention as MeshConverter.cs:154-160 — the
-        // CalcSliceTransform output lives in component space because both
-        // splinePos and the basis vectors are derived from SplineParams.*,
-        // which FSplineMeshParams.cs:15/31 documents as "in component space").
-        // So the placement's world transform (which already folds the
-        // AttachParent chain via SceneTransform.CalculateTransform) is handed
-        // straight through SceneTransform.NodeMatrix (N = W, FModel's verified
-        // placement matrix) to put the bent mesh exactly where the verified
-        // preview puts the straight mesh of a non-spline component.
+        // LOCAL space (the CalcSliceTransform output lives in component space
+        // because both splinePos and the basis vectors are derived from
+        // SplineParams.*, which are defined in component space). So the
+        // placement's world transform (which already folds the AttachParent
+        // chain via SceneTransform.CalculateTransform) is handed straight
+        // through SceneTransform.NodeMatrix (N = W, FModel's placement matrix)
+        // to put the bent mesh exactly where the preview puts the straight mesh
+        // of a non-spline component.
         context.AddRigidMesh(
             deformedMesh,
             overrideMaterials,
@@ -144,10 +134,10 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
             SceneTransform.NodeMatrix(placed.WorldTransform));
     }
 
-    // 1:1 mirror of StaticMeshComponentExporter.BuildOverrideMaterialLists
-    // (kept duplicated rather than refactored upstream because the static-mesh
-    // exporter file is owned by another cell). The duplication MUST stay
-    // byte-faithful — any divergence in the cache-signature derivation would
+    // Mirror of StaticMeshComponentExporter.BuildOverrideMaterialLists
+    // (kept duplicated rather than refactored into the shared file because the
+    // static-mesh exporter file is owned by another cell). The duplication MUST
+    // stay byte-exact — any divergence in the cache-signature derivation would
     // re-introduce the write-side/read-side key inconsistency the foundation
     // contract calls out explicitly.
     private static void BuildOverrideMaterialLists(
@@ -411,14 +401,12 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         var deformedVb = (FStaticMeshVertexBuffer)CallMemberwiseClone(sourceVb);
         deformedVb.UV = new FStaticMeshUVItem[sourceVb.UV.Length];
 
-        // Per-vertex deformation. MUST mirror MeshConverter.cs:154-160 for
-        // positions (the verified CPU port that CUE4Parse uses; also matches
-        // UE 5.7.4 Engine/Private/Components/SplineMeshComponent.cpp:1013), and
-        // additionally rotates Normal (TangentZ) and Tangent (TangentX) by the
-        // slice's rotation matrix exactly like the GPU vertex shader does
-        // (Engine/Shaders/Private/SplineMeshCommon.ush:240-258). The shader's
-        // SliceRot omits the slice scale, so TransformVectorNoScale is the
-        // correct vehicle (FTransform.cs:400, pure quaternion rotation).
+        // Per-vertex deformation. MUST match the position deformation CUE4Parse
+        // uses (MeshConverter.CalcSliceTransform path), and additionally rotates
+        // Normal (TangentZ) and Tangent (TangentX) by the slice's rotation
+        // matrix exactly like the GPU spline-mesh vertex shader does. That
+        // rotation omits the slice scale, so TransformVectorNoScale is the
+        // correct vehicle (pure quaternion rotation).
         ESplineMeshAxis forwardAxis = spline.ForwardAxis;
         FVector[] sourceVerts = sourcePvb.Verts;
         FVector[] deformedVerts = deformedPvb.Verts;
@@ -427,14 +415,14 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         int vertexCount = sourceVerts.Length;
         for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
         {
-            // ---- POSITION (1:1 MeshConverter.cs:154-160) ------------------
+            // ---- POSITION -------------------------------------------------
             FVector localPosition = sourceVerts[vertexIndex];
             float distanceAlong = USplineMeshComponent.GetAxisValueRef(ref localPosition, forwardAxis);
             FTransform sliceTransform = spline.CalcSliceTransform(distanceAlong);
             USplineMeshComponent.SetAxisValueRef(ref localPosition, forwardAxis, 0f);
             deformedVerts[vertexIndex] = sliceTransform.TransformPosition(localPosition);
 
-            // ---- NORMAL + TANGENT (1:1 SplineMeshCommon.ush:240-258) -------
+            // ---- NORMAL + TANGENT -----------------------------------------
             // FStaticMeshUVItem.Normal is [TangentX, TangentY (deprecated/0),
             // TangentZ] per FStaticMeshUVItem.cs:30. We re-pack TangentX and
             // TangentZ; TangentY is a derived bitangent and the engine

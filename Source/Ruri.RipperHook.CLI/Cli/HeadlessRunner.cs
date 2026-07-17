@@ -310,7 +310,7 @@ internal static class HeadlessRunner
         {
             Logger.Add(new StderrLogger { MinLevel = options.LogLevel });
         }
-        Logger.Add(new FileLogger($"Ruri_Cli_{DateTime.Now:yyyyMMdd_HHmmss}.log"));
+        Logger.Add(new FileLogger(Path.Combine(LocalFileSystem.ExecutingDirectory, $"Ruri_Cli_{DateTime.Now:yyyyMMdd_HHmmss}.log")));
         Logger.AllowVerbose = options.LogLevel == LogType.Verbose || options.LogLevel == LogType.Debug;
     }
 

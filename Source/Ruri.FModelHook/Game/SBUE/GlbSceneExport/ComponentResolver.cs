@@ -33,11 +33,11 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // Duplicates between sources are filtered by object identity (HashSet<UObject>):
 // a component referenced by both BlueprintCreatedComponents and a named
 // property must yield exactly once. AttachParent-driven world transform is
-// computed via SceneTransform.CalculateTransform — exactly the verified
-// Renderer's CalculateTransform path, so spline knots, BP child meshes and
-// "rope component nested two SceneComponents deep" all land at their preview
-// position. LODActor is suppressed at the WorldGlbExporter level (it never
-// arrives here), matching Renderer.cs:448.
+// computed via SceneTransform.CalculateTransform — the same
+// CalculateTransform path the Renderer uses, so spline knots, BP child meshes
+// and "rope component nested two SceneComponents deep" all land at their
+// preview position. LODActor is suppressed at the WorldGlbExporter level (it
+// never arrives here), matching Renderer.cs:448.
 //
 // The resolver only feeds the RENDER layer (IComponentExporter table). The
 // lossless layer iterates the same actor list in WorldGlbExporter directly
@@ -74,12 +74,11 @@ internal static class ComponentResolver
         // component appearing in both BCC and InstanceComponents) is yielded
         // only once. CRUCIALLY it is NOT consulted for entries INSIDE the
         // CURRENT source — duplicate entries WITHIN a single InstanceComponents
-        // array are yielded multiple times because the verified Renderer's
-        // foreach (Renderer.cs:537) does the same, and faithful-port parity
-        // requires identical fan-out. (Parity self-test: the central foliage
-        // actor InstancedFoliageActor_25600_0_0_0 holds 96 InstanceComponents
-        // entries that resolve to 48 distinct UObjects; without this
-        // distinction the resolver collapses 196094 placements down to 98047.)
+        // array are yielded multiple times because the Renderer's foreach
+        // (Renderer.cs:537) does the same, and matching its fan-out is
+        // required. A single InstanceComponents array can hold duplicate
+        // entries that resolve to fewer distinct UObjects; collapsing them
+        // here would halve the emitted placement count.
         HashSet<UObject> seenPriorSource = new();
 
         // ----- (1) BlueprintCreatedComponents[] -----------------------------
@@ -164,13 +163,12 @@ internal static class ComponentResolver
     // Load a component package index, swallowing per-component deserialization
     // failures the same way FPackageIndex.TryLoad(out UExport) does — wrapping
     // `Object?.Value` in try/catch. This MUST mirror TryLoad's behaviour because
-    // the verified Renderer's InstanceComponents loop uses TryLoad and skips
-    // failing entries with `continue`. If we let Load() propagate the
-    // exception, an iterator's `yield return` shape would tear down the entire
-    // foreach for this actor — losing every subsequent valid component in the
-    // SAME array. The Oni_Valley parity self-test caught this (97k missing
-    // placements traced to one foliage actor where component #N threw and the
-    // remaining 18+ components were silently lost).
+    // the Renderer's InstanceComponents loop uses TryLoad and skips failing
+    // entries with `continue`. If we let Load() propagate the exception, an
+    // iterator's `yield return` shape would tear down the entire foreach for
+    // this actor — losing every subsequent valid component in the SAME array.
+    // A single component that throws mid-array must not drop the components
+    // that follow it.
     private static bool TryLoadObject(CUE4Parse.UE4.Objects.UObject.FPackageIndex componentIndex, out UObject? component)
     {
         try

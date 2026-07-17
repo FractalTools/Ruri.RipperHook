@@ -14,44 +14,27 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // shared scene graph through GlbSceneContext.AddCamera.
 //
 // ---------------------------------------------------------------------------
-// Ground-truth property + math sources (verified ASCII files on disk):
-//   * UCameraComponent class declaration (FieldOfView / OrthoWidth /
-//     OrthoNearClipPlane / OrthoFarClipPlane / AspectRatio /
-//     bConstrainAspectRatio / ProjectionMode):
-//     E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/Engine/Classes/
-//       Camera/CameraComponent.h:44, 66, 84, 90, 108, 120, 226.
-//   * UCineCameraComponent fields (Filmback / LensSettings / FocusSettings /
+// Property + math model:
+//   * UCameraComponent drives FieldOfView / OrthoWidth / OrthoNearClipPlane /
+//     OrthoFarClipPlane / AspectRatio / bConstrainAspectRatio / ProjectionMode.
+//   * UCineCameraComponent adds Filmback / LensSettings / FocusSettings /
 //     CropSettings / CurrentFocalLength / CurrentAperture / ExposureMethod /
-//     bOverride_CustomNearClippingPlane / CustomNearClippingPlane):
-//     E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/CinematicCamera/
-//       Public/CineCameraComponent.h:38, 45, 52, 59, 66, 70, 81, 84, 88.
-//   * UCineCameraComponent::GetHorizontalFieldOfViewInternal — the canonical
-//     focal-length -> horizontal FOV formula (with anamorphic Squeeze, plate
-//     crop, and uniform / asymmetric Overscan):
-//     E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/CinematicCamera/
-//       Private/CineCameraComponent.cpp:286-305.
-//   * UCineCameraComponent::GetVerticalFieldOfViewInternal — vertical FOV
-//     formula (used directly for the glTF VerticalFOV value):
-//     E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/CinematicCamera/
-//       Private/CineCameraComponent.cpp:312-331.
-//   * Filmback / Lens default values (SensorWidth=24.89mm, SensorHeight=18.67mm,
-//     SqueezeFactor=1, defaults match the cooked-asset native init order):
-//     E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/CinematicCamera/
-//       Public/CineCameraSettings.h:57-64, 89-130.
-//   * UE class identity in CUE4Parse (empty marker types — every property is
-//     read via GetOrDefault on the IPropertyHolder):
-//     D:/Ruri/Git/FractalTools/Ruri-RipperHook/FModel/CUE4Parse/CUE4Parse/UE4/
-//       Assets/Exports/Component/ActorComponent.cs:135, 150.
-//   * SharpGLTF camera surface (verified by reflection against the bound
-//     AssetRipper.SharpGLTF.Toolkit 1.0.2 net8.0 DLL):
+//     bOverride_CustomNearClippingPlane / CustomNearClippingPlane.
+//   * Cine cameras derive horizontal FOV from focal length via the anamorphic
+//     Squeeze factor, plate crop, and uniform / asymmetric Overscan; vertical
+//     FOV is derived the same way and used directly for the glTF VerticalFOV.
+//   * Filmback / lens defaults (SensorWidth=24.89mm, SensorHeight=18.67mm,
+//     SqueezeFactor=1) match the cooked-asset native init order.
+//   * The CUE4Parse component types are empty marker classes, so every property
+//     is read via GetOrDefault on the IPropertyHolder.
+//   * SharpGLTF camera surface (AssetRipper.SharpGLTF.Toolkit 1.0.2):
 //       CameraBuilder.Perspective(float? aspectRatio, float fovy /* radians */,
 //                                 float znear, float zfar = +Inf)
 //       CameraBuilder.Orthographic(float xmag, float ymag, float znear,
 //                                  float zfar)
 //       SceneBuilder.AddCamera(CameraBuilder camera,
 //                              AffineTransform cameraTransform)  // matrix overload.
-//     CameraBuilder.Perspective.VerticalFOV is documented as RADIANS in the
-//     toolkit XML doc (SharpGLTF.Toolkit.xml line 1903).
+//     CameraBuilder.Perspective.VerticalFOV is expressed in RADIANS.
 //
 // ---------------------------------------------------------------------------
 // Coordinate system mapping (camera-axis remap):
@@ -84,9 +67,9 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //         (+Z) -> (-1, 0, 0) = -X     => (-Z) -> +X   CORRECT
 //         (+Y) -> (0, 1, 0)  = +Y     CORRECT
 //
-//     So the correct remap is Ry(-pi/2), NOT Ry(+pi/2). The original
-//     comment claimed Ry(+90) sent (-Z) to (+X), which is the column-vec
-//     answer; System.Numerics is row-vec and the sign flips.
+//     So the correct remap is Ry(-pi/2), NOT Ry(+pi/2). Ry(+90) sending
+//     (-Z) to (+X) is the column-vector answer; System.Numerics is
+//     row-vector and the sign flips.
 //
 //   * In System.Numerics row-vector convention a local-frame correction
 //     composes on the LEFT (Matrix4x4.Multiply(A, B) = A * B applied as
@@ -99,9 +82,9 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // ---------------------------------------------------------------------------
 // Lossless preservation:
 //   * Every property read here is also captured byte-for-byte by the lossless
-//     layer (CompleteSceneDataExporter) for the same actor / component. So
-//     the JSON sidecar is the ground-truth round-trip; this exporter only
-//     writes the glTF-renderable summary plus extras that downstream bridges
+//     layer (CompleteSceneDataExporter) for the same actor / component. The
+//     JSON sidecar is the authoritative round-trip; this exporter only writes
+//     the glTF-renderable summary plus extras that downstream bridges
 //     (Blender, Houdini, Unity / Unreal re-imports) consume.
 //
 // ---------------------------------------------------------------------------
@@ -321,9 +304,9 @@ public sealed class CameraComponentExporter : IComponentExporter
             farPlaneMeters);
     }
 
-    // 1:1 of UCineCameraComponent::GetVerticalFieldOfViewInternal
-    // (CineCameraComponent.cpp:312-331), with bIncludeOverscan = true mirroring
-    // the public GetVerticalFieldOfView() default at line 309. Steps:
+    // Matches UCineCameraComponent::GetVerticalFieldOfViewInternal, with
+    // bIncludeOverscan = true (the public GetVerticalFieldOfView() default).
+    // Steps:
     //   1. CropedSensorHeight starts at Filmback.SensorHeight.
     //   2. If CropSettings.AspectRatio > 0, compute the DesqueezeAspectRatio =
     //      SensorWidth * SqueezeFactor / SensorHeight and, when the desqueeze
@@ -467,7 +450,7 @@ public sealed class CameraComponentExporter : IComponentExporter
         // UE's default OrthoNearClipPlane is NEGATIVE (-768 cm), which cannot
         // be expressed in a glTF orthographic camera. Clamp to a positive
         // floor so the file is loadable while keeping the lossless JSON
-        // sidecar as the ground truth for the raw UE values.
+        // sidecar as the authoritative record of the raw UE values.
         if (xMagnification <= 0.0f) xMagnification = 1.0f;
         if (yMagnification <= 0.0f) yMagnification = xMagnification;
         if (nearPlaneMeters <= 0.0f) nearPlaneMeters = DefaultPerspectiveNearPlaneMeters;

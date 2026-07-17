@@ -1,9 +1,8 @@
 # Ruri.UEShaderTpkDumper
 
-C# port of the Python `EngineUbMetadata/_generator/gen_ub_metadata.py`
-that drives uniform-buffer layout extraction directly from UE source.
-Independent project — does NOT depend on Ruri.FModelHook so it can be
-run as a one-shot CLI per engine version.
+Uniform-buffer layout extractor that parses UE source directly to emit
+per-engine-version metadata JSONs. Independent project — does NOT depend
+on Ruri.FModelHook so it can be run as a one-shot CLI per engine version.
 
 ## Run
 
@@ -52,18 +51,16 @@ are walked for `*.h` / `*.cpp` / `*.inl`.
 
 ## Schema
 
-Output mirrors the existing Python generator's schema byte-for-byte
-(the runtime decompiler reads via `System.Text.Json` with
-`PropertyNameCaseInsensitive=true`):
+The runtime decompiler reads the output via `System.Text.Json` with
+`PropertyNameCaseInsensitive=true`:
 
 ```
 <out>/<X.Y.Z>/<BindingName>_<LayoutHash:X8>_MetaData.json
 ```
 
-## Known gaps (vs Python parity)
+## Known gaps
 
-Tracking on the Stage-38 + Stage-39 commits. UE 5.1.1 smoke test:
-138/141 UBs found, 112 exact hash matches.
+UE 5.1.1 smoke test: 138/141 UBs found, 112 exact hash matches.
 
 | Gap                                                | Status |
 | --------                                           | ------ |
@@ -71,7 +68,7 @@ Tracking on the Stage-38 + Stage-39 commits. UE 5.1.1 smoke test:
 | IMPLEMENT_*_STRUCT scan (binding name + flags)     | done   |
 | UE 5.0-5.4 / 5.5+ UBMT integer mapping             | done   |
 | Macro-table expansion (single level)               | done   |
-| Macro-table expansion (deeper levels, View etc.)   | partial — 6/11 tables found vs Python's 11 |
+| Macro-table expansion (deeper levels, View etc.)   | partial — 6/11 tables found |
 | SHADER_PARAMETER_STRUCT_INCLUDE recursive walk     | partial — recursion in place but registry lookup occasionally misses nested children |
 | ShaderType seed (LAYOUT_FIELD scan)                | pending |
 | Hash-to-name index emission                        | pending |
@@ -79,14 +76,12 @@ Tracking on the Stage-38 + Stage-39 commits. UE 5.1.1 smoke test:
 | USF-level loose-param scan (`_Globals` recovery)   | pending |
 | Runtime exact-version lookup (replace GAME_UE5_X)  | pending |
 
-## Why this isn't done overnight
+## Implementation notes
 
-The Python generator is ~3300 lines. The faithful port preserves
-every macro-handling subtlety the Python accumulated over 30+ stages
-of UE-quirks debugging. Tonight's commit lands the structural
-foundation (parser, layout walker, hash math, IMPLEMENT scan, macro
-tables) and proves end-to-end hash parity for the simple-shape UBs
-(112 out of 138). The deeper gaps (nested struct includes, multi-
-level macro tables, shader-type seed scan) are mechanical follow-up
-ports — straightforward to add incrementally now that the spine is
-in place.
+The macro-handling path has to cover every UE-specific subtlety in how
+uniform-buffer structs are declared across engine versions. The current
+build lands the structural foundation (parser, layout walker, hash math,
+IMPLEMENT scan, macro tables) and achieves end-to-end hash parity for the
+simple-shape UBs (112 out of 138). The deeper gaps (nested struct
+includes, multi-level macro tables, shader-type seed scan) are mechanical
+follow-up work that slots into the same spine incrementally.

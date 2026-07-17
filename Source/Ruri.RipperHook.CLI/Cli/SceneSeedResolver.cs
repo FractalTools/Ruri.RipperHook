@@ -9,20 +9,20 @@ namespace Ruri.RipperHook.CLI;
 /// Resolves a VFS streaming map name (e.g. "base01_lv002") into the load-file set + bundle-granular
 /// load filter the shared export flow consumes, plus the placement manifest a render-side scene
 /// assembler needs to rebuild the map. Headless equivalent of the Blender addon's interactive
-/// discovery pipeline — 1:1 ports, source anchors on each member:
-/// scene_state.py (vfs_roots/placeable/resolve_cabs) + prefab_importer.py (select_best_lod family).
+/// discovery pipeline: discover placements -> keep the best available LOD per instance ->
+/// resolve mesh/material container paths to their hosting CABs -> expand to the load-file closure.
 /// </summary>
 internal static class SceneSeedResolver
 {
     /// <summary>One placeable scene placement, as written into the manifest. Rotation is the Unity
-    /// quaternion (x,y,z,w); transform fields are the ground-truth-verified values from
-    /// EndfieldSceneBridge (ECS blob LocalToWorld / FBPropertyBytesData pose / bounds center).</summary>
+    /// quaternion (x,y,z,w); transform fields are the resolved values from EndfieldSceneBridge
+    /// (ECS blob LocalToWorld / FBPropertyBytesData pose / bounds center).</summary>
     internal sealed record Placement(
         string AssetPath, string EntityName, string SourceChunk,
         float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz,
         string[] MaterialAssetPaths);
 
-    /// <summary>源=scene_state.py:30-40 vfs_roots — hot-update overlay first, then base client.</summary>
+    /// <summary>VFS root search order — hot-update overlay first, then base client.</summary>
     private static string[] VfsRoots(string gameRoot) =>
     [
         Path.Combine(gameRoot, "Endfield_Data", "Persistent", "VFS"),
@@ -31,8 +31,8 @@ internal static class SceneSeedResolver
 
     /// <summary>
     /// Discover the map's placements, keep the best available LOD sibling per instance, resolve the
-    /// mesh+material container paths to their hosting CABs, and expand to the load-file closure.
-    /// Mirrors the addon's discover → placeable(lod0_only=True) → resolve_cabs → ImportCabs seed flow.
+    /// mesh+material container paths to their hosting CABs, and expand to the load-file closure --
+    /// the seed set the shared ImportCabs export flow consumes.
     /// </summary>
     internal static (string[] LoadFiles, HashSet<string> LoadFilterFileNames, List<Placement> Placements)
         Resolve(CabTable table, string gameRoot, string mapName)
@@ -45,8 +45,8 @@ internal static class SceneSeedResolver
 
         string[] vfsRoots = VfsRoots(gameRoot);
         int rawCount = 0;
-        // 源=scene_state.py:79 placeable — a placement without a verified transform or resolved
-        // asset path isn't geometry and doesn't get placed (not "placed at the origin").
+        // A placement without a usable transform or a resolved asset path isn't geometry and
+        // doesn't get placed (not "placed at the origin").
         var withTransform = new List<Placement>();
         foreach (var p in discover(vfsRoots, mapName))
         {
@@ -62,8 +62,8 @@ internal static class SceneSeedResolver
         Console.Error.WriteLine(
             $"[Ruri.CLI] scene '{mapName}': {rawCount} placements → {withTransform.Count} with transform+asset → {rows.Count} after best-LOD selection");
 
-        // 源=scene_state.py:112-130 resolve_cabs — distinct mesh paths ∪ distinct material paths,
-        // sorted, resolved to hosting CABs; unmatched paths are silently dropped by the resolver.
+        // Distinct mesh paths ∪ distinct material paths, sorted, resolved to hosting CABs;
+        // unmatched paths are silently dropped by the resolver.
         var meshPaths = rows.Select(p => p.AssetPath).ToHashSet(StringComparer.Ordinal);
         var materialPaths = rows.SelectMany(p => p.MaterialAssetPaths).ToHashSet(StringComparer.Ordinal);
         string[] allPaths = meshPaths.Union(materialPaths).OrderBy(p => p, StringComparer.Ordinal).ToArray();
@@ -99,14 +99,14 @@ internal static class SceneSeedResolver
         Console.Error.WriteLine($"[Ruri.CLI] scene manifest: {placements.Count} placements → {manifestPath}");
     }
 
-    // ── best-available-LOD selection, 源=prefab_importer.py:921-985 ────────────────────────────────
+    // ── best-available-LOD selection ────────────────────────────────────────────────────────────────
 
     private static readonly Regex LodSuffixRegex = new(@"_lod(\d+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex VariantSuffixRegex = new(@"_(?:lod\d+|col\d+_[a-z]+\d*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ColSuffixRegex = new(@"_col\d+_", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    /// <summary>源=prefab_importer.py:921-931 _expected_mesh_name — the ##subname suffix of a
-    /// multi-object FBX path, or the bare file stem, lowercased.</summary>
+    /// <summary>The identity of a mesh within a placement: the ##subname suffix of a multi-object
+    /// FBX path, or the bare file stem, lowercased.</summary>
     private static string ExpectedMeshName(string assetPath)
     {
         int hashIndex = assetPath.IndexOf("##", StringComparison.Ordinal);
@@ -119,8 +119,8 @@ internal static class SceneSeedResolver
         return (dotIndex >= 0 ? leaf[..dotIndex] : leaf).ToLowerInvariant();
     }
 
-    /// <summary>源=prefab_importer.py:939-951 _lod_rank — lod0=0, lodN=N, unsuffixed=-1 (as good as
-    /// lod0), collision meshes rank 1000 (tried only when nothing else exists in the group).</summary>
+    /// <summary>LOD priority of a mesh name: lod0=0, lodN=N, unsuffixed=-1 (as good as lod0),
+    /// collision meshes rank 1000 (picked only when nothing else exists in the group).</summary>
     private static int LodRank(string assetPath)
     {
         string name = ExpectedMeshName(assetPath);
@@ -132,19 +132,18 @@ internal static class SceneSeedResolver
         return ColSuffixRegex.IsMatch(name) ? 1000 : -1;
     }
 
-    /// <summary>源=prefab_importer.py:954-970 _lod_group_key — (rounded position, variant-stripped
-    /// stem) identifies the parallel sibling entities placed for the SAME instance at different
-    /// detail levels; position rounded to collapse float noise between identically-placed siblings.</summary>
+    /// <summary>Group key (rounded position, variant-stripped stem) that identifies the parallel
+    /// sibling entities placed for the SAME instance at different detail levels; position rounded to
+    /// collapse float noise between identically-placed siblings.</summary>
     private static (double, double, double, string) LodGroupKey(Placement row)
     {
         string stem = VariantSuffixRegex.Replace(ExpectedMeshName(row.AssetPath), "");
         return (Math.Round(row.Px, 2), Math.Round(row.Py, 2), Math.Round(row.Pz, 2), stem);
     }
 
-    /// <summary>源=prefab_importer.py:973-985 select_best_lod — group placements into per-instance
-    /// LOD-sibling sets, keep only the best-ranked member of each (first wins on rank ties, matching
-    /// Python min semantics); falls back to whatever detail level actually shipped when no lod0
-    /// sibling exists at all.</summary>
+    /// <summary>Group placements into per-instance LOD-sibling sets and keep only the best-ranked
+    /// member of each (first wins on rank ties); falls back to whatever detail level actually
+    /// shipped when no lod0 sibling exists at all.</summary>
     private static List<Placement> SelectBestLod(List<Placement> rows)
     {
         var groupOrder = new List<(double, double, double, string)>();

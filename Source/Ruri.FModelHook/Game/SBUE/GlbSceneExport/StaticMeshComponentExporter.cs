@@ -10,9 +10,9 @@ using FModel.Views.Snooper;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Full-fidelity port of FModel Renderer.ProcessMesh (Renderer.cs:586-674) for
-// static-mesh-shaped placements. Three shapes are recognised, in declining
-// priority so the legacy single-property fallback never claims an ISM:
+// Full-fidelity handling of static-mesh-shaped placements, following FModel
+// Renderer.ProcessMesh (Renderer.cs:586-674). Three shapes are recognised, in
+// declining priority so the single-property fallback never claims an ISM:
 //
 //   (1) UInstancedStaticMeshComponent (and its HISM/HLOD/Grass subclasses)
 //       — fan out into PerInstanceSMData[] and call AddRigidMesh once per
@@ -32,8 +32,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // the spline-deformed mesh slice geometry. The dispatch table lists the
 // spline exporter BEFORE this one so spline placements never reach here.
 //
-// Material handling (the previously logged "271 components skipped"
-// regression): OverrideMaterials is now resolved into a parallel list of
+// Material handling: OverrideMaterials is resolved into a parallel list of
 // loaded UMaterialInterface? + their PathNames. The list is fed into
 // GlbSceneContext.AddRigidMesh which (a) uses the PathName signature as part
 // of the mesh-share cache key — so an overridden placement does not collide
@@ -136,10 +135,10 @@ public sealed class StaticMeshComponentExporter : IComponentExporter
     // Loads the OverrideMaterials array into (a) UMaterialInterface? slots so
     // GlbSceneContext.BuildMesh can substitute per-section materials, and
     // (b) a parallel string list of PathNames the cache key uses to keep the
-    // (mesh, overrides) tuple unique. Building both at the same site is the
-    // gotcha-list fix for "write-side / read-side key inconsistency": there
-    // is exactly ONE place that derives the cache signature from the override
-    // material list, so a divergence is impossible by construction.
+    // (mesh, overrides) tuple unique. Building both at the same site prevents
+    // any write-side / read-side key inconsistency: there is exactly ONE place
+    // that derives the cache signature from the override material list, so a
+    // divergence is impossible by construction.
     private static void BuildOverrideMaterialLists(
         UObject component,
         out IReadOnlyList<UMaterialInterface?> overrideMaterials,
@@ -187,7 +186,7 @@ public sealed class StaticMeshComponentExporter : IComponentExporter
         return false;
     }
 
-    // 1:1 of Renderer.cs:565-570: prefer the template's StaticMesh field, fall
+    // Matches Renderer.cs:565-570: prefer the template's StaticMesh field, fall
     // back to the GeometryCollection RestCollection's first proxy mesh. The
     // out-parameter is non-null only when a usable mesh with materials is
     // resolved, mirroring the `m is { Materials.Length: > 0 }` check at

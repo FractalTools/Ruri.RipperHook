@@ -29,16 +29,14 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //       PNG bytes onto the BaseColor / Normal / MetallicRoughness / Emissive
 //       channels via `MaterialChannel.SetTexture`. Geometry stays untouched.
 //
-// Ground truth references:
-//   * CUE4Parse-Conversion/Materials/MaterialExporter2.cs:13-72 — shape of the
-//     JSON sidecar + decode/encode call pattern this writer mirrors.
-//   * CUE4Parse-Conversion/IExporter.cs:23-53 — `ExporterOptions` is the
-//     options struct each `MaterialExporter2.Options` member carries; we read
-//     it back to drive the same MaterialFormat / TextureFormat / Platform /
-//     ExportHdrTexturesAsHdr knobs the original construction used.
-//   * CUE4Parse-Conversion/Meshes/glTF/Gltf.cs:200-210 — `tex.Name` ->
-//     `MaterialBuilder.Name` -> `Schema2.Material.Name` propagation that the
-//     embed pass keys on.
+// Interop with CUE4Parse-Conversion:
+//   * The JSON sidecar shape and decode/encode call pattern follow
+//     MaterialExporter2.
+//   * `ExporterOptions` is the options struct each `MaterialExporter2.Options`
+//     member carries; it is read back to drive the same MaterialFormat /
+//     TextureFormat / Platform / ExportHdrTexturesAsHdr knobs.
+//   * Gltf propagates `tex.Name` -> `MaterialBuilder.Name` ->
+//     `Schema2.Material.Name`, which the embed pass keys on.
 public sealed class MaterialTextureWriter
 {
     // Reflection handle for `MaterialExporter2._materialData`. The field is

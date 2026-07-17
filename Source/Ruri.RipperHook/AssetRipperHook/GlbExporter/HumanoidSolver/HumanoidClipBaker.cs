@@ -9,12 +9,11 @@ namespace Ruri.RipperHook.GlbExporter;
 
 /// <summary>
 /// Bakes a humanoid clip's muscle/root float curves into per-bone glTF rotation/translation
-/// tracks, sampled at the clip's SampleRate. Sampling and composition are a 1:1 port of the
-/// validated Blender-side baker (RuriRipperImporter/animation_builder.py `_bake_muscles`):
-/// every driven bone -- hips included -- gets its FULL absolute local transform for the frame
-/// directly (see AvatarMuscleReferential.LocalRotation/BodyTransform -- neither is a delta, and
-/// neither composes with the prefab rest), and the extracted root motion (MotionT/MotionQ) is
-/// baked onto the animator root node so the composed total always equals RootT/RootQ.
+/// tracks, sampled at the clip's SampleRate. Every driven bone -- hips included -- gets its
+/// FULL absolute local transform for the frame directly (see
+/// AvatarMuscleReferential.LocalRotation/BodyTransform -- neither is a delta, and neither
+/// composes with the prefab rest), and the extracted root motion (MotionT/MotionQ) is baked
+/// onto the animator root node so the composed total always equals RootT/RootQ.
 /// </summary>
 public static class HumanoidClipBaker
 {
@@ -47,7 +46,7 @@ public static class HumanoidClipBaker
         }
         int frameCount = Math.Max(1, (int)MathF.Round(duration * sampleRate) + 1);
 
-        // 每通道每帧只求值一次,全体骨骼共享(animation_builder.py:244-248)。
+        // 每通道每帧只求值一次,全体骨骼共享。
         Dictionary<string, int> channelIndex = new(channels.Count, StringComparer.Ordinal);
         for (int i = 0; i < channels.Count; i++)
         {
@@ -140,8 +139,7 @@ public static class HumanoidClipBaker
         {
             // BodyLocalQuats IS the bone's absolute local rotation for the frame already,
             // WITH TwistSolve's parent<->child redistribution applied -- not a delta, not
-            // composed with rest (animation_builder.py's _bake_muscles, non-hips branch,
-            // current revision).
+            // composed with rest (non-hips branch).
             Quaternion animLocal = bodyQuatsByFrame[f][bone.Slot];
             rotation.SetPoint(f / sampleRate, GlbCoordinateConversion.ToGltfQuaternionConvert(animLocal));
         }
@@ -166,8 +164,7 @@ public static class HumanoidClipBaker
         {
             int frame = f;
             // BodyTransform IS the hips' absolute local transform for the frame already --
-            // not a delta, not composed with rest (animation_builder.py's _bake_muscles,
-            // is_hips branch, current revision).
+            // not a delta, not composed with rest (is_hips branch).
             var result = referential.BodyTransform(
                 attribute => channelIndex.TryGetValue(attribute, out int c) ? values[frame, c] : null,
                 keepPositionXz, keepPositionY, keepOrientation);
@@ -281,9 +278,8 @@ public static class HumanoidClipBaker
 }
 
 /// <summary>
-/// A single scalar Unity AnimationCurve channel with cubic-Hermite evaluation
-/// (1:1 with RuriRipperImporter/animation_builder.py:29-76 `_HermiteCurve`): keys sorted by time,
-/// clamped outside the key range, slopes scaled by the segment length.
+/// A single scalar Unity AnimationCurve channel with cubic-Hermite evaluation:
+/// keys sorted by time, clamped outside the key range, slopes scaled by the segment length.
 /// </summary>
 public sealed class HermiteCurve
 {

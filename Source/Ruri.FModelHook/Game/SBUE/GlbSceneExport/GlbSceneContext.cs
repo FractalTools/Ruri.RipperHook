@@ -32,17 +32,16 @@ using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, Vert
 // of which families show up.
 //
 // Mesh-sharing key (critical correctness fix):
-// the verified FModel Renderer caches by `mesh.LightingGuid` and then RUN-PATCHES
+// the FModel Renderer caches by `mesh.LightingGuid` and then RUN-PATCHES
 // the cached model's materials via `OverrideMaterials` per placement
-// (Renderer.cs:642-652). The old port shared by LightingGuid only, so the first
-// caller's material set won the cache and every subsequent placement that
-// carried OverrideMaterials inherited the wrong materials — the
-// `_overrideMaterialSkips` counter in the original implementation logged
-// exactly that bug. Since we cannot mutate the shared MeshBuilder per-
-// placement, the only correct fix is to fold the override material set into
-// the cache key: identical mesh + identical material override list = share;
-// any difference = a fresh MeshBuilder. That keeps the byte-for-byte equality
-// with `Gltf.ExportStaticMeshSections` and still instances heavily when
+// (Renderer.cs:642-652). Sharing by LightingGuid alone lets the first
+// caller's material set win the cache, so every subsequent placement that
+// carries OverrideMaterials inherits the wrong materials. Since we cannot
+// mutate the shared MeshBuilder per-placement, the only correct fix is to
+// fold the override material set into the cache key: identical mesh +
+// identical material override list = share; any difference = a fresh
+// MeshBuilder. That keeps the byte-for-byte equality with
+// `Gltf.ExportStaticMeshSections` and still instances heavily when
 // nothing overrides.
 //
 // Part flushing: SharpGLTF's `ToGltf2()` materialises one Schema2 node per
@@ -90,9 +89,9 @@ public sealed class GlbSceneContext
     private readonly List<PendingLight> _pendingLights = new();
 
     // Cameras have the SAME problem as lights in this SharpGLTF build:
-    // SceneBuilder.AddCamera is a silent no-op (ToGltf2 emits zero LogicalCameras
-    // — verified by probe). So cameras are buffered too and emitted at the Schema2
-    // layer alongside the lights in the dedicated final part.
+    // SceneBuilder.AddCamera is a silent no-op (ToGltf2 emits zero LogicalCameras).
+    // So cameras are buffered too and emitted at the Schema2 layer alongside
+    // the lights in the dedicated final part.
     private readonly List<PendingCamera> _pendingCameras = new();
 
     private string _outputBasePath = string.Empty;
@@ -131,15 +130,15 @@ public sealed class GlbSceneContext
     // Append a static-mesh placement to the in-flight scene. Returns true if
     // the call added a node (false = mesh failed to build, e.g. no LODs).
     //
-    // `overrideMaterials` is the per-section override array the verified
-    // Renderer reads off the component (Renderer.cs:642-652), already loaded
-    // by the caller. Nulls in the array mean "this slot keeps the section's
-    // base material". The path-name list passed in tandem is precomputed by
-    // the caller and used as the cache key — so identical (mesh, override
-    // list) tuples share a single MeshBuilder, while any different override
-    // list builds a fresh one. This is the gotcha-list-cited fix for the
-    // write/read key inconsistency: cache write and lookup use the *same*
-    // formula because the caller pre-computes the path-name list once.
+    // `overrideMaterials` is the per-section override array the Renderer reads
+    // off the component (Renderer.cs:642-652), already loaded by the caller.
+    // Nulls in the array mean "this slot keeps the section's base material".
+    // The path-name list passed in tandem is precomputed by the caller and
+    // used as the cache key — so identical (mesh, override list) tuples share
+    // a single MeshBuilder, while any different override list builds a fresh
+    // one. This closes the write/read key inconsistency: cache write and
+    // lookup use the *same* formula because the caller pre-computes the
+    // path-name list once.
     public bool AddRigidMesh(
         UStaticMesh mesh,
         IReadOnlyList<UMaterialInterface?> overrideMaterials,
@@ -155,8 +154,8 @@ public sealed class GlbSceneContext
         if (meshBuilder == null)
         {
             // BuildMesh failed — the mesh has no LODs / no sections. Mirror
-            // the verified Renderer behaviour (`if (meshBuilder == null) return;`
-            // in OLD AddMeshInstance): swallow the placement silently. The
+            // the Renderer behaviour (`if (meshBuilder == null) return;` in
+            // AddMeshInstance): swallow the placement silently. The
             // BuildMesh path already wrote its own [GlbScene] log entry naming
             // the mesh, so the audit trail is intact. We do NOT record this
             // as manifest.dropped because (a) per-instance placements off an
@@ -229,8 +228,8 @@ public sealed class GlbSceneContext
     // Emit every buffered punctual light into a dedicated final .glb part at the
     // Schema2 layer (one node per light carrying a PunctualLight). Called by
     // WorldGlbExporter AFTER the mesh render pass + final FlushBatch, so the
-    // light set is complete and lands in exactly one file. Validated end-to-end:
-    // an empty SceneBuilder.ToGltf2() yields a model with a default scene, and
+    // light set is complete and lands in exactly one file. An empty
+    // SceneBuilder.ToGltf2() yields a model with a default scene, and
     // ModelRoot.CreatePunctualLight + Node.PunctualLight produce a glb whose JSON
     // chunk carries the KHR_lights_punctual extension.
     public void WritePendingLightsAndCameras()
@@ -312,13 +311,13 @@ public sealed class GlbSceneContext
         _batchInstanceCount = 0;
     }
 
-    // Single-mesh build: 1:1 port of the old WorldGlbExporter.BuildMesh path
-    // plus the override-material substitution at material-name level so each
-    // distinct (mesh, overrides) tuple emits a distinct MeshBuilder. Geometry
-    // bytes are still produced by Gltf.ExportStaticMeshSections, so vertex/
-    // index/UV bytes remain identical to FModel's "Save Model" output.
+    // Single-mesh build plus the override-material substitution at material-
+    // name level so each distinct (mesh, overrides) tuple emits a distinct
+    // MeshBuilder. Geometry bytes are still produced by
+    // Gltf.ExportStaticMeshSections, so vertex/index/UV bytes remain identical
+    // to FModel's "Save Model" output.
     //
-    // The override-material substitution mirrors the verified Renderer path
+    // The override-material substitution follows the Renderer path
     // (Renderer.cs:642-652): index by `section.MaterialIndex`, bounds-check
     // against the override array (and the section count), fall through if
     // the cell is null or not a UMaterialInterface — in which case the
@@ -346,12 +345,12 @@ public sealed class GlbSceneContext
         {
             CMeshSection baseSection = sections[sectionIndex];
 
-            // 1:1 of Renderer.cs:646-650: matIndex must fit inside the mesh's
-            // Materials array AND the override array. The earlier port keyed
-            // the upper bound on the section count, which is divergent — a
-            // mesh with more material slots than sections (common for atlas-
-            // packed meshes) would skip valid overrides. Use the mesh's
-            // Materials.Length as the renderer does.
+            // Matches Renderer.cs:646-650: matIndex must fit inside the mesh's
+            // Materials array AND the override array. Keying the upper bound on
+            // the section count would be divergent — a mesh with more material
+            // slots than sections (common for atlas-packed meshes) would skip
+            // valid overrides. Use the mesh's Materials.Length as the renderer
+            // does.
             UMaterialInterface? overrideMaterial = ResolveOverrideMaterial(
                 baseSection.MaterialIndex,
                 meshMaterialSlotCount,
@@ -401,7 +400,7 @@ public sealed class GlbSceneContext
         return meshBuilder;
     }
 
-    // 1:1 of Renderer.cs:646-650 selection: bounds-check matIndex against
+    // Matches Renderer.cs:646-650 selection: bounds-check matIndex against
     // both the mesh's Materials slot count AND the override array length,
     // then read the override slot. Renderer.cs returns the slot loaded as
     // UMaterialInterface or skips; here we pre-loaded so the entry is
@@ -511,11 +510,10 @@ public sealed class GlbSceneContext
 
     // Shared mesh cache key: LightingGuid + ordered override material PathNames.
     // Identical mesh + identical override list = share; any difference = a
-    // fresh MeshBuilder. This is the gotcha-list fix for `agent migration
-    // index-key inconsistency`: both sides of the cache (write/read) compute
-    // the key the same way (the resolver builds the override-name list once
-    // per placement and the context uses it both as cache key and as the
-    // input to BuildMesh's override loop, so a write-side miss is impossible).
+    // fresh MeshBuilder. Both sides of the cache (write/read) compute the key
+    // the same way (the resolver builds the override-name list once per
+    // placement and the context uses it both as cache key and as the input to
+    // BuildMesh's override loop, so a write-side miss is impossible).
     private readonly struct MeshShareKey : IEquatable<MeshShareKey>
     {
         private readonly CUE4Parse.UE4.Objects.Core.Misc.FGuid _lightingGuid;
