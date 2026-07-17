@@ -37,13 +37,45 @@ public static class RipperBlenderBridge
     /// is by the time a caller can reach this static class at all. This is what an in-process caller (the
     /// Blender addon's Hook picker) should populate its selectable hook list from, instead of hardcoding
     /// or free-typing ids.
+    /// Includes every <c>AlsoCoversVersions</c> alias id (via <see cref="Ruri.Hook.RuriHook.BuildHookIds"/>,
+    /// same as the CLI's --list-hooks) -- e.g. the 1.2.4 class covering byte-identical 1.3.3 answers to
+    /// BOTH "EndField_1.2.4" and "EndField_1.3.3". Listing only primaries made the addon's pre-ticked
+    /// "EndField_1.3.3" default silently resolve to zero hooks after the alias refactor ("No VFS game
+    /// hook active" on Discover Maps).
     /// </summary>
     public static string[] ListAvailableHooks() =>
         Ruri.Hook.RuriHook.GetAvailableHooks()
-            .Select(h => $"{h.Attribute.GameName}_{h.Attribute.Version}")
+            .SelectMany(h => Ruri.Hook.RuriHook.BuildHookIds(h.Attribute))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    /// <summary>
+    /// Canonicalize a caller-supplied hook id to the exact id <see cref="Ruri.Hook.RuriHook"/> answers to,
+    /// accepting '.'/'_' punctuation variants and <c>AlsoCoversVersions</c> aliases -- the same resolution
+    /// the CLI's --hook option performs. Unknown ids pass through unchanged (ApplyHooks then simply
+    /// enables nothing for them, matching previous behavior).
+    /// </summary>
+    private static string NormalizeHookId(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return id;
+        }
+        static string Canonicalize(string s) => s.Replace('.', '_');
+        string target = Canonicalize(id);
+        foreach ((_, Ruri.Hook.Attributes.GameHookAttribute attribute) in Ruri.Hook.RuriHook.GetAvailableHooks())
+        {
+            foreach (string candidate in Ruri.Hook.RuriHook.BuildHookIds(attribute))
+            {
+                if (string.Equals(Canonicalize(candidate), target, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+        }
+        return id;
+    }
 
     /// <summary>
     /// One-call bootstrap: assembly resolver, a stderr logger sink (AssetRipper logging is a black hole
@@ -65,7 +97,7 @@ public static class RipperBlenderBridge
         HookConfig config = new();
         foreach (string id in enabledHookIds)
         {
-            config.EnabledHooks.Add(id);
+            config.EnabledHooks.Add(NormalizeHookId(id));
         }
         Bootstrap.ApplyHooks(config);
     }
