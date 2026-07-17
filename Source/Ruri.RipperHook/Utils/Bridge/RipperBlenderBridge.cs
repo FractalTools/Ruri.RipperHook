@@ -76,109 +76,79 @@ public static class RipperBlenderBridge
     /// <summary>Load an existing cabmap file. Returns an opaque handle for <see cref="EnumerateRows"/>/<see cref="ImportCabs"/>.</summary>
     public static CabMapHandle LoadCabMap(string cabMapPath)
     {
-        (string baseFolder, Dictionary<string, CabMap.Entry> entries) = CabMap.Load(cabMapPath);
-        return new CabMapHandle(cabMapPath, baseFolder, entries);
-    }
-
-    /// <summary>Per-row cap on the joined Container display/search string. A non-bundled
-    /// resources.assets row can carry tens of thousands of harvested asset names (see
-    /// GameBundleHook.HarvestAssetNames) -- joining ALL of them into every row's search string would
-    /// multiply the browser's memory by orders of magnitude for no search benefit past this point.
-    /// The truncation is explicit in the string itself (never silent), and the full name list stays
-    /// intact in the map/Entry for programmatic use.</summary>
-    private const int MaxContainerJoinChars = 16384;
-
-    /// <summary>Every CAB in the map, projected to the flat browsable row shape (Name/Container/Type/Source/Deps).</summary>
-    public static CabRowDto[] EnumerateRows(CabMapHandle map)
-    {
-        ArgumentNullException.ThrowIfNull(map);
-        CabRowDto[] rows = new CabRowDto[map.Entries.Count];
-        int i = 0;
-        foreach ((string cab, CabMap.Entry entry) in map.Entries)
-        {
-            rows[i++] = new CabRowDto(
-                Cab: cab,
-                Name: DisplayName(entry.ContainerPaths),
-                Container: JoinContainerPaths(entry.ContainerPaths),
-                TypeNames: TypeNames(entry.ClassIds),
-                Source: entry.RelativePath,
-                DependencyCount: entry.Dependencies.Count);
-        }
-        return rows;
+        return new CabMapHandle(cabMapPath, CabMap.LoadTable(cabMapPath));
     }
 
     /// <summary>
-    /// <see cref="EnumerateRows"/> in ONE interop crossing: the same per-row fields, packed as six
-    /// parallel columns -- five NUL-joined strings plus a little-endian int32 dependency-count
-    /// buffer. A pythonnet caller reading 237k <see cref="CabRowDto"/>s pays ~1.4M reflected
-    /// property accesses (measured: 1.5s of a 2.3s cabmap load); splitting five strings and one
-    /// numpy frombuffer is C-speed on both sides. NUL is the join character because it cannot
-    /// appear in any of these values (NTFS forbids it in file names, Unity never serializes it
-    /// inside container paths, and TypeNames is built from a fixed enum) -- newline CAN legally
-    /// appear in an NTFS name, so it is not safe here.
+    /// The row table as the RAW columnar buffers the map was loaded as -- ZERO per-row work on
+    /// either side of the interop boundary. The python consumer decodes each blob once, derives
+    /// display strings (leaf name, joined container list, type names) lazily for just the ~500
+    /// rows in its visible window, and runs its quick-search directly over the blobs' text.
+    /// Offset buffers are little-endian int32; ClassIdNames maps every distinct class id present
+    /// to its <see cref="ClassIDType"/> name ("id=Name" per line).
     /// </summary>
-    public static PackedRowsDto EnumerateRowsPacked(CabMapHandle map)
+    public static PackedTableDto EnumerateTablePacked(CabMapHandle map)
     {
         ArgumentNullException.ThrowIfNull(map);
-        int count = map.Entries.Count;
-        StringBuilder cabs = new(count * 40);
-        StringBuilder names = new(count * 24);
-        StringBuilder containers = new(count * 64);
-        StringBuilder typeNames = new(count * 24);
-        StringBuilder sources = new(count * 32);
-        byte[] depCounts = new byte[count * sizeof(int)];
-        int i = 0;
-        foreach ((string cab, CabMap.Entry entry) in map.Entries)
+        CabTable table = map.Table;
+        int count = table.Count;
+
+        // Entry-only cab column: offsets [0..Count] index the shared blob whose tail may hold
+        // phantom names -- slice the blob to the last real entry's end.
+        byte[] cabBlob = new byte[table.CabOffsets[count]];
+        Buffer.BlockCopy(table.CabBlob, 0, cabBlob, 0, cabBlob.Length);
+
+        int[] dependencyCounts = new int[count];
+        for (int id = 0; id < count; id++)
         {
-            if (i > 0)
-            {
-                cabs.Append('\0');
-                names.Append('\0');
-                containers.Append('\0');
-                typeNames.Append('\0');
-                sources.Append('\0');
-            }
-            cabs.Append(cab);
-            names.Append(DisplayName(entry.ContainerPaths));
-            containers.Append(JoinContainerPaths(entry.ContainerPaths));
-            typeNames.Append(TypeNames(entry.ClassIds));
-            sources.Append(entry.RelativePath);
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
-                depCounts.AsSpan(i * sizeof(int)), entry.Dependencies.Count);
-            i++;
+            dependencyCounts[id] = table.DependencyCount(id);
         }
-        return new PackedRowsDto(count, cabs.ToString(), names.ToString(), containers.ToString(),
-            typeNames.ToString(), sources.ToString(), depCounts);
+
+        HashSet<int> distinctClassIds = new();
+        foreach (int classId in table.ClassIdsFlat)
+        {
+            distinctClassIds.Add(classId);
+        }
+        StringBuilder classNames = new();
+        foreach (int classId in distinctClassIds)
+        {
+            classNames.Append(classId).Append('=')
+                .Append(Enum.IsDefined(typeof(ClassIDType), classId)
+                    ? ((ClassIDType)classId).ToString() : classId.ToString())
+                .Append('\n');
+        }
+
+        return new PackedTableDto(
+            Count: count,
+            CabBlob: cabBlob,
+            CabOffsets: IntsToBytes(table.CabOffsets, count + 1),
+            SourceBlob: table.RelativePathBlob,
+            SourceOffsets: IntsToBytes(table.RelativePathOffsets, count + 1),
+            PathBlob: table.ContainerPathBlob,
+            PathOffsets: IntsToBytes(table.ContainerPathOffsets, table.ContainerPathOffsets.Length),
+            PathStarts: IntsToBytes(table.ContainerPathStarts, count + 1),
+            ClassFlat: IntsToBytes(table.ClassIdsFlat, table.ClassIdsFlat.Length),
+            ClassStarts: IntsToBytes(table.ClassIdStarts, count + 1),
+            DependencyCounts: IntsToBytes(dependencyCounts, count),
+            ClassIdNames: classNames.ToString());
     }
 
-    private static string JoinContainerPaths(IReadOnlyList<string> containerPaths)
+    private static byte[] IntsToBytes(int[] values, int count)
     {
-        StringBuilder sb = new();
-        for (int i = 0; i < containerPaths.Count; i++)
-        {
-            if (i > 0)
-            {
-                sb.Append("  |  ");
-            }
-            if (sb.Length + containerPaths[i].Length > MaxContainerJoinChars)
-            {
-                sb.Append($"…(+{containerPaths.Count - i} more names)");
-                break;
-            }
-            sb.Append(containerPaths[i]);
-        }
-        return sb.ToString();
+        byte[] bytes = new byte[count * sizeof(int)];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        return bytes;
     }
 
     /// <summary>Resolve a set of addressable container paths (e.g. <see cref="DiscoverScenePlacements"/>'
     /// <see cref="ScenePlacementDto.AssetPath"/> values) to the CAB names that host them, via
-    /// <see cref="CabMap.ResolveCabsForPaths(Dictionary{string, CabMap.Entry}, IEnumerable{string})"/>.
+    /// <see cref="CabMap.ResolveCabsForPaths(CabTable, IEnumerable{string})"/>.
     /// Paths with no match are silently skipped -- compare the input count against the result to check
     /// coverage.</summary>
     public static string[] ResolveCabsForPaths(CabMapHandle map, string[] containerPaths)
     {
         ArgumentNullException.ThrowIfNull(map);
-        return CabMap.ResolveCabsForPaths(map.Entries, containerPaths);
+        return CabMap.ResolveCabsForPaths(map.Table, containerPaths);
     }
 
     /// <summary>Pure in-memory dependency-closure CAB-name enumeration for the given seed CABs -- see
@@ -189,7 +159,7 @@ public static class RipperBlenderBridge
     public static string[] ResolveClosureCabNames(CabMapHandle map, string[] seedCabNames)
     {
         ArgumentNullException.ThrowIfNull(map);
-        return CabMap.ResolveClosureCabNames(map.Entries, seedCabNames);
+        return CabMap.ResolveClosureCabNames(map.Table, seedCabNames);
     }
 
     /// <summary>
@@ -218,37 +188,50 @@ public static class RipperBlenderBridge
     public static string[] FindAssociatedAvatarCabs(CabMapHandle map, string clipCabName, int maxCandidates = 4)
     {
         ArgumentNullException.ThrowIfNull(map);
-        Dictionary<string, List<string>> reverse = map.ReverseIndex;
+        CabTable table = map.Table;
+        if (!table.CabToId.TryGetValue(clipCabName, out int clipId))
+        {
+            return Array.Empty<string>();
+        }
+        int[][] reverse = table.ReverseAdjacency;
 
         List<string> found = new();
-        HashSet<string> foundSet = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> visited = new(StringComparer.OrdinalIgnoreCase) { clipCabName };
-        Queue<string> queue = new();
-        queue.Enqueue(clipCabName);
+        HashSet<int> foundSet = new();
+        bool[] visited = new bool[table.Count + table.PhantomCount];
+        visited[clipId] = true;
+        Queue<int> queue = new();
+        queue.Enqueue(clipId);
+        int avatarClassId = (int)ClassIDType.Avatar;
         while (queue.Count > 0 && found.Count < maxCandidates)
         {
-            string current = queue.Dequeue();
-            if (!reverse.TryGetValue(current, out List<string>? dependents))
+            int current = queue.Dequeue();
+            foreach (int dependent in reverse[current])
             {
-                continue;
-            }
-            foreach (string dependent in dependents)
-            {
-                if (!visited.Add(dependent))
+                if (visited[dependent])
                 {
                     continue;
                 }
-                foreach (string cab in CabMap.ResolveClosureCabNames(map.Entries, new[] { dependent }))
+                visited[dependent] = true;
+                // Per-dependent forward closure, Avatar hits reported in case-insensitive
+                // name order -- matching the classic implementation, whose per-dependent
+                // scan iterated an alphabetically sorted closure.
+                List<string> hits = new();
+                foreach (int id in table.ClosureIds(new[] { dependent }))
                 {
-                    if (map.Entries.TryGetValue(cab, out CabMap.Entry? entry)
-                        && entry.ClassIds.Contains((int)ClassIDType.Avatar)
-                        && foundSet.Add(cab))
+                    if (id < table.Count && !foundSet.Contains(id)
+                        && table.ClassIds(id).Contains(avatarClassId))
                     {
-                        found.Add(cab);
-                        if (found.Count >= maxCandidates)
-                        {
-                            break;
-                        }
+                        foundSet.Add(id);
+                        hits.Add(table.CabName(id));
+                    }
+                }
+                hits.Sort(StringComparer.OrdinalIgnoreCase);
+                foreach (string hit in hits)
+                {
+                    found.Add(hit);
+                    if (found.Count >= maxCandidates)
+                    {
+                        break;
                     }
                 }
                 if (found.Count >= maxCandidates)
@@ -273,7 +256,7 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(seedCabNames);
 
         (string[] closureFiles, HashSet<string> loadFilterFileNames) =
-            CabMap.ResolveScopedClosure(map.BaseFolder, map.Entries, seedCabNames);
+            CabMap.ResolveScopedClosure(map.Table, seedCabNames);
         if (closureFiles.Length == 0)
         {
             return ClosureResult.Empty;
@@ -299,7 +282,7 @@ public static class RipperBlenderBridge
         InMemoryFileSystem memoryFileSystem = new();
         handler.Export(gameData, "mem:/out", memoryFileSystem);
 
-        return Partition(memoryFileSystem.Files, map.Entries, seedCabNames, clipCapture.Captured);
+        return Partition(memoryFileSystem.Files, map.Table, seedCabNames, clipCapture.Captured);
     }
 
     /// <summary>
@@ -455,7 +438,7 @@ public static class RipperBlenderBridge
             "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
-        Dictionary<string, CabMap.Entry> entries, string[] seedCabNames,
+        CabTable table, string[] seedCabNames,
         List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips)
     {
         Dictionary<string, string> documents = new(StringComparer.Ordinal);
@@ -518,10 +501,11 @@ public static class RipperBlenderBridge
         Dictionary<string, string> seedRoots = new(StringComparer.Ordinal);
         foreach (string seedCab in seedCabNames)
         {
-            if (!entries.TryGetValue(seedCab, out CabMap.Entry? entry))
+            if (!table.CabToId.TryGetValue(seedCab, out int seedId) || seedId >= table.Count)
             {
                 continue;
             }
+            int pathCount = table.ContainerPathCount(seedId);
 
             // Per-asset virtual row ("<hostFile>::<pathID>", see GameBundleHook.ReadFullMetadataRows):
             // its ContainerPaths[0] is the asset's own m_Name and ClassIds[0] its real class. The
@@ -529,9 +513,10 @@ public static class RipperBlenderBridge
             // GetBestName), so stem+class-extension is a same-field round trip, not a heterogeneous
             // display-name guess.
             if (seedCab.Contains(GameBundleHook.AssetRowSeparator, StringComparison.Ordinal)
-                && entry.ContainerPaths.Count == 1 && entry.ClassIds.Count == 1)
+                && pathCount == 1 && table.ClassIds(seedId).Length == 1)
             {
-                string? assetGuid = ResolveAssetRowGuid(pathToGuid, entry.ContainerPaths[0], entry.ClassIds[0]);
+                string? assetGuid = ResolveAssetRowGuid(pathToGuid, table.ContainerPath(seedId, 0),
+                    table.ClassIds(seedId)[0]);
                 if (assetGuid is not null)
                 {
                     seedRoots[seedCab] = assetGuid;
@@ -539,9 +524,9 @@ public static class RipperBlenderBridge
                 continue;
             }
 
-            foreach (string containerPath in entry.ContainerPaths)
+            for (int p = 0; p < pathCount; p++)
             {
-                if (pathToGuid.TryGetValue(NormalizeExportPath(containerPath), out string? guid))
+                if (pathToGuid.TryGetValue(NormalizeExportPath(table.ContainerPath(seedId, p)), out string? guid))
                 {
                     seedRoots[seedCab] = guid;
                     break;
@@ -556,7 +541,7 @@ public static class RipperBlenderBridge
             // (SceneDefinitionProcessor derives the scene name from the file name), so the seed's
             // identity join is "assets/scenes/<cab>.unity" -- still the cabmap's own key, no
             // display-name guessing.
-            if (entry.ContainerPaths.Count == 0
+            if (pathCount == 0
                 && pathToGuid.TryGetValue($"assets/scenes/{seedCab.ToLowerInvariant()}.unity", out string? sceneGuid))
             {
                 seedRoots[seedCab] = sceneGuid;
@@ -674,88 +659,36 @@ public static class RipperBlenderBridge
 
     private static bool IsPng(byte[] bytes) =>
         bytes.Length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
-
-    /// <summary>First container path's leaf name, "(+N)" suffixed when the CAB has more than one; the raw CAB hash has already been substituted by the caller when there are none.</summary>
-    private static string DisplayName(IReadOnlyList<string> containerPaths)
-    {
-        if (containerPaths.Count == 0)
-        {
-            return string.Empty;
-        }
-        string path = containerPaths[0];
-        int slash = path.LastIndexOf('/');
-        string leaf = slash >= 0 ? path[(slash + 1)..] : path;
-        return containerPaths.Count > 1 ? $"{leaf} (+{containerPaths.Count - 1})" : leaf;
-    }
-
-    private static string TypeNames(IReadOnlyList<int> classIds)
-    {
-        List<string> names = new();
-        foreach (int id in classIds)
-        {
-            if (id == (int)ClassIDType.AssetBundle)
-            {
-                continue;
-            }
-            names.Add(Enum.IsDefined(typeof(ClassIDType), id) ? ((ClassIDType)id).ToString() : id.ToString());
-        }
-        return names.Count > 0 ? string.Join(", ", names) : nameof(ClassIDType.AssetBundle);
-    }
 }
 
-/// <summary>Opaque handle to a loaded cabmap — the base folder it was built from plus its CAB entries.</summary>
+/// <summary>Opaque handle to a loaded cabmap — the columnar <see cref="CabTable"/> (blobs +
+/// offsets + int dependency graph; see CabTable.cs for why nothing per-entry is materialized).</summary>
 public sealed class CabMapHandle
 {
     public string CabMapPath { get; }
-    public string BaseFolder { get; }
-    public Dictionary<string, CabMap.Entry> Entries { get; }
+    public CabTable Table { get; }
+    public string BaseFolder => Table.BaseFolder;
 
-    private Dictionary<string, List<string>>? _reverseIndex;
-
-    /// <summary>dependency CAB -> the CABs that directly depend on it, built lazily once per handle
-    /// (~1M edges over a full EndField map, sub-second) -- backs
-    /// <see cref="RipperBlenderBridge.FindAssociatedAvatarCab"/>'s nearest-first reverse walk.</summary>
-    internal Dictionary<string, List<string>> ReverseIndex
-    {
-        get
-        {
-            if (_reverseIndex is null)
-            {
-                Dictionary<string, List<string>> reverse = new(StringComparer.OrdinalIgnoreCase);
-                foreach ((string cab, CabMap.Entry entry) in Entries)
-                {
-                    foreach (string dep in entry.Dependencies)
-                    {
-                        if (!reverse.TryGetValue(dep, out List<string>? list))
-                        {
-                            reverse[dep] = list = new List<string>();
-                        }
-                        list.Add(cab);
-                    }
-                }
-                _reverseIndex = reverse;
-            }
-            return _reverseIndex;
-        }
-    }
-
-    internal CabMapHandle(string cabMapPath, string baseFolder, Dictionary<string, CabMap.Entry> entries)
+    internal CabMapHandle(string cabMapPath, CabTable table)
     {
         CabMapPath = cabMapPath;
-        BaseFolder = baseFolder;
-        Entries = entries;
+        Table = table;
     }
 }
 
-/// <summary>One browsable row — mirrors the WinForms "Virtual Asset List" columns 1:1.</summary>
-public sealed record CabRowDto(string Cab, string Name, string Container, string TypeNames, string Source, int DependencyCount);
-
-/// <summary>The whole row table as six parallel columns in ONE interop crossing — five NUL-joined
-/// strings plus a little-endian int32 dependency-count buffer. See
-/// <see cref="RipperBlenderBridge.EnumerateRowsPacked"/> for why (pythonnet per-property access
-/// dominates a per-DTO enumeration at this row count).</summary>
-public sealed record PackedRowsDto(int Count, string Cabs, string Names, string Containers,
-    string TypeNames, string Sources, byte[] DependencyCounts);
+/// <summary>The row table as RAW columnar buffers (UTF-8 blobs + little-endian int32 offset/range
+/// tables), straight from the loaded <see cref="CabTable"/> -- see
+/// <see cref="RipperBlenderBridge.EnumerateTablePacked"/>. Display columns (leaf name, joined
+/// container string, type names) are deliberately absent: the consumer derives them lazily for
+/// its visible window only.</summary>
+public sealed record PackedTableDto(
+    int Count,
+    byte[] CabBlob, byte[] CabOffsets,
+    byte[] SourceBlob, byte[] SourceOffsets,
+    byte[] PathBlob, byte[] PathOffsets, byte[] PathStarts,
+    byte[] ClassFlat, byte[] ClassStarts,
+    byte[] DependencyCounts,
+    string ClassIdNames);
 
 /// <summary>One file inside the VFS, as returned by <see cref="RipperBlenderBridge.EnumerateVfsFiles"/> — its
 /// exact original name (the lookup key <see cref="RipperBlenderBridge.ExtractVfsFile"/> takes), its

@@ -21,16 +21,13 @@ namespace Ruri.RipperHook.CabMapping;
 ///   * <see cref="ResolveScopedClosure"/> — same as ResolveByNames' closure step, but seeded directly
 ///     by known CAB names (no regex) — what a Blender-side browser selection resolves through.
 ///
-/// Format RCM3: magic+version, base-folder, count, then per CAB
-/// { cab; relativePath; entryFileName; depCount; deps[]; classIdCount; classIds[]; pathCount; paths[] }.
-/// <see cref="Load"/> also reads RCM2 (no names — offset field consumed and dropped) and the older
-/// headerless format; those two auto-load the "<c>.names</c>" RNM2 sidecar when present.
+/// Format: RCM4 only -- the columnar layout documented in <see cref="CabTable"/> (UTF-8 blobs +
+/// offset tables + int-indexed dependency graph), loading as one ReadAllBytes plus buffer
+/// slices. A cabmap is a regenerable cache: a format bump means rebuild, never a
+/// multi-format compatibility reader.
 /// </summary>
 public static class CabMap
 {
-    private const uint Magic2 = 0x52434D32; // "RCM2" (legacy: offset field, no inline names)
-    private const uint Magic3 = 0x52434D33; // "RCM3" (self-contained: entry file name + container paths inline)
-
     public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
 
     public static int Build(string rootFolder, string outPath)
@@ -175,76 +172,33 @@ public static class CabMap
         return result;
     }
 
-    public static (string baseFolder, Dictionary<string, Entry> entries) Load(string path)
+    /// <summary>
+    /// Load a cabmap as the columnar <see cref="CabTable"/>: one ReadAllBytes plus buffer
+    /// slices, no per-string parse at all. RCM4 is the ONLY format -- a cabmap is a
+    /// regenerable cache, so a format bump means rebuild, never a compatibility reader.
+    /// </summary>
+    public static CabTable LoadTable(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        string mapDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? AppContext.BaseDirectory;
-        using FileStream stream = File.OpenRead(path);
-        using BinaryReader reader = new(stream, Encoding.UTF8, leaveOpen: false);
-
-        uint magic = stream.Length >= 4 ? reader.ReadUInt32() : 0;
-        bool selfContained = magic == Magic3;
-        bool typed = selfContained || magic == Magic2;
-        if (typed)
+        byte[] file = File.ReadAllBytes(path);
+        if (file.Length < 8 || BitConverter.ToUInt32(file, 0) != CabTable.Magic4)
         {
-            reader.ReadInt32(); // version, reserved
+            throw new InvalidDataException(
+                $"'{path}' is not an RCM4 cabmap -- rebuild it (Build writes RCM4 only).");
         }
-        else
-        {
-            stream.Position = 0; // headerless legacy format: rewind and read base string directly
-        }
-
-        string storedBase = reader.ReadString();
-        string baseFolder = Path.GetFullPath(Path.Combine(mapDir, storedBase));
-
-        int count = reader.ReadInt32();
-        Dictionary<string, Entry> entries = new(count, StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < count; i++)
-        {
-            string cab = reader.ReadString();
-            string relativePath = reader.ReadString();
-            string entryFileName = string.Empty;
-            if (selfContained)
-            {
-                entryFileName = reader.ReadString();
-            }
-            else
-            {
-                reader.ReadInt64(); // RCM2/legacy offset — dead field, consumed and dropped
-            }
-            int depCount = reader.ReadInt32();
-            List<string> deps = new(depCount);
-            for (int j = 0; j < depCount; j++) deps.Add(reader.ReadString());
-
-            List<int> classIds;
-            if (typed)
-            {
-                int classCount = reader.ReadInt32();
-                classIds = new List<int>(classCount);
-                for (int j = 0; j < classCount; j++) classIds.Add(reader.ReadInt32());
-            }
-            else
-            {
-                classIds = [];
-            }
-
-            List<string> containerPaths;
-            if (selfContained)
-            {
-                int pathCount = reader.ReadInt32();
-                containerPaths = new List<string>(pathCount);
-                for (int j = 0; j < pathCount; j++) containerPaths.Add(reader.ReadString());
-            }
-            else
-            {
-                containerPaths = [];
-            }
-            entries[cab] = new Entry(relativePath, entryFileName, deps, classIds, containerPaths);
-        }
-        return (baseFolder, entries);
+        return CabTable.LoadRcm4(path, file);
     }
 
-    /// <summary>True when the map carries its names inline (RCM3) — no sidecar needed.</summary>
+    public static (string baseFolder, Dictionary<string, Entry> entries) Load(string path)
+    {
+        // Classic dictionary API (CLI/GUI resolvers) over the columnar load: correctness
+        // identical, the materialization cost lands only on consumers that genuinely want
+        // the dictionary shape.
+        CabTable table = LoadTable(path);
+        return (table.BaseFolder, table.ToEntries());
+    }
+
+    /// <summary>True when the map carries its names inline — no sidecar needed.</summary>
     public static bool HasInlineNames(Dictionary<string, Entry> entries)
     {
         foreach (Entry entry in entries.Values)
@@ -707,27 +661,103 @@ public static class CabMap
 
     private static void Save(string outPath, string baseFolder, IReadOnlyDictionary<string, Entry> entries)
     {
-        string outDir = Path.GetDirectoryName(Path.GetFullPath(outPath))!;
-        Directory.CreateDirectory(outDir);
-        string relativeBase = Path.GetRelativePath(outDir, baseFolder);
+        // RCM4 (columnar) is the only written format now -- it loads via buffer slices instead
+        // of a per-string walk, stores dependencies as int ids instead of repeated name strings
+        // (the bulk of RCM3's size), and is what the pythonnet bridge hands across unchanged.
+        // Load() still reads every older format.
+        CabTable.FromEntries(baseFolder, new Dictionary<string, Entry>(entries, StringComparer.OrdinalIgnoreCase))
+            .Save(outPath);
+    }
 
-        using FileStream stream = File.Create(outPath);
-        using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
-        writer.Write(Magic3);
-        writer.Write(3); // version
-        writer.Write(relativeBase);
-        writer.Write(entries.Count);
-        foreach ((string cab, Entry e) in entries.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
+    // ── columnar (CabTable) resolver overloads ───────────────────────────────
+    //
+    // Same contracts as the Dictionary-of-Entry overloads above, executed on the int graph:
+    // closure output includes unknown seeds and phantom dependency names exactly like the
+    // classic BFS did (visited.Add happened before the entry lookup), results sorted the same.
+
+    public static string[] ResolveClosureCabNames(CabTable table, IEnumerable<string> seedCabNames)
+    {
+        HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+        List<int> seedIds = new();
+        foreach (string seed in seedCabNames)
         {
-            writer.Write(cab);
-            writer.Write(e.RelativePath);
-            writer.Write(e.EntryFileName);
-            writer.Write(e.Dependencies.Count);
-            foreach (string d in e.Dependencies) writer.Write(d);
-            writer.Write(e.ClassIds.Count);
-            foreach (int c in e.ClassIds) writer.Write(c);
-            writer.Write(e.ContainerPaths.Count);
-            foreach (string p in e.ContainerPaths) writer.Write(p);
+            if (table.CabToId.TryGetValue(seed, out int id))
+            {
+                seedIds.Add(id);
+            }
+            else
+            {
+                names.Add(seed); // unknown seed: classic Bfs still reported it as visited
+            }
         }
+        foreach (int id in table.ClosureIds(seedIds))
+        {
+            names.Add(table.CabName(id));
+        }
+        return names.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public static (string[] Files, HashSet<string> LoadFilterFileNames) ResolveScopedClosure(
+        CabTable table, IEnumerable<string> seedCabNames)
+    {
+        List<int> seedIds = new();
+        foreach (string seed in seedCabNames)
+        {
+            if (table.CabToId.TryGetValue(seed, out int id))
+            {
+                seedIds.Add(id);
+            }
+        }
+        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> loadFilterFileNames = new(StringComparer.OrdinalIgnoreCase);
+        foreach (int id in table.ClosureIds(seedIds))
+        {
+            if (id >= table.Count)
+            {
+                continue; // phantom dependency: no file, no entry name
+            }
+            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.RelativePath(id)));
+            if (File.Exists(full))
+            {
+                resultFiles.Add(full);
+            }
+            string entryFileName = table.EntryFileName(id);
+            if (entryFileName.Length > 0)
+            {
+                loadFilterFileNames.Add(entryFileName);
+            }
+        }
+        return (resultFiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
+                loadFilterFileNames);
+    }
+
+    public static string[] ResolveCabsForPaths(CabTable table, IEnumerable<string> containerPaths)
+    {
+        Dictionary<string, List<int>> index = new(StringComparer.OrdinalIgnoreCase);
+        for (int id = 0; id < table.Count; id++)
+        {
+            int pathCount = table.ContainerPathCount(id);
+            for (int p = 0; p < pathCount; p++)
+            {
+                string key = NormalizeContainerPath(table.ContainerPath(id, p));
+                if (!index.TryGetValue(key, out List<int>? ids))
+                {
+                    index[key] = ids = new List<int>();
+                }
+                ids.Add(id);
+            }
+        }
+        HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in containerPaths)
+        {
+            if (index.TryGetValue(NormalizeContainerPath(path), out List<int>? matches))
+            {
+                foreach (int id in matches)
+                {
+                    cabs.Add(table.CabName(id));
+                }
+            }
+        }
+        return cabs.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 }
