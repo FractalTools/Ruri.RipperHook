@@ -107,6 +107,50 @@ public static class RipperBlenderBridge
         return rows;
     }
 
+    /// <summary>
+    /// <see cref="EnumerateRows"/> in ONE interop crossing: the same per-row fields, packed as six
+    /// parallel columns -- five NUL-joined strings plus a little-endian int32 dependency-count
+    /// buffer. A pythonnet caller reading 237k <see cref="CabRowDto"/>s pays ~1.4M reflected
+    /// property accesses (measured: 1.5s of a 2.3s cabmap load); splitting five strings and one
+    /// numpy frombuffer is C-speed on both sides. NUL is the join character because it cannot
+    /// appear in any of these values (NTFS forbids it in file names, Unity never serializes it
+    /// inside container paths, and TypeNames is built from a fixed enum) -- newline CAN legally
+    /// appear in an NTFS name, so it is not safe here.
+    /// </summary>
+    public static PackedRowsDto EnumerateRowsPacked(CabMapHandle map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        int count = map.Entries.Count;
+        StringBuilder cabs = new(count * 40);
+        StringBuilder names = new(count * 24);
+        StringBuilder containers = new(count * 64);
+        StringBuilder typeNames = new(count * 24);
+        StringBuilder sources = new(count * 32);
+        byte[] depCounts = new byte[count * sizeof(int)];
+        int i = 0;
+        foreach ((string cab, CabMap.Entry entry) in map.Entries)
+        {
+            if (i > 0)
+            {
+                cabs.Append('\0');
+                names.Append('\0');
+                containers.Append('\0');
+                typeNames.Append('\0');
+                sources.Append('\0');
+            }
+            cabs.Append(cab);
+            names.Append(DisplayName(entry.ContainerPaths));
+            containers.Append(JoinContainerPaths(entry.ContainerPaths));
+            typeNames.Append(TypeNames(entry.ClassIds));
+            sources.Append(entry.RelativePath);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+                depCounts.AsSpan(i * sizeof(int)), entry.Dependencies.Count);
+            i++;
+        }
+        return new PackedRowsDto(count, cabs.ToString(), names.ToString(), containers.ToString(),
+            typeNames.ToString(), sources.ToString(), depCounts);
+    }
+
     private static string JoinContainerPaths(IReadOnlyList<string> containerPaths)
     {
         StringBuilder sb = new();
@@ -705,6 +749,13 @@ public sealed class CabMapHandle
 
 /// <summary>One browsable row — mirrors the WinForms "Virtual Asset List" columns 1:1.</summary>
 public sealed record CabRowDto(string Cab, string Name, string Container, string TypeNames, string Source, int DependencyCount);
+
+/// <summary>The whole row table as six parallel columns in ONE interop crossing — five NUL-joined
+/// strings plus a little-endian int32 dependency-count buffer. See
+/// <see cref="RipperBlenderBridge.EnumerateRowsPacked"/> for why (pythonnet per-property access
+/// dominates a per-DTO enumeration at this row count).</summary>
+public sealed record PackedRowsDto(int Count, string Cabs, string Names, string Containers,
+    string TypeNames, string Sources, byte[] DependencyCounts);
 
 /// <summary>One file inside the VFS, as returned by <see cref="RipperBlenderBridge.EnumerateVfsFiles"/> — its
 /// exact original name (the lookup key <see cref="RipperBlenderBridge.ExtractVfsFile"/> takes), its
