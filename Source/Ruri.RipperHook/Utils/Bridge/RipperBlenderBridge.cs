@@ -198,24 +198,23 @@ public static class RipperBlenderBridge
     /// For a CAB that hosts AnimationClips (and typically nothing else), find EVERY CAB carrying an Avatar
     /// (ClassID 90) in the clip's dependency neighborhood, nearest first -- the assets a standalone clip
     /// import co-loads so (a) AssetRipper's own AnimationClipConverter can restore the clips' hashed curve
-    /// paths to real transform-path strings (confirmed against the real game: a clip CAB alone has NO
-    /// dependencies, its exported curve paths come out as "path_0x&lt;CRC32&gt;_&lt;suffix&gt;"
-    /// placeholders; co-seeding the rig-FBX CAB flips every one of them to a full "Root/Bip001/..."
-    /// string, byte-identical to what a whole-character export produces), and (b) the caller can build a
-    /// humanoid muscle retargeter from the rig's REAL Avatar.
+    /// paths to real transform-path strings (a clip CAB alone has NO dependencies, so its exported curve
+    /// paths come out as "path_0x&lt;CRC32&gt;_&lt;suffix&gt;" placeholders; co-seeding the rig-FBX CAB
+    /// resolves every one of them to a full "Root/Bip001/..." transform-path string, matching what a
+    /// whole-character export produces), and (b) the caller can build a humanoid muscle retargeter from
+    /// the rig's REAL Avatar.
     /// Returns ALL candidates (BFS order, capped) rather than the first hit, because the neighborhood
-    /// routinely contains multiple Avatar assets of very different quality -- confirmed against the real
-    /// game: pelica's battle rig neighborhood surfaces a 7KB stub Avatar (empty m_TOS, all-zero m_ID,
-    /// no usable skeleton) BEFORE the real 334KB SK_actor_pelica_01Avatar (full m_TOS + muscle
-    /// referential). WHICH one is usable is a content question the caller answers by trying to build a
-    /// retargeter from each in order -- name/size heuristics here would be exactly the kind of guessing
-    /// this bridge exists to avoid.
-    /// Search shape mirrors the data's real topology (verified via harness): the Avatar is never among the
-    /// clip's reverse dependents themselves (those are the AnimatorController, then the character prefabs)
-    /// -- it lives in the FORWARD closure of those dependents. So: breadth-first over reverse dependents
-    /// (nearest first, pure in-memory cabmap graph), scanning each one's forward closure for Avatar-classed
-    /// CABs. Empty when the clip has no Avatar anywhere in its neighborhood. Cheap: the reverse adjacency
-    /// index is built once per loaded map (lazily, cached on the handle).
+    /// routinely contains multiple Avatar assets of very different quality -- for example a small stub
+    /// Avatar (empty m_TOS, all-zero m_ID, no usable skeleton) may surface before the real full Avatar
+    /// (full m_TOS + muscle setup) a few hops later. WHICH one is usable is a content question the caller
+    /// answers by trying to build a retargeter from each in order -- name/size heuristics here would be
+    /// exactly the kind of guessing this bridge exists to avoid.
+    /// Search shape mirrors the data's dependency topology: the Avatar is never among the clip's reverse
+    /// dependents themselves (those are the AnimatorController, then the character prefabs) -- it lives in
+    /// the FORWARD closure of those dependents. So: breadth-first over reverse dependents (nearest first,
+    /// pure in-memory cabmap graph), scanning each one's forward closure for Avatar-classed CABs. Empty
+    /// when the clip has no Avatar anywhere in its neighborhood. Cheap: the reverse adjacency index is
+    /// built once per loaded map (lazily, cached on the handle).
     /// </summary>
     public static string[] FindAssociatedAvatarCabs(CabMapHandle map, string clipCabName, int maxCandidates = 4)
     {
@@ -245,8 +244,7 @@ public static class RipperBlenderBridge
                 }
                 visited[dependent] = true;
                 // Per-dependent forward closure, Avatar hits reported in case-insensitive
-                // name order -- matching the classic implementation, whose per-dependent
-                // scan iterated an alphabetically sorted closure.
+                // name order so results are deterministic across runs.
                 List<string> hits = new();
                 foreach (int id in table.ClosureIds(new[] { dependent }))
                 {
@@ -343,8 +341,8 @@ public static class RipperBlenderBridge
     /// the exporter actually wrote (including any name-collision uniquification suffix). This is the
     /// cabmap-identity bridge for clips: a clip's CAB container path is its host FBX
     /// ("...a_x_01.fbx") while its exported file is named after the clip's own m_Name
-    /// ("...A_x_ACL.anim") -- confirmed against the real game, the two stems genuinely differ, so no
-    /// path/name normalization can join them after the fact. The asset object itself is the only thing
+    /// ("...A_x_ACL.anim") -- the two stems genuinely differ, so no path/name normalization can join
+    /// them after the fact. The asset object itself is the only thing
     /// that carries both identities (asset.Collection.Name == the cabmap's CAB key), and the export call
     /// is the only point where that asset meets its final output path -- so capture exactly there.
     /// TryCreateCollection mirrors DefaultYamlExporter's body verbatim, just with THIS exporter installed
@@ -432,7 +430,7 @@ public static class RipperBlenderBridge
     /// Extract + decrypt one VFS-packed file's raw bytes by its exact original name (as returned by
     /// <see cref="EnumerateVfsFiles"/>'s <see cref="VfsFileDto.FileName"/>), trying <paramref name="vfsRoots"/>
     /// in priority order with fallback (a hot-update overlay can list a chunk it never duplicated because
-    /// that patch didn't change it; confirmed against the real game -- see EndfieldSceneBridge.cs).
+    /// that patch didn't change it -- see EndfieldSceneBridge.cs).
     /// </summary>
     public static byte[] ExtractVfsFile(string[] vfsRoots, string fileName) =>
         VfsFuncOrThrow(GameBundleHook.ExtractVfsFile)(vfsRoots, fileName);
@@ -459,9 +457,9 @@ public static class RipperBlenderBridge
             .ToArray();
 
     /// <summary>Binary/vtable-level schema-drift diagnostic for <paramref name="mapName"/>'s streaming
-    /// chunks -- one report line per FlatBuffers table type, flagging any type where the live game's
-    /// data declares more fields than our (1.2.4-era) generated bindings know how to read, plus sample
-    /// raw dumps of the extra field bytes. See EndfieldSceneBridge.DiagnoseSchemaDrift's doc comment.</summary>
+    /// chunks -- one report line per FlatBuffers table type, flagging any type where the source data
+    /// declares more fields than the currently-compiled bindings know how to read, plus sample raw
+    /// dumps of the extra field bytes. See EndfieldSceneBridge.DiagnoseSchemaDrift's doc comment.</summary>
     public static string[] DiagnoseSchemaDrift(string[] vfsRoots, string mapName) =>
         VfsFuncOrThrow(GameBundleHook.DiagnoseSchemaDrift)(vfsRoots, mapName);
 
@@ -520,11 +518,11 @@ public static class RipperBlenderBridge
             {
                 // A non-bundled build's GameObject hierarchies (level0/level1/... -- the actual
                 // level + character models) export as SCENE files, not prefabs; without this the
-                // whole scene body silently vanished from the importable roots (confirmed against
-                // a real plain 2019.4 player build: the level closure exported 33 shared SFX
-                // .prefabs and the level itself as Assets/Scenes/level0.unity -- "imported fine",
-                // zero level geometry). A scene document is the same GameObject/Transform/renderer
-                // document stream a .prefab is, so the same importer consumes it.
+                // whole scene body is absent from the importable roots (the level itself exports as
+                // Assets/Scenes/level0.unity alongside any shared SFX .prefabs, so treating only
+                // .prefab as a root would drop all level geometry). A scene document is the same
+                // GameObject/Transform/renderer document stream a .prefab is, so the same importer
+                // consumes it.
                 roots.Add(guid);
                 sceneRoots.Add(guid);
             }
@@ -660,10 +658,10 @@ public static class RipperBlenderBridge
         return extMatch ?? (stemMatches == 1 ? stemMatch : null);
     }
 
-    /// <summary>Normalizes an export-side path (actually "mem:/out\ExportedProject\Assets\beyond\...\x.prefab"
-    /// on Windows -- backslashes throughout, plus an "ExportedProject\" segment neither the cabmap side nor
-    /// the old forward-slash-only doc comment here accounted for; confirmed via a direct dump of
-    /// InMemoryFileSystem.Files' actual keys, not assumed) or a cabmap-side <see cref="CabMap.Entry.ContainerPaths"/>
+    /// <summary>Normalizes an export-side path (on Windows this is
+    /// "mem:/out\ExportedProject\Assets\beyond\...\x.prefab" -- backslashes throughout, plus an
+    /// "ExportedProject\" segment the cabmap side does not carry) or a cabmap-side
+    /// <see cref="CabMap.Entry.ContainerPaths"/>
     /// entry ("assets/beyond/.../x.prefab", forward slashes, no export-root prefix) to the same comparable
     /// key: backslashes normalized to forward slashes first (so "Assets/" search works on both sides
     /// regardless of Path.DirectorySeparatorChar), anchored at "Assets/" (dropping any export root prefix),
@@ -730,9 +728,9 @@ public sealed record VfsFileDto(string FileName, long FileNameHash, string Block
 
 /// <summary>One mesh-bearing entity placement discovered by <see cref="RipperBlenderBridge.DiscoverScenePlacements"/>.
 /// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.
-/// HasTransform false means no ground-truth-verified transform source was found for this entity (see the
-/// method's doc comment); Px..Sz are all zero/identity in that case and callers should treat this as "don't
-/// place," not "place at the origin." MaterialAssetPaths is this entity's own resolved material(s) -- same
+/// HasTransform false means no usable transform source was found for this entity (see the method's doc
+/// comment); Px..Sz are all zero/identity in that case and callers should treat this as "don't place,"
+/// not "place at the origin." MaterialAssetPaths is this entity's own resolved material(s) -- same
 /// hash-LUT source as AssetPath, just the sibling AssetType==1 property entries instead of ==2; empty when
 /// the entity carries none or none resolved.</summary>
 public sealed record ScenePlacementDto(

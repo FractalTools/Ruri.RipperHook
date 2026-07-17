@@ -29,18 +29,15 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //       built during (1). Geometry bytes stay untouched — only the materials
 //       table at the end of the GLB binary header is mutated then re-saved.
 //
-// Ground truth references:
-//   * CUE4Parse-Conversion/Materials/MaterialExporter2.cs:35-46   GetParams +
-//     PathName extraction flow that this class mirrors at register time.
-//   * CUE4Parse-Conversion/Materials/MaterialExporter2.cs:49-72   sidecar JSON
-//     + per-texture decode/encode loop; we reuse the same MaterialData shape
-//     and same package-path-mirroring helper.
-//   * CUE4Parse/UE4/Assets/Exports/Material/CMaterialParams2.cs:46-134   role-
-//     name tables Diffuse[0]/Normals[0]/SpecularMasks[0]/Emissive[0] used to
-//     pick the right texture for each PBR channel.
-//   * CUE4Parse-Conversion/Meshes/glTF/Gltf.cs:200-210   the `material.Name`
-//     binding (Gltf writes `UMaterialInterface.Name`); we use the same key on
-//     the embed pass so the rebind hits the right material.
+// Interop with CUE4Parse-Conversion:
+//   * GetParams + PathName extraction (MaterialExporter2) is reused at register
+//     time.
+//   * The sidecar JSON uses the same MaterialData shape and the same
+//     package-path-mirroring helper as the per-texture decode/encode loop.
+//   * CMaterialParams2 role-name tables Diffuse[0] / Normals[0] /
+//     SpecularMasks[0] / Emissive[0] pick the right texture for each PBR channel.
+//   * Gltf binds `material.Name` (= `UMaterialInterface.Name`); the embed pass
+//     keys on the same name so the rebind hits the right material.
 //
 // Threading contract:
 //   The native texture decoder (BC/ASTC/...) is process-global, with hot paths
@@ -326,11 +323,10 @@ public sealed class GlbMaterialFactory
     // De-dup: `_decodedPngByTexturePathName` keys on texture PathName so a
     // texture shared by ten materials is decoded once.
     //
-    // Ground truth: MaterialExporter2.cs:58-69 single-mip decode is the
-    // upstream's mip-0 path. We extend to "all mips" per the user's "zero
-    // compromise / every byte" requirement; mip-0 byte-equivalence with FModel
-    // is preserved because we feed `texture.GetFirstMipIndex()` as the mip-0
-    // index (same call used internally by `t.Decode(platform)`).
+    // MaterialExporter2's single-mip decode covers the mip-0 path. This extends
+    // it to "all mips" per the "zero compromise / every byte" requirement; mip-0
+    // byte-equivalence is preserved because `texture.GetFirstMipIndex()` is fed
+    // as the mip-0 index (the same call used internally by `t.Decode(platform)`).
     private void DecodeAndCacheAllMips(UTexture2D texture, ExporterOptions options, MaterialEmbedBundle bundle, string roleKey)
     {
         string texturePathName = texture.GetPathName();
@@ -423,15 +419,14 @@ public sealed class GlbMaterialFactory
     // bytes are untouched; only the materials table is rebound and the file is
     // re-serialized.
     //
-    // Implementation choice: we mutate Schema2 materials directly via
+    // Implementation choice: Schema2 materials are mutated directly via
     // `MaterialChannel.SetTexture(int, Image)`, where `Image` is built by
     // `Toolkit.UseImageWithContent(root, new MemoryImage(pngBytes))`. This
-    // path was verified against the SharpGLTF 1.0.0-alpha0023 surface area
-    // shipped with this repo. The MaterialBuilder.WithChannelImage path
-    // documented in the foundation header is the build-time analogue — it is
-    // unreachable here because the MaterialBuilder is constructed inside
-    // `Gltf.ExportStaticMeshSections` (Gltf.cs:209-210) which we cannot
-    // intercept without modifying GlbSceneContext / the ground truth Gltf.cs.
+    // targets the SharpGLTF 1.0.0-alpha0023 surface area used in this repo.
+    // The MaterialBuilder.WithChannelImage path documented in the foundation
+    // header is the build-time analogue — it is unreachable here because the
+    // MaterialBuilder is constructed inside `Gltf.ExportStaticMeshSections`,
+    // which cannot be intercepted without modifying GlbSceneContext / Gltf.cs.
     //
     // Falls back gracefully: a material with no bundle keeps its base-color-
     // only MaterialBuilder output unchanged.
@@ -592,12 +587,11 @@ public sealed class GlbMaterialFactory
         }
         if (!memoryImage.IsValid) return;
 
-        // SharpGLTF dedups identical MemoryImage content (verified against
-        // 1.0.0-alpha0023 — `UseImageWithContent` returns the same Image
-        // when called repeatedly with the same byte sequence), so this is
-        // O(1) extra GLB Image entries per unique texture across all
-        // materials in the part — exactly what we want for a scene with
-        // many materials reusing the same base/normal/etc texture.
+        // SharpGLTF dedups identical MemoryImage content (`UseImageWithContent`
+        // returns the same Image when called repeatedly with the same byte
+        // sequence), so this is O(1) extra GLB Image entries per unique texture
+        // across all materials in the part — exactly what we want for a scene
+        // with many materials reusing the same base/normal/etc texture.
         Image image = model.UseImageWithContent(memoryImage);
         // TEXCOORD index 0 = the primary UV set; matches Gltf.cs:262-267
         // which puts the section's primary UV in slot 0.

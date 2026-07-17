@@ -23,7 +23,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //                     SceneTransform.InstanceTransform without re-walking.
 //   OwnerActor      — the placing actor (AStaticMeshActor / AInstancedFoliageActor
 //                     / BP_Boulder_C / ...). Needed by the static-mesh path
-//                     because the verified Renderer.ProcessMesh reads
+//                     because Renderer.ProcessMesh reads
 //                     `actor.bMirrored` and per-actor `TextureData[]` off the
 //                     owner, not the component (Renderer.cs:604/606).
 //

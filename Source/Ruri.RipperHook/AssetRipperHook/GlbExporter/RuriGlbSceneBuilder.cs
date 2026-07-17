@@ -173,8 +173,7 @@ public static class RuriGlbSceneBuilder
     /// <summary>
     /// Grow avatar-skeleton bones the prefab hierarchy does not carry (stripped/optimized rigs):
     /// every TOS path missing from the node tree is created under its skeleton parent with the
-    /// avatar DefaultPose local TRS — the same restoration VibeStudio's
-    /// ModelConverter.DeoptimizeTransformHierarchy (ModelConverter.cs:1338) performs.
+    /// avatar DefaultPose local TRS, restoring the full skeleton shape the optimizer removed.
     /// </summary>
     private static void SynthesizeMissingAvatarBones(BuildContext context, AnimatorEntry animatorEntry)
     {

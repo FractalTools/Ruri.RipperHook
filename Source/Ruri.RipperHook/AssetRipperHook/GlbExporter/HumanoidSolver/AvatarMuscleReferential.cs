@@ -16,31 +16,22 @@ namespace Ruri.RipperHook.GlbExporter;
 /// <summary>
 /// Unity humanoid muscle referential extracted from an Avatar: per driven human bone the Axes
 /// (preQ/postQ/sgn/limit) and the TOS transform path.
-/// Muscle math is a 1:1 port of the validated Blender-side solver
-/// (RuriRipperImporter/humanoid_retarget.py, ``_axes_local``): a normalized muscle value in
-/// [-1,1] scales to a radian angle via the per-axis limit and sign, the three axes compose via
-/// Unity's own tan-half-angle (Rodrigues parameter) formula (see ``SwingTwist``), and
-/// ``preQ * swingTwist * postQ^-1`` (see ``LocalRotation``) IS the bone's FULL absolute local
-/// rotation for the frame -- not a delta, and not composed with or divided by any rest
-/// quaternion; see ``LocalRotation`` for the two wrong intermediate revisions of this formula (a
-/// per-bone ``normRest`` table validated against contaminated ground truth, then a per-bone
-/// character-rest division that algebraically canceled to a no-op once wired into the real call
-/// site) and why each one's own validation didn't catch it, and see ``SwingTwist`` for a THIRD,
-/// independent bug found later: the swing/twist COMPOSITION itself was a plain sequential
-/// product of a combined-axis swing and a separate twist, which only agrees with Unity in the
-/// small-angle limit and diverges sharply for larger swings.
-/// RootT/RootQ do NOT drive the hips directly: they are Unity's internal
-/// mecanim::human::Human "root reference" -- a mass-weighted center of mass across the 25 body
-/// bones (RootT) and an orientation frame built from the shoulder/hip bone positions (RootQ),
-/// relative to the same quantities computed once from the avatar's rest pose. Both were
-/// confirmed by decompiling Unity's own native HumanComputeBoneMassCenter/
-/// HumanComputeOrientation/HumanSetupAxes (IDA Pro on Unity.dll) and validated against live
-/// Unity ground truth (Animator + AnimationClip.SampleAnimation on a real walk-cycle clip): the
-/// orientation-frame formula matches Unity's own rest-pose computation to 0.00002 degrees, and
-/// the resulting hips rotation and (Y, X) position track live Unity output to a few degrees /
-/// centimeters across a full multi-frame gait cycle. See <see cref="BodyTransform"/> for the
-/// full derivation (a provisional FK with hips forced to the origin/identity, whose mass-center
-/// and orientation are solved against RootT/RootQ for the hips' true transform).
+/// Muscle math: a normalized muscle value in [-1,1] scales to a radian angle via the per-axis
+/// limit and sign, the three axes compose via Unity's tan-half-angle (Rodrigues parameter)
+/// formula (see ``SwingTwist``), and ``preQ * swingTwist * postQ^-1`` (see ``LocalRotation``) IS
+/// the bone's FULL absolute local rotation for the frame -- not a delta, and not composed with
+/// or divided by any rest quaternion. The swing/twist COMPOSITION must use the coupled cross-term
+/// form in ``SwingTwist``; a plain sequential product of a combined-axis swing and a separate
+/// twist only agrees with Unity in the small-angle limit and diverges sharply for larger swings.
+/// RootT/RootQ do NOT drive the hips directly: they are Unity's internal humanoid "root
+/// reference" -- a mass-weighted center of mass across the 25 body bones (RootT) and an
+/// orientation frame built from the shoulder/hip bone positions (RootQ), relative to the same
+/// quantities computed once from the avatar's rest pose. The orientation-frame formula matches
+/// Unity's rest-pose computation to ~0.00002 degrees, and the resulting hips rotation and (Y, X)
+/// position track Unity output to a few degrees / centimeters across a full multi-frame gait
+/// cycle. See <see cref="BodyTransform"/> for the full derivation (a provisional FK with hips
+/// forced to the origin/identity, whose mass-center and orientation are solved against
+/// RootT/RootQ for the hips' true transform).
 ///
 /// KNOWN LIMITATION: clips authored without a separate MotionT/MotionQ curve (ground-projected
 /// root motion) still bake full world-space walking progress into RootT itself; since that
@@ -62,11 +53,10 @@ public sealed class AvatarMuscleReferential
     private static readonly Dictionary<string, (int Slot, int Axis)> MuscleDofTable = BuildMuscleDofTable();
 
     /// <summary>
-    /// Port of mecanim::human::HumanComputeBoneMassCenter's per-body-slot table: most bones use
-    /// the midpoint of their own and an adjacent bone's provisional position. Any body slot not
+    /// Per-body-slot mass-center table for the humanoid root reference: most bones use the
+    /// midpoint of their own and an adjacent bone's provisional position. Any body slot not
     /// listed here (feet, hands, toes, eyes, head, jaw) uses its own provisional position
-    /// directly, matching HumanComputeBoneMassCenter's default case (see
-    /// humanoid_retarget.py's ``_MASS_CENTER_FORMULA``, same table).
+    /// directly.
     /// </summary>
     private static readonly Dictionary<BoneType, (BoneType Neighbor, float Weight)[]> MassCenterFormula = new()
     {
@@ -88,21 +78,15 @@ public sealed class AvatarMuscleReferential
     };
 
     /// <summary>
-    /// The 8 fixed (parent, child, avatar-configurable factor) pairs
-    /// <c>mecanim::human::TwistSolve</c> processes, in Unity's exact order, after every bone's
-    /// own independent muscle solve (IDA Pro decompilation of Unity.dll -- read directly, not
-    /// guessed: an isolated single-bone test with only that bone's own muscles active can only
-    /// ever observe the "rescale this bone's own twist" half of what TwistSolve does, never the
-    /// child-compensation half, which needs the PARENT's twist muscle active and the CHILD's own
-    /// resulting rotation read back -- this is exactly why the original "Forearm Twist In-Out
-    /// needs its angle negated" and later "limb twist needs 0.5x" patches, both derived from
-    /// single-bone isolation tests, were each real but incomplete). Each pair rescales the
-    /// PARENT's own twist angle by the factor (default 0.5 for all four, confirmed for this
-    /// avatar) and adjusts the CHILD's local rotation to keep the child's WORLD orientation
-    /// exactly unchanged -- see <see cref="BodyLocalQuats"/> for the derivation and where this is
-    /// applied (humanoid_retarget.py's ``_TWIST_SOLVE_PAIRS``, same set and order). Order matters:
+    /// The 8 fixed (parent, child, avatar-configurable factor) pairs Unity's twist-solve stage
+    /// processes, in order, after every bone's own independent muscle solve. Each pair rescales
+    /// the PARENT's own twist angle by the factor (default 0.5 for all four) and adjusts the
+    /// CHILD's local rotation to keep the child's WORLD orientation exactly unchanged -- see
+    /// <see cref="BodyLocalQuats"/> for the derivation and where this is applied. Order matters:
     /// e.g. LeftLowerArm is a CHILD in the first pair and a PARENT in the second, applied
-    /// sequentially.
+    /// sequentially. Note that a single-bone test exercising only one bone's own muscles observes
+    /// just the "rescale this bone's own twist" half; the child-compensation half only appears
+    /// once the PARENT's twist muscle is active and the CHILD's resulting rotation is read back.
     /// </summary>
     private static readonly (BoneType Parent, BoneType Child, Func<AvatarMuscleReferential, float> Factor)[] TwistSolvePairs =
     {
@@ -126,8 +110,8 @@ public sealed class AvatarMuscleReferential
     private Vector3[] _nodeRestT = Array.Empty<Vector3>();
     private Quaternion[] _nodeRestQ = Array.Empty<Quaternion>();
 
-    // TwistSolve parent<->child redistribution factors (see TwistSolvePairs/BodyLocalQuats) --
-    // avatar-configurable per mecanim::human::TwistSolve, default 0.5 for all four.
+    // Twist-solve parent<->child redistribution factors (see TwistSolvePairs/BodyLocalQuats) --
+    // avatar-configurable, default 0.5 for all four.
     private float _armTwist = 0.5f;
     private float _foreArmTwist = 0.5f;
     private float _upperLegTwist = 0.5f;
@@ -273,27 +257,20 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>
     /// The bone's FULL absolute local rotation for this frame:
-    /// preQ * swingTwist(angles) * inv(postQ) (humanoid_retarget.py's ``_axes_local``, same
-    /// formula), WITHOUT Unity's TwistSolve parent&lt;-&gt;child redistribution (see
-    /// <see cref="BodyLocalQuats"/> for the corrected, final version every caller outside this
-    /// class should use). This is NOT a delta and is NOT identity at muscle=0 -- it already IS
+    /// preQ * swingTwist(angles) * inv(postQ), WITHOUT the twist-solve parent&lt;-&gt;child
+    /// redistribution (see <see cref="BodyLocalQuats"/> for the final version every caller outside
+    /// this class should use). This is NOT a delta and is NOT identity at muscle=0 -- it already IS
     /// the answer the caller wants in place of the bone's rest local rotation, with no further
     /// composition or division by any rest quaternion (character's own, or the avatar's
     /// ``m_SkeletonPose`` "normalized rest") needed or correct. preQ and postQ are NOT
     /// interchangeable -- on a real rig they differ by 60-280+ degrees per bone, so the
     /// sandwich is asymmetric, not a similarity-transform conjugation by postQ alone.
     ///
-    /// Verified against live Unity Mecanim ground truth (Editor
-    /// AnimationMode.SampleAnimationClip + Animator.GetBoneTransform on a real humanoid
-    /// Avatar+clip) across 18 body bones at 11 frames each (187 samples): grand-average error
-    /// 4.93 degrees with the pre/post-Q sandwich used directly, no per-bone table, no rest
-    /// division of any kind -- BUT that validation happened to exercise mostly single-DOF-at-a-
-    /// time poses, so it did not catch the separate swing/twist composition bug fixed in
-    /// <see cref="SwingTwist"/> or the TwistSolve parent&lt;-&gt;child redistribution fixed in
-    /// <see cref="BodyLocalQuats"/> (both small at low swing angles, large once two swing axes
-    /// are simultaneously large, e.g. arms/legs mid-stride). See the class-level doc comment for
-    /// two earlier, wrong versions of THIS method (the pre/post-Q sandwich) and why each one's
-    /// own validation was invalid or pointless.
+    /// The pre/post-Q sandwich is used directly, with no per-bone table and no rest division of
+    /// any kind. Two related effects must be applied alongside it: the coupled swing/twist
+    /// composition in <see cref="SwingTwist"/> and the twist-solve parent&lt;-&gt;child
+    /// redistribution in <see cref="BodyLocalQuats"/>. Both are negligible at low swing angles but
+    /// grow large once two swing axes are simultaneously large (e.g. arms/legs mid-stride).
     /// </summary>
     public static Quaternion LocalRotation(MuscleBone bone, Func<string, float?> muscleLookup)
         => ComposeFromAngles(bone, ComputeAngles(bone, muscleLookup));
@@ -334,8 +311,8 @@ public sealed class AvatarMuscleReferential
     /// <summary>
     /// Every body/finger bone's local rotation this referential drives (hips excluded --
     /// <see cref="BodyTransform"/> reconstructs its actual transform separately) for this
-    /// frame's muscle values, WITH Unity's TwistSolve parent&lt;-&gt;child twist redistribution
-    /// applied (see <see cref="TwistSolvePairs"/> for the mechanism and IDA source). Keyed by
+    /// frame's muscle values, WITH the twist-solve parent&lt;-&gt;child twist redistribution
+    /// applied (see <see cref="TwistSolvePairs"/> for the mechanism). Keyed by
     /// <see cref="MuscleBone.Slot"/>.
     ///
     /// Derivation of the child compensation (algebraic necessity, not curve-fit):
@@ -343,10 +320,8 @@ public sealed class AvatarMuscleReferential
     /// local rotation changes by delta = inverse(parent_local_old) * parent_local_new (only the
     /// parent's OWN local changes; its ancestors don't) -- parent_world_new = parent_world_old *
     /// delta, so preserving child_world requires child_local_new = inverse(delta) *
-    /// child_local_old. Uses this class's own already-validated <see cref="SwingTwist"/>/pre-post-Q
-    /// formula for the parent's before/after local rotation (validated exact against live Unity
-    /// ground truth) as the basis for delta, rather than re-deriving Unity's internal
-    /// math::ToAxes/SkeletonAlign bit-for-bit.
+    /// child_local_old. Uses this class's own <see cref="SwingTwist"/>/pre-post-Q formula for the
+    /// parent's before/after local rotation as the basis for delta.
     /// </summary>
     public Dictionary<int, Quaternion> BodyLocalQuats(Func<string, float?> muscleLookup)
     {
@@ -379,9 +354,8 @@ public sealed class AvatarMuscleReferential
     /// <summary>
     /// The hips' own FULL absolute local position+rotation for this frame, reconstructed from
     /// the clip's Root curves, plus whatever root motion was extracted onto the character's own
-    /// root object, or null when the clip carries no root translation channels
-    /// (humanoid_retarget.py's ``body_transform``, same formula). The hips value is NOT a delta
-    /// -- used directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and
+    /// root object, or null when the clip carries no root translation channels. The hips value is
+    /// NOT a delta -- used directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and
     /// RootT/RootQ are NOT the hips' own transform (see the class doc comment): they are the
     /// avatar's mass-center/orientation reference, so recovering the hips' transform means
     /// building a PROVISIONAL pose with the hips forced to the origin/identity (every other body
@@ -395,9 +369,7 @@ public sealed class AvatarMuscleReferential
     /// ``keepPositionXz``/``keepPositionY``/``keepOrientation`` mirror the clip's own
     /// ``MuscleClipInfo.KeepOriginalPosition{Xz,Y}``/``KeepOriginalOrientation``. When a setting
     /// is False, Unity extracts that component as root motion belonging to the character's root
-    /// GameObject rather than the hips (confirmed by decompiling
-    /// mecanim::animation::EvaluateRootMotion/GetClipX/GetCycleX on Unity.dll, validated against
-    /// live Unity ground truth). The returned ``Motion`` is exactly that extracted amount (zero
+    /// GameObject rather than the hips. The returned ``Motion`` is exactly that extracted amount (zero
     /// for any axis where the corresponding ``keep*`` is True) -- the caller MUST bake it onto
     /// the character's root object separately (see <see cref="HumanoidClipBaker"/>) or the
     /// character will animate its stride in place with no actual locomotion.
@@ -545,8 +517,7 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Port of mecanim::human::HumanComputeBoneMassCenter's per-body-slot table; see
-    /// <see cref="MassCenterFormula"/>.
+    /// Per-body-slot mass-center lookup; see <see cref="MassCenterFormula"/>.
     /// </summary>
     private static Vector3 MassCenterOf(BoneType type, (Vector3 Pos, Quaternion Rot)?[] fk)
     {
@@ -563,8 +534,7 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Port of the mass-weighted center-of-mass loop in
-    /// mecanim::human::HumanSetupAxes/RetargetTo.
+    /// The mass-weighted center-of-mass loop over the body bones.
     /// </summary>
     private Vector3 ComputeMassCenter((Vector3 Pos, Quaternion Rot)?[] fk)
     {
@@ -588,9 +558,8 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Port of mecanim::human::HumanComputeOrientation: the body's orientation frame from the
-    /// shoulder-center/hip-center world positions. Matches Unity's own rest-pose computation of
-    /// this same formula to 0.00002 degrees (validated against m_RootX.q).
+    /// The body's orientation frame from the shoulder-center/hip-center world positions. Matches
+    /// Unity's rest-pose orientation (m_RootX.q) to ~0.00002 degrees.
     /// </summary>
     private static Quaternion ComputeOrientation((Vector3 Pos, Quaternion Rot)?[] fk)
     {
@@ -653,7 +622,7 @@ public sealed class AvatarMuscleReferential
 
     /// <summary>
     /// Map a normalized muscle in [-1,1] to a radian angle via the per-axis limit and sign:
-    /// -1 -> min, 0 -> 0, +1 -> max (humanoid_retarget.py:188-192 `_muscle_angle`).
+    /// -1 -> min, 0 -> 0, +1 -> max.
     /// </summary>
     private static float MuscleAngle(float muscle, float sgn, float limitMin, float limitMax)
     {
@@ -662,25 +631,20 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Compose three per-axis angles into a quaternion via Unity's own tan-half-angle
-    /// (Rodrigues parameter) formula: tx,ty,tz = tan(angle/2) per axis, then
-    /// normalize(1, tx, ty + tx*tz, tz - tx*ty) as (w,x,y,z)
-    /// (humanoid_retarget.py's `_swing_twist`, same formula). This is NOT
+    /// Compose three per-axis angles into a quaternion via Unity's tan-half-angle (Rodrigues
+    /// parameter) formula: tx,ty,tz = tan(angle/2) per axis, then
+    /// normalize(1, tx, ty + tx*tz, tz - tx*ty) as (w,x,y,z). This is NOT
     /// ``swing(Y,Z) * twist(X)`` (a plain sequential product of a combined-axis swing and a
     /// separate twist) -- that only agrees with Unity in the small-angle limit and diverges
     /// sharply as the swing grows, since twist and swing couple through the cross terms below,
     /// and twist-free swing itself is the raw per-axis tan-half pair (ty, tz), not a single
     /// combined axis-angle rotation around (0, angleY, angleZ).
     ///
-    /// Reverse-engineered by reading (not guessing) Unity.dll's own ``math::FromAxes_2`` (IDA
-    /// Pro decompilation, the kZYRoll case all 25 human body bones use): it computes halfTan of
-    /// the muscle-scaled angle vector, then combines the X (twist) lane with the Y/Z (swing)
-    /// lanes via exactly these cross terms before normalizing the whole 4-vector as a
-    /// quaternion. Verified bit-exact (5 decimal places) against live Unity ground truth
-    /// (HumanPoseHandler.SetHumanPose, SaionNanae avatar, LeftUpperArm, several two-axis muscle
-    /// combinations) -- the previous combined-axis-angle formula matched single-axis-only ground
-    /// truth perfectly (no cross term to get wrong) but diverged 5-85 degrees the moment two
-    /// axes were simultaneously non-zero.
+    /// This is the kZYRoll case all 25 human body bones use: halfTan of the muscle-scaled angle
+    /// vector, then the X (twist) lane combined with the Y/Z (swing) lanes via exactly these
+    /// cross terms before normalizing the whole 4-vector as a quaternion. A combined-axis-angle
+    /// formula matches single-axis-only poses perfectly (no cross term to get wrong) but diverges
+    /// 5-85 degrees the moment two axes are simultaneously non-zero.
     /// </summary>
     private static Quaternion SwingTwist(float angleX, float angleY, float angleZ)
     {
@@ -737,7 +701,7 @@ public sealed class AvatarMuscleReferential
 
     private static Vector3 ToVector3(IVector3Float? v) => v is null ? Vector3.Zero : new Vector3(v.X, v.Y, v.Z);
 
-    /// <summary>``math::trsX``'s translation is versioned (Vector3 vs Vector4 layout), same
+    /// <summary>The Xform translation is versioned (Vector3 vs Vector4 layout), same
     /// version-guard shape as GetSgn/GetLimit above.</summary>
     private static Vector3 ToXformTranslation(IXform xform)
     {
@@ -745,10 +709,10 @@ public sealed class AvatarMuscleReferential
     }
 
     /// <summary>
-    /// Body rows mirror RuriRipperImporter/humanoid_retarget.py:_MUSCLE_DOF (validated against IK
-    /// markers) extended with the eye/jaw muscles it omitted; finger rows are generated from the
-    /// Unity muscle taxonomy (attribute pattern "&lt;Hand&gt;.&lt;Finger&gt;.&lt;DoF&gt;",
-    /// 1/2/3 Stretched -> Z of proximal/intermediate/distal phalange, Spread -> Y of proximal).
+    /// Body rows map each Unity muscle attribute to its (bone slot, DoF axis), including the
+    /// eye/jaw muscles; finger rows are generated from the Unity muscle taxonomy (attribute
+    /// pattern "&lt;Hand&gt;.&lt;Finger&gt;.&lt;DoF&gt;", 1/2/3 Stretched -> Z of
+    /// proximal/intermediate/distal phalange, Spread -> Y of proximal).
     /// </summary>
     private static Dictionary<string, (int Slot, int Axis)> BuildMuscleDofTable()
     {

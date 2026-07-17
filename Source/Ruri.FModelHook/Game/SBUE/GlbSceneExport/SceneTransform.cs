@@ -6,7 +6,7 @@ using FModel.Views.Snooper;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Coordinate-space bridge between FModel's verified world preview and a glTF
+// Coordinate-space bridge between FModel's world preview and a glTF
 // scene graph.
 //
 // The mesh geometry we place is produced by CUE4Parse's
@@ -17,7 +17,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // See Gltf.cs:287 (`SwapYZ(vert.Position*0.01f)`) and SwapYZ at Gltf.cs:301-305
 // (`(X, Z, Y)`).
 //
-// FModel's verified Snooper preview builds the SAME vertex: StaticModel.cs:33-35
+// FModel's Snooper preview builds the SAME vertex: StaticModel.cs:33-35
 // stores `(v.X, v.Z, v.Y) * SCALE_DOWN_RATIO` = `SwapYZ(v) * 0.01` — byte-for-byte
 // `g`. It then renders `g * W`, where `W` = FModel's `Transform.Matrix`
 // (Transform.cs:20-23). Critically, the Y/Z swizzle, the W-negation (LH->RH) and
@@ -49,14 +49,14 @@ internal static class SceneTransform
 
     // The world matrix to hand SharpGLTF's SceneBuilder.AddRigidMesh for a mesh
     // built by Gltf.ExportStaticMeshSections. The mesh vertices are already in
-    // FModel's glTF-local space, so the node matrix is FModel's verified
-    // placement matrix verbatim.
+    // FModel's glTF-local space, so the node matrix is FModel's placement
+    // matrix verbatim.
     public static Matrix4x4 NodeMatrix(Transform placement)
     {
         return placement.Matrix;
     }
 
-    // 1:1 port of FModel Renderer.CalculateTransform (Renderer.cs:676-690).
+    // Mirrors FModel Renderer.CalculateTransform (Renderer.cs:676-690).
     // Walks the AttachParent chain so a component's placement folds in every
     // parent SceneComponent's local transform.
     public static Transform CalculateTransform(IPropertyHolder component, Transform relation)

@@ -1,10 +1,10 @@
 // UE umap -> 完整场景包导出 workflow（ruri-engineering-discipline §E 闭环：foundation -> 并行实现 -> 逐个对抗验证 -> 集成自测）
 //
-// 用户铁令（升级版，凌驾一切）：「完整场景导出 必须从源码真理级还原导出场景所关联的每个字节；fmodel 忽略的也要加上」。
+// 用户铁令（升级版，凌驾一切）：「完整场景导出 必须完整还原导出场景所关联的每个字节；fmodel 忽略的也要加上」。
 // => 这不再是"只导 FModel 预览能渲染的子集"。**场景 umap 里出现的每一个 actor / 每一个 component / 它递归引用的每一个
 //    asset，都必须被无损导出，一个字节不丢。** FModel 预览丢弃的全部要补上：Niagara 粒子系统、PostProcessVolume、
 //    ExponentialHeightFog、SkyAtmosphere、SphereReflectionCapture、CineCamera、LevelSequence、RuntimeVirtualTextureVolume、
-//    WorldDataLayers、PlayerStart、SkyLight/RectLight…… 凡是场景里有的，全部 source-truth 级还原。
+//    WorldDataLayers、PlayerStart、SkyLight/RectLight…… 凡是场景里有的，全部完整还原。
 //
 // 【交付物 = 一个"完整场景包"】CLI `--export-map-direct` 跑完，输出目录下产出：
 //   1. <map>.glb(+parts)   —— 可渲染层：静态/实例/蓝图/样条几何 + 地形 + 材质(嵌入PBR)+贴图 + 灯光(全类型) + 相机；
@@ -16,18 +16,18 @@
 //   4. scene-manifest.json  —— 清册：每 actor->其数据文件+GLB节点+引用的 asset；每 asset->其导出；完整性计数(actors=2537、
 //                            assets=N、dropped=0)。这是"每个字节都在"的证明。
 //
-// 真值矩阵（全部 Read 真源逐行对照，禁臆造）：
-//   渲染放置(已验证)：FModel/FModel/Views/Snooper/Renderer.cs、Models/SplineModel.cs
+// 参考源矩阵（全部 Read 真源逐行对照，禁凭空猜）：
+//   渲染放置：      FModel/FModel/Views/Snooper/Renderer.cs、Models/SplineModel.cs
 //   CUE4Parse 转换器：FModel/CUE4Parse/CUE4Parse-Conversion/{Meshes/glTF/Gltf.cs, Landscape/LandscapeExporter.cs, Materials/MaterialExporter2.cs}
 //   CUE4Parse 类型：  .../Component/{SplineMesh/USplineMeshComponent.cs+FSplineMeshParams.cs, Lights/ULightComponent.cs+LightUtils.cs, Landscape/ULandscapeComponent.cs}、Exports/Actor/ALandscape.cs
 //   无损 JSON：        FModel JsonConvert.SerializeObject(package.GetExports(), Indented)（Save-Properties 路径，逐字段无损）
 //   依赖闭包：         CUE4Parse IoPackage.ImportedPackages(Lazy<IoPackage?[]>) 直接导入 + 属性树里 FPackageIndex/FSoftObjectPath 递归
-//   UE 5.7.4 引擎源(每个类型的字段真理)：E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/
+//   UE 5.7.4 引擎源(每个类型的字段定义)：E:/Games/UnrealEngine-5.7.4-release/Engine/Source/Runtime/
 //                     （Landscape/、Engine/Classes/Components/*Light*.h、SplineMeshComponent.h、CineCameraComponent.h、
 //                       Niagara/、Engine/Classes/Engine/{ExponentialHeightFog,PostProcessVolume,SkyLight}.h、Engine/Classes/Components/SkyAtmosphereComponent.h …）
 //   SharpGLTF.Toolkit 1.0.0-alpha0023：SceneBuilder.AddLight/AddCamera；node.Extras；MaterialBuilder.WithChannelImage/WithEmissive/WithMetallicRoughness/WithNormal。
 //
-// 实测场景事实(E:/Games/OniValleyDemo5.1, GAME_UE5_1)：持久图 Oni_Valley.umap + 328 WP _Generated_ cell；
+// 目标场景规模(E:/Games/OniValleyDemo5.1, GAME_UE5_1)：持久图 Oni_Valley.umap + 328 WP _Generated_ cell；
 //   2537 actor / 35 ExportType / 324821 静态放置 / 112 唯一网格；蓝图几何全在 BlueprintCreatedComponents[]；无骨骼网格。
 //   非渲染 actor(FModel 丢弃,本 workflow 必须无损补全)：NiagaraActor32、PostProcessVolume16、ExponentialHeightFog13、
 //   LevelSequenceActor15、SphereReflectionCapture5、CineCameraActor5、RuntimeVirtualTextureVolume2、SkyLight13、SkyAtmosphere1、
@@ -66,7 +66,7 @@ const BUILD = `dotnet build "${CLIPROJ}" -c Debug --nologo -v quiet`
 const KILL = `Get-Process Ruri.FModelHook.CLI -EA SilentlyContinue | Stop-Process -Force`
 
 const COMMON = `项目：Ruri-RipperHook 的 FModelHook —— UE umap -> **完整场景包**导出子系统。动手前先读 ${SKILL}
-（§A 永不降级 / §B 1:1 忠实移植=参考是 ground truth，先 Read 真源逐行核、同义替换不算偏离、汇报"已 1:1 移植，源=file:line" /
+（§A 永不降级 / §B 1:1 忠实移植=参考源即权威，先 Read 真源逐行核、同义替换不算偏离、汇报"已 1:1 移植，源=file:line" /
 §C 代码风格：英文注释、一文件一内聚单元、禁缩写、禁单行堆叠 / §D 黑洞性能：span/0-GC/全核并行）。
 
 【最高铁令——每个字节，零妥协】用户原话："完整场景导出 必须从源码真理级还原导出场景所关联的每个字节；fmodel 忽略的也要加上"。
@@ -81,7 +81,7 @@ PlayerStart/SkyLight/RectLight…）全部要补上。**绝不以"glTF 表达不
   (3) Assets/...：umap 递归依赖闭包里**每个 asset** 无损导出。
   (4) scene-manifest.json：清册 + 完整性计数(actors/components/assets/dropped=0)。
 
-【架构（统一按组件分发，禁 per-game 分支）】cooked 蓝图 actor 组件全在 \`BlueprintCreatedComponents[]\`（实测：
+【架构（统一按组件分发，禁 per-game 分支）】cooked 蓝图 actor 组件全在 \`BlueprintCreatedComponents[]\`（如：
 BP_Boulder=13 StaticMeshComponent、BP_Torii=18、BP_Ancestral_tree=19、BP_Chochin_lamp=网格+PointLight、
 River_spline/BP_Rope_spline=SplineMeshComponent×N、BP_Fireflies=Niagara+PointLight）；StaticMeshActor 用命名属性
 \`StaticMeshComponent\`；InstancedFoliageActor 用 \`InstanceComponents[]\`；LandscapeStreamingProxy 用 \`LandscapeComponents[16]\`。
@@ -90,8 +90,8 @@ ComponentResolver 把这些并集去重成 PlacedComponent 流，WorldGlbExporte
 **无损层(Actors/)与闭包层(Assets/)与渲染层正交**：对全部 2537 actor 无差别走无损 JSON，不管渲不渲染。
 
 【硬规则】① 只可编辑 ${GLB}/ 下文件 + 必要时 CLI ${ROOT}/Source/Ruri.FModelHook.CLI/。绝不改冻结区 ${CUE}/、${FMODEL}/
-（FModel/CUE4Parse=ground truth，只读）。绝不新建 assembly/csproj。
-② 渲染几何必须仍由 CUE4Parse \`Gltf.ExportStaticMeshSections\`(Gltf.cs) 产出(逐字节 1:1)；landscape 由
+（FModel/CUE4Parse=权威源，只读）。绝不新建 assembly/csproj。
+② 渲染几何必须仍由 CUE4Parse \`Gltf.ExportStaticMeshSections\`(Gltf.cs) 产出(逐字节一致)；landscape 由
 \`ALandscapeProxy.TryConvert\`(LandscapeExporter.cs) 产出 CStaticMesh 再走同一条。绝不手写顶点导出。
 ③ 坐标：SceneTransform.cs 已建 Unreal-local->glTF 桥(节点矩阵 N=S^-1*W)。新组件世界变换走
 \`SceneTransform.CalculateTransform(component, baseTransform)\`(AttachParent 链)、节点矩阵走 \`SceneTransform.NodeMatrix\`；绝不另立坐标约定。
@@ -375,7 +375,7 @@ const verifications = await parallel(VERIFY_TARGETS.map(v => () =>
 
 【对抗验证：${v.t}】你是独立顶级审计 agent。**预设这份移植/实现是错的且不完整**，带敌意逐行挑。**绝不盲信实现 agent 的"已 1:1/已完整"自报**
 （本机经验：agent 端口必带偏离，含灾难级坐标/索引 key 错 + 完整性漏项）。
-方法（§E 强制闭环）：① Read 真源(ground truth)：${v.src}；② Read 被审代码：${v.files}；③ 逐行结构 diff，产出**逐步 file:line 1:1 对应表**
+方法（§E 强制闭环）：① Read 真源(权威源)：${v.src}；② Read 被审代码：${v.files}；③ 逐行结构 diff，产出**逐步 file:line 1:1 对应表**
 或逐条列偏离；④ **就地 Edit 修每个真 bug**；⑤ **完整性审计(最高铁令)**：${v.inv}
 这是对真源的结构验证 + 对"每个字节零丢失"的完整性验证。
 ⚠**EDIT-ONLY**：8 个验证并行，**绝不执行 \`dotnet build\`/跑 CLI**（撞构建）。修复保持文件自洽可编译；只 Edit 你 target 的文件。

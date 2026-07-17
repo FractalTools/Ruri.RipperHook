@@ -875,7 +875,7 @@ public sealed class DependencyClosureExporter
     }
 
     // "<ProjectName>/Content/Maps/MyMap" -> "<ProjectName>/Content/__ExternalActors__/Maps/MyMap/".
-    // 1:1 of WorldActorCollector.BuildExternalActorPrefix (WorldActorCollector.cs:313-322).
+    // Matches WorldActorCollector.BuildExternalActorPrefix (WorldActorCollector.cs:313-322).
     // Mirrors Unreal's OFPA layout: "/Game/Maps/MyMap" becomes
     // "/Game/__ExternalActors__/Maps/MyMap", and "/Game" maps to "<Project>/Content"
     // in provider Files keys.

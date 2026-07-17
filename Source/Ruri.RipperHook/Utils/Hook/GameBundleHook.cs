@@ -113,7 +113,7 @@ public class GameBundleHook : CommonHook, IHookModule
 
     /// <summary>One mesh-bearing scene-entity placement, as a plain tuple (no concrete game-hook type):
     /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, source chunk file
-    /// name, whether a ground-truth-verified transform source was found, the transform itself
+    /// name, whether a usable transform source was found, the transform itself
     /// (identity/zero when HasTransform is false -- treat as "don't place", not "place at the origin"),
     /// and the entity's own resolved material asset path(s) (empty array if it has none or none resolved
     /// -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1 instead of ==2,
@@ -124,7 +124,7 @@ public class GameBundleHook : CommonHook, IHookModule
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
 
     /// <summary>Set by a VFS game hook: binary/vtable-level schema-drift diagnostic -- one report line
-    /// per FlatBuffers table type, flagging any type where the live game's data declares more fields
+    /// per FlatBuffers table type, flagging any type where the source data declares more fields
     /// than the currently-compiled bindings know how to read (see EndfieldSceneBridge.
     /// DiagnoseSchemaDrift's doc comment for why this is the only way to detect that gap).
     /// <c>null</c> when no VFS hook is active.</summary>
