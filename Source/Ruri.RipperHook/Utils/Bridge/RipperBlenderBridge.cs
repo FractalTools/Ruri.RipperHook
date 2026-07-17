@@ -295,8 +295,12 @@ public static class RipperBlenderBridge
     {
         private readonly DefaultYamlExporter _inner = new();
 
-        /// <summary>(lowercased CAB name, exported file path) per exported AnimationClip.</summary>
-        public List<(string Cab, string Path)> Captured { get; } = new();
+        /// <summary>(lowercased CAB name, exported file path, curve blob) per exported AnimationClip.
+        /// MetaJson/Curves are the clip's <see cref="ClipCurveBlob"/> payload -- the editor-format
+        /// curves handed straight across the bridge so the Blender side never re-parses them out of
+        /// the (potentially 80+MB) YAML text; empty for a clip whose blob build failed (the YAML
+        /// document still exists, so the consumer just falls back to parsing it).</summary>
+        public List<(string Cab, string Path, string MetaJson, byte[] Curves)> Captured { get; } = new();
 
         public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
         {
@@ -306,7 +310,20 @@ public static class RipperBlenderBridge
 
         public bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
         {
-            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path));
+            string metaJson = string.Empty;
+            byte[] curves = Array.Empty<byte>();
+            if (asset is IAnimationClip animationClip)
+            {
+                try
+                {
+                    (metaJson, curves) = ClipCurveBlob.Build(animationClip);
+                }
+                catch (Exception exception)
+                {
+                    Logger.Warning(LogCategory.Export, $"Clip curve blob failed for '{asset.GetBestName()}': {exception.Message} -- Blender side falls back to YAML parsing.");
+                }
+            }
+            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, metaJson, curves));
             return _inner.Export(container, asset, path, fileSystem);
         }
 
@@ -395,7 +412,7 @@ public static class RipperBlenderBridge
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
         Dictionary<string, CabMap.Entry> entries, string[] seedCabNames,
-        List<(string Cab, string Path)> capturedClips)
+        List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips)
     {
         Dictionary<string, string> documents = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> textures = new(StringComparer.Ordinal);
@@ -511,8 +528,26 @@ public static class RipperBlenderBridge
             .GroupBy(c => c.Cab, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Guid!).Distinct().ToArray(), StringComparer.Ordinal);
 
+        // Same exact join for the per-clip curve blobs (see ClipCurveBlob): guid-keyed so the
+        // Blender side can look one up straight from a clip guid and skip YAML parsing entirely.
+        Dictionary<string, string> clipCurveMeta = new(StringComparer.Ordinal);
+        Dictionary<string, byte[]> clipCurveData = new(StringComparer.Ordinal);
+        foreach ((string _, string path, string metaJson, byte[] curves) in capturedClips)
+        {
+            if (metaJson.Length == 0)
+            {
+                continue; // blob build failed for this clip -- YAML fallback
+            }
+            string? guid = pathToGuid.GetValueOrDefault(NormalizeExportPath(path));
+            if (guid is not null)
+            {
+                clipCurveMeta[guid] = metaJson;
+                clipCurveData[guid] = curves;
+            }
+        }
+
         return new ClosureResult(documents, textures, other, roots.ToArray(), seedRoots, clipGuidsByCab,
-            sceneRoots.ToArray());
+            sceneRoots.ToArray(), clipCurveMeta, clipCurveData);
     }
 
     /// <summary>Resolve a per-asset virtual row (asset m_Name + ClassID) to its exported guid: scan the
@@ -709,6 +744,11 @@ public sealed record ScenePlacementDto(
 /// metadata only, no export yet) into the real clip documents once the closure HAS been exported,
 /// without any display-name/m_Name matching.
 /// </summary>
+/// <see cref="ClipCurveMeta"/>/<see cref="ClipCurveData"/> are the per-clip curve payloads
+/// (guid-keyed JSON index + float32 blob, see <see cref="ClipCurveBlob"/>): the same curves the
+/// YAML document carries, handed over as raw numbers so the Blender side never spends seconds
+/// re-parsing them out of the text. A guid absent here (blob build failed) still has its YAML
+/// document -- consumers fall back to parsing.
 public sealed record ClosureResult(
     IReadOnlyDictionary<string, string> Documents,
     IReadOnlyDictionary<string, byte[]> Textures,
@@ -716,7 +756,9 @@ public sealed record ClosureResult(
     string[] Roots,
     IReadOnlyDictionary<string, string> SeedRoots,
     IReadOnlyDictionary<string, string[]> ClipGuidsByCab,
-    string[] SceneRoots)
+    string[] SceneRoots,
+    IReadOnlyDictionary<string, string> ClipCurveMeta,
+    IReadOnlyDictionary<string, byte[]> ClipCurveData)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, string>(),
@@ -725,5 +767,7 @@ public sealed record ClosureResult(
         Array.Empty<string>(),
         new Dictionary<string, string>(),
         new Dictionary<string, string[]>(),
-        Array.Empty<string>());
+        Array.Empty<string>(),
+        new Dictionary<string, string>(),
+        new Dictionary<string, byte[]>());
 }
