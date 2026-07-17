@@ -62,7 +62,41 @@ internal static class HeadlessRunner
         // these bundles out of the (possibly 161k-bundle) chunks.
         HashSet<string>? loadFilterFileNames = null;
 
-        if (options.CabMapPath is { Length: > 0 } cabMapPath)
+        // Scene-map export: --load[0] is the game install root (VFS-root derivation only, never a load
+        // seed); the load set is the placement closure the resolver computes. Exclusive with the generic
+        // cab-map seed expansion below — the manifest is written after a successful export.
+        List<SceneSeedResolver.Placement>? scenePlacements = null;
+        if (options.ExportSceneMap is { Length: > 0 } sceneMapName)
+        {
+            if (options.CabMapPath is not { Length: > 0 } sceneCabMapPath || !File.Exists(sceneCabMapPath))
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "--export-scene needs --cab-map <existing map>.");
+                return 1;
+            }
+            if (options.LoadPaths.Length == 0 || !Directory.Exists(Path.Combine(options.LoadPaths[0], "Endfield_Data")))
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "--export-scene needs --load <gameRoot> (the directory containing Endfield_Data).");
+                return 1;
+            }
+            if (options.ExportPath is null)
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "--export-scene needs --export <dir>.");
+                return 1;
+            }
+            try
+            {
+                CabTable table = CabMap.LoadTable(sceneCabMapPath);
+                (paths, loadFilterFileNames, scenePlacements) =
+                    SceneSeedResolver.Resolve(table, options.LoadPaths[0], sceneMapName);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Ruri.CLI] scene resolve stack:\n{ex}");
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"Scene resolve failed for '{sceneMapName}': {ex.GetType().Name}: {ex.Message}");
+                return 1;
+            }
+        }
+        else if (options.CabMapPath is { Length: > 0 } cabMapPath)
         {
             if (!File.Exists(cabMapPath))
             {
@@ -138,7 +172,8 @@ internal static class HeadlessRunner
         // When --names drove cab-map seeding, the export must write the whole dependency closure
         // (pelica + everything it needs), so the name regex is NOT also applied as a per-asset export
         // filter — otherwise the unnamed dependencies (textures/materials/meshes) would be dropped.
-        Regex[] exportNameFilter = nameDriven ? [] : options.Names;
+        // Same for a scene closure: every asset in it is a real dependency of the placed geometry.
+        Regex[] exportNameFilter = nameDriven || scenePlacements is not null ? [] : options.Names;
         ExportFilter.Configure(allowedClassIds, exportNameFilter, options.SmokeTestLimit, options.FailFast);
         ExportFilter.Install();
 
@@ -213,6 +248,11 @@ internal static class HeadlessRunner
                 {
                     ExportFilter.Failures.Add(new ExportFilter.Failure("(unknown)", null, $"{ex.GetType().Name}: {ex.Message}", ex.ToString()));
                 }
+            }
+
+            if (scenePlacements is not null)
+            {
+                SceneSeedResolver.WriteManifest(options.ExportPath, options.ExportSceneMap!, scenePlacements);
             }
 
             int matchedConsidered = ExportFilter.Considered;

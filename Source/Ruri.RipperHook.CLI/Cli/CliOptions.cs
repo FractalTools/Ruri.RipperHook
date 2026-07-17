@@ -59,6 +59,18 @@ internal sealed class CliOptions
     /// The directory is never deleted — files are only added. Auto-enables the AR_GlbExporter hook.
     /// </summary>
     public string? ExportGlbPath { get; init; }
+
+    /// <summary>
+    /// Set to a VFS streaming map name (e.g. <c>base01_lv002</c>) to export that whole scene:
+    /// discovers the map's mesh-bearing placements (best available LOD per instance), resolves
+    /// their mesh+material container paths to CABs via <see cref="CabMapPath"/>, exports the
+    /// dependency closure as a Unity project into <see cref="ExportPath"/>, and writes a
+    /// <c>ruri_scene_placements.json</c> manifest (asset path + world transform + materials per
+    /// placement) at the export root. Requires <c>--load &lt;gameRoot&gt;</c> (the game install
+    /// root, used only to derive the VFS roots), <c>--cab-map</c>, <c>--export</c>, and a
+    /// VFS-game <c>--hook</c>.
+    /// </summary>
+    public string? ExportSceneMap { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -78,6 +90,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string?> CabMap { get; }
     public Option<string[]> LoadTypes { get; }
     public Option<string?> ExportGlb { get; }
+    public Option<string?> ExportScene { get; }
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -137,6 +150,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             AllowMultipleArgumentsPerToken = true,
         };
         ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
+        ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -160,6 +174,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             CabMap,
             LoadTypes,
             ExportGlb,
+            ExportScene,
             Passthrough,
         };
         return root;
@@ -185,6 +200,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             CabMapPath = pr.GetValueForOption(CabMap),
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             ExportGlbPath = pr.GetValueForOption(ExportGlb),
+            ExportSceneMap = pr.GetValueForOption(ExportScene),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }
