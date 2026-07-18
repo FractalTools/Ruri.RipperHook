@@ -539,7 +539,10 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             p.Read.SubShaderIndex,
             p.Read.PassIndex,
             p.Read.Stage,
-            ProgramTypeToPlatform(p.Read.SubProgram.GetProgramType(p.Read.Version)) == GPUPlatform.D3D11)).ToList());
+            ProgramTypeToPlatform(p.Read.SubProgram.GetProgramType(p.Read.Version)) == GPUPlatform.D3D11,
+            p.Read.BlobIndex,
+            p.Read.Binary,
+            p.Read.KeywordIndices)).ToList());
 
         return result;
     }
@@ -1147,7 +1150,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// (D3D11) so a game observer can group stages of the same pass and branch on DX11 vs Vulkan without
     /// depending on the AssetRipper platform enum.
     /// </summary>
-    public sealed record ShaderPassView(SerializedProgramData Symbols, int SubShaderIndex, int PassIndex, string Stage, bool IsDxbc);
+    public sealed record ShaderPassView(SerializedProgramData Symbols, int SubShaderIndex, int PassIndex, string Stage, bool IsDxbc, uint BlobIndex, byte[] Binary, IReadOnlyList<ushort> KeywordIndices);
 
     /// <summary>
     /// View of one decompiled pass handed to <see cref="IShaderExportObserver.OnShaderDecompiled"/>:
