@@ -28,21 +28,32 @@ namespace Ruri.RipperHook.AR;
 public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 {
     /// <summary>
-    /// Optional callback installed by game-specific hooks (e.g. EndField) to rewrite the
-    /// <see cref="SerializedProgramData"/> for one pass after the standard reader has filled it in.
-    /// Use this to apply proprietary register-decoding, deduplicate duplicate-name bindings,
-    /// reorder lookups, etc. The generic exporter must stay free of game-specific branches.
+    /// Game-specific export observer (dependency inversion seam). The generic exporter carries ZERO
+    /// game logic — proprietary engines implement this in their GameHook and install an instance on
+    /// <see cref="Observer"/>; vanilla Unity installs nothing and every hook point is a no-op with no
+    /// argument allocation (all invocations are null-conditional). All methods default to no-op so an
+    /// observer implements only the lifecycle points it needs.
     /// </summary>
-    public static Action<SerializedProgramData, ShaderSubProgram, ShaderReadContext>? PostProcessSymbols;
+    public interface IShaderExportObserver
+    {
+        /// <summary>Per pass, right after the generic reader filled <paramref name="symbols"/> in.
+        /// Rewrite in place: proprietary register decoding, duplicate-binding dedupe, CB merging, …</summary>
+        void OnPassSymbolsRead(SerializedProgramData symbols, ShaderSubProgram subProgram, ShaderReadContext context) { }
 
-    /// <summary>
-    /// Optional callback installed by game-specific hooks, invoked ONCE per shader with every pass's
-    /// symbols after <see cref="PostProcessSymbols"/> has run on each. Unlike the per-pass callback,
-    /// this can reason across the stages of a pass — needed when a proprietary engine records a
-    /// pass's resource bindings on only one stage's parameter block (see the invocation site).
-    /// Vanilla Unity installs no callback so the generic path is untouched.
-    /// </summary>
-    public static Action<IReadOnlyList<ShaderPassView>>? PostProcessAllPasses;
+        /// <summary>Once per shader, after <see cref="OnPassSymbolsRead"/> ran on every pass. Sees all
+        /// passes together — for engines whose metadata must be reasoned about across the stages of a
+        /// pass (e.g. a binding table recorded on only one stage) or across all passes of the shader
+        /// (e.g. a CB's member set split across passes).</summary>
+        void OnShaderSymbolsRead(IReadOnlyList<ShaderPassView> passes) { }
+
+        /// <summary>Once per shader, after the batch decompile finished. <paramref name="passes"/> carry
+        /// the FINAL symbol state (decompile-time hooks mutate <see cref="SerializedProgramData"/> in
+        /// place) plus each pass's raw binary and outcome — e.g. for regression-fixture dumps.</summary>
+        void OnShaderDecompiled(string shaderName, IReadOnlyList<ShaderPassResultView> passes) { }
+    }
+
+    /// <summary>Installed by game hooks (one game per process); null for vanilla Unity.</summary>
+    public static IShaderExportObserver? Observer;
 
     /// <summary>
     /// Live-read from the persisted ShaderDecompilerSettings snapshot
@@ -501,7 +512,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     private static List<ShaderSymbolPass> BuildSymbols(List<ShaderReadPass> reads)
     {
         List<ShaderSymbolPass> result = [];
-        var postProcess = PostProcessSymbols;
+        IShaderExportObserver? observer = Observer;
         foreach (ShaderReadPass read in reads)
         {
             SerializedProgramData symbols = new()
@@ -514,66 +525,21 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             AppendSymbols(symbols, read.ParameterSymbols);
             AppendRuntimeSymbols(symbols, read.SubProgram);
 
-            // Game-specific symbol rewrite (no game branches in the generic path). EndField uses
-            // this to apply its packed-binding decode + size-perfect-match for CB→register
-            // resolution. Vanilla Unity shaders don't install a callback so the call is a no-op.
-            postProcess?.Invoke(symbols, read.SubProgram, new ShaderReadContext(read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version));
+            // Game-specific per-pass rewrite (dependency-inverted; no game branches here).
+            observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version));
 
             result.Add(new ShaderSymbolPass(read, symbols));
         }
 
-        // Cross-pass game-specific rewrite (no game branches in the generic path). Some engines
-        // (EndField) record a pass's texture/sampler binding table on only ONE stage's parameter
-        // block (the vertex program's CommonParameters), leaving the fragment stage — which is the
-        // one that actually samples them — with an empty table. A per-pass callback can't repair
-        // that because it sees a single stage in isolation; this seam hands the game hook every
-        // pass at once so it can share bindings across the stages of a pass and assign real
-        // registers. Vanilla Unity installs no callback, so this is a no-op and the output stays
-        // byte-identical.
-        PostProcessAllPasses?.Invoke(result.Select(static p => new ShaderPassView(
+        // Game-specific whole-shader rewrite (dependency-inverted): the observer sees every pass at
+        // once for cross-stage / cross-pass reasoning. Argument list is only materialised when an
+        // observer is installed (null-conditional short-circuits before evaluation).
+        observer?.OnShaderSymbolsRead(result.Select(static p => new ShaderPassView(
             p.Symbols,
             p.Read.SubShaderIndex,
             p.Read.PassIndex,
             p.Read.Stage,
             ProgramTypeToPlatform(p.Read.SubProgram.GetProgramType(p.Read.Version)) == GPUPlatform.D3D11)).ToList());
-
-        // Global member union. EndField splits a constant buffer's members across passes — one pass's
-        // metadata may list ShaderVariablesGlobal's full member set while another lists only a partial
-        // subset, even though both passes' SPIR-V access the same registers. The structured rewriter drops
-        // a CB to a flat `_f_0[N]` array if ANY accessed register lacks a member (Pass050 access
-        // validation), so a partial pass that reads register 44 (_WorldSpaceCameraPos) but lacks that
-        // member stays flat. Give every pass the UNION (by byte offset) of each CB's members seen anywhere
-        // in this shader; the LayoutBuilder still trims to each pass's SPIR-V array length, so members
-        // beyond what a pass actually accesses are dropped correctly. Keyed by name — a CB name denotes one
-        // layout in a Unity shader.
-        var vectorUnion = new Dictionary<string, Dictionary<int, VectorParameter>>();
-        var matrixUnion = new Dictionary<string, Dictionary<int, MatrixParameter>>();
-        var structUnion = new Dictionary<string, Dictionary<int, StructParameter>>();
-        foreach (ShaderSymbolPass pass in result)
-        {
-            foreach (ConstantBufferParameter cb in pass.Symbols.ConstantBufferParameters)
-            {
-                if (!vectorUnion.TryGetValue(cb.Name, out Dictionary<int, VectorParameter>? vmap))
-                {
-                    vmap = new Dictionary<int, VectorParameter>();
-                    vectorUnion[cb.Name] = vmap;
-                    matrixUnion[cb.Name] = new Dictionary<int, MatrixParameter>();
-                    structUnion[cb.Name] = new Dictionary<int, StructParameter>();
-                }
-                foreach (VectorParameter v in cb.VectorParameters) vmap[v.Index] = v;
-                foreach (MatrixParameter m in cb.MatrixParameters) matrixUnion[cb.Name][m.Index] = m;
-                foreach (StructParameter s in cb.StructParameters) structUnion[cb.Name][s.Index] = s;
-            }
-        }
-        foreach (ShaderSymbolPass pass in result)
-        {
-            foreach (ConstantBufferParameter cb in pass.Symbols.ConstantBufferParameters)
-            {
-                cb.VectorParameters = vectorUnion[cb.Name].Values.OrderBy(v => v.Index).ToArray();
-                cb.MatrixParameters = matrixUnion[cb.Name].Values.OrderBy(m => m.Index).ToArray();
-                cb.StructParameters = structUnion[cb.Name].Values.OrderBy(s => s.Index).ToArray();
-            }
-        }
 
         return result;
     }
@@ -629,23 +595,14 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             Console.WriteLine($"[ShaderDecompile] {shader.Name} [{now}/{total}] {passStems[idx]}{suffix}");
         });
 
-        // Fixture regeneration: dump the FINAL SerializedProgramData (after the CB-remap hook mutated
-        // it in place during Decompile) plus the raw DXBC payload, so the decompiler's offline
-        // regression fixtures — which deserialize straight into SerializedProgramData, bypassing all
-        // these hooks — carry the fully-resolved EndField texture AND cbuffer binding shape.
-        string? fixtureOut = Environment.GetEnvironmentVariable("RURI_ENDFIELD_FIXTURE_OUT");
-        if (!string.IsNullOrEmpty(fixtureOut))
-        {
-            Directory.CreateDirectory(fixtureOut);
-            for (int i = 0; i < total; i++)
-            {
-                string basePath = Path.Combine(fixtureOut, $"{SanitizeFileName(shader.Name)}.{passStems[i]}");
-                File.WriteAllText(basePath + ".metadata.json",
-                    Newtonsoft.Json.JsonConvert.SerializeObject(symbols[i].Symbols, Newtonsoft.Json.Formatting.Indented),
-                    new UTF8Encoding(false));
-                File.WriteAllBytes(basePath + ".dxbc.bin", symbols[i].Read.Binary);
-            }
-        }
+        // Game-specific post-decompile observation (dependency-inverted): symbols now carry their
+        // FINAL state (decompile-time hooks mutate SerializedProgramData in place). Argument list is
+        // only materialised when an observer is installed.
+        Observer?.OnShaderDecompiled(shader.Name, Enumerable.Range(0, total).Select(i => new ShaderPassResultView(
+            symbols[i].Symbols,
+            symbols[i].Read.Binary,
+            passStems[i],
+            results[i]?.Success == true)).ToList());
 
         // 3. Compose the final .shader text and write in one shot. Pass order matters —
         // consumers cross-reference passes by name and reruns must be textually
@@ -930,7 +887,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// Copy parameters/bindings from <paramref name="source"/> into <paramref name="target"/>
     /// verbatim. The generic exporter is no longer responsible for decoding packed bindings —
     /// that decoder (formerly <c>DecodeUnityBindPoint</c>) is EndField-specific and now lives
-    /// in <see cref="PostProcessSymbols"/> game hooks.
+    /// in <see cref="IShaderExportObserver.OnPassSymbolsRead"/> game-hook observers.
     /// </summary>
     private static void AppendSymbols(SerializedProgramData target, SerializedProgramData source)
     {
@@ -1049,7 +1006,8 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return trimmed;
     }
 
-    private static string SanitizeFileName(string value)
+    /// <summary>Public: game-hook observers reuse this for filenames derived from shader names.</summary>
+    public static string SanitizeFileName(string value)
     {
         char[] invalidChars = Path.GetInvalidFileNameChars();
         StringBuilder builder = new(value.Length);
@@ -1178,18 +1136,26 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     }
 
     /// <summary>
-    /// Per-pass context handed to <see cref="PostProcessSymbols"/>. Identifies the shader and
-    /// pass so a game-specific hook can branch on identity (debug logging, per-pass quirks).
+    /// Per-pass context handed to <see cref="IShaderExportObserver.OnPassSymbolsRead"/>. Identifies the
+    /// shader and pass so a game-specific observer can branch on identity (debug logging, per-pass quirks).
     /// </summary>
     public readonly record struct ShaderReadContext(string ShaderName, int SubShaderIndex, int PassIndex, uint BlobIndex, UnityVersion Version);
 
     /// <summary>
-    /// View of one decompile pass handed to <see cref="PostProcessAllPasses"/>: its mutable symbol
-    /// table plus the identity (which SubShader/Pass/Stage) and whether the blob is DXBC (D3D11) so a
-    /// game hook can group stages of the same pass and branch on DX11 vs Vulkan without depending on
-    /// the AssetRipper platform enum.
+    /// View of one decompile pass handed to <see cref="IShaderExportObserver.OnShaderSymbolsRead"/>: its
+    /// mutable symbol table plus the identity (which SubShader/Pass/Stage) and whether the blob is DXBC
+    /// (D3D11) so a game observer can group stages of the same pass and branch on DX11 vs Vulkan without
+    /// depending on the AssetRipper platform enum.
     /// </summary>
     public sealed record ShaderPassView(SerializedProgramData Symbols, int SubShaderIndex, int PassIndex, string Stage, bool IsDxbc);
+
+    /// <summary>
+    /// View of one decompiled pass handed to <see cref="IShaderExportObserver.OnShaderDecompiled"/>:
+    /// the FINAL symbol state (decompile-time hooks mutate it in place), the pass's raw shader binary,
+    /// the exporter's canonical pass stem ("subN.passN.stage.blobN.passName", filename-safe) and whether
+    /// the decompile succeeded.
+    /// </summary>
+    public sealed record ShaderPassResultView(SerializedProgramData Symbols, byte[] Binary, string PassStem, bool Success);
 
     private sealed record ShaderReadSource(uint BlobIndex, uint? ParameterBlobIndex, List<ushort> KeywordIndices, ISerializedProgramParameters? Parameters);
 
