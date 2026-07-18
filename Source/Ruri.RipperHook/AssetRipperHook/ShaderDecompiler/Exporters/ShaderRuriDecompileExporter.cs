@@ -36,6 +36,15 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     public static Action<SerializedProgramData, ShaderSubProgram, ShaderReadContext>? PostProcessSymbols;
 
     /// <summary>
+    /// Optional callback installed by game-specific hooks, invoked ONCE per shader with every pass's
+    /// symbols after <see cref="PostProcessSymbols"/> has run on each. Unlike the per-pass callback,
+    /// this can reason across the stages of a pass — needed when a proprietary engine records a
+    /// pass's resource bindings on only one stage's parameter block (see the invocation site).
+    /// Vanilla Unity installs no callback so the generic path is untouched.
+    /// </summary>
+    public static Action<IReadOnlyList<ShaderPassView>>? PostProcessAllPasses;
+
+    /// <summary>
     /// Live-read from the persisted ShaderDecompilerSettings snapshot
     /// (loaded at host startup, mutated by the host's settings UI).
     /// When true (default), multi-variant stages get their HLSL bodies
@@ -513,6 +522,21 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             result.Add(new ShaderSymbolPass(read, symbols));
         }
 
+        // Cross-pass game-specific rewrite (no game branches in the generic path). Some engines
+        // (EndField) record a pass's texture/sampler binding table on only ONE stage's parameter
+        // block (the vertex program's CommonParameters), leaving the fragment stage — which is the
+        // one that actually samples them — with an empty table. A per-pass callback can't repair
+        // that because it sees a single stage in isolation; this seam hands the game hook every
+        // pass at once so it can share bindings across the stages of a pass and assign real
+        // registers. Vanilla Unity installs no callback, so this is a no-op and the output stays
+        // byte-identical.
+        PostProcessAllPasses?.Invoke(result.Select(static p => new ShaderPassView(
+            p.Symbols,
+            p.Read.SubShaderIndex,
+            p.Read.PassIndex,
+            p.Read.Stage,
+            ProgramTypeToPlatform(p.Read.SubProgram.GetProgramType(p.Read.Version)) == GPUPlatform.D3D11)).ToList());
+
         // Global member union. EndField splits a constant buffer's members across passes — one pass's
         // metadata may list ShaderVariablesGlobal's full member set while another lists only a partial
         // subset, even though both passes' SPIR-V access the same registers. The structured rewriter drops
@@ -604,6 +628,24 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             string suffix = r.Success ? string.Empty : $" — fail: {FirstLine(r.ErrorMessage)}";
             Console.WriteLine($"[ShaderDecompile] {shader.Name} [{now}/{total}] {passStems[idx]}{suffix}");
         });
+
+        // Fixture regeneration: dump the FINAL SerializedProgramData (after the CB-remap hook mutated
+        // it in place during Decompile) plus the raw DXBC payload, so the decompiler's offline
+        // regression fixtures — which deserialize straight into SerializedProgramData, bypassing all
+        // these hooks — carry the fully-resolved EndField texture AND cbuffer binding shape.
+        string? fixtureOut = Environment.GetEnvironmentVariable("RURI_ENDFIELD_FIXTURE_OUT");
+        if (!string.IsNullOrEmpty(fixtureOut))
+        {
+            Directory.CreateDirectory(fixtureOut);
+            for (int i = 0; i < total; i++)
+            {
+                string basePath = Path.Combine(fixtureOut, $"{SanitizeFileName(shader.Name)}.{passStems[i]}");
+                File.WriteAllText(basePath + ".metadata.json",
+                    Newtonsoft.Json.JsonConvert.SerializeObject(symbols[i].Symbols, Newtonsoft.Json.Formatting.Indented),
+                    new UTF8Encoding(false));
+                File.WriteAllBytes(basePath + ".dxbc.bin", symbols[i].Read.Binary);
+            }
+        }
 
         // 3. Compose the final .shader text and write in one shot. Pass order matters —
         // consumers cross-reference passes by name and reruns must be textually
@@ -1140,6 +1182,14 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// pass so a game-specific hook can branch on identity (debug logging, per-pass quirks).
     /// </summary>
     public readonly record struct ShaderReadContext(string ShaderName, int SubShaderIndex, int PassIndex, uint BlobIndex, UnityVersion Version);
+
+    /// <summary>
+    /// View of one decompile pass handed to <see cref="PostProcessAllPasses"/>: its mutable symbol
+    /// table plus the identity (which SubShader/Pass/Stage) and whether the blob is DXBC (D3D11) so a
+    /// game hook can group stages of the same pass and branch on DX11 vs Vulkan without depending on
+    /// the AssetRipper platform enum.
+    /// </summary>
+    public sealed record ShaderPassView(SerializedProgramData Symbols, int SubShaderIndex, int PassIndex, string Stage, bool IsDxbc);
 
     private sealed record ShaderReadSource(uint BlobIndex, uint? ParameterBlobIndex, List<ushort> KeywordIndices, ISerializedProgramParameters? Parameters);
 
