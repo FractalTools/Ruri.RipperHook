@@ -84,6 +84,16 @@ internal static class Program
         {
             config.EnabledHooks.Add(NormalizeHookId(id));
         }
+        // Always on, unconditionally, not opt-in: "Copying streaming assets" blind-copies whatever
+        // sits in <game>/StreamingAssets verbatim into the export tree. For VFS games (EndField) that
+        // includes a stale, previously-decompiled shader HLSL cache dropped there by a prior session
+        // (Endfield_Data/StreamingAssets/VFS/<id>/<hash>Output/) -- so any export silently overwrote
+        // our freshly-decompiled shaders with old ones after the real decompile step ran, making every
+        // decompiler fix upstream look like it "did nothing" or "worked" at random depending on which
+        // files a given run happened to touch. Root-caused 2026-07-18 (user instruction: never let this
+        // run again without an explicit opt-in). --hook AR_SkipStreamingAssetsCopy still works too; this
+        // just removes the need to remember it every single invocation.
+        config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
         // --load-types implies the export should be filtered to those same types.
         if (opts.LoadTypes.Length > 0)
         {
@@ -94,10 +104,7 @@ internal static class Program
         {
             config.EnabledHooks.Add("AR_GlbExporter_");
         }
-        if (opts.Hooks.Length > 0 || opts.LoadTypes.Length > 0 || opts.ExportGlbPath is { Length: > 0 })
-        {
-            Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
-        }
+        Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
         Bootstrap.ApplyHooks(config);
     }
 
