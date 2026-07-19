@@ -112,6 +112,18 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     public static bool OneVariantPerProgramSlot { get; set; } =
         Environment.GetEnvironmentVariable("RURI_SHADER_FAST_ITERATION") == "1";
 
+    /// <summary>
+    /// Bisection/regression-testing mode: the instant any pass fails to decompile, dump its
+    /// full error and kill the process (<see cref="Environment.Exit(int)"/>) instead of letting
+    /// the batch finish the remaining hundreds of shaders. Off by default — a normal export run
+    /// must still tolerate isolated per-blob failures and finish so `.shader.failures` dumps for
+    /// every failing blob land on disk in one pass. Toggle via <c>RURI_STRICT_SHADER_EXPORT=1</c>
+    /// when you need a yes/no answer on "did this change reintroduce any hard failure" in seconds
+    /// instead of waiting out a full-corpus run.
+    /// </summary>
+    public static bool StrictShaderExport { get; set; } =
+        Environment.GetEnvironmentVariable("RURI_STRICT_SHADER_EXPORT") == "1";
+
     public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
     {
         IShader shader = (IShader)asset;
@@ -596,6 +608,14 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             int now = Interlocked.Increment(ref completed);
             string suffix = r.Success ? string.Empty : $" — fail: {FirstLine(r.ErrorMessage)}";
             Console.WriteLine($"[ShaderDecompile] {shader.Name} [{now}/{total}] {passStems[idx]}{suffix}");
+
+            if (!r.Success && StrictShaderExport)
+            {
+                Console.Error.WriteLine($"[ShaderDecompile] RURI_STRICT_SHADER_EXPORT: aborting on first failure — {shader.Name} {passStems[idx]}");
+                Console.Error.WriteLine(r.ErrorMessage);
+                Console.Error.WriteLine($"Debug dump: {Path.Combine(failuresRoot, passStems[idx])}");
+                Environment.Exit(1);
+            }
         });
 
         // Game-specific post-decompile observation (dependency-inverted): symbols now carry their
