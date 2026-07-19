@@ -580,11 +580,26 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         var passStems = new string[total];
         var requests = new (byte[] Binary, DecompileOptions Options)[total];
 
+        // Ground-truth investigation aid: RURI_DUMP_INPUT_DIR=<dir> writes every pass's raw
+        // pre-decompile shader binary (the exact DXBC/DXIL/SPIR-V blob the engine shipped) as
+        // <dir>/<shaderName sanitized>.<passStem>.input.bin. Off by default (the normal export
+        // tree stays clean). Unlike the failure dump this fires on success too, so the RDEF
+        // reflection chunk of a shader that decompiles fine but resolves symbols imperfectly can
+        // be parsed offline against the engine's own bind-slot table.
+        string? dumpInputDir = Environment.GetEnvironmentVariable("RURI_DUMP_INPUT_DIR");
+
         for (int i = 0; i < total; i++)
         {
             ShaderSymbolPass pass = symbols[i];
             string passStem = $"sub{pass.Read.SubShaderIndex}.pass{pass.Read.PassIndex}.{pass.Read.Stage.ToLowerInvariant()}.blob{pass.Read.BlobIndex}.{SanitizeFileName(pass.Read.PassName)}";
             passStems[i] = passStem;
+
+            if (!string.IsNullOrEmpty(dumpInputDir))
+            {
+                Directory.CreateDirectory(dumpInputDir);
+                string safeShader = SanitizeFileName(shader.Name);
+                File.WriteAllBytes(Path.Combine(dumpInputDir, $"{safeShader}.{passStem}.input.bin"), pass.Read.Binary);
+            }
 
             requests[i] = (pass.Read.Binary, new DecompileOptions
             {
