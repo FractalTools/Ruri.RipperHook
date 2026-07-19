@@ -195,6 +195,40 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>
+    /// Reverse dependency lookup: every CAB that DIRECTLY depends on (references) any of the given
+    /// seed CABs -- the mirror of <see cref="ResolveClosureCabNames"/>'s forward walk, via
+    /// <see cref="CabTable.ReverseAdjacency"/> (built once per loaded map, lazily). No VFS decrypt,
+    /// no AssetRipper export; a pure in-memory graph lookup, same cost class as the forward closure.
+    /// Useful when an asset's real usage context isn't reachable from its OWN forward dependencies
+    /// at all -- e.g. a Mesh-only FBX sub-asset carries no Material of its own; the Prefab whose
+    /// Renderer component pairs that mesh with a material is a direct DEPENDENT, never the other
+    /// way around. Direct (one-hop) dependents only, not a transitive reverse closure: the caller
+    /// typically feeds the results back into <see cref="ImportCabs"/> next, whose own forward
+    /// closure resolution already pulls the seed CAB itself back in along with everything else.
+    /// </summary>
+    public static string[] FindDirectDependents(CabMapHandle map, string[] seedCabNames)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(seedCabNames);
+        CabTable table = map.Table;
+        int[][] reverse = table.ReverseAdjacency;
+        HashSet<int> found = new();
+        foreach (string seedName in seedCabNames)
+        {
+            if (table.CabToId.TryGetValue(seedName, out int seedId))
+            {
+                foreach (int dependent in reverse[seedId])
+                {
+                    found.Add(dependent);
+                }
+            }
+        }
+        string[] names = found.Select(table.CabName).ToArray();
+        Array.Sort(names, StringComparer.OrdinalIgnoreCase);
+        return names;
+    }
+
+    /// <summary>
     /// For a CAB that hosts AnimationClips (and typically nothing else), find EVERY CAB carrying an Avatar
     /// (ClassID 90) in the clip's dependency neighborhood, nearest first -- the assets a standalone clip
     /// import co-loads so (a) AssetRipper's own AnimationClipConverter can restore the clips' hashed curve
