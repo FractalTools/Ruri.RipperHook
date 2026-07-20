@@ -42,18 +42,12 @@ public partial class MainForm
 		ToggleUi(false);
 		try
 		{
-			// Load the map (RCM3 carries its names inline; a legacy RCM2 map falls back to the sidecar so
-			// the list is searchable by name), then materialise + sort the virtual-file rows — all off the
-			// UI thread (258k+ CABs).
+			// Load the map (RCM4 always carries names inline — no sidecar), then materialise + sort the
+			// virtual-file rows — all off the UI thread (258k+ CABs).
 			List<ExportCabMap.CabRow> rows = [];
 			await Task.Run(() =>
 			{
 				_exportMap.Load(file);
-				string namesPath = ExportCabMap.NameIndexPath(file);
-				if (!_exportMap.HasNames && File.Exists(namesPath))
-				{
-					_exportMap.LoadNames(namesPath);
-				}
 				rows = _exportMap.EnumerateCabRows()
 					.OrderBy(static r => r.ContainerPaths.Count > 0 ? r.ContainerPaths[0] : r.Cab, StringComparer.OrdinalIgnoreCase)
 					.ToList();
