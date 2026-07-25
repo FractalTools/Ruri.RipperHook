@@ -155,6 +155,20 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         {
             available.Add((GPUPlatform)(int)p);
         }
+
+        // RURI_SHADER_PLATFORM=<GPUPlatform name> pins the pick, so a shader that ships several
+        // platforms can be exported from a specific one. Needed because a shader's per-program
+        // parameter block is shared across ALL its platforms: comparing what one platform's
+        // bytecode actually declares against that shared block is the only way to establish which
+        // platform the block was written for. Ignored when the shader doesn't ship that platform.
+        string? pinned = Environment.GetEnvironmentVariable("RURI_SHADER_PLATFORM");
+        if (!string.IsNullOrWhiteSpace(pinned)
+            && Enum.TryParse(pinned, ignoreCase: true, out GPUPlatform pinnedPlatform)
+            && available.Contains(pinnedPlatform))
+        {
+            return pinnedPlatform;
+        }
+
         foreach (GPUPlatform candidate in PreferredPlatforms)
         {
             if (available.Contains(candidate))
@@ -538,7 +552,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             AppendRuntimeSymbols(symbols, read.SubProgram);
 
             // Game-specific per-pass rewrite (dependency-inverted; no game branches here).
-            observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version));
+            observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version, read.Stage, read.CommonSymbols, read.ParameterSymbols));
 
             result.Add(new ShaderSymbolPass(read, symbols));
         }
@@ -1176,8 +1190,24 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     /// <summary>
     /// Per-pass context handed to <see cref="IShaderExportObserver.OnPassSymbolsRead"/>. Identifies the
     /// shader and pass so a game-specific observer can branch on identity (debug logging, per-pass quirks).
+    ///
+    /// <paramref name="CommonSymbols"/> / <paramref name="ParameterSymbols"/> are the two serialized
+    /// sources that <see cref="BuildSymbols"/> concatenated (in that order) into the merged table the
+    /// observer receives — <c>SerializedProgram.m_CommonParameters</c> and
+    /// <c>SerializedSubProgram.m_Parameters</c>. The merge is lossy about provenance, and provenance
+    /// matters: the two streams are populated by different halves of the engine's shader importer and
+    /// can disagree about the same buffer. Handing both through keeps that recoverable without
+    /// re-reading the asset.
     /// </summary>
-    public readonly record struct ShaderReadContext(string ShaderName, int SubShaderIndex, int PassIndex, uint BlobIndex, UnityVersion Version);
+    public readonly record struct ShaderReadContext(
+        string ShaderName,
+        int SubShaderIndex,
+        int PassIndex,
+        uint BlobIndex,
+        UnityVersion Version,
+        string Stage,
+        SerializedProgramData CommonSymbols,
+        SerializedProgramData ParameterSymbols);
 
     /// <summary>
     /// View of one decompile pass handed to <see cref="IShaderExportObserver.OnShaderSymbolsRead"/>: its
