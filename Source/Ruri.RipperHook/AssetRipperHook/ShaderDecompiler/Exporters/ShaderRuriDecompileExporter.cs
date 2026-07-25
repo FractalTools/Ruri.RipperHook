@@ -50,6 +50,25 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         /// the FINAL symbol state (decompile-time hooks mutate <see cref="SerializedProgramData"/> in
         /// place) plus each pass's raw binary and outcome — e.g. for regression-fixture dumps.</summary>
         void OnShaderDecompiled(string shaderName, IReadOnlyList<ShaderPassResultView> passes) { }
+
+        /// <summary>
+        /// Which platform's bytecode to export this shader from. <paramref name="defaultChoice"/> is
+        /// what the generic priority picked; return it to accept. A shader's symbol tables are stored
+        /// once per program and shared by every platform's bytecode, so on a given engine they can
+        /// only describe ONE of them — which one is a fact about that engine, hence a hook decision.
+        /// A return value the shader doesn't actually ship is ignored.
+        /// </summary>
+        GPUPlatform PickPlatform(IShader shader, IReadOnlyCollection<GPUPlatform> available, GPUPlatform defaultChoice) => defaultChoice;
+
+        /// <summary>
+        /// Split one subprogram's raw <c>ProgramData</c> into the bytecode modules it carries, each
+        /// tagged with the stage it belongs to. Return <see langword="null"/> (the default) for the
+        /// standard Unity shape — a single module for <paramref name="stage"/> behind the usual
+        /// header. An engine that packs several stages into one payload, or wraps it in a container
+        /// of its own, implements this; the exporter then emits one pass per returned module and
+        /// takes the stage from the module rather than from the program slot it was filed under.
+        /// </summary>
+        IReadOnlyList<(string Stage, byte[] Binary)>? SplitProgramPayload(byte[] programData, GPUPlatform platform, string stage, UnityVersion version) => null;
     }
 
     /// <summary>Installed by game hooks (one game per process); null for vanilla Unity.</summary>
@@ -81,17 +100,13 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     }
 
     /// <summary>
-    /// Platform priority for the auto-pick. In an ideal world Vulkan comes first because the
-    /// downstream <see cref="ShaderDecompiler"/> already speaks SPIR-V natively — but Unity's
-    /// Vulkan bytecode is wrapped with SMOL-V (Aras P.'s compressed-SPIR-V format) and we don't
-    /// yet ship a SMOL-V decoder. Until that lands, prefer D3D11 so we go through the working
-    /// DXBC→DXIL→SPV path. Other platforms (Metal MSL, GLSL, console) aren't ingestible by
-    /// spirv-cross today, so we skip them entirely.
-    ///
-    /// TODO: when a SMOL-V decoder is added (port of github.com/aras-p/smol-v), swap order so
-    /// Vulkan wins for vanilla Unity shaders that use raw SPIR-V. EndField specifically wraps
-    /// Vulkan blobs in SMOL-V at offset 0xB0 (header field at 0x0C tells the strip size), so
-    /// EndField would still need that strip + decompress before raw SPIR-V can flow through.
+    /// Default platform priority for the auto-pick: D3D11, because stock Unity's Vulkan bytecode
+    /// arrives SMOL-V compressed behind a version-dependent payload layout, whereas the DXBC path is
+    /// uniform across every Unity build this exporter reads. An engine whose bytecode is better read
+    /// from another platform says so through <see cref="IShaderExportObserver.PickPlatform"/> rather
+    /// than by reordering this list — which platform an asset's symbols actually describe is a
+    /// property of the engine that built it, not of the exporter. Platforms other than these two
+    /// (Metal MSL, GLSL, console) aren't ingestible by spirv-cross today, so we skip them entirely.
     /// </summary>
     private static readonly GPUPlatform[] PreferredPlatforms = new[]
     {
@@ -137,11 +152,10 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     }
 
     /// <summary>
-    /// Pick the highest-quality platform actually present in the shader, walking
-    /// <see cref="PreferredPlatforms"/> in declared order. EndField (and any modern Unity
-    /// project) ships Vulkan pre-built, so we get SPIR-V straight from the bundle and skip the
-    /// lossy DXBC translation entirely. Returns <see cref="GPUPlatform.Unknown"/> when no
-    /// supported platform is present (e.g. Metal-only mobile shader).
+    /// Pick the platform to export from: the first of <see cref="PreferredPlatforms"/> the shader
+    /// actually ships, then whatever the installed game observer prefers instead, with
+    /// <c>RURI_SHADER_PLATFORM</c> overriding both. Returns <see cref="GPUPlatform.Unknown"/> when no
+    /// supported platform is present (e.g. a Metal-only mobile shader).
     /// </summary>
     private static GPUPlatform PickBestPlatform(IShader shader)
     {
@@ -157,10 +171,10 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         }
 
         // RURI_SHADER_PLATFORM=<GPUPlatform name> pins the pick, so a shader that ships several
-        // platforms can be exported from a specific one. Needed because a shader's per-program
-        // parameter block is shared across ALL its platforms: comparing what one platform's
-        // bytecode actually declares against that shared block is the only way to establish which
-        // platform the block was written for. Ignored when the shader doesn't ship that platform.
+        // platforms can be exported from a specific one. Comparing what one platform's bytecode
+        // declares against the shared per-program parameter block is the only way to establish which
+        // platform that block was written for, so this stays available whatever the game hook
+        // prefers. Ignored when the shader doesn't ship that platform.
         string? pinned = Environment.GetEnvironmentVariable("RURI_SHADER_PLATFORM");
         if (!string.IsNullOrWhiteSpace(pinned)
             && Enum.TryParse(pinned, ignoreCase: true, out GPUPlatform pinnedPlatform)
@@ -169,14 +183,18 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             return pinnedPlatform;
         }
 
+        GPUPlatform chosen = GPUPlatform.Unknown;
         foreach (GPUPlatform candidate in PreferredPlatforms)
         {
             if (available.Contains(candidate))
             {
-                return candidate;
+                chosen = candidate;
+                break;
             }
         }
-        return GPUPlatform.Unknown;
+
+        GPUPlatform preferred = Observer?.PickPlatform(shader, available, chosen) ?? chosen;
+        return available.Contains(preferred) ? preferred : chosen;
     }
 
     private static bool DecompileShader(IShader shader, GPUPlatform platform, string outputPath)
@@ -204,7 +222,9 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             return false;
         }
 
-        UnityShaderMetadata unityMetadata = UnityShaderMetadataBuilder.Build(shader, platform, EnumerateProgramBlobIndices);
+        UnityShaderMetadata unityMetadata = UnityShaderMetadataBuilder.Build(shader, platform, EnumerateProgramBlobIndices,
+            symbols.Select(static s => new UnityShaderMetadataBuilder.ProgramResultLocation(
+                s.Read.SubShaderIndex, s.Read.PassIndex, s.Read.Stage, s.Read.BlobIndex, s.Read.ParameterBlobIndex, s.Read.KeywordIndices)).ToList());
         DecompileAndWritePasses(shader, symbols, unityMetadata, outputPath);
         return true;
     }
@@ -269,26 +289,58 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                 continue;
             }
 
-            byte[] payload = ExtractPayload(subProgram.ProgramData, shader.Collection.Version);
-            if (payload.Length == 0)
+            // A subprogram payload is normally one stage's bytecode behind the standard header, but an
+            // engine is free to lay its own container out differently (several stages in one payload,
+            // its own table, its own compression). That shape is the engine's, so the split is a game
+            // hook's call and only the default is implemented here.
+            List<(string Stage, byte[] Binary)> binaries = [];
+            IReadOnlyList<(string Stage, byte[] Binary)>? split =
+                Observer?.SplitProgramPayload(subProgram.ProgramData, platform, stage, shader.Collection.Version);
+            if (split is not null)
+            {
+                binaries.AddRange(split);
+            }
+            else
+            {
+                byte[] payload = ExtractPayload(subProgram.ProgramData, shader.Collection.Version);
+                if (payload.Length > 0)
+                {
+                    binaries.Add((stage, payload));
+                }
+            }
+            if (binaries.Count == 0)
             {
                 continue;
             }
 
-            result.Add(new ShaderReadPass(
-                pass.State.Name_R,
-                subShaderIndex,
-                passIndex,
-                stage,
-                source.BlobIndex,
-                source.ParameterBlobIndex,
-                source.KeywordIndices,
-                subProgram,
-                ReadProgramSymbols(program.CommonParameters, nameTable),
-                ReadProgramSymbols(source.Parameters, nameTable),
-                payload,
-                shader.Name,
-                shader.Collection.Version));
+            foreach ((string moduleStage, byte[] binary) in binaries)
+            {
+                // A payload reachable from several program slots would otherwise produce the same
+                // module once per slot.
+                if (result.Any(existing => existing.SubShaderIndex == subShaderIndex
+                    && existing.PassIndex == passIndex
+                    && existing.Stage == moduleStage
+                    && existing.BlobIndex == source.BlobIndex
+                    && existing.KeywordIndices.SequenceEqual(source.KeywordIndices)))
+                {
+                    continue;
+                }
+
+                result.Add(new ShaderReadPass(
+                    pass.State.Name_R,
+                    subShaderIndex,
+                    passIndex,
+                    moduleStage,
+                    source.BlobIndex,
+                    source.ParameterBlobIndex,
+                    source.KeywordIndices,
+                    subProgram,
+                    ReadProgramSymbols(program.CommonParameters, nameTable),
+                    ReadProgramSymbols(source.Parameters, nameTable),
+                    binary,
+                    shader.Name,
+                    shader.Collection.Version));
+            }
 
             if (OneVariantPerProgramSlot)
             {
@@ -552,7 +604,10 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             AppendRuntimeSymbols(symbols, read.SubProgram);
 
             // Game-specific per-pass rewrite (dependency-inverted; no game branches here).
-            observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version, read.Stage, read.CommonSymbols, read.ParameterSymbols));
+            observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(
+                read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version, read.Stage,
+                ProgramTypeToPlatform(read.SubProgram.GetProgramType(read.Version)),
+                read.CommonSymbols, read.ParameterSymbols));
 
             result.Add(new ShaderSymbolPass(read, symbols));
         }
@@ -1206,6 +1261,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         uint BlobIndex,
         UnityVersion Version,
         string Stage,
+        GPUPlatform Platform,
         SerializedProgramData CommonSymbols,
         SerializedProgramData ParameterSymbols);
 

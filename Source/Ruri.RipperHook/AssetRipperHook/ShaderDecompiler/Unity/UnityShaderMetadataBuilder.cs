@@ -22,13 +22,24 @@ internal static class UnityShaderMetadataBuilder
 
     public readonly record struct ProgramResultLocation(int SubShaderIndex, int PassIndex, string Stage, uint BlobIndex, uint? ParameterBlobIndex, List<ushort> KeywordIndices);
 
+    /// <param name="actualPrograms">
+    /// The (SubShader, Pass, Stage) slots the reader really produced bytecode for. It is the
+    /// authority whenever it covers a slot, because which program slot a subprogram is FILED under
+    /// need not be the stage it IS: a Vulkan container carries the whole pass, so the fragment
+    /// module arrives under the vertex program and <paramref name="enumerateProgramBlobIndices"/>
+    /// would report the fragment slot as empty — leaving the emitted ShaderLab pass with no
+    /// `#pragma fragment` even though the stage decompiled fine. Slots absent from it fall back to
+    /// the enumerator, so single-module platforms behave exactly as before.
+    /// </param>
     public static UnityShaderMetadata Build(
         IShader shader,
         GPUPlatform platform,
-        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices)
+        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices,
+        IReadOnlyList<ProgramResultLocation> actualPrograms)
     {
         ArgumentNullException.ThrowIfNull(shader);
         ArgumentNullException.ThrowIfNull(enumerateProgramBlobIndices);
+        ArgumentNullException.ThrowIfNull(actualPrograms);
 
         var parsedForm = shader.ParsedForm!;
         UnityShaderMetadata metadata = new()
@@ -89,7 +100,15 @@ internal static class UnityShaderMetadataBuilder
             for (int passIndex = 0; passIndex < sourceSubShader.Passes.Count; passIndex++)
             {
                 var sourcePass = sourceSubShader.Passes[passIndex];
-                UnitySerializedPass pass = BuildPass(sourcePass, shader.Collection.Version, platform, enumerateProgramBlobIndices);
+                int capturedSubShader = subShaderIndex;
+                int capturedPass = passIndex;
+                UnitySerializedPass pass = BuildPass(sourcePass, shader.Collection.Version, platform, enumerateProgramBlobIndices,
+                    stage => actualPrograms
+                        .Where(location => location.SubShaderIndex == capturedSubShader
+                            && location.PassIndex == capturedPass
+                            && location.Stage == stage)
+                        .Select(static location => new ProgramBlobReference(location.BlobIndex, location.ParameterBlobIndex, location.KeywordIndices))
+                        .ToList());
                 subShader.Passes.Add(pass);
             }
 
@@ -134,7 +153,8 @@ internal static class UnityShaderMetadataBuilder
         ISerializedPass sourcePass,
         UnityVersion version,
         GPUPlatform platform,
-        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices)
+        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices,
+        Func<string, List<ProgramBlobReference>> actualProgramsForStage)
     {
         List<UnitySerializedNameIndex> nameIndices = [];
         for (int i = 0; i < sourcePass.NameIndices.Count; i++)
@@ -171,12 +191,12 @@ internal static class UnityShaderMetadataBuilder
         }
 
         BuildPassState(sourcePass.State, pass);
-        AssignProgramSlot(pass, "Vertex", sourcePass.ProgVertex, version, platform, enumerateProgramBlobIndices);
-        AssignProgramSlot(pass, "Fragment", sourcePass.ProgFragment, version, platform, enumerateProgramBlobIndices);
-        AssignProgramSlot(pass, "Geometry", sourcePass.ProgGeometry, version, platform, enumerateProgramBlobIndices);
-        AssignProgramSlot(pass, "Hull", sourcePass.ProgHull, version, platform, enumerateProgramBlobIndices);
-        AssignProgramSlot(pass, "Domain", sourcePass.ProgDomain, version, platform, enumerateProgramBlobIndices);
-        AssignProgramSlot(pass, "RayTracing", sourcePass.ProgRayTracing, version, platform, enumerateProgramBlobIndices);
+        AssignProgramSlot(pass, "Vertex", sourcePass.ProgVertex, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("Vertex"));
+        AssignProgramSlot(pass, "Fragment", sourcePass.ProgFragment, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("Fragment"));
+        AssignProgramSlot(pass, "Geometry", sourcePass.ProgGeometry, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("Geometry"));
+        AssignProgramSlot(pass, "Hull", sourcePass.ProgHull, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("Hull"));
+        AssignProgramSlot(pass, "Domain", sourcePass.ProgDomain, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("Domain"));
+        AssignProgramSlot(pass, "RayTracing", sourcePass.ProgRayTracing, version, platform, enumerateProgramBlobIndices, actualProgramsForStage("RayTracing"));
         return pass;
     }
 
@@ -193,7 +213,8 @@ internal static class UnityShaderMetadataBuilder
         ISerializedProgram? sourceProgram,
         UnityVersion version,
         GPUPlatform platform,
-        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices)
+        Func<ISerializedProgram, UnityVersion, GPUPlatform, IEnumerable<ProgramBlobReference>> enumerateProgramBlobIndices,
+        List<ProgramBlobReference> actualPrograms)
     {
         if (sourceProgram is null)
         {
@@ -201,7 +222,10 @@ internal static class UnityShaderMetadataBuilder
         }
 
         UnitySerializedProgram program = new();
-        foreach (ProgramBlobReference blob in enumerateProgramBlobIndices(sourceProgram, version, platform))
+        IEnumerable<ProgramBlobReference> blobs = actualPrograms.Count > 0
+            ? actualPrograms
+            : enumerateProgramBlobIndices(sourceProgram, version, platform);
+        foreach (ProgramBlobReference blob in blobs)
         {
             program.SubPrograms.Add(new UnitySerializedSubProgram
             {
