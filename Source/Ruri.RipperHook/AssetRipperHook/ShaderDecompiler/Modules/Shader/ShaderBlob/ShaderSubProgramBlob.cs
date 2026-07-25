@@ -154,8 +154,35 @@ public sealed class ShaderSubProgramBlob
 			return;
 		}
 
-		subProgram.Read(entryReader, readProgramData, readParams);
+		// A blob index that resolves to a PARAMETER-only entry rather than a code entry is not a
+		// parse bug to propagate — the entry table mixes both kinds, and a proprietary engine's
+		// per-platform index spaces don't have to agree about which slots hold which (EndField's
+		// Vulkan table is contiguous where its D3D11 table steps by two, so a stale index can land
+		// on the wrong kind). Such an entry starts straight into the parameter block, so the
+		// keyword-array read walks off the end. Leave the sub-program empty and count it: the
+		// caller already skips sub-programs with no program data, and the count is what tells
+		// "this variant had nothing to decompile" apart from "we lost it silently".
+		try
+		{
+			subProgram.Read(entryReader, readProgramData, readParams);
+		}
+		catch (Exception ex)
+		{
+			UnreadableProgramDataCount++;
+			if (Environment.GetEnvironmentVariable("RURI_SHADER_BLOB_DEBUG") == "1")
+			{
+				Console.Error.WriteLine($"[BlobDebug] entry {index}/{Entries.Length} seg={entry.Segment} off={entry.Offset} len={entry.Length} not a code entry: {ex.Message}");
+				Console.Error.WriteLine("[BlobDebug]   head=" + BitConverter.ToString(segmentBytes, entry.Offset, Math.Min(48, entry.Length)));
+			}
+		}
 	}
+
+	/// <summary>
+	/// How many blob indices resolved to an entry whose program data could not be parsed (see
+	/// <see cref="ReadEntry"/>). Non-zero is not automatically wrong — it means those variants
+	/// contributed nothing — but a jump in it is how a mis-resolved index space shows up.
+	/// </summary>
+	public int UnreadableProgramDataCount { get; private set; }
 
 	public ShaderSubProgramEntry[] Entries { get; set; } = [];
 
