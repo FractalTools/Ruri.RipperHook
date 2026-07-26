@@ -12,7 +12,7 @@ internal static class MaterialTextureNameInferrer
 
     public static int InferAndAppend(byte[] spirv, SerializedProgramData symbols)
     {
-        if (spirv == null || spirv.Length < SpvOpCode.HeaderWordCount * 4)
+        if (spirv == null || spirv.Length < SpirvModule.HeaderWordCount * 4)
         {
             return 0;
         }
@@ -22,7 +22,7 @@ internal static class MaterialTextureNameInferrer
         }
 
         uint[] words = BytesToWords(spirv);
-        if (words.Length < SpvOpCode.HeaderWordCount || words[0] != SpvOpCode.MagicNumber)
+        if (words.Length < SpirvModule.HeaderWordCount || words[0] != SpirvModule.MagicNumber)
         {
             return 0;
         }
@@ -32,7 +32,7 @@ internal static class MaterialTextureNameInferrer
         Dictionary<uint, int?> varToBinding = new();
         List<(uint ImageLoadId, uint SamplerLoadId)> sampledImagePairs = new();
 
-        int offset = SpvOpCode.HeaderWordCount;
+        int offset = SpirvModule.HeaderWordCount;
         while (offset < words.Length)
         {
             uint header = words[offset];
@@ -49,11 +49,11 @@ internal static class MaterialTextureNameInferrer
                     {
                         uint targetId = words[offset + 1];
                         uint decoration = words[offset + 2];
-                        if (decoration == SpvOpCode.DecorationDescriptorSet)
+                        if (decoration == Decoration.DescriptorSet)
                         {
                             varToSet[targetId] = (int)words[offset + 3];
                         }
-                        else if (decoration == SpvOpCode.DecorationBinding)
+                        else if (decoration == Decoration.Binding)
                         {
                             varToBinding[targetId] = (int)words[offset + 3];
                         }

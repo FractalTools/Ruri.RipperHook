@@ -7,7 +7,7 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
 public class UnrealShaderParser
 {
-    public static byte[] Parse(byte[] data, out ShaderArchitecture architecture, out UnrealMetadata? metadata)
+    public static byte[] Parse(byte[] data, out ShaderBinaryFormat architecture, out UnrealMetadata? metadata)
     {
         metadata = null;
         using var reader = new BinaryReader(new MemoryStream(data));
@@ -27,17 +27,17 @@ public class UnrealShaderParser
         // the chunk table sits within the first 256 bytes of any DXBC blob.
         if (IsDxbcWrappedDxil(data))
         {
-            architecture = ShaderArchitecture.Dxil;
+            architecture = ShaderBinaryFormat.Dxil;
             return data;
         }
         if (IsDxbc(data))
         {
-            architecture = ShaderArchitecture.Dxbc;
+            architecture = ShaderBinaryFormat.Dxbc;
             return data;
         }
         if (IsDxil(data))
         {
-            architecture = ShaderArchitecture.Dxil;
+            architecture = ShaderBinaryFormat.Dxil;
             return data;
         }
 
@@ -56,7 +56,7 @@ public class UnrealShaderParser
         }
 
         long codeStart = -1;
-        ShaderArchitecture arch = ShaderArchitecture.Unknown;
+        ShaderBinaryFormat arch = ShaderBinaryFormat.Unknown;
 
         long currentPos = reader.BaseStream.Position;
         byte[] remaining = reader.ReadBytes((int)(reader.BaseStream.Length - currentPos));
@@ -71,7 +71,7 @@ public class UnrealShaderParser
             // SM 6.0+ shaders sit inside a DXBC container even though
             // their bytecode is DXIL. Same SM6-routing rationale as the
             // entry-of-Parse() check above.
-            arch = ShaderArchitecture.Dxbc;
+            arch = ShaderBinaryFormat.Dxbc;
             int slice = data.Length - absStart;
             if (slice >= 32)
             {
@@ -79,7 +79,7 @@ public class UnrealShaderParser
                 Array.Copy(data, absStart, view, 0, slice);
                 if (IsDxbcWrappedDxil(view))
                 {
-                    arch = ShaderArchitecture.Dxil;
+                    arch = ShaderBinaryFormat.Dxil;
                 }
             }
         }
@@ -89,7 +89,7 @@ public class UnrealShaderParser
             if (dxilOffset >= 0)
             {
                 codeStart = currentPos + dxilOffset;
-                arch = ShaderArchitecture.Dxil;
+                arch = ShaderBinaryFormat.Dxil;
             }
             else
             {
@@ -103,7 +103,7 @@ public class UnrealShaderParser
                 if (bitcodeOffset >= 0)
                 {
                     codeStart = currentPos + bitcodeOffset;
-                    arch = ShaderArchitecture.Dxil;
+                    arch = ShaderBinaryFormat.Dxil;
                 }
                 else
                 {
@@ -111,13 +111,13 @@ public class UnrealShaderParser
                     if (shexOffset >= 0)
                     {
                         codeStart = currentPos;
-                        arch = ShaderArchitecture.Dxbc;
+                        arch = ShaderBinaryFormat.Dxbc;
                     }
                 }
             }
         }
 
-        if (arch != ShaderArchitecture.Unknown && codeStart >= 0)
+        if (arch != ShaderBinaryFormat.Unknown && codeStart >= 0)
         {
             metadata = new UnrealMetadata
             {
@@ -145,7 +145,7 @@ public class UnrealShaderParser
         }
 
         long fallbackOffset = -1;
-        ShaderArchitecture fallbackArch = ShaderArchitecture.Unknown;
+        ShaderBinaryFormat fallbackArch = ShaderBinaryFormat.Unknown;
 
         Console.WriteLine($"[Debug] Fallback Scan on {data.Length} bytes...");
         int fDxbc = FindSequence(data, [0x44, 0x58, 0x42, 0x43]);
@@ -153,7 +153,7 @@ public class UnrealShaderParser
         {
             Console.WriteLine($"[Debug] Found DXBC at {fDxbc}");
             fallbackOffset = fDxbc;
-            fallbackArch = ShaderArchitecture.Dxbc;
+            fallbackArch = ShaderBinaryFormat.Dxbc;
         }
         else
         {
@@ -162,7 +162,7 @@ public class UnrealShaderParser
             {
                 Console.WriteLine($"[Debug] Found DXIL at {fDxil}");
                 fallbackOffset = fDxil;
-                fallbackArch = ShaderArchitecture.Dxil;
+                fallbackArch = ShaderBinaryFormat.Dxil;
             }
             else
             {
@@ -171,7 +171,7 @@ public class UnrealShaderParser
                 {
                     Console.WriteLine($"[Debug] Found SHEX at {fShex}");
                     fallbackOffset = fShex;
-                    fallbackArch = ShaderArchitecture.Dxbc;
+                    fallbackArch = ShaderBinaryFormat.Dxbc;
                 }
                 else
                 {
@@ -180,7 +180,7 @@ public class UnrealShaderParser
             }
         }
 
-        if (fallbackArch != ShaderArchitecture.Unknown && fallbackOffset >= 0)
+        if (fallbackArch != ShaderBinaryFormat.Unknown && fallbackOffset >= 0)
         {
             int len = (int)(data.Length - fallbackOffset);
             byte[] code = new byte[len];
@@ -189,7 +189,7 @@ public class UnrealShaderParser
             return code;
         }
 
-        architecture = ShaderArchitecture.Unknown;
+        architecture = ShaderBinaryFormat.Unknown;
         return data;
     }
 

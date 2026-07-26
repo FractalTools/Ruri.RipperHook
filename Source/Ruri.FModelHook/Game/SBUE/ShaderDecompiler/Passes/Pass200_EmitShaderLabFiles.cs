@@ -107,7 +107,7 @@ internal static class Pass200_EmitShaderLabFiles
             string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
             byte freq = state.Library != null && member.ArchiveShaderIndex >= 0 && member.ArchiveShaderIndex < state.Library.ShaderEntries.Length
                 ? state.Library.ShaderEntries[member.ArchiveShaderIndex].Frequency : (byte)255;
-            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage ?? "unknown"} freq={ShaderFrequency.ToString(freq)}]: {firstLine}");
+            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage} freq={ShaderFrequency.ToString(freq)}]: {firstLine}");
             return new ContainerOutputEntry
             {
                 Prep = prep,
@@ -117,13 +117,13 @@ internal static class Pass200_EmitShaderLabFiles
             };
         }
 
-        if (result.FinalMetadata != null)
+        if (result.FinalSymbols != null)
         {
             // Per-map UsedMaterials honesty: every emission of a shared
             // binary lists ONLY the assets of the shader-map this emission
             // belongs to, not the union across all maps that share the
             // binary.
-            result.FinalMetadata.UsedMaterials = new List<string>(map.Assets);
+            result.FinalSymbols.UsedMaterials = new List<string>(map.Assets);
         }
 
         state.Decompiled++;
@@ -280,7 +280,7 @@ internal static class Pass200_EmitShaderLabFiles
                         Success = output.Result.Success,
                         SourceCode = output.Result.SourceCode,
                         ErrorMessage = output.Result.ErrorMessage,
-                        SymbolMetadata = output.Result.FinalMetadata,
+                        SymbolMetadata = output.Result.FinalSymbols,
                     };
                 })
                 .ToList()

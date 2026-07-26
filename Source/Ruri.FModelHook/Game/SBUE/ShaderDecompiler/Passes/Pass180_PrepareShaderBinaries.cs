@@ -265,7 +265,7 @@ internal static class Pass180_PrepareShaderBinaries
         string failureDumpDir = Path.Combine(state.FailuresRoot, provisionalStem);
 
         // Strip UE wrapper: produces clean DXBC/DXIL + UnrealMetadata.
-        byte[] strippedCode = UnrealShaderParser.Parse(raw, out ShaderArchitecture detectedFormat, out UnrealShaderParser.UnrealMetadata? unrealMetadata);
+        byte[] strippedCode = UnrealShaderParser.Parse(raw, out ShaderBinaryFormat detectedFormat, out UnrealShaderParser.UnrealMetadata? unrealMetadata);
 
         // Pick the best symbol source for this shader's material(s).
         bool hadUsage = state.UsageByShaderIndex.TryGetValue(shaderIndex, out HashSet<string>? usedBy) && usedBy.Count > 0;
@@ -395,7 +395,7 @@ internal static class Pass180_PrepareShaderBinaries
         // SM 5.1 fixture stays byte-identical.
         uint perShaderModel = state.Options.ShaderModel;
         bool optionallyMarkedSm6 = unrealMetadata?.IsSm6Shader == true;
-        if (optionallyMarkedSm6 || detectedFormat == ShaderArchitecture.Dxil)
+        if (optionallyMarkedSm6 || detectedFormat == ShaderBinaryFormat.Dxil)
         {
             // Only bump UPWARDS. If the caller explicitly asked for SM
             // 6.2 / 6.6 we keep that (a higher caller intent wins).
@@ -405,9 +405,9 @@ internal static class Pass180_PrepareShaderBinaries
         EngineDecompileOptions engineOptions = new()
         {
             Format = detectedFormat,
-            Metadata = metadata,
+            Symbols = metadata,
             ShaderModel = perShaderModel,
-            MetadataEnricher = static (spv, md) => MaterialTextureNameInferrer.InferAndAppend(spv, md),
+            SymbolEnricher = static (spv, symbols) => MaterialTextureNameInferrer.InferAndAppend(spv, symbols),
             DebugDumpDirectory = state.Options.DumpFailures ? failureDumpDir : null,
             DebugDumpStem = state.Options.DumpFailures ? (bestSource != null ? "with-symbols" : "no-symbols") : null,
         };
