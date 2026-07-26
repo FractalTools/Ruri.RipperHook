@@ -22,6 +22,8 @@ using AssetRipper.SourceGenerated.Subclasses.SerializedSubProgram;
 using Ruri.RipperHook;
 using Ruri.SourceGenerated.NativeEnums.Global;
 using Ruri.ShaderTools;
+using Ruri.ShaderTools.Unity.ShaderLab;
+using Ruri.ShaderTools.Pipeline.Frontend;
 
 namespace Ruri.RipperHook.AR;
 
@@ -115,14 +117,23 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
     };
 
     /// <summary>
-    /// Fast-iteration mode: decompile only the first successfully-decoded variant per
-    /// (SubShader, Pass, Stage) slot instead of every keyword permutation. A decompiler bug
-    /// almost always reproduces identically across a shader's variants (same structure, different
-    /// #if branches enabled) -- exporting all of them just multiplies wall-clock time for the same
-    /// diagnostic signal during a fix-rebuild-retry loop. Off by default (full export keeps every
-    /// variant, which is what a final/complete export needs); toggled via
-    /// <c>RURI_SHADER_FAST_ITERATION=1</c> so a CLI batch run can flip it without touching the
-    /// persisted <see cref="ShaderDecompilerSettings"/>.
+    /// Fast-iteration mode: decompile only the LARGEST variant per
+    /// (SubShader, Pass, Stage) slot instead of every keyword permutation.
+    ///
+    /// A decompiler bug reproduces near-identically across a shader's variants —
+    /// same structure, different <c>#if</c> branches enabled — so exporting all of
+    /// them multiplies wall-clock time for the same diagnostic signal during a
+    /// fix-rebuild-retry loop.
+    ///
+    /// LARGEST, not first. The first variant enumerated is usually the
+    /// no-keyword default, which is the SIMPLEST one: fewest features enabled,
+    /// smallest constant buffers, fewest access-chain shapes. Bytecode length is a
+    /// direct proxy for how much of the decompiler a variant exercises, so the
+    /// biggest blob is the one worth keeping when you only keep one.
+    ///
+    /// Off by default — a final export keeps every variant. Toggled via
+    /// <c>RURI_SHADER_FAST_ITERATION=1</c> so a CLI run can flip it without
+    /// touching the persisted <see cref="ShaderDecompilerSettings"/>.
     /// </summary>
     public static bool OneVariantPerProgramSlot { get; set; } =
         Environment.GetEnvironmentVariable("RURI_SHADER_FAST_ITERATION") == "1";
@@ -278,6 +289,10 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         LogProgramEnumeration(shader.Name, stage, program, shader.Collection.Version);
 
+        // Where this slot's variants start, so fast-iteration mode can prune just
+        // them and leave everything earlier callers added untouched.
+        int slotStart = result.Count;
+
         foreach (ShaderReadSource source in EnumerateProgramSources(program, shader.Collection.Version, platform))
         {
             ShaderSubProgram subProgram = source.ParameterBlobIndex is uint paramBlobIndex
@@ -341,12 +356,44 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                     shader.Name,
                     shader.Collection.Version));
             }
+        }
 
-            if (OneVariantPerProgramSlot)
+        if (OneVariantPerProgramSlot)
+        {
+            KeepLargestVariantPerStage(result, slotStart);
+        }
+    }
+
+    /// <summary>
+    /// Collapse everything added from <paramref name="slotStart"/> onwards down to
+    /// the single largest-bytecode variant per module stage.
+    ///
+    /// Pruning AFTER enumeration rather than breaking out of it is what makes
+    /// "largest" possible at all — the sizes are only comparable once every
+    /// variant has been read. One slot can still contribute several entries when
+    /// a game hook splits one payload into multiple stages, so the reduction is
+    /// per stage, not per slot.
+    /// </summary>
+    private static void KeepLargestVariantPerStage(List<ShaderReadPass> result, int slotStart)
+    {
+        if (result.Count - slotStart <= 1)
+        {
+            return;
+        }
+
+        Dictionary<string, ShaderReadPass> largestByStage = new(StringComparer.Ordinal);
+        for (int i = slotStart; i < result.Count; i++)
+        {
+            ShaderReadPass candidate = result[i];
+            if (!largestByStage.TryGetValue(candidate.Stage, out ShaderReadPass? incumbent)
+                || candidate.Binary.Length > incumbent.Binary.Length)
             {
-                break;
+                largestByStage[candidate.Stage] = candidate;
             }
         }
+
+        result.RemoveRange(slotStart, result.Count - slotStart);
+        result.AddRange(largestByStage.Values);
     }
 
     private static IEnumerable<ShaderReadSource> EnumerateProgramSources(ISerializedProgram program, UnityVersion version, GPUPlatform platform)
@@ -672,8 +719,8 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
             requests[i] = (pass.Read.Binary, new DecompileOptions
             {
-                Format = ShaderArchitecture.Unknown,
-                Metadata = pass.Symbols,
+                Format = ShaderBinaryFormat.Unknown,
+                Symbols = pass.Symbols,
                 UnityMetadata = unityMetadata,
                 ShaderModel = 51,
                 DebugDumpDirectory = Path.Combine(failuresRoot, passStem),
@@ -734,7 +781,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         if (SplitVariantsToHlslFiles)
         {
             string variantFolderStem = Path.GetFileNameWithoutExtension(outputPath);
-            UnityShaderLabResult result = UnityShaderLabWriter.WriteSplit(unityMetadata, variantFolderStem);
+            ShaderLabDocument result = ShaderLabWriter.WriteSplit(unityMetadata, variantFolderStem);
             File.WriteAllText(outputPath, result.ShaderText);
 
             if (result.VariantFiles.Count > 0)
@@ -752,7 +799,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         }
         else
         {
-            File.WriteAllText(outputPath, UnityShaderLabWriter.Write(unityMetadata));
+            File.WriteAllText(outputPath, ShaderLabWriter.Write(unityMetadata));
             Console.WriteLine($"[ShaderDecompile] {shader.Name} done ({succeeded}/{total} passes, inline)");
         }
     }

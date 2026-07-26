@@ -13,6 +13,8 @@ using AssetRipper.SourceGenerated.Subclasses.SerializedShaderVectorValue;
 using AssetRipper.SourceGenerated.Subclasses.SerializedStencilOp;
 using AssetRipper.SourceGenerated.Subclasses.SerializedTagMap;
 using Ruri.ShaderTools;
+using Ruri.ShaderTools.Unity.ShaderLab;
+using Ruri.ShaderTools.Pipeline.Frontend;
 
 namespace Ruri.RipperHook.AR;
 

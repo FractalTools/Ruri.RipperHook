@@ -13,6 +13,8 @@ using AssetRipper.Processing.Configuration;
 using Ruri.Hook;
 using Ruri.Hook.Config;
 using Ruri.ShaderTools;
+using Ruri.ShaderTools.Unity.ShaderLab;
+using Ruri.ShaderTools.Pipeline.Frontend;
 
 namespace Ruri.RipperHook.GUI;
 

@@ -2,6 +2,8 @@ using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Extensions.Enums.Shader;
 using AssetRipper.SourceGenerated.Extensions.Enums.Shader.GpuProgramType;
 using Ruri.ShaderTools;
+using Ruri.ShaderTools.Unity.ShaderLab;
+using Ruri.ShaderTools.Pipeline.Frontend;
 
 namespace AssetRipper.Export.Modules.Shaders.ShaderBlob;
 

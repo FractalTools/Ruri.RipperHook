@@ -5,6 +5,8 @@ using AssetRipper.Import.Logging;
 using Ruri.Hook.Config;
 using Ruri.RipperHook;
 using Ruri.ShaderTools;
+using Ruri.ShaderTools.Unity.ShaderLab;
+using Ruri.ShaderTools.Pipeline.Frontend;
 
 namespace Ruri.RipperHook.GUI;
 
