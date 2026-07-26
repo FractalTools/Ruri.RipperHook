@@ -7,78 +7,18 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
 internal static class MaterialTextureNameInferrer
 {
-    private const ushort OpLoad = 61;
-    private const ushort OpSampledImage = 86;
-
     public static int InferAndAppend(byte[] spirv, SerializedProgramData symbols)
     {
-        if (spirv == null || spirv.Length < SpirvModule.HeaderWordCount * 4)
-        {
-            return 0;
-        }
         if (symbols.SamplerParameters.Count == 0)
         {
             return 0;
         }
 
-        uint[] words = BytesToWords(spirv);
-        if (words.Length < SpirvModule.HeaderWordCount || words[0] != SpirvModule.MagicNumber)
-        {
-            return 0;
-        }
-
-        Dictionary<uint, uint> loadToVar = new();
-        Dictionary<uint, int?> varToSet = new();
-        Dictionary<uint, int?> varToBinding = new();
-        List<(uint ImageLoadId, uint SamplerLoadId)> sampledImagePairs = new();
-
-        int offset = SpirvModule.HeaderWordCount;
-        while (offset < words.Length)
-        {
-            uint header = words[offset];
-            ushort opCode = SpvOpCode.GetOpCode(header);
-            ushort wordCount = SpvOpCode.GetWordCount(header);
-            if (wordCount == 0)
-            {
-                break;
-            }
-
-            switch (opCode)
-            {
-                case SpvOpCode.OpDecorate when wordCount >= 4:
-                    {
-                        uint targetId = words[offset + 1];
-                        uint decoration = words[offset + 2];
-                        if (decoration == Decoration.DescriptorSet)
-                        {
-                            varToSet[targetId] = (int)words[offset + 3];
-                        }
-                        else if (decoration == Decoration.Binding)
-                        {
-                            varToBinding[targetId] = (int)words[offset + 3];
-                        }
-                        break;
-                    }
-                case OpLoad when wordCount >= 4:
-                    {
-                        uint resultId = words[offset + 2];
-                        uint pointerId = words[offset + 3];
-                        loadToVar[resultId] = pointerId;
-                        break;
-                    }
-                case OpSampledImage when wordCount >= 5:
-                    {
-                        uint imageOperand = words[offset + 3];
-                        uint samplerOperand = words[offset + 4];
-                        sampledImagePairs.Add((imageOperand, samplerOperand));
-                        break;
-                    }
-            }
-
-            offset += wordCount;
-        }
-
-        if (sampledImagePairs.Count == 0)
+        // Which texture goes with which sampler is a SPIR-V structural fact, so
+        // it comes from the SPIR-V layer. What the resulting names MEAN — the
+        // Material_* conventions below — is UE knowledge and stays here.
+        IReadOnlyList<SampledImageBinding> pairings = SpirvReflection.ScanSampledImageBindings(spirv);
+        if (pairings.Count == 0)
         {
             return 0;
         }
@@ -106,43 +46,30 @@ internal static class MaterialTextureNameInferrer
             }
         }
 
+        // Set 0 only: the material parameters this inferrer names live there, and
+        // the same binding number in another set is a different resource.
         Dictionary<int, HashSet<int>> texturesPerSamplerBinding = new();
-        Dictionary<(int, int), bool> resolvedPairs = new();
-        foreach ((uint imageLoadId, uint samplerLoadId) in sampledImagePairs)
+        List<(int SamplerBinding, int TextureBinding)> materialPairs = new();
+        foreach (SampledImageBinding pairing in pairings)
         {
-            if (!loadToVar.TryGetValue(imageLoadId, out uint imageVarId)
-                || !loadToVar.TryGetValue(samplerLoadId, out uint samplerVarId))
+            if (pairing.TextureSet != 0 || pairing.SamplerSet != 0)
             {
                 continue;
             }
 
-            int? imageSet = varToSet.GetValueOrDefault(imageVarId);
-            int? imageBinding = varToBinding.GetValueOrDefault(imageVarId);
-            int? samplerSet = varToSet.GetValueOrDefault(samplerVarId);
-            int? samplerBinding = varToBinding.GetValueOrDefault(samplerVarId);
-            if (imageSet != 0 || imageBinding == null || samplerSet != 0 || samplerBinding == null)
-            {
-                continue;
-            }
-
-            int sb = samplerBinding.Value;
-            int ib = imageBinding.Value;
-            if (!texturesPerSamplerBinding.TryGetValue(sb, out HashSet<int>? texSet))
+            if (!texturesPerSamplerBinding.TryGetValue(pairing.SamplerBinding, out HashSet<int>? texSet))
             {
                 texSet = new HashSet<int>();
-                texturesPerSamplerBinding[sb] = texSet;
+                texturesPerSamplerBinding[pairing.SamplerBinding] = texSet;
             }
-            texSet.Add(ib);
-            resolvedPairs[(sb, ib)] = true;
+            texSet.Add(pairing.TextureBinding);
+            materialPairs.Add((pairing.SamplerBinding, pairing.TextureBinding));
         }
 
         int appended = 0;
         HashSet<int> alreadyInferred = new();
-        foreach (var kvp in resolvedPairs)
+        foreach ((int samplerBinding, int imageBinding) in materialPairs)
         {
-            int samplerBinding = kvp.Key.Item1;
-            int imageBinding = kvp.Key.Item2;
-
             if (texturesPerSamplerBinding[samplerBinding].Count != 1)
             {
                 continue;
@@ -260,12 +187,5 @@ internal static class MaterialTextureNameInferrer
         }
 
         return textureName;
-    }
-
-    private static uint[] BytesToWords(byte[] bytes)
-    {
-        uint[] words = new uint[bytes.Length / 4];
-        Buffer.BlockCopy(bytes, 0, words, 0, words.Length * 4);
-        return words;
     }
 }
