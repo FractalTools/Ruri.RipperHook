@@ -16,6 +16,7 @@
 	     runtime that reads it back; linking the source keeps a single definition rather than a copy
 	     the two sides could drift apart on. -->
 	<ItemGroup>
+		<Compile Include="..\Ruri.RipperHook\Core\VersionKey.cs" Link="Contract\VersionKey.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeManifest.cs" Link="Contract\TypeTreeManifest.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeOrdinal.cs" Link="Contract\TypeTreeOrdinal.cs" />
 	</ItemGroup>

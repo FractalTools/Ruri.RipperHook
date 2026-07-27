@@ -31,15 +31,15 @@ namespace Ruri.RipperHook.Core.Capabilities;
 /// </summary>
 public static class CapabilityResolver
 {
-    public static void Apply(GameType game, int engineBuild, HookRegistry registry)
+    public static void Apply(GameType game, string version, HookRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
 
         List<MethodInfo> capabilityMethods = DiscoverCapabilityMethods(game);
 
-        ApplyRetargetCapabilities(capabilityMethods, engineBuild, registry);
-        ApplyModuleCapabilities(capabilityMethods, engineBuild, registry);
-        ApplyTypeTreeCapabilities(capabilityMethods, engineBuild);
+        ApplyRetargetCapabilities(capabilityMethods, version, registry);
+        ApplyModuleCapabilities(capabilityMethods, version, registry);
+        ApplyTypeTreeCapabilities(capabilityMethods, version);
     }
 
     /// <summary>
@@ -48,7 +48,7 @@ public static class CapabilityResolver
     /// once the asset is read. Competes by (class, node path) / (class, post-read slot) and resolves
     /// with the same highest-<see cref="SinceAttribute"/>-wins rule as everything else.
     /// </summary>
-    private static void ApplyTypeTreeCapabilities(List<MethodInfo> methods, int engineBuild)
+    private static void ApplyTypeTreeCapabilities(List<MethodInfo> methods, string version)
     {
         TypeTreeOverrides.Clear();
 
@@ -57,7 +57,7 @@ public static class CapabilityResolver
             .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.NodePath));
         foreach (var slot in gateSlots)
         {
-            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), version);
             if (winner is null) continue;
 
             TypeTreeNodeGateAttribute attribute = slot.First(e => e.Method == winner).Attribute;
@@ -73,7 +73,7 @@ public static class CapabilityResolver
             .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.NodePath));
         foreach (var slot in valueFixSlots)
         {
-            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), version);
             if (winner is null) continue;
 
             ParameterInfo[] parameters = winner.GetParameters();
@@ -95,7 +95,7 @@ public static class CapabilityResolver
             .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.Slot));
         foreach (var slot in postReadSlots)
         {
-            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), version);
             if (winner is null) continue;
 
             TypeTreePostReadAttribute attribute = slot.First(e => e.Method == winner).Attribute;
@@ -155,7 +155,7 @@ public static class CapabilityResolver
         return methods;
     }
 
-    private static void ApplyRetargetCapabilities(List<MethodInfo> methods, int engineBuild, HookRegistry registry)
+    private static void ApplyRetargetCapabilities(List<MethodInfo> methods, string version, HookRegistry registry)
     {
         // Each retarget attribute is its own slot. A method carrying several (one handler for two
         // AnimationClip type-versions, one version getter answering both DefaultVersion and
@@ -167,7 +167,7 @@ public static class CapabilityResolver
         List<MethodInfo> winners = methods
             .SelectMany(m => RetargetSlots(m).Select(slot => (Slot: slot, Method: m)))
             .GroupBy(static entry => entry.Slot)
-            .Select(slot => ResolveWinner(slot.Select(static e => e.Method), engineBuild))
+            .Select(slot => ResolveWinner(slot.Select(static e => e.Method), version))
             .Where(static m => m is not null)
             .Select(static m => m!)
             .Distinct()
@@ -210,7 +210,7 @@ public static class CapabilityResolver
             "-- name inference is not supported for capability slots (it would make two capabilities that infer " +
             "to the same target invisible to each other).");
 
-    private static void ApplyModuleCapabilities(List<MethodInfo> methods, int engineBuild, HookRegistry registry)
+    private static void ApplyModuleCapabilities(List<MethodInfo> methods, string version, HookRegistry registry)
     {
         var slots = methods
             .Where(static m => m.GetCustomAttribute<FeedsModuleAttribute>() is not null)
@@ -220,7 +220,7 @@ public static class CapabilityResolver
 
         foreach (var slot in slots)
         {
-            MethodInfo? winner = ResolveWinner(slot, engineBuild);
+            MethodInfo? winner = ResolveWinner(slot, version);
             if (winner is null) continue;
 
             Type moduleType = slot.Key.ModuleType;
@@ -240,11 +240,18 @@ public static class CapabilityResolver
         }
     }
 
-    private static MethodInfo? ResolveWinner(IEnumerable<MethodInfo> candidates, int engineBuild) =>
+    private static MethodInfo? ResolveWinner(IEnumerable<MethodInfo> candidates, string version) =>
         candidates
-            .Where(m => m.GetCustomAttribute<SinceAttribute>()!.Build <= engineBuild)
-            .OrderByDescending(m => m.GetCustomAttribute<SinceAttribute>()!.Build)
+            .Where(m => VersionKey.Compare(m.GetCustomAttribute<SinceAttribute>()!.Version, version) <= 0)
+            .OrderByDescending(m => m.GetCustomAttribute<SinceAttribute>()!.Version, SinceVersionComparer.Instance)
             .FirstOrDefault();
+
+    private sealed class SinceVersionComparer : IComparer<string>
+    {
+        public static readonly SinceVersionComparer Instance = new();
+
+        public int Compare(string? x, string? y) => VersionKey.Compare(x ?? "", y ?? "");
+    }
 
     private sealed class ModuleSlotComparer : IEqualityComparer<FeedsModuleAttribute>
     {

@@ -140,7 +140,12 @@ internal static class Pass150_BuildShaderMapView
                 bool matches = false;
                 foreach (string token in filterVariants)
                 {
-                    if (token.Length >= 8 && mapHash.StartsWith(token, StringComparison.OrdinalIgnoreCase))
+                    // Prefix match in EITHER direction: the caller may hold the full 40-hex hash
+                    // (what --find-shader-for-material prints) while the library stores a shortened
+                    // form, or vice versa.
+                    if (token.Length >= 8
+                        && (mapHash.StartsWith(token, StringComparison.OrdinalIgnoreCase)
+                            || token.StartsWith(mapHash, StringComparison.OrdinalIgnoreCase)))
                     {
                         matches = true;
                         break;

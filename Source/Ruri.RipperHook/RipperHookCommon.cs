@@ -49,7 +49,16 @@ public abstract class RipperHookCommon : RuriHook
     /// AddMethodHook/RegisterModule calls per version. A version whose resolved capability set is
     /// identical to another's needs no call of its own beyond this one.
     /// </summary>
-    protected void ApplyCapabilities(GameType game, int engineBuild) => CapabilityResolver.Apply(game, engineBuild, Registry);
+    /// <remarks>
+    /// The version comes from this hook's own <c>[RipperHook(..., "1.4.4")]</c> rather than being
+    /// repeated at the call site -- there is one place a hook says which build it is.
+    /// </remarks>
+    protected void ApplyCapabilities(GameType game)
+    {
+        RipperHookAttribute attr = GetType().GetCustomAttribute<RipperHookAttribute>()
+            ?? throw new InvalidOperationException($"{GetType().Name} has no {nameof(RipperHookAttribute)}.");
+        CapabilityResolver.Apply(game, attr.Version, Registry);
+    }
 
     protected override void InitAttributeHook()
     {

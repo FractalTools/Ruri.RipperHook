@@ -1,16 +1,18 @@
 using System;
 
-namespace Ruri.Tpk.Pipeline;
+namespace Ruri.RipperHook.Core;
 
 /// <summary>
-/// Orders a lineage's version keys, which is what decides the inheritance chain.
+/// Orders free-form version strings, the way a human reads one: split on the usual separators and
+/// compare segment by segment, numerically when both segments are numeric.
 ///
-/// A key is free-form, so this compares it the way a human reads one: split on the usual separators
-/// and compare segment by segment, numerically when both segments are numeric. That makes
-/// <c>1.4.4</c> follow <c>1.3.3</c>, and <c>1.0.14</c> follow <c>1.0.9</c> rather than preceding it
-/// the way an ordinal string compare would.
+/// This is the one ordering used everywhere a version is compared -- the type tree chain a lineage
+/// inherits along, and the build a capability is <c>[Since]</c>. Nothing packs a version into a
+/// number any more, so <c>1.4.4</c> follows <c>1.3.3</c>, <c>1.0.14</c> follows <c>1.0.9</c> instead
+/// of preceding it the way an ordinal string compare would, and a game can number its builds however
+/// it likes without colliding (<c>1.0.14</c> and <c>10.1.4</c> used to pack to the same 1014).
 /// </summary>
-internal static class VersionKeyComparer
+public static class VersionKey
 {
     private static readonly char[] Separators = ['.', '-', '_', '+'];
 

@@ -2,6 +2,7 @@ using AssetRipper.Primitives;
 using AssetRipper.Tpk;
 using AssetRipper.Tpk.TypeTrees;
 using AssetRipper.Tpk.TypeTrees.Json;
+using Ruri.RipperHook.Core;
 using Ruri.RipperHook.Core.TypeTree;
 using VersionClassPair = System.Collections.Generic.KeyValuePair<
     AssetRipper.Primitives.UnityVersion,
@@ -127,7 +128,7 @@ internal static class TypeTreeTpkBuilder
                 continue;
             }
 
-            gameChain.Sort(static (left, right) => VersionKeyComparer.Compare(left.VersionKey, right.VersionKey));
+            gameChain.Sort(static (left, right) => VersionKey.Compare(left.VersionKey, right.VersionKey));
 
             // The chain only needs the engine up to the build the game forked from; anything newer
             // describes a Unity the game never shipped.
