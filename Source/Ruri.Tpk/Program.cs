@@ -57,9 +57,12 @@ internal static class Program
         }
     }
 
-    /// <summary>The tpk lands next to the hook sources so it is committed and embedded with them.</summary>
+    /// <summary>
+    /// The tpk lands inside the game hook submodule, alongside the hooks whose layouts it describes,
+    /// so it is versioned and embedded with them rather than sitting loose in the core project.
+    /// </summary>
     private static string DefaultOutputPath() =>
-        Path.Combine(LocateRepoRoot(), "Source", "Ruri.RipperHook", "Libraries", TpkFileName);
+        Path.Combine(LocateRepoRoot(), "Source", "Ruri.RipperHook", "AssetRipperGameHook", "TypeTree", TpkFileName);
 
     private static string ResolveDumpRoot(string path)
     {

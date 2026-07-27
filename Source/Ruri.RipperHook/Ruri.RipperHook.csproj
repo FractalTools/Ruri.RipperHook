@@ -68,10 +68,11 @@
 		<ProjectReference Include="..\Ruri.ACL\Ruri.ACL.csproj" />
 	</ItemGroup>
 
-	<!-- The game type trees, interpreted at runtime by Ruri.RipperHook.Core.TypeTree.
-	     Rebuild with the Ruri.Tpk project. -->
-	<ItemGroup>
-		<EmbeddedResource Include="Libraries\RuriTypeTree.tpk">
+	<!-- The game type trees, interpreted at runtime by Ruri.RipperHook.Core.TypeTree. They live with
+	     the game hooks they describe, so PureRelease strips them along with the rest of that tree
+	     (see the AssetRipperGameHook removals above). Rebuild with the Ruri.Tpk project. -->
+	<ItemGroup Condition="'$(PureRelease)' != 'true'">
+		<EmbeddedResource Include="AssetRipperGameHook\TypeTree\RuriTypeTree.tpk">
 			<LogicalName>RuriTypeTree.tpk</LogicalName>
 		</EmbeddedResource>
 	</ItemGroup>
