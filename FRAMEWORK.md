@@ -89,7 +89,7 @@ pair.Value.Asset.SetAsset(bundle.Collection, asset as IObject);  // SetAsset 需
 
 ## 5. Source-generated 参考
 
-`Ruri.SourceGenerated.dll` 从 `Source/Ruri.RipperHook/Libraries/` 经 HintPath 引用。由 `Ruri.AssemblyDumper` 流水线生成。
+`RuriTypeTree.tpk` 从 `Source/Ruri.RipperHook/Libraries/` 以 `EmbeddedResource` 打进 Ruri.RipperHook,由 `Ruri.AssemblyDumper` 打包、`Ruri.RipperHook.Core.TypeTree` 在运行时解释。
 
 **只读源码镜像**（用于 grep / 参考）：`D:\Ruri\Git\FractalTools\AssemblyDumper\AssetRipper\SourceGenerated\` —— 类接口在 `Classes/ClassID_<N>/I<Class>.cs`，生成的实现在 `<Class>_<version>.cs`。用它来核对方法签名（例如 `IMonoBehaviour.GameObjectP`、`IAssetBundle.Container`）。
 
@@ -154,17 +154,31 @@ ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
 
 ---
 
-## 10. AssemblyDumper 流水线 + TypeTree（`Ruri.SourceGenerated.dll` 是怎么构建的）
+## 10. 运行时类型树（`RuriTypeTree.tpk` 是怎么构建和消费的）
 
-`Ruri.SourceGenerated.dll` 是每个 AR 游戏 hook 都消费的 Unity 类型模型（`ClassID_<N>` 类 + Read/Write/YAML/Walk 方法）。两半：
+游戏的 Unity 类型模型不再是生成的 assembly，而是 **数据**：`Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`（0.15 MB，`EmbeddedResource`），由 `Ruri.RipperHook.Core.TypeTree` 在运行时解释、直接读进 stock `AssetRipper.SourceGenerated` 对象。此前这里是一条 codegen 流水线：跑 AR AssemblyDumper 的 60+ 个 pass 生成一整套 `Ruri.SourceGenerated` 孪生类（53 MB DLL），每个资产先读一个 dummy 再按字段名 deep-copy 回真对象。
 
 | 部件 | 角色 |
 |---|---|
-| `AssetRipper.AssemblyDumper`（冻结子模块） | 生成器。~60 个有序 pass（`Program.cs`）把一个 `type_tree.tpk` 变成 `AssetRipper.SourceGenerated` assembly。入口：`Pass000_ProcessTpk.IntitializeSharedState("type_tree.tpk")`。 |
-| `Source/Ruri.AssemblyDumper`（可编辑） | 编排器：构建 tpk，用反射跑每个 AR pass，给 assembly 改名，emit + 反编译 + 重新构建 + 部署 DLL。 |
+| `Source/Ruri.AssemblyDumper`（可编辑） | tpk 打包器。读 TypeTree JSON 输出目录 → 写 `RuriTypeTree.tpk`。不再依赖 `AssetRipper.AssemblyDumper`。 |
+| `Ruri.RipperHook.Core.TypeTree`（可编辑） | 运行时解释器。`TypeTreeDatabase` 载入 tpk，`TypeTreeReadPlan` 为每个 (class, 引擎版本, AR 类型) 编译一份缓存读取计划。 |
 
-**`build` 流程**（`Program.RunBuild`，默认 / 无参数）：① `TypeTreeTpkBuilder.WriteFromJsonDirectory(output/, type_tree.tpk)` ② `EnsureRequiredArtifacts` 从 `0Bins/AssetRipper.AssemblyDumper/{Release|Debug}/` 拷贝 `consolidated.json`/`native_enums.json`/`engine_assets.tpk`/`assemblies.json` ③ `new ArAssemblyDumperHook().Initialize()` ④ `PassRunner.RunAllExceptSave`（passes 000-941 经反射，与 AR `Program.cs` 1:1）⑤ `PostProcess.RenameAssemblyAndNamespaces`（`AssetRipper.SourceGenerated`→`Ruri.SourceGenerated`；这个名字是个 `const`，不可 hook）⑥ `PassRunner.RunSave`（Pass998）emit `Ruri.SourceGenerated.dll` ⑦ `RecompileStage` 反编译到 `Source/Ruri.SourceGenerated/Ruri/SourceGenerated`，`dotnet build`，`<CopyAfterBuild>` 把 DLL 部署到 `Source/Ruri.RipperHook/Libraries/`。其它模式：`docs`（PDB→consolidated.json）、`hook`（ClassHookGenerator）。
-- 构建工具：`dotnet build Source/Ruri.AssemblyDumper/Ruri.AssemblyDumper.csproj -c Debug`。运行：`…/0Bins/Ruri.AssemblyDumper/Debug/Ruri.AssemblyDumper.exe`（无参数 ⇒ 输入 = `D:\Ruri\Git\FractalTools\TypeTree\output`）。
+**读取语义的移植真源**（改之前必读）：`AssetRipper.AssemblyDumper` 的 `Pass100_FillReadMethods`（节点分派 / count-then-loop / `Capacity` 收缩 / align 位置）、`Pass015_AddFields`（生成字段名 = 消毒后的节点名）、`Pass002_RenameSubnodes`（只有两处影响字节：`ValidNameGenerator.GetValidFieldName` 名字消毒、`ChangeStringToUtf8String` 把 align 从内层 `Array` 抬到 string 节点）。解释器按绑定到的 AR 字段的 .NET 类型决定读法，所以 Pass002 剩下的类型名改写用不上。
+
+**绑定规则**：AR 生成类的字段名就是消毒后的节点名（`m_SubMeshes`、`m_MeshMetrics_0_`），可见性 `internal`，引用型字段构造函数已预分配 —— 所以计划直接绑到字段，用 `DynamicMethod` 访问器避免每个基元字段装箱。游戏树里 stock 类没有对应字段的节点按树结构消费掉字节（等价于旧的「Ruri 类型没这个字段 → deep-copy 时丢弃」）。
+
+**tpk 表达不了的三类偏差**（Unity 类型树是无条件的，每个节点必然序列化）—— 都是 `[Since]` 竞争解析的 capability，禁止在共享代码里加游戏分支：
+
+| attribute | 用途 | 例子 |
+|---|---|---|
+| `[TypeTreeNodeGate(classID, nodePath, Captures = [...])]` | 条件节点 | EndField Mesh 的 `m_CompressedMesh` 仅在 `m_CollisionMeshBaked` 为假时写入 |
+| `[TypeTreeValueFix(classID, nodePath)]` | 值改写 | EndField 的 `m_MeshCompression == 4` 归一成 0 |
+| `[TypeTreePostRead(classID, Slot, Captures = [...])]` | 读后解码 | ACL 动画缓冲解压、`m_TOSData` → CRC32 → `m_TOS`、shader blob 上提 |
+
+stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕获成 `TypeTreeValue` 结构值（标量 / 字节数组 / 序列 / 结构），由 gate 和 post-read hook 通过 `TypeTreeReadContext` 取用；没声明的只消费字节。路径是从类根起、用消毒后节点名以 `/` 连接（`m_MuscleClip/m_Clip/m_Data/m_DenseClip/m_ACLArray`）。
+
+- 打 tpk：`dotnet build Source/Ruri.AssemblyDumper/Ruri.AssemblyDumper.csproj -c Debug`，再跑 `…/0Bins/Ruri.AssemblyDumper/Debug/Ruri.AssemblyDumper.exe`（无参数 ⇒ 输入 = `D:\Ruri\Git\FractalTools\TypeTree\output`，输出 = `Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`）。
+- 迭代时不想重打包，可用 `RURI_TYPE_TREE_TPK` 环境变量指向另一个 tpk。
 
 **输入**
 - `D:\Ruri\Git\FractalTools\TypeTreeDumps` —— 官方 Unity dump，**1384 个版本**，`InfoJson/<ver>.json` = `{Version, Strings[], Classes[]}`（每个类：`TypeID, Name, Base, IsAbstract, EditorRootNode, ReleaseRootNode`）。规范的真实 Unity 来源。

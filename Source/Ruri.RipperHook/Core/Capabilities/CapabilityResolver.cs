@@ -5,6 +5,7 @@ using System.Reflection;
 using Ruri.Hook.Attributes;
 using Ruri.Hook.Core;
 using Ruri.Hook.Utils;
+using Ruri.RipperHook.Core.TypeTree;
 
 namespace Ruri.RipperHook.Core.Capabilities;
 
@@ -38,6 +39,71 @@ public static class CapabilityResolver
 
         ApplyRetargetCapabilities(capabilityMethods, engineBuild, registry);
         ApplyModuleCapabilities(capabilityMethods, engineBuild, registry);
+        ApplyTypeTreeCapabilities(capabilityMethods, engineBuild);
+    }
+
+    /// <summary>
+    /// The third capability kind: overrides for layout facts a Unity type tree cannot state -- a
+    /// conditional node, a value whose stock meaning the fork changed, a payload that needs decoding
+    /// once the asset is read. Competes by (class, node path) / (class, post-read slot) and resolves
+    /// with the same highest-<see cref="SinceAttribute"/>-wins rule as everything else.
+    /// </summary>
+    private static void ApplyTypeTreeCapabilities(List<MethodInfo> methods, int engineBuild)
+    {
+        TypeTreeOverrides.Clear();
+
+        var gateSlots = methods
+            .SelectMany(m => m.GetCustomAttributes<TypeTreeNodeGateAttribute>().Select(a => (Attribute: a, Method: m)))
+            .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.NodePath));
+        foreach (var slot in gateSlots)
+        {
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            if (winner is null) continue;
+
+            TypeTreeNodeGateAttribute attribute = slot.First(e => e.Method == winner).Attribute;
+            TypeTreeOverrides.RegisterGate(
+                attribute.ClassID,
+                attribute.NodePath,
+                winner.CreateDelegate<Func<TypeTreeReadContext, bool>>(),
+                attribute.Captures);
+        }
+
+        var valueFixSlots = methods
+            .SelectMany(m => m.GetCustomAttributes<TypeTreeValueFixAttribute>().Select(a => (Attribute: a, Method: m)))
+            .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.NodePath));
+        foreach (var slot in valueFixSlots)
+        {
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            if (winner is null) continue;
+
+            ParameterInfo[] parameters = winner.GetParameters();
+            if (parameters.Length != 1 || parameters[0].ParameterType != winner.ReturnType)
+            {
+                throw new InvalidOperationException(
+                    $"[CapabilityResolver] {winner.DeclaringType?.Name}.{winner.Name} must be a T Fix(T value) to be a type tree value fix.");
+            }
+
+            TypeTreeValueFixAttribute attribute = slot.First(e => e.Method == winner).Attribute;
+            TypeTreeOverrides.RegisterValueFix(
+                attribute.ClassID,
+                attribute.NodePath,
+                winner.CreateDelegate(typeof(Func<,>).MakeGenericType(winner.ReturnType, winner.ReturnType)));
+        }
+
+        var postReadSlots = methods
+            .SelectMany(m => m.GetCustomAttributes<TypeTreePostReadAttribute>().Select(a => (Attribute: a, Method: m)))
+            .GroupBy(static e => (e.Attribute.ClassID, e.Attribute.Slot));
+        foreach (var slot in postReadSlots)
+        {
+            MethodInfo? winner = ResolveWinner(slot.Select(static e => e.Method), engineBuild);
+            if (winner is null) continue;
+
+            TypeTreePostReadAttribute attribute = slot.First(e => e.Method == winner).Attribute;
+            TypeTreeOverrides.RegisterPostRead(
+                attribute.ClassID,
+                winner.CreateDelegate<Action<TypeTreeReadContext>>(),
+                attribute.Captures);
+        }
     }
 
     private static List<MethodInfo> DiscoverCapabilityMethods(GameType game)
