@@ -69,7 +69,7 @@
 	</ItemGroup>
 
 	<!-- The game type trees, interpreted at runtime by Ruri.RipperHook.Core.TypeTree.
-	     Rebuild with the Ruri.AssemblyDumper project. -->
+	     Rebuild with the Ruri.Tpk project. -->
 	<ItemGroup>
 		<EmbeddedResource Include="Libraries\RuriTypeTree.tpk">
 			<LogicalName>RuriTypeTree.tpk</LogicalName>

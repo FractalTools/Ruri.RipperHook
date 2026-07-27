@@ -7,15 +7,20 @@ using VersionClassPair = System.Collections.Generic.KeyValuePair<
     AssetRipper.Primitives.UnityVersion,
     AssetRipper.Tpk.TypeTrees.TpkUnityClass?>;
 
-namespace Ruri.AssemblyDumper.Pipeline;
+namespace Ruri.Tpk.Pipeline;
 
 internal static class TypeTreeTpkBuilder
 {
     public static void WriteFromJsonDirectory(string jsonDirectory, string outputPath)
     {
         TpkTypeTreeBlob blob = CreateFromDirectory(jsonDirectory);
+
+        // The runtime interpreter binds nodes onto AssetRipper's generated fields, so the tpk has to
+        // speak AssetRipper's post-rename vocabulary rather than the raw dump's.
+        blob = TypeTreeRenamer.ApplyAssetRipperRenaming(blob);
+
         TpkFile.FromBlob(blob, TpkCompressionType.Brotli).WriteToFile(outputPath);
-        Console.WriteLine($"[Build] Wrote type_tree.tpk from {jsonDirectory} to {outputPath}");
+        Console.WriteLine($"[Build] Wrote RuriTypeTree.tpk from {jsonDirectory} to {outputPath}");
     }
 
     private static TpkTypeTreeBlob CreateFromDirectory(string directoryPath)

@@ -132,7 +132,7 @@ internal static class Pass150_BuildShaderMapView
                 bool matches = false;
                 foreach (string asset in assets)
                 {
-                    if (MaterialPathVariants.Build(asset).Overlaps(filterVariants))
+                    if (MaterialPathVariants.Matches(asset, filterVariants))
                     {
                         matches = true;
                         break;

@@ -116,7 +116,7 @@
   <Project Path="FModel/CUE4Parse/CUE4Parse-Conversion/CUE4Parse-Conversion.csproj" />
   <Project Path="FModel/CUE4Parse/CUE4Parse/CUE4Parse.csproj" />
   <Project Path="FModel/FModel/FModel.csproj" />
-  <Project Path="Source/Ruri.AssemblyDumper/Ruri.AssemblyDumper.csproj" />
+  <Project Path="Source/Ruri.Tpk/Ruri.Tpk.csproj" />
   <Project Path="Source/Ruri.Hook/Ruri.Hook.csproj" />
   <Project Path="Source/Ruri.RipperHook/Ruri.RipperHook.csproj" />
   <Project Path="Source/Ruri.RipperHook.CLI/Ruri.RipperHook.CLI.csproj" />

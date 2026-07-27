@@ -89,7 +89,7 @@ pair.Value.Asset.SetAsset(bundle.Collection, asset as IObject);  // SetAsset 需
 
 ## 5. Source-generated 参考
 
-`RuriTypeTree.tpk` 从 `Source/Ruri.RipperHook/Libraries/` 以 `EmbeddedResource` 打进 Ruri.RipperHook,由 `Ruri.AssemblyDumper` 打包、`Ruri.RipperHook.Core.TypeTree` 在运行时解释。
+`RuriTypeTree.tpk` 从 `Source/Ruri.RipperHook/Libraries/` 以 `EmbeddedResource` 打进 Ruri.RipperHook,由 `Ruri.Tpk` 打包、`Ruri.RipperHook.Core.TypeTree` 在运行时解释。
 
 **只读源码镜像**（用于 grep / 参考）：`D:\Ruri\Git\FractalTools\AssemblyDumper\AssetRipper\SourceGenerated\` —— 类接口在 `Classes/ClassID_<N>/I<Class>.cs`，生成的实现在 `<Class>_<version>.cs`。用它来核对方法签名（例如 `IMonoBehaviour.GameObjectP`、`IAssetBundle.Container`）。
 
@@ -160,7 +160,7 @@ ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
 
 | 部件 | 角色 |
 |---|---|
-| `Source/Ruri.AssemblyDumper`（可编辑） | tpk 打包器。读 TypeTree JSON 输出目录 → 写 `RuriTypeTree.tpk`。不再依赖 `AssetRipper.AssemblyDumper`。 |
+| `Source/Ruri.Tpk`（可编辑） | tpk 打包器。读 TypeTree JSON 输出目录 → 写 `RuriTypeTree.tpk`。不再依赖 `AssetRipper.AssemblyDumper`。 |
 | `Ruri.RipperHook.Core.TypeTree`（可编辑） | 运行时解释器。`TypeTreeDatabase` 载入 tpk，`TypeTreeReadPlan` 为每个 (class, 引擎版本, AR 类型) 编译一份缓存读取计划。 |
 
 **读取语义的移植真源**（改之前必读）：`AssetRipper.AssemblyDumper` 的 `Pass100_FillReadMethods`（节点分派 / count-then-loop / `Capacity` 收缩 / align 位置）、`Pass015_AddFields`（生成字段名 = 消毒后的节点名）、`Pass002_RenameSubnodes`（只有两处影响字节：`ValidNameGenerator.GetValidFieldName` 名字消毒、`ChangeStringToUtf8String` 把 align 从内层 `Array` 抬到 string 节点）。解释器按绑定到的 AR 字段的 .NET 类型决定读法，所以 Pass002 剩下的类型名改写用不上。
@@ -177,7 +177,7 @@ ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
 
 stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕获成 `TypeTreeValue` 结构值（标量 / 字节数组 / 序列 / 结构），由 gate 和 post-read hook 通过 `TypeTreeReadContext` 取用；没声明的只消费字节。路径是从类根起、用消毒后节点名以 `/` 连接（`m_MuscleClip/m_Clip/m_Data/m_DenseClip/m_ACLArray`）。
 
-- 打 tpk：`dotnet build Source/Ruri.AssemblyDumper/Ruri.AssemblyDumper.csproj -c Debug`，再跑 `…/0Bins/Ruri.AssemblyDumper/Debug/Ruri.AssemblyDumper.exe`（无参数 ⇒ 输入 = `D:\Ruri\Git\FractalTools\TypeTree\output`，输出 = `Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`）。
+- 打 tpk：`dotnet build Source/Ruri.Tpk/Ruri.Tpk.csproj -c Debug`，再跑 `…/0Bins/Ruri.Tpk/Debug/Ruri.Tpk.exe`（无参数 ⇒ 输入 = `D:\Ruri\Git\FractalTools\TypeTree\output`，输出 = `Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`）。
 - 迭代时不想重打包，可用 `RURI_TYPE_TREE_TPK` 环境变量指向另一个 tpk。
 
 **输入**

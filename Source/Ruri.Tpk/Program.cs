@@ -1,8 +1,8 @@
 using AssetRipper.Primitives;
-using Ruri.AssemblyDumper.Pipeline;
+using Ruri.Tpk.Pipeline;
 using System.Diagnostics;
 
-namespace Ruri.AssemblyDumper;
+namespace Ruri.Tpk;
 
 /// <summary>
 /// Packs the external TypeTree JSON dumps into the single <c>RuriTypeTree.tpk</c> that
@@ -30,7 +30,7 @@ internal static class Program
         {
             if (args.Length > 2)
             {
-                throw new ArgumentException("Usage: Ruri.AssemblyDumper [<TypeTree JSON directory>] [<output .tpk path>]");
+                throw new ArgumentException("Usage: Ruri.Tpk [<TypeTree JSON directory>] [<output .tpk path>]");
             }
 
             string jsonDirectory = ResolveTypeTreeJsonDirectory(args.Length > 0 ? args[0] : DefaultTypeTreeJsonDirectory);
@@ -47,13 +47,13 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Ruri.AssemblyDumper] FATAL: {ex}");
+            Console.WriteLine($"[Ruri.Tpk] FATAL: {ex}");
             return 1;
         }
         finally
         {
             sw.Stop();
-            Console.WriteLine($"[Ruri.AssemblyDumper] Total: {sw.ElapsedMilliseconds} ms");
+            Console.WriteLine($"[Ruri.Tpk] Total: {sw.ElapsedMilliseconds} ms");
         }
     }
 

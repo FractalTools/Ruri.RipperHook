@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<OutputPath>..\..\AssetRipper\Source\0Bins\Ruri.Tpk\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\..\AssetRipper\Source\0Bins\obj\Ruri.Tpk\$(Configuration)\</IntermediateOutputPath>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RootNamespace>Ruri.Tpk</RootNamespace>
+		<Nullable>enable</Nullable>
+		<InternalsAssemblyNames>AssetRipper.AssemblyDumper</InternalsAssemblyNames>
+		<NoWarn>CS0436</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Tpk\Tpk.TypeTrees.Json\Tpk.TypeTrees.Json.csproj" />
+		<ProjectReference Include="..\..\Tpk\Tpk\Tpk.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
+		<!-- Build AR.AssemblyDumper but reference its output via Reference (below) so the
+		     IgnoresAccessChecksToGenerator publicizer kicks in for internals access: the tpk packer
+		     runs AR's real Pass002_RenameSubnodes so the shipped tpk uses AR's field names. -->
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.AssemblyDumper\AssetRipper.AssemblyDumper.csproj">
+			<ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="AssetRipper.AssemblyDumper">
+			<HintPath>..\..\AssetRipper\Source\0Bins\AssetRipper.AssemblyDumper\$(Configuration)\AssetRipper.AssemblyDumper.dll</HintPath>
+			<SpecificVersion>False</SpecificVersion>
+			<Private>true</Private>
+		</Reference>
+		<Reference Include="AssetRipper.AssemblyDumper.Utils">
+			<HintPath>..\..\AssetRipper\Source\0Bins\AssetRipper.AssemblyDumper\$(Configuration)\AssetRipper.AssemblyDumper.Utils.dll</HintPath>
+			<SpecificVersion>False</SpecificVersion>
+			<Private>true</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.0-beta.5" />
+		<PackageReference Include="AsmResolver.Symbols.Pdb" Version="6.0.0-beta.5" />
+		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+</Project>

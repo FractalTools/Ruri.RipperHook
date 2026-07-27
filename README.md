@@ -47,8 +47,8 @@ public class MyHook : RipperHookCommon
 | `Source/Ruri.FModelHook` | FModel / UE 侧增强,shader bytecode 导出与统一 metadata 整理 |
 | `Source/Ruri.FModelHook.GUI` | FModel 流程的图形界面入口 |
 | `Source/Ruri.ShaderDecompiler` | DX11 shader 反编译实现 |
-| `Source/Ruri.AssemblyDumper` | AssetRipper 结构定义与 Read 代码的生成链路 |
-| `Source/Ruri.AssemblyDumper` | 把 TypeTree JSON 打包成 `RuriTypeTree.tpk`(Ruri.RipperHook 的内嵌资源) |
+| `Source/Ruri.Tpk` | AssetRipper 结构定义与 Read 代码的生成链路 |
+| `Source/Ruri.Tpk` | 把 TypeTree JSON 打包成 `RuriTypeTree.tpk`(Ruri.RipperHook 的内嵌资源) |
 | `AssetRipper/`, `FModel/`, `Tpk/` | 上游 submodule,**只读冻结**,差异通过 Hook 注入而非直接修改 |
 
 ## 主要能力
@@ -79,15 +79,15 @@ public class MyHook : RipperHookCommon
 | 列出可用 Hook | `Ruri.RipperHook.CLI.exe --list-hooks` |
 | Headless 导出 | `Ruri.RipperHook.CLI.exe --hook <Id> --load <path> --export <dir>` |
 
-游戏的 Unity 类型模型是运行时解释的 `RuriTypeTree.tpk`,不再有生成的 assembly;重打 tpk 用 `Ruri.AssemblyDumper`。
+游戏的 Unity 类型模型是运行时解释的 `RuriTypeTree.tpk`,不再有生成的 assembly;重打 tpk 用 `Ruri.Tpk`。
 
 Hot Reload 状态下偶发的 Hook 失效一般来自增量残留,重新触发编译可恢复。
 
 ## Todo
 
 - 把 UE / FModel 侧的 Prefab / Model / Material / Shader 等主要数据转换为 Unity YAML 数据导出
-- 进一步缩小 `Ruri.AssemblyDumper` 生成的 DLL 体积 —— 当前生成内容超出实际所需,只需要类型定义与 Read 路径(目标 < 1 MB)
-- `Ruri.AssemblyDumper` 的生成工作流简化
+- 进一步缩小 `Ruri.Tpk` 生成的 DLL 体积 —— 当前生成内容超出实际所需,只需要类型定义与 Read 路径(目标 < 1 MB)
+- `Ruri.Tpk` 的生成工作流简化
 - 实现cpp2il hook 使其导出汇编代码体
 
 ## Special Thanks

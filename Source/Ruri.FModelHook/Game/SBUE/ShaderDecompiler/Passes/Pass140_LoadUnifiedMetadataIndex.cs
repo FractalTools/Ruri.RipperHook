@@ -260,7 +260,7 @@ internal static class Pass140_LoadUnifiedMetadataIndex
     }
 
     private static bool MatchesFilter(string materialPath, HashSet<string> filterVariants)
-        => filterVariants.Count == 0 || MaterialPathVariants.Build(materialPath).Overlaps(filterVariants);
+        => MaterialPathVariants.Matches(materialPath, filterVariants);
 
     private static string NormalizeMaterialPathKey(string materialPath)
     {
@@ -346,6 +346,29 @@ internal static class MaterialPathVariants
             result.UnionWith(Build(trimmed));
         }
         return result;
+    }
+
+    /// <summary>
+    /// 材质路径是否命中过滤器。判据两条,**任一命中即算**:
+    ///   1. 路径变体全等(把 `/Game/...`、`X6Game/Content/...`、去后缀等写法归一后比对) —— 用户
+    ///      给完整资产路径时的精确匹配;
+    ///   2. **子串包含** —— 这正是 `--material-filter` 的文档语义("shader-maps whose material
+    ///      path contains TOK")。此前只做了第 1 条,于是 `--material-filter S0165` 这种按套装/
+    ///      角色前缀捞一批材质的用法**静默匹配 0 条**(实测 shader-maps=0 decompiled=0),
+    ///      而那批 shader-map 明明存在(它们的 .shader 头 UsedMaterials 里就列着 MI_S0165*)。
+    /// </summary>
+    public static bool Matches(string? materialPath, HashSet<string> filterVariants)
+    {
+        if (filterVariants.Count == 0) return true;
+        if (string.IsNullOrEmpty(materialPath)) return false;
+        string normalized = materialPath!.Replace('\\', '/');
+        if (Build(normalized).Overlaps(filterVariants)) return true;
+        foreach (string token in filterVariants)
+        {
+            if (token.Length > 0 && normalized.Contains(token, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     public static HashSet<string> Build(string? materialPath)
