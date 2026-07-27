@@ -62,7 +62,7 @@ public static class Program
         // .stableinfo / UnifiedShaderMetadata sidecars next to it.
         if (!string.IsNullOrWhiteSpace(opts.DecompileOnly))
         {
-            return RunDecompileOnly(opts.DecompileOnly!);
+            return RunDecompileOnly(opts.DecompileOnly!, opts);
         }
 
         // Settings-free GLB scene export. Skips FModel boot entirely and drives
@@ -108,7 +108,7 @@ public static class Program
     // matching what UE_ShaderDecompiler_Hook does). Output lands at
     // `<libraryDir>/Decompiled/<libraryStem>/` so the dump matches the
     // shape produced by the full export+decompile pipeline.
-    private static int RunDecompileOnly(string libraryPath)
+    private static int RunDecompileOnly(string libraryPath, CliOptions opts)
     {
         if (!File.Exists(libraryPath))
         {
@@ -139,10 +139,10 @@ public static class Program
 
         try
         {
-            // SplitVariants flag obeys the persisted setting (loaded by the
-            // CLI's WireModuleSettings path normally; here we read the
-            // public access shim directly to avoid booting HookConfig).
-            bool splitVariants = ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+            // SplitVariants: explicit --split-variants / --no-split-variants wins;
+            // otherwise the persisted setting (read via the public access shim so
+            // we don't have to boot HookConfig).
+            bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
 
             // Diagnostic gate: `RURI_SHADER_INDEX_FILTER=1234,5678` limits the
             // pipeline to those shader indices only. Skips the multi-minute
@@ -166,10 +166,16 @@ public static class Program
                 LibraryPath = libraryPath,
                 OutputDirectory = outDir,
                 UnifiedMetadataPath = unifiedPath,
+                // `--material-filter` must reach the pipeline here too, not just on the
+                // export path (HeadlessShaderExportRunner) — without it `--decompile-only`
+                // silently walks the WHOLE archive (261k shaders on X6Game-main) while the
+                // user asked for a handful of materials. Same additive semantics as the
+                // export side: a filtered run does NOT wipe prior output.
+                MaterialFilter = opts.MaterialFilter,
                 // Don't wipe existing output when a filter is active —
-                // diagnostic re-runs target a single shader, full archive
-                // results from prior runs stay intact.
-                RecreateOutputDirectory = indexFilter == null,
+                // diagnostic re-runs target a single shader / a few materials, full
+                // archive results from prior runs stay intact.
+                RecreateOutputDirectory = indexFilter == null && string.IsNullOrWhiteSpace(opts.MaterialFilter),
                 SplitVariantsToHlslFiles = splitVariants,
                 ShaderIndexFilter = indexFilter,
                 Log = HookLogger.Log,

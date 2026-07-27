@@ -779,6 +779,72 @@ internal static class Pass200_EmitShaderLabFiles
     // all). This pass is intentionally a single string-replace, never
     // touching shader structure — the rewriter remains the only piece
     // that mutates SPIR-V.
+    /// <summary>
+    /// 按 UE 的材质贴图**声明序**给匿名槽命名(见调用点注释)。已具名的 <c>Material_*</c> 槽当锚点校验;
+    /// 任一锚点对不上就整体放弃(宁可无名,不可错名)。
+    /// </summary>
+    private static void ApplyMaterialTextureOrder(
+        string source,
+        List<(string Ident, string HlslType, string UbmtKind, string SlotPrefix, string SlotIdx)> anons,
+        Dictionary<int, string> rename,
+        HashSet<int> claimed,
+        SerializedProgramData? symbolMetadata)
+    {
+        if (symbolMetadata == null || symbolMetadata.TextureParameters.Count == 0) return;
+
+        // 本 shader 的全部贴图声明(含已具名的),按 t 槽升序。
+        var declarations = new List<(string Name, int Slot, bool IsAnon, int AnonIndex)>();
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+            source, @"(?m)^\s*Texture(?:2D|2DArray|Cube|CubeArray|3D|1D)\s*(?:<[^>]*>)?\s+(\w+)\s*:\s*register\(t(\d+)"))
+        {
+            string ident = m.Groups[1].Value;
+            int slot = int.Parse(m.Groups[2].Value);
+            int anonIndex = anons.FindIndex(a => a.Ident == ident);
+            declarations.Add((ident, slot, anonIndex >= 0, anonIndex));
+        }
+        if (declarations.Count == 0) return;
+        declarations.Sort((a, b) => a.Slot.CompareTo(b.Slot));
+
+        // 材质贴图 = 不是引擎侧 `View_*`/`Scene_*` 的那些。引擎槽与材质槽交错出现,故先滤掉。
+        var materialSlots = declarations
+            .Where(d => !d.Name.StartsWith("View_", StringComparison.Ordinal)
+                     && !d.Name.StartsWith("Scene_", StringComparison.Ordinal)
+                     && !d.Name.StartsWith("TranslucentBasePass_", StringComparison.Ordinal)
+                     && !d.Name.StartsWith("OpaqueBasePass_", StringComparison.Ordinal))
+            .ToList();
+        if (materialSlots.Count == 0) return;
+
+        List<string> order = symbolMetadata.TextureParameters.Select(t => t.Name).ToList();
+        if (order.Count < materialSlots.Count)
+        {
+            Console.Error.WriteLine($"[Pass200] material-texture order: 槽 {materialSlots.Count} 个 > UES 名表 {order.Count} 项 — 放弃按序命名(宁可无名)。");
+            return;
+        }
+
+        // 锚点校验:已具名槽的名字必须等于其位置上的 UES 名。
+        for (int i = 0; i < materialSlots.Count; i++)
+        {
+            var slot = materialSlots[i];
+            if (slot.IsAnon) continue;
+            string expected = "Material_" + SanitizeIdent(order[i]);
+            if (!string.Equals(slot.Name, expected, StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"[Pass200] material-texture order: 锚点不符(t{slot.Slot} 已具名 '{slot.Name}',按序应为 '{expected}')" +
+                    " — 声明序假设不成立,放弃按序命名。");
+                return;
+            }
+        }
+
+        for (int i = 0; i < materialSlots.Count; i++)
+        {
+            var slot = materialSlots[i];
+            if (!slot.IsAnon || claimed.Contains(slot.AnonIndex)) continue;
+            rename[slot.AnonIndex] = "Material_" + SanitizeIdent(order[i]);
+            claimed.Add(slot.AnonIndex);
+        }
+    }
+
     private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
@@ -951,14 +1017,45 @@ internal static class Pass200_EmitShaderLabFiles
             // distinctive enough that this is source-truth, not guessing.
             ApplyUsagePatternMatches(result, anons, rename, claimedByOrdered);
 
+            // PASS 3.7: MATERIAL textures by declaration order. `symbolMetadata.TextureParameters`
+            // now carries the material's `UniformTextureParameters` flattened in UE's own
+            // declaration order (MaterialTextureOrder), and DXC assigns `t` registers in that
+            // same order — so the k-th material texture slot IS the k-th name.
+            //
+            // Verification, not faith: some slots already carry a `Material_<name>` symbol from
+            // the SPIR-V naming path. Those act as ANCHORS — if the positional assignment
+            // disagrees with any anchor, the ordering assumption doesn't hold for this shader and
+            // we assign nothing (a wrong texture name silently swaps BaseColor for a mask).
+            ApplyMaterialTextureOrder(result, anons, rename, claimedByOrdered, symbolMetadata);
+
             // PASS 4: for anons not claimed by count-matching, try the
             // global type-uniqueness (one engine candidate of that type
             // across the entire engine), then fall back to hash-tagged.
+            //
+            // AMBIGUITY GUARD (correctness red line): "unique" means the ENGINE has
+            // exactly ONE resource of this (kind, hlslType) — so at most one binding
+            // in this shader can BE it. Applying that single name to every unclaimed
+            // anon of the type emits DUPLICATE declarations (invalid HLSL: the same
+            // identifier declared at two different registers) and mislabels every
+            // slot but one. Measured on the X6Game base-pass PS:
+            // View_AtmosphereTransmittanceTexture at both t2 and t6,
+            // View_VolumetricLightmapBrickAmbientVector ×3,
+            // TranslucentBasePass_..._DirectionalLightShadowmapAtlas ×5.
+            // A wrong name is worse than no name → an ambiguous group stays anonymous.
+            Dictionary<(string, string), int> unclaimedByType = new();
+            for (int i = 0; i < anons.Count; i++)
+            {
+                if (claimedByOrdered.Contains(i) || string.IsNullOrEmpty(anons[i].UbmtKind)) continue;
+                (string, string) countKey = (anons[i].UbmtKind, anons[i].HlslType);
+                unclaimedByType[countKey] = unclaimedByType.GetValueOrDefault(countKey) + 1;
+            }
+
             for (int i = 0; i < anons.Count; i++)
             {
                 if (claimedByOrdered.Contains(i)) continue;
                 var a = anons[i];
                 if (!string.IsNullOrEmpty(a.UbmtKind)
+                    && unclaimedByType.GetValueOrDefault((a.UbmtKind, a.HlslType)) == 1
                     && EngineTypeUniquenessIndex.TryResolveUnique(a.UbmtKind, a.HlslType, out string ubName, out string resName))
                 {
                     rename[i] = $"{ubName}_{resName}";
@@ -986,6 +1083,33 @@ internal static class Pass200_EmitShaderLabFiles
                     identToFinal[anons[i].Ident] = rename[i];
                 }
             }
+            // COLLISION BACKSTOP: whatever route produced a name (ordered
+            // count-match, usage pattern, global uniqueness), two DIFFERENT original
+            // identifiers must never end up with the SAME final name — that emits two
+            // declarations of one identifier at two registers, which is not valid HLSL
+            // and means at least one of the two names is factually wrong. When it
+            // happens, revert the whole colliding set to its anonymous identifiers and
+            // say so loudly: an unnamed slot is honest, a mislabelled one is not.
+            Dictionary<string, List<string>> finalToIdents = new(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> kv in identToFinal)
+            {
+                if (!finalToIdents.TryGetValue(kv.Value, out List<string>? owners))
+                {
+                    owners = new List<string>();
+                    finalToIdents[kv.Value] = owners;
+                }
+                owners.Add(kv.Key);
+            }
+            foreach (KeyValuePair<string, List<string>> kv in finalToIdents)
+            {
+                if (kv.Value.Count <= 1) continue;
+                Console.Error.WriteLine(
+                    $"[Pass200] name collision: '{kv.Key}' claimed by {kv.Value.Count} bindings " +
+                    $"({string.Join(", ", kv.Value)}) — reverting them to anonymous identifiers " +
+                    "(a wrong symbol is worse than none).");
+                foreach (string ident in kv.Value) identToFinal[ident] = ident;
+            }
+
             if (Environment.GetEnvironmentVariable("RURI_UB_DEBUG") == "1")
             {
                 foreach (KeyValuePair<string, string> kv in identToFinal)

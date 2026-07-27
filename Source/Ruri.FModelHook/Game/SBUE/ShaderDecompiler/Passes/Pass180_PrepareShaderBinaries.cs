@@ -60,6 +60,64 @@ internal static class Pass180_PrepareShaderBinaries
     // The cook's Parameters[i].Size carries the byte size (4 for scalar,
     // 8 for vec2, 12 for vec3, 16 for vec4). We use it to derive the
     // emitted member's RowCount when the seed's placeholder differs.
+    /// <summary>
+    /// 用 cook 的 <c>ParameterMapInfo</c> 把 UES 贴图名钉到真实 t 槽。资源槽从
+    /// <c>TextureSamplers</c> 与 <c>SRVs</c> 两个数组按 <c>BaseIndex</c> 升序合并去重
+    /// (UE 把材质贴图记在前者、把 buffer/SRV 记在后者,不同版本/平台分布不同,合并后按槽序
+    /// 才是稳定口径);数量与 UES 贴图数不等就整体不改名。
+    /// </summary>
+    private static void ReconcileMaterialTextureBindings(PipelineState state, int shaderIndex, SerializedProgramData metadata)
+    {
+        bool hasPmi = state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out System.Text.Json.JsonElement pmi);
+        if (s_textureBindDiagLogged.Count < 12 && s_textureBindDiagLogged.TryAdd(shaderIndex.ToString(), true))
+        {
+            string props = hasPmi && pmi.ValueKind == System.Text.Json.JsonValueKind.Object
+                ? string.Join(",", pmi.EnumerateObject().Select(p => $"{p.Name}[{(p.Value.ValueKind == System.Text.Json.JsonValueKind.Array ? p.Value.GetArrayLength() : -1)}]"))
+                : "(none)";
+            state.Log($"    [texbind-diag] shader={shaderIndex} uesTextures={metadata.TextureParameters.Count} pmi={hasPmi} props={props}");
+        }
+        if (metadata.TextureParameters.Count == 0) return;
+        if (!hasPmi) return;
+
+        var slots = new List<int>();
+        foreach (string arrayName in new[] { "TextureSamplers", "SRVs" })
+        {
+            if (!pmi.TryGetProperty(arrayName, out System.Text.Json.JsonElement arr)
+                || arr.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+            foreach (System.Text.Json.JsonElement entry in arr.EnumerateArray())
+            {
+                if (entry.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+                if (!entry.TryGetProperty("BaseIndex", out System.Text.Json.JsonElement bi)) continue;
+                if (!bi.TryGetInt32(out int slot)) continue;
+                // Sampler 槽与纹理槽在同一数组里靠 Type 区分;只有 SRV 型才是 t 寄存器。
+                if (entry.TryGetProperty("Type", out System.Text.Json.JsonElement ty)
+                    && ty.ValueKind == System.Text.Json.JsonValueKind.String
+                    && ty.GetString() is string typeName
+                    && typeName.IndexOf("Sampler", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (!slots.Contains(slot)) slots.Add(slot);
+            }
+        }
+        if (slots.Count == 0) return;
+        slots.Sort();
+
+        if (slots.Count != metadata.TextureParameters.Count)
+        {
+            if (s_textureBindMismatchLogged.TryAdd(metadata.DebugName ?? shaderIndex.ToString(), true))
+            {
+                state.Log($"    [texbind] {metadata.DebugName}: UES 贴图 {metadata.TextureParameters.Count} 个 vs cook 资源槽 {slots.Count} 个 — 数量不等,保持匿名(拒绝按位错标)。");
+            }
+            return;
+        }
+
+        for (int i = 0; i < slots.Count; i++)
+        {
+            metadata.TextureParameters[i].Index = slots[i];
+        }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_textureBindMismatchLogged = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_textureBindDiagLogged = new();
+
     private static ConstantBufferParameter? TryReconcileGlobalsCB(EngineUbMetadata seed, System.Text.Json.JsonElement parameterMapInfo)
     {
         if (!parameterMapInfo.TryGetProperty("LooseParameterBuffers", out System.Text.Json.JsonElement loose)
@@ -363,6 +421,20 @@ internal static class Pass180_PrepareShaderBinaries
                 }
             }
         }
+
+        // Material TEXTURE bind indices. The UES gives the texture NAMES in the
+        // material's declaration order; the cook's `FShaderParameterMapInfo` gives the
+        // real `t<N>` register per resource in that SAME order
+        // (`FShaderResourceParameterInfo.BaseIndex`, MaterialResourceTypes.cs:418).
+        // Pairing them positionally is the cook's own contract and the ONLY source that
+        // says which slot is `Main_D` vs `Pattern_N` — the UES alone carries synthetic
+        // indices (see MaterialSymbolMetadataBuilder), so without this every material
+        // texture stays an anonymous `_NN` in the decompiled output.
+        // Gate: the two lists must have the SAME length. A mismatch means this
+        // permutation doesn't use the full texture set (or the pairing assumption
+        // doesn't hold), and a positional pairing would then mislabel slots — so we
+        // leave the names alone rather than emit a wrong one.
+        ReconcileMaterialTextureBindings(state, shaderIndex, metadata);
 
         // Per-shader shader-model selection. The library-level option is
         // a default that callers tune to the lowest model they expect; an

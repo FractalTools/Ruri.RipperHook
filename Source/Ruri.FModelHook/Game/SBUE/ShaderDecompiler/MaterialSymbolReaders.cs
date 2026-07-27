@@ -159,11 +159,33 @@ internal sealed class UnifiedMaterialReader
     private readonly JsonDocument? _document;
     private readonly Dictionary<string, MaterialSymbolSource?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
+    // ---- On-disk seek-index mode (files past MaxInMemoryUnifiedBytes) ----
+    // `_index` maps NormalizeKey(materialPath) -> the byte range of that material's
+    // JSON value inside `MaterialInterfaces`. Lookups seek + parse ONE material,
+    // so peak memory is bounded by the single largest material entry instead of the
+    // whole cook. Symbols are therefore available at ANY cook size — the old
+    // behaviour (return null past the cap) silently downgraded every Material cb to
+    // anonymous `Material_loose[N]` on all-materials caches, which is exactly the
+    // "symbols must all be restored" red line.
+    private readonly string? _indexedPath;
+    private readonly Dictionary<string, MaterialEntryRange>? _index;
+
+    private readonly record struct MaterialEntryRange(long Start, int Length);
+
     private UnifiedMaterialReader(JsonDocument document, Dictionary<string, JsonElement> materialInterfaces)
     {
         _document = document;
         _materialInterfaces = materialInterfaces;
     }
+
+    private UnifiedMaterialReader(string indexedPath, Dictionary<string, MaterialEntryRange> index)
+    {
+        _indexedPath = indexedPath;
+        _index = index;
+    }
+
+    /// <summary>是否有可用的符号源(内存模式或索引模式其一)。</summary>
+    private bool HasSource => _materialInterfaces != null || _index != null;
 
     // Above this on-disk size the unified file is NOT loaded into a JsonDocument
     // for per-material symbol lookup. Rationale: this reader holds the ENTIRE
@@ -175,8 +197,9 @@ internal sealed class UnifiedMaterialReader
     // decompile). Past the cap we skip the rich symbol source and let naming fall
     // back to the per-archive `.assetinfo.json` sidecar + the lean hash bridges.
     // Archive-scoped exports (the common case) stay well under this and get full
-    // symbols. TODO(top-tier): replace the whole-document hold with an on-disk
-    // seek index so per-material symbols load on demand regardless of cook size.
+    // symbols. Past the cap we no longer give up: `BuildMaterialInterfaceIndex`
+    // streams the file once and records each material's byte range, and lookups
+    // seek+parse a single entry on demand (bounded memory, symbols at any size).
     private const long MaxInMemoryUnifiedBytes = 1024L * 1024 * 1024; // 1 GiB
 
     public static UnifiedMaterialReader? LoadFromFile(string unifiedMetadataPath)
@@ -189,8 +212,27 @@ internal sealed class UnifiedMaterialReader
         long length = new FileInfo(unifiedMetadataPath).Length;
         if (length > MaxInMemoryUnifiedBytes)
         {
-            HookLogger.LogWarning($"[UnifiedMaterialReader] Unified metadata is {length / (1024 * 1024)} MB (> {MaxInMemoryUnifiedBytes / (1024 * 1024)} MB cap) — skipping the in-memory symbol source to avoid the 2GB JsonDocument limit. Material NAMES still resolve from sidecars; per-material rich symbols are unavailable for this all-materials cache. Export a narrower archive set for full symbols.");
-            return null;
+            // Too big for a single JsonDocument (contiguous buffer, ~2GB array ceiling)
+            // → build an on-disk seek index instead of dropping the symbol source.
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+            Dictionary<string, MaterialEntryRange>? index;
+            try
+            {
+                index = BuildMaterialInterfaceIndex(unifiedMetadataPath);
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogWarning($"[UnifiedMaterialReader] Seek-index build failed on {length / (1024 * 1024)} MB unified metadata: {ex.GetType().Name}: {ex.Message} — per-material symbols unavailable.");
+                return null;
+            }
+            sw.Stop();
+            if (index == null || index.Count == 0)
+            {
+                HookLogger.LogWarning($"[UnifiedMaterialReader] Unified metadata {length / (1024 * 1024)} MB has no usable MaterialInterfaces block — per-material symbols unavailable.");
+                return null;
+            }
+            HookLogger.Log($"[UnifiedMaterialReader] Unified metadata is {length / (1024 * 1024)} MB (> {MaxInMemoryUnifiedBytes / (1024 * 1024)} MB) — built on-disk seek index: {index.Count} material(s) in {sw.ElapsedMilliseconds} ms; per-material symbols load on demand.");
+            return new UnifiedMaterialReader(unifiedMetadataPath, index);
         }
 
         try
@@ -221,9 +263,173 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
+    // Streams the unified metadata once with Utf8JsonReader and records the byte
+    // range of every value under `MaterialInterfaces`. Stops as soon as that object
+    // closes — the block sits near the file end on big cooks, but the scan is a
+    // single sequential pass either way and never materialises a value.
+    //
+    // Buffer management is the standard chunked-Utf8JsonReader pattern: the reader
+    // works on a span, so unconsumed bytes are compacted to the front and the buffer
+    // grows whenever a single value (a material entry can be MBs) doesn't fit.
+    private static Dictionary<string, MaterialEntryRange>? BuildMaterialInterfaceIndex(string path)
+    {
+        var index = new Dictionary<string, MaterialEntryRange>(StringComparer.OrdinalIgnoreCase);
+        using FileStream stream = File.OpenRead(path);
+
+        byte[] buffer = new byte[1 << 20];
+        int dataLength = stream.Read(buffer, 0, buffer.Length);
+        bool isFinalBlock = dataLength < buffer.Length;
+        long bufferStartOffset = 0;                 // file offset of buffer[0]
+        JsonReaderState state = new(new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+
+        bool insideMaterialInterfaces = false;
+        // Depth of the PROPERTY NAMES inside the MaterialInterfaces object.
+        // Utf8JsonReader.CurrentDepth for a StartObject is the depth of the container
+        // itself, and its member property names sit one level deeper — so the inner
+        // depth is (StartObject depth + 1), and the object's own EndObject comes back
+        // at (inner - 1). Getting this off by one indexes ROOT-level siblings instead
+        // (e.g. the bool `MaterialScanComplete`), which then blows up as "requires an
+        // element of type 'Object', but the target element has type 'True'".
+        int materialInterfacesInnerDepth = -1;
+        bool pendingMaterialInterfaces = false;     // saw the property name, next token is its value
+        string? pendingMaterialName = null;
+        bool done = false;
+
+        while (!done)
+        {
+            var reader = new Utf8JsonReader(buffer.AsSpan(0, dataLength), isFinalBlock, state);
+            bool needMoreData = false;
+            // Resume checkpoint = (bytes consumed, reader state) captured BEFORE each
+            // token is read. A material entry is handled as a PropertyName + value
+            // PAIR across two Read() calls, so when the value doesn't fit in the
+            // current buffer we must rewind to before the NAME — resuming from the
+            // post-name position would re-enter the loop pointing at the value's
+            // first inner token and the whole entry would be walked as ordinary
+            // tokens and silently dropped from the index (measured: 3306 of 6357).
+            long resumeConsumed = 0;
+            JsonReaderState resumeState = state;
+
+            while (true)
+            {
+                resumeConsumed = reader.BytesConsumed;
+                resumeState = reader.CurrentState;
+                if (!reader.Read()) { needMoreData = !isFinalBlock; break; }
+
+                if (pendingMaterialInterfaces)
+                {
+                    pendingMaterialInterfaces = false;
+                    if (reader.TokenType == JsonTokenType.StartObject)
+                    {
+                        insideMaterialInterfaces = true;
+                        materialInterfacesInnerDepth = reader.CurrentDepth + 1;
+                        continue;
+                    }
+                    // Not an object → nothing to index.
+                    if (!reader.TrySkip()) { needMoreData = true; break; }
+                    continue;
+                }
+
+                if (!insideMaterialInterfaces)
+                {
+                    if (reader.TokenType == JsonTokenType.PropertyName
+                        && reader.CurrentDepth == 1
+                        && reader.ValueTextEquals("MaterialInterfaces"))
+                    {
+                        pendingMaterialInterfaces = true;
+                    }
+                    continue;
+                }
+
+                // Inside MaterialInterfaces.
+                if (reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == materialInterfacesInnerDepth - 1)
+                {
+                    done = true;
+                    break;
+                }
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != materialInterfacesInnerDepth)
+                {
+                    continue;
+                }
+
+                pendingMaterialName = reader.GetString();
+                if (!reader.Read()) { needMoreData = !isFinalBlock; break; }
+
+                bool isObjectValue = reader.TokenType == JsonTokenType.StartObject;
+                long valueStart = bufferStartOffset + reader.TokenStartIndex;
+                if (!reader.TrySkip()) { needMoreData = true; break; }
+                long valueEnd = bufferStartOffset + reader.BytesConsumed;
+
+                // Only object entries are material records; anything else under this
+                // block would be a schema change, and indexing it would hand a
+                // non-object to every downstream TryGetProperty.
+                if (isObjectValue && !string.IsNullOrEmpty(pendingMaterialName) && valueEnd > valueStart && valueEnd - valueStart < int.MaxValue)
+                {
+                    index[NormalizeKey(pendingMaterialName!)] = new MaterialEntryRange(valueStart, (int)(valueEnd - valueStart));
+                }
+                pendingMaterialName = null;
+            }
+
+            int consumed = needMoreData ? (int)resumeConsumed : (int)reader.BytesConsumed;
+            state = needMoreData ? resumeState : reader.CurrentState;
+            if (done) break;
+
+            if (!needMoreData && isFinalBlock) break;
+
+            bufferStartOffset += consumed;
+            int leftover = dataLength - consumed;
+            if (leftover > 0) Buffer.BlockCopy(buffer, consumed, buffer, 0, leftover);
+            if (leftover == buffer.Length)
+            {
+                // A single token/value spans the whole buffer — grow so TrySkip can finish.
+                Array.Resize(ref buffer, buffer.Length * 2);
+            }
+            int read = stream.Read(buffer, leftover, buffer.Length - leftover);
+            dataLength = leftover + read;
+            isFinalBlock = read == 0;
+            if (read == 0 && leftover == 0) break;
+
+            // A partially-consumed value must restart from a state that matches the
+            // compacted buffer; JsonReaderState already encodes that (it is position
+            // independent), so nothing else to fix up here.
+        }
+
+        return index;
+    }
+
+    /// <summary>索引模式:按字节范围 seek + 解析单个材质条目(Clone 脱离临时文档,调用方持有即安全)。</summary>
+    private JsonElement? LoadIndexedEntry(string normalizedKey)
+    {
+        if (_index == null || _indexedPath == null) return null;
+        if (!_index.TryGetValue(normalizedKey, out MaterialEntryRange range)) return null;
+
+        byte[] bytes = new byte[range.Length];
+        using (FileStream stream = File.OpenRead(_indexedPath))
+        {
+            stream.Seek(range.Start, SeekOrigin.Begin);
+            int read = 0;
+            while (read < bytes.Length)
+            {
+                int n = stream.Read(bytes, read, bytes.Length - read);
+                if (n <= 0) break;
+                read += n;
+            }
+            if (read < bytes.Length) return null;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(bytes);
+            return document.RootElement.Clone();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public JsonElement? TryGetUniformExpressionSet(string materialPath, string? shaderPlatform = null)
     {
-        if (_materialInterfaces == null)
+        if (!HasSource)
         {
             return null;
         }
@@ -272,10 +478,9 @@ internal sealed class UnifiedMaterialReader
     // which bucket a cook happens to populate.
     public IEnumerable<(string LibraryShaderMapHash, Dictionary<int, JsonElement> ParameterMapInfoByResourceIndex)> EnumerateShaderMapShaders()
     {
-        if (_materialInterfaces == null) yield break;
-        foreach (KeyValuePair<string, JsonElement> kvp in _materialInterfaces)
+        foreach (JsonElement materialEntry in EnumerateMaterialEntries())
         {
-            JsonElement materialEntry = kvp.Value;
+            if (materialEntry.ValueKind != JsonValueKind.Object) continue;
             if (!materialEntry.TryGetProperty("LoadedShaderMaps", out JsonElement loadedMaps)
                 || loadedMaps.ValueKind != JsonValueKind.Array
                 || loadedMaps.GetArrayLength() == 0)
@@ -350,9 +555,28 @@ internal sealed class UnifiedMaterialReader
     // was populated by Pass020. Null when the asset wasn't a UMaterialInterface
     // subclass that carries render state (functions, collections), or when
     // the unified metadata file pre-dates the render-state writer.
+    /// <summary>
+    /// 逐材质条目枚举(两种模式统一):内存模式直接给字典值;索引模式按索引键逐个 seek+解析,
+    /// 峰值内存 = 单个最大材质条目(条目 Clone 自带独立文档,消费方持有引用即安全)。
+    /// </summary>
+    private IEnumerable<JsonElement> EnumerateMaterialEntries()
+    {
+        if (_materialInterfaces != null)
+        {
+            foreach (KeyValuePair<string, JsonElement> kvp in _materialInterfaces) yield return kvp.Value;
+            yield break;
+        }
+        if (_index == null) yield break;
+        foreach (string key in _index.Keys)
+        {
+            JsonElement? entry = LoadIndexedEntry(key);
+            if (entry.HasValue) yield return entry.Value;
+        }
+    }
+
     public JsonElement? TryGetRenderState(string materialPath)
     {
-        if (_materialInterfaces == null)
+        if (!HasSource)
         {
             return null;
         }
@@ -373,7 +597,7 @@ internal sealed class UnifiedMaterialReader
 
     public MaterialSymbolSource? GetSource(string materialPath, string? shaderPlatform = null)
     {
-        if (_materialInterfaces == null)
+        if (!HasSource)
         {
             return null;
         }
@@ -403,9 +627,26 @@ internal sealed class UnifiedMaterialReader
             SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(normalizedPath, shaderPlatform, uniformExpressionSet.Value);
             if (inputs != null)
             {
+                SerializedProgramData built = MaterialSymbolMetadataBuilder.Build(inputs);
+                // 材质贴图的**声明序名表**:UE 生成 HLSL 时按 UniformTextureParameters 的桶序 + 桶内序
+                // 声明 `Material.Texture2D_<i>` 等,寄存器随声明序分配 —— 所以这张扁平表的第 k 项就是
+                // 本 shader 第 k 个材质贴图槽。之前这里只建 cbuffer、完全不产 TextureParameters,
+                // 材质贴图因此永远无名(Pass200 只能靠引擎 UB 种子瞎猜,还猜出重名)。
+                foreach (string textureName in MaterialTextureOrder.Extract(uniformExpressionSet.Value))
+                {
+                    built.TextureParameters.Add(new TextureParameter
+                    {
+                        Name = textureName,
+                        NameIndex = -1,
+                        Index = built.TextureParameters.Count,   // 序数;真实 t 槽由 Pass200 按声明序对位
+                        SamplerIndex = -1,
+                        MultiSampled = false,
+                        Dim = 2,
+                    });
+                }
                 MaterialSymbolSource source = new(
                     normalizedPath,
-                    MaterialSymbolMetadataBuilder.Build(inputs),
+                    built,
                     inputs.UsedLoadedMaterialResources ? 2 : inputs.NumericParameterInfos.Count > 0 ? 1 : 0,
                     inputs.UsedLoadedMaterialResources,
                     inputs.MaterialResourceCounts != null ? new MaterialUniformBufferLayout(inputs.MaterialResourceCounts) : null);
@@ -511,16 +752,29 @@ internal sealed class UnifiedMaterialReader
     private bool TryResolveMaterialEntry(string materialPath, out JsonElement entry)
     {
         entry = default;
-        if (_materialInterfaces == null)
+
+        if (_materialInterfaces != null)
         {
+            foreach (string candidate in EnumerateLookupKeys(materialPath))
+            {
+                if (_materialInterfaces.TryGetValue(NormalizeKey(candidate), out entry))
+                {
+                    return true;
+                }
+            }
             return false;
         }
 
-        foreach (string candidate in EnumerateLookupKeys(materialPath))
+        if (_index != null)
         {
-            if (_materialInterfaces.TryGetValue(NormalizeKey(candidate), out entry))
+            foreach (string candidate in EnumerateLookupKeys(materialPath))
             {
-                return true;
+                JsonElement? loaded = LoadIndexedEntry(NormalizeKey(candidate));
+                if (loaded.HasValue)
+                {
+                    entry = loaded.Value;
+                    return true;
+                }
             }
         }
 
