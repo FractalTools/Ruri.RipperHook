@@ -106,7 +106,12 @@ internal static class HeadlessRunner
             try
             {
                 (string baseFolder, var entries) = CabMap.Load(cabMapPath);
-                HashSet<string> resolved = new(CabMap.ResolveDeps(baseFolder, entries, paths), StringComparer.OrdinalIgnoreCase);
+                // --load is a SCOPE, not an extra seed set, whenever --names/--load-types drive the
+                // selection. Seeding from it too made "--load <gameRoot> --names pelica" a union that
+                // loaded the entire game (measured: 118098 assets / 166 bundles for a 66-CAB closure).
+                HashSet<string> resolved = typeDriven || nameDriven
+                    ? new(StringComparer.OrdinalIgnoreCase)
+                    : new(CabMap.ResolveDeps(baseFolder, entries, paths), StringComparer.OrdinalIgnoreCase);
                 if (options.LoadTypes.Length > 0)
                 {
                     HashSet<int> typeIds = ResolveTypes(options.LoadTypes);
@@ -145,8 +150,23 @@ internal static class HeadlessRunner
                     loadFilterFileNames = loadFilter;
                     Console.Error.WriteLine($"[Ruri.CLI] cab-map names [{string.Join(",", options.Names.Select(static r => r.ToString()))}]: {matchedCabs} CAB(s) matched → {loadFilter.Count} bundle(s) with dependencies across {byName.Length} chunk file(s)");
                 }
+                // --load given alongside --names/--load-types: keep only the resolved files that live
+                // under it. A directory scope narrows the closure; it never widens it.
+                int beforeScope = resolved.Count;
+                if ((typeDriven || nameDriven) && options.LoadPaths.Length > 0)
+                {
+                    string[] scopes = options.LoadPaths
+                        .Where(static s => !string.IsNullOrWhiteSpace(s))
+                        .Select(static s => Path.GetFullPath(s))
+                        .ToArray();
+                    resolved.RemoveWhere(f => !scopes.Any(scope =>
+                        f.StartsWith(scope, StringComparison.OrdinalIgnoreCase)));
+                }
                 string[] expanded = resolved.ToArray();
-                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {paths.Length} seed(s) + {options.LoadTypes.Length} type(s) + {options.Names.Length} name(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath})");
+                string scopeNote = beforeScope == expanded.Length
+                    ? string.Empty
+                    : $" (scoped by --load: {beforeScope} → {expanded.Length})";
+                Console.Error.WriteLine($"[Ruri.CLI] cab-map: {options.LoadTypes.Length} type(s) + {options.Names.Length} name(s) → {expanded.Length} files via {entries.Count}-entry map ({cabMapPath}){scopeNote}");
                 paths = expanded;
             }
             catch (Exception ex)
