@@ -68,6 +68,14 @@
 		<ProjectReference Include="..\Ruri.ACL\Ruri.ACL.csproj" />
 	</ItemGroup>
 
+	<!-- The game type trees, interpreted at runtime by Ruri.RipperHook.Core.TypeTree.
+	     Rebuild with the Ruri.AssemblyDumper project. -->
+	<ItemGroup>
+		<EmbeddedResource Include="Libraries\RuriTypeTree.tpk">
+			<LogicalName>RuriTypeTree.tpk</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
 	<ItemGroup>
 		<Reference Include="Ruri.SourceGenerated.dll">
 			<SpecificVersion>False</SpecificVersion>
