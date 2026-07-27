@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
@@ -8,7 +8,6 @@ using AssetRipper.SourceGenerated;
 using Ruri.Hook;
 using Ruri.RipperHook.Core;
 using Ruri.RipperHook.Core.Capabilities;
-using Ruri.RipperHook.Core.TypeTree;
 
 namespace Ruri.RipperHook;
 
@@ -58,7 +57,7 @@ public abstract class RipperHookCommon : RuriHook
     }
 
     /// <summary>
-    /// Scans for [TypeTreeHook] attributes on the current class and registers them.
+    /// Scans for [HookObjectClass] attributes on the current class and registers them.
     /// </summary>
     protected void ProcessGameHooks()
     {
@@ -66,9 +65,10 @@ public abstract class RipperHookCommon : RuriHook
         var ripperHookAttr = type.GetCustomAttribute<RipperHookAttribute>();
         if (ripperHookAttr == null) return;
 
+
         // TypeTreeHookAttribute is AssetRipper specific
         var hookClassAttrs = type.GetCustomAttributes<TypeTreeHookAttribute>();
-        if (!hookClassAttrs.Any())
+        if (!hookClassAttrs.Any()) 
         {
             return;
         }
@@ -76,11 +76,18 @@ public abstract class RipperHookCommon : RuriHook
         HookLogger.LogRaw($"    Found {hookClassAttrs.Count()} TypeTreeHook attributes in {type.Name}.");
 
         var classIds = hookClassAttrs.Select(a => a.ClassID).ToList();
-
+        
         UnityVersion targetVersionVec = GetTargetVersion(ripperHookAttr);
         if (targetVersionVec == default) return; // Skip if version resolution failed or returned empty
 
-        HookClasses(classIds, ripperHookAttr.BaseEngineVersion, targetVersionVec);
+        // Let's assume GeneratedNamespace is standard unless overridden
+        string generatedNamespace = "Ruri.SourceGenerated";
+        
+        // Check if any attribute overrides namespace
+        var firstNamespaceOverride = hookClassAttrs.FirstOrDefault(a => a.GeneratedAssemblyNamespace != null);
+        if (firstNamespaceOverride != null) generatedNamespace = firstNamespaceOverride.GeneratedAssemblyNamespace!;
+
+        HookClasses(classIds, ripperHookAttr.BaseEngineVersion, targetVersionVec, generatedNamespace);
     }
 
     protected virtual UnityVersion GetTargetVersion(RipperHookAttribute attr)
@@ -88,109 +95,165 @@ public abstract class RipperHookCommon : RuriHook
         return UnityVersion.Parse(attr.BaseEngineVersion);
     }
 
-    /// <summary>
-    /// Retargets every listed class's <c>ReadRelease</c> onto <see cref="HookDispatcher"/>, which
-    /// reads it with the game's own type tree at <paramref name="targetVersion"/> (see
-    /// <see cref="TypeTreeReadPlan"/>).
-    ///
-    /// <paramref name="sourceUnityVersion"/> only picks *which* stock AssetRipper class version the
-    /// game's files instantiate -- the layout always comes from the tpk.
-    /// </summary>
     protected void HookClasses(
         IEnumerable<ClassIDType> classIds,
         string sourceUnityVersion,
         UnityVersion targetVersion,
+        string generatedAssemblyNamespace = "Ruri.SourceGenerated",
         Dictionary<ClassIDType, ReadReleaseDelegate>? customCallbacks = null)
     {
         Dictionary<ClassIDType, HookDispatcher.ReadReleaseDelegate>? coreCallbacks = null;
         if (customCallbacks != null)
         {
             coreCallbacks = new Dictionary<ClassIDType, HookDispatcher.ReadReleaseDelegate>();
-            foreach (var kvp in customCallbacks)
+            foreach(var kvp in customCallbacks)
             {
                 coreCallbacks[kvp.Key] = (obj, ref reader) => kvp.Value(obj, ref reader);
             }
         }
 
-        UnityVersion lookupVersion = UnityVersion.Parse(sourceUnityVersion);
-
-        var universalDestMethod = typeof(HookDispatcher).GetMethod(nameof(HookDispatcher.Universal_ReadRelease), BindingFlags.Public | BindingFlags.Static);
-        if (universalDestMethod == null) throw new Exception("Universal_ReadRelease missing");
-
-        var originalAssembly = typeof(ClassIDType).Assembly;
-
-        foreach (var classId in classIds)
+        Assembly? ruriAssembly = null;
+        try
         {
-            try
+            ruriAssembly = ResolveGeneratedAssembly(generatedAssemblyNamespace);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RipperHook] Warning: Could not resolve assembly {generatedAssemblyNamespace}: {ex.Message}");
+        }
+
+        if (ruriAssembly != null)
+        {
+            UnityVersion lookupVersion = UnityVersion.Parse(sourceUnityVersion);
+            
+            var universalDestMethod = typeof(HookDispatcher).GetMethod(nameof(HookDispatcher.Universal_ReadRelease), BindingFlags.Public | BindingFlags.Static);
+            if (universalDestMethod == null) throw new Exception("Universal_ReadRelease missing");
+
+            var originalAssembly = typeof(ClassIDType).Assembly; 
+
+            foreach(var classId in classIds)
             {
-                Type sourceType = ResolveSourceType(originalAssembly, classId, lookupVersion);
-
-                HookDispatcher.ReadReleaseDelegate? callback = null;
-                if (coreCallbacks != null && coreCallbacks.TryGetValue(classId, out var customAction))
+                try 
                 {
-                    callback = customAction;
-                }
+                   // 1. Resolve AssetRipper Source Type
+                   int id = (int)classId;
+                   string enumName = classId.ToString();
+                   string baseNamespace = $"AssetRipper.SourceGenerated.Classes.ClassID_{id}";
+                   
+                   // Try standard name
+                   string factoryTypeName = $"{baseNamespace}.{enumName}";
+                   Type? factoryType = originalAssembly.GetType(factoryTypeName);
 
-                if (callback == null && TypeTreeDatabase.GetReleaseRoot(classId, targetVersion) == null)
-                {
-                    HookLogger.LogFailure($"[-] Failed {classId}: no type tree at {targetVersion} in {TypeTreeDatabase.BlobOrigin}");
-                    continue;
-                }
+                   // Try removing suffix if not found
+                   if (factoryType == null)
+                   {
+                       string suffix = $"_{id}";
+                       if (enumName.EndsWith(suffix))
+                       {
+                           string cleanName = enumName.Substring(0, enumName.Length - suffix.Length);
+                           string cleanTypeName = $"{baseNamespace}.{cleanName}";
+                           factoryType = originalAssembly.GetType(cleanTypeName);
+                       }
+                   }
 
-                HookDispatcher.Register(sourceType, classId, targetVersion, callback);
+                   if (factoryType == null)
+                       throw new InvalidOperationException($"[RipperHook] Could not find factory type for {classId}");
 
-                var readReleaseMethod = sourceType.GetMethod("ReadRelease", BindingFlags.Public | BindingFlags.Instance);
-                if (readReleaseMethod != null)
-                {
-                    ReflectionExtensions.RetargetCall(readReleaseMethod, universalDestMethod, 1, true, true);
-                    HookLogger.LogSuccessRaw($"    [+] Hooked {sourceType.Name} -> type tree {classId}@{targetVersion}");
+                   var mi = factoryType.GetMethod("Create", new[] { typeof(AssetInfo), typeof(UnityVersion) });
+                   if (mi == null)
+                       throw new InvalidOperationException($"[RipperHook] Create method missing on {factoryType.FullName}");
+
+                   // Invoke Create(null, lookupVersion) to get an instance, then get its type.
+                   object instance = mi.Invoke(null, new object[] { null, lookupVersion });
+                   Type sourceType = instance.GetType();
+                   string sourceTypeName = sourceType.FullName!;
+
+                   // 2. Resolve Ruri Target Type & Hooks
+                   string ruriBaseNamespace = $"{generatedAssemblyNamespace}.Classes.ClassID_{id}";
+                   string ruriTypeName = $"{ruriBaseNamespace}.{enumName}";
+                   
+                   Type? ruriType = ruriAssembly.GetType(ruriTypeName);
+                   if (ruriType == null && enumName.EndsWith($"_{id}"))
+                   {
+                        string cleanName = enumName.Substring(0, enumName.Length - $"_{id}".Length);
+                        ruriType = ruriAssembly.GetType($"{ruriBaseNamespace}.{cleanName}");
+                   }
+
+                   HookDispatcher.ReadReleaseDelegate? callback = null;
+                   if (coreCallbacks != null && coreCallbacks.TryGetValue(classId, out var customAction))
+                   {
+                       callback = customAction;
+                   }
+
+                   if (ruriType == null && callback == null)
+                   {
+                       continue; 
+                   }
+
+                   MethodInfo? createMethod = ruriType?.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(AssetInfo), typeof(UnityVersion) }, null);
+                   if (ruriType != null && createMethod == null)
+                   {
+                        HookLogger.LogFailure($"[-] Failed {classId}: Missing 'Create' method on {ruriType.Name}");
+                        continue;
+                   }
+
+                   if (createMethod == null && callback == null) 
+                   {
+                       HookLogger.LogFailure($"[-] Failed {classId}: No callback or Create method");
+                       continue;
+                   }
+
+                   HookDispatcher.Register(sourceType, createMethod, targetVersion, callback);
+                   
+                   var readReleaseMethod = sourceType.GetMethod("ReadRelease", BindingFlags.Public | BindingFlags.Instance);
+                   if (readReleaseMethod != null)
+                   {
+                       ReflectionExtensions.RetargetCall(readReleaseMethod, universalDestMethod, 1, true, true);
+                       
+                       string targetName = "Unknown";
+                       if (createMethod != null)
+                       {
+                           object targetInstance = createMethod.Invoke(null, new object[] { null, targetVersion });
+                           targetName = targetInstance.GetType().Name;
+                       }
+
+                       HookLogger.LogSuccessRaw($"    [+] Hooked {sourceType.Name} -> {targetName}");
+                   }
+                   else
+                   {
+                       HookLogger.LogSuccess($"[+] {sourceType.Name} (Dispatch Only)"); 
+                   }
                 }
-                else
+                catch (Exception ex)
                 {
-                    HookLogger.LogSuccess($"[+] {sourceType.Name} (Dispatch Only)");
+                   HookLogger.LogFailure($"[-] Failed {classId}: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                HookLogger.LogFailure($"[-] Failed {classId}: {ex.Message}");
             }
         }
     }
 
-    /// <summary>
-    /// Finds the stock AssetRipper class the loader will instantiate for <paramref name="classId"/> at
-    /// <paramref name="lookupVersion"/>, by asking its factory for one.
-    /// </summary>
-    private static Type ResolveSourceType(Assembly originalAssembly, ClassIDType classId, UnityVersion lookupVersion)
+    private static Assembly? ResolveGeneratedAssembly(string generatedAssemblyNamespace)
     {
-        int id = (int)classId;
-        string enumName = classId.ToString();
-        string baseNamespace = $"AssetRipper.SourceGenerated.Classes.ClassID_{id}";
+        Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
 
-        Type? factoryType = originalAssembly.GetType($"{baseNamespace}.{enumName}");
-
-        // Some enum members carry a disambiguating "_<id>" suffix the class itself does not.
-        if (factoryType == null)
+        // First prefer already loaded assemblies in the current process.
+        Assembly? assembly = loadedAssemblies.FirstOrDefault(a => string.Equals(a.GetName().Name, generatedAssemblyNamespace, StringComparison.Ordinal));
+        if (assembly != null)
         {
-            string suffix = $"_{id}";
-            if (enumName.EndsWith(suffix))
-            {
-                string cleanName = enumName.Substring(0, enumName.Length - suffix.Length);
-                factoryType = originalAssembly.GetType($"{baseNamespace}.{cleanName}");
-            }
+            return assembly;
         }
 
-        if (factoryType == null)
-            throw new InvalidOperationException($"[RipperHook] Could not find factory type for {classId}");
+        // The common path is the default Ruri.SourceGenerated namespace. Use a direct type anchor so
+        // we do not depend on probing rules or display-name based Assembly.Load.
+        if (string.Equals(generatedAssemblyNamespace, "Ruri.SourceGenerated", StringComparison.Ordinal))
+        {
+            return typeof(SourceTpk).Assembly;
+        }
 
-        var mi = factoryType.GetMethod("Create", new[] { typeof(AssetInfo), typeof(UnityVersion) });
-        if (mi == null)
-            throw new InvalidOperationException($"[RipperHook] Create method missing on {factoryType.FullName}");
-
-        object instance = mi.Invoke(null, new object[] { null!, lookupVersion })!;
-        return instance.GetType();
+        // Namespace overrides may still already be loaded under a matching assembly name.
+        return loadedAssemblies.FirstOrDefault(a => string.Equals(a.GetName().Name, generatedAssemblyNamespace, StringComparison.OrdinalIgnoreCase));
     }
-
+    
     // SetAssetListField is AR specific
     protected void SetAssetListField<T>(Type type, string name, ref EndianSpanReader reader, bool isAlign = true) where T : UnityAssetBase, new()
     {
@@ -199,7 +262,7 @@ public abstract class RipperHookCommon : RuriHook
 
         var fieldType = field.FieldType;
         var filedObj = Activator.CreateInstance(fieldType);
-
+        
         if (isAlign)
             ((AssetList<T>)filedObj).ReadRelease_ArrayAlign_Asset(ref reader);
         else

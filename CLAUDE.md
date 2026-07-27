@@ -31,7 +31,7 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 
 | 规则 | 细节 |
 |---|---|
-| 可编辑区 | **现有的** `Source/Ruri.*/**` 项目（Ruri.RipperHook, Ruri.AssemblyDumper, Ruri.Hook, Ruri.ShaderDecompiler）。就地编辑它们。 |
+| 可编辑区 | **现有的** `Source/Ruri.*/**` 项目（Ruri.RipperHook, Ruri.AssemblyDumper, Ruri.Hook, Ruri.SourceGenerated, Ruri.ShaderDecompiler）。就地编辑它们。 |
 | **不许新建 assembly** | **绝不为某个特性新建 `.csproj` / 项目 / assembly —— 哪怕是 `Ruri.*` 命名的也不行。** 每个特性都落在**现有 `Source/Ruri.*` 项目内部**（默认：`Ruri.RipperHook` 核心），形式是 Ruri.Hook 的 attribute hook 加上它们的支撑代码。新的 NuGet 依赖 —— 即便是重型 / 原生的（例如某个 USD 绑定）—— 也加到那个现有 csproj 上。如果你发现自己在为「隔离」一个依赖、一个导出器、或者为了「可扩展性」而搭一个新项目，**停下** —— 那个本能（泛化的 §0.C）在这里是错的；往核心里加一个 hook。 |
 | 冻结区 | `AssetRipper/**` 以及所有子模块。 |
 | 临时探查 | 为了确认「哪个方法才是正确的 hook 目标」，可以临时改一个子模块，**然后 `git checkout` 还原回上游**。最终实现必须以 Ruri.Hook attribute hook 的形式住在 `Source/Ruri.*/**` 里。 |
@@ -42,7 +42,7 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 | 引擎级 hook 安装 | 每个引擎的跨版本设置放在 *Common* hook 类的 `InitAttributeHook` 里，而不是每个版本各放一份。EndField 在 `EndFieldCommon_Hook.InitAttributeHook` 里安装它的 shader 绑定后处理器；`EndFieldShaderBindingHook.Install()` 是幂等的，所以跨 5 个版本重入也无害。 |
 | 测试循环输出 | 永远导出到 D:\Ruri\Temp\AntiGravity\AssetRipperHookOutput和FModelHookOutput CLI 每次运行都会自动清空那个目录 —— 不要往里塞额外的文件夹。启动新的运行前，先杀掉任何残留的 `Ruri.RipperHook.CLI.exe`。 |
 | 迭代超时 | 长时间运行走 `run_in_background` + `Monitor` until-loop。不要用一串短 sleep 去绕过死锁守卫；选一个预算，超了就让运行循环大声失败。 |
-| **类型树是数据，不是生成的代码** | 游戏的 Unity 类型模型来自 `Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`（内嵌资源，0.15 MB），由 `Ruri.RipperHook.Core.TypeTree` 在运行时解释直接读进 stock AssetRipper 对象。重打 tpk：`dotnet build Source/Ruri.AssemblyDumper/Ruri.AssemblyDumper.csproj -c Debug` 再跑它的 exe。tpk 表达不了的偏差（条件节点 / 值改写 / 读后解码）走 `[TypeTreeNodeGate]` / `[TypeTreeValueFix]` / `[TypeTreePostRead]` 三个 capability attribute，不许在共享代码里加分支。 |
+| **绝不构建 `Ruri.SourceGenerated`** | 它是一个指向预构建 DLL 的 `<Reference HintPath>`（只由 `Ruri.AssemblyDumper` 流水线重新生成）。构建 slnx 会触发它、烧掉好几分钟。其它一切都用 `dotnet build Source/Ruri.<X>/Ruri.<X>.csproj -c Debug --nologo`。 |
 | **里程碑处提交并 push** | 当一块逻辑完整的工作落地（一个 hook 接好并干净编译、一个 UI 特性端到端打通、一个 bug 修好并测过、一个文档章节加好），无需被要求就提交并 push。**阶段性提交 —— 每个里程碑各自一个 commit 各自 push，不要攒成一个大 commit 再 push。** 只暂存相关文件（`git add path/...`，不是 `-A`/`.`），不带 Co-Authored-By trailer。如果改动涉及子模块（`Source/Ruri.ShaderDecompiler` 等之下的任何东西），先在子模块里提交；父仓库的子模块指针 bump 由用户决定。不要提交投机性的 WIP、坏掉的构建、或琐碎的回退。**消息风格取决于改了什么：** 代码 → 一行简短英文，匹配现有日志风格（例如 `flip SplitVariantsToHlslFiles default to false`、`delete redundant BundledAssetsExportMode hook`）；**`.md` / 文档 → 多行正文，点明加了 / 重构了哪些章节以及*原因*（结构 / 行为上的转变，而非字面文字的改动）—— 例如 `add §7 AR_* hook vs native setting policy + flag when to delete a hook because the native default already covers it`。跳过 prose 级别的 diff；用最多 2–4 行抓住意图。** |
 
 ---

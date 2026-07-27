@@ -16,6 +16,8 @@ launchSettings.json
 AssetRipper.SourceGenerated.xml
 Source/Ruri.RipperHook/PyTools/TypeTreeDump
 Source/Ruri.RipperHook/PyTools/TypeTreeOutput
+Source/Ruri.SourceGenerated/*
+!Source/Ruri.SourceGenerated/Ruri.SourceGenerated.csproj
 
 # Python bytecode from the EngineUbMetadata generator scripts —
 # nondeterministic & rebuilt on every run.

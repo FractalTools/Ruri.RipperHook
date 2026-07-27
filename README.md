@@ -48,7 +48,7 @@ public class MyHook : RipperHookCommon
 | `Source/Ruri.FModelHook.GUI` | FModel 流程的图形界面入口 |
 | `Source/Ruri.ShaderDecompiler` | DX11 shader 反编译实现 |
 | `Source/Ruri.AssemblyDumper` | AssetRipper 结构定义与 Read 代码的生成链路 |
-| `Source/Ruri.AssemblyDumper` | 把 TypeTree JSON 打包成 `RuriTypeTree.tpk`(Ruri.RipperHook 的内嵌资源) |
+| `Source/Ruri.SourceGenerated` | AssemblyDumper 产物,以 `HintPath` 形式被 Ruri.RipperHook 引用 |
 | `AssetRipper/`, `FModel/`, `Tpk/` | 上游 submodule,**只读冻结**,差异通过 Hook 注入而非直接修改 |
 
 ## 主要能力
@@ -79,7 +79,7 @@ public class MyHook : RipperHookCommon
 | 列出可用 Hook | `Ruri.RipperHook.CLI.exe --list-hooks` |
 | Headless 导出 | `Ruri.RipperHook.CLI.exe --hook <Id> --load <path> --export <dir>` |
 
-游戏的 Unity 类型模型是运行时解释的 `RuriTypeTree.tpk`,不再有生成的 assembly;重打 tpk 用 `Ruri.AssemblyDumper`。
+**不要直接 build 整个 slnx** —— `Ruri.SourceGenerated` 是 `HintPath` 引用的预编译 DLL,只由 `Ruri.AssemblyDumper` pipeline 重新生成,误 build 会消耗大量时间。
 
 Hot Reload 状态下偶发的 Hook 失效一般来自增量残留,重新触发编译可恢复。
 
