@@ -12,8 +12,8 @@ public static class Bootstrap
     private static bool _resolverInstalled;
 
     /// <summary>
-    /// Install the assembly version-mismatch resolver (Ruri.SourceGenerated, etc., target older
-    /// AssetRipper.Assets versions and otherwise fail to bind).
+    /// Install the assembly version-mismatch resolver: a side-loaded assembly compiled against an
+    /// older AssetRipper.Assets otherwise fails to bind, so redirect it to whatever is already loaded.
     /// </summary>
     public static void InstallAssemblyResolver()
     {
