@@ -319,8 +319,9 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
 
-        (string[] closureFiles, HashSet<string> loadFilterFileNames) =
-            CabMap.ResolveScopedClosure(map.Table, seedCabNames);
+        CabClosure closure = new CabSelection { SeedCabNames = seedCabNames }.Resolve(map.Table);
+        string[] closureFiles = closure.Files;
+        HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
         if (closureFiles.Length == 0)
         {
             return ClosureResult.Empty;

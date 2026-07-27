@@ -62,9 +62,12 @@ public sealed class CabSelection
         bool hasPredicate = NamePatterns.Length > 0 || ClassIds is not null || FileScopes.Length > 0;
         if (hasPredicate)
         {
+            // Scopes are relativized to the map's base ONCE, so the per-CAB test is a string prefix
+            // compare against RelativePath instead of 237k Path.GetFullPath calls.
+            string[] relativeScopes = RelativeScopes(table);
             for (int id = 0; id < table.Count; id++)
             {
-                if (Matches(table, id))
+                if (Matches(table, id, relativeScopes))
                 {
                     seeds.Add(id);
                 }
@@ -109,7 +112,25 @@ public sealed class CabSelection
         };
     }
 
-    private bool Matches(CabTable table, int id)
+    /// <summary><see cref="FileScopes"/> expressed relative to the map's base folder, normalized to
+    /// the separator <see cref="CabTable.RelativePath"/> stores. Empty when no scope was given.</summary>
+    private string[] RelativeScopes(CabTable table)
+    {
+        if (FileScopes.Length == 0)
+        {
+            return [];
+        }
+        string[] scopes = new string[FileScopes.Length];
+        for (int i = 0; i < FileScopes.Length; i++)
+        {
+            string relative = Path.GetRelativePath(table.BaseFolder, FileScopes[i]);
+            // The whole base folder as scope constrains nothing; "" would prefix-match everything anyway.
+            scopes[i] = relative == "." ? string.Empty : relative.TrimEnd(Path.DirectorySeparatorChar);
+        }
+        return scopes;
+    }
+
+    private bool Matches(CabTable table, int id, string[] relativeScopes)
     {
         if (ClassIds is { } classIds)
         {
@@ -128,13 +149,13 @@ public sealed class CabSelection
             }
         }
 
-        if (FileScopes.Length > 0)
+        if (relativeScopes.Length > 0)
         {
-            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.RelativePath(id)));
+            string relative = table.RelativePath(id);
             bool inScope = false;
-            foreach (string scope in FileScopes)
+            foreach (string scope in relativeScopes)
             {
-                if (full.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
+                if (scope.Length == 0 || relative.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
                 {
                     inScope = true;
                     break;

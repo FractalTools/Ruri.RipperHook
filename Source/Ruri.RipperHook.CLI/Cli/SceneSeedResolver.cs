@@ -69,7 +69,9 @@ internal static class SceneSeedResolver
         string[] allPaths = meshPaths.Union(materialPaths).OrderBy(p => p, StringComparer.Ordinal).ToArray();
         string[] seedCabs = CabMap.ResolveCabsForPaths(table, allPaths);
 
-        (string[] loadFiles, HashSet<string> loadFilterFileNames) = CabMap.ResolveScopedClosure(table, seedCabs);
+        CabClosure closure = new CabSelection { SeedCabNames = seedCabs }.Resolve(table);
+        string[] loadFiles = closure.Files;
+        HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
         Console.Error.WriteLine(
             $"[Ruri.CLI] scene '{mapName}': {allPaths.Length} container paths → {seedCabs.Length} seed CABs → {loadFiles.Length} closure files");
 

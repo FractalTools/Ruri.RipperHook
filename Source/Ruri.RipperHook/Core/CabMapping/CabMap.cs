@@ -189,14 +189,6 @@ public static class CabMap
         return CabTable.LoadRcm4(path, file);
     }
 
-    public static (string baseFolder, Dictionary<string, Entry> entries) Load(string path)
-    {
-        // Classic dictionary API (CLI/GUI resolvers) over the columnar load: correctness
-        // identical, the materialization cost lands only on consumers that genuinely want
-        // the dictionary shape.
-        CabTable table = LoadTable(path);
-        return (table.BaseFolder, table.ToEntries());
-    }
 
 
 
@@ -223,35 +215,6 @@ public static class CabMap
 
 
 
-    /// <summary>
-    /// Inverted index from normalized addressable container path → every CAB whose
-    /// <see cref="Entry.ContainerPaths"/> includes it. Normalization = lowercase + strip any
-    /// "##subObjectName" suffix. A scene-placement's asset path (resolved via StringPathHash, see
-    /// RipperBlenderBridge.DiscoverScenePlacements) references a specific named sub-object inside a
-    /// multi-object FBX (e.g. "...model.fbx##some_mesh"); Entry.ContainerPaths records only the
-    /// container-level FBX path (what Unity's AssetBundle.Container actually stores), never the
-    /// sub-object suffix. Confirmed empirically against the real game: 446/446 distinct
-    /// base01_lv001 scene-placement asset paths resolve with exactly this rule, 0 exceptions —
-    /// this is not a fuzzy/heuristic match, it's the one transformation the data actually needs.
-    /// </summary>
-    public static Dictionary<string, List<string>> BuildContainerPathIndex(Dictionary<string, Entry> entries)
-    {
-        Dictionary<string, List<string>> index = new(StringComparer.OrdinalIgnoreCase);
-        foreach ((string cab, Entry entry) in entries)
-        {
-            foreach (string path in entry.ContainerPaths)
-            {
-                string key = NormalizeContainerPath(path);
-                if (!index.TryGetValue(key, out List<string>? cabs))
-                {
-                    cabs = new List<string>();
-                    index[key] = cabs;
-                }
-                cabs.Add(cab);
-            }
-        }
-        return index;
-    }
 
     private static string NormalizeContainerPath(string path)
     {
@@ -259,23 +222,6 @@ public static class CabMap
         return (hashIdx >= 0 ? path[..hashIdx] : path).ToLowerInvariant();
     }
 
-    /// <summary>Resolve a set of addressable paths (e.g. scene-placement AssetPaths) to the CAB names
-    /// that host them, against an already-built <see cref="BuildContainerPathIndex"/> result -- use
-    /// this overload when resolving many path sets against the same loaded cabmap, to build the index
-    /// once. Paths with no match are silently skipped; a caller checking coverage should compare its
-    /// input count against how many resolved.</summary>
-    public static string[] ResolveCabsForPaths(Dictionary<string, List<string>> containerPathIndex, IEnumerable<string> containerPaths)
-    {
-        HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string path in containerPaths)
-        {
-            if (containerPathIndex.TryGetValue(NormalizeContainerPath(path), out List<string>? matches))
-            {
-                foreach (string cab in matches) cabs.Add(cab);
-            }
-        }
-        return cabs.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToArray();
-    }
 
 
 
@@ -317,39 +263,6 @@ public static class CabMap
         return names.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    public static (string[] Files, HashSet<string> LoadFilterFileNames) ResolveScopedClosure(
-        CabTable table, IEnumerable<string> seedCabNames)
-    {
-        List<int> seedIds = new();
-        foreach (string seed in seedCabNames)
-        {
-            if (table.CabToId.TryGetValue(seed, out int id))
-            {
-                seedIds.Add(id);
-            }
-        }
-        HashSet<string> resultFiles = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> loadFilterFileNames = new(StringComparer.OrdinalIgnoreCase);
-        foreach (int id in table.ClosureIds(seedIds))
-        {
-            if (id >= table.Count)
-            {
-                continue; // phantom dependency: no file, no entry name
-            }
-            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.RelativePath(id)));
-            if (File.Exists(full))
-            {
-                resultFiles.Add(full);
-            }
-            string entryFileName = table.EntryFileName(id);
-            if (entryFileName.Length > 0)
-            {
-                loadFilterFileNames.Add(entryFileName);
-            }
-        }
-        return (resultFiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
-                loadFilterFileNames);
-    }
 
     /// <summary>
     /// On-disk chunk files -> the CAB names they host. The seed step for a plain

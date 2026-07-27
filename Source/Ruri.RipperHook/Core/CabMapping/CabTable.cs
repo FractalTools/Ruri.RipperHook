@@ -237,37 +237,6 @@ public sealed class CabTable
         };
     }
 
-    /// <summary>Classic dictionary materialization -- the compatibility bridge for the
-    /// Dictionary-of-Entry consumers (CLI/GUI resolvers). Costs the string allocations the
-    /// columnar model exists to avoid; only call on paths where seconds-scale work follows.</summary>
-    public Dictionary<string, CabMap.Entry> ToEntries()
-    {
-        Dictionary<string, CabMap.Entry> entries = new(Count, StringComparer.OrdinalIgnoreCase);
-        for (int id = 0; id < Count; id++)
-        {
-            int pathCount = ContainerPathCount(id);
-            List<string> paths = new(pathCount);
-            for (int p = 0; p < pathCount; p++)
-            {
-                paths.Add(ContainerPath(id, p));
-            }
-            ReadOnlySpan<int> classIds = ClassIds(id);
-            List<int> classList = new(classIds.Length);
-            foreach (int classId in classIds)
-            {
-                classList.Add(classId);
-            }
-            ReadOnlySpan<int> deps = Dependencies(id);
-            List<string> depList = new(deps.Length);
-            foreach (int dep in deps)
-            {
-                depList.Add(CabName(dep));
-            }
-            entries[CabName(id)] = new CabMap.Entry(
-                RelativePath(id), EntryFileName(id), depList, classList, paths);
-        }
-        return entries;
-    }
 
     private sealed class BlobBuilder
     {
