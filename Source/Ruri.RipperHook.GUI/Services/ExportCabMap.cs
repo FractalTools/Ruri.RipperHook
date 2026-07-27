@@ -6,18 +6,15 @@ namespace Ruri.RipperHook.GUI.Services;
 /// GUI façade over <see cref="CabMap"/> — the same cabmap reader/writer the CLI and the Blender pythonnet
 /// bridge use (RCM4, columnar, self-contained: names inline, no sidecar). A map built by any of the three
 /// producers loads identically in the other two. Build it once over the whole game (one file at a time, low
-/// peak memory), then resolve exactly which on-disk files to load for a given target — by asset type
-/// (<see cref="ResolveFilesByTypes"/>) or by a seed CAB's dependency closure
-/// (<see cref="ResolveScopedClosure"/>) — instead of loading the whole game into memory and filtering.
+/// peak memory), then resolve exactly which on-disk files to load for a given target — every resolve goes
+/// through <see cref="CabSelection"/> on the columnar int graph, never a materialized dictionary.
 /// </summary>
 internal sealed class ExportCabMap
 {
-    private Dictionary<string, CabMap.Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
-    private string _baseFolder = string.Empty;
+    private CabTable? _table;
 
-    public bool HasMap => _entries.Count > 0;
-    public bool HasNames => CabMap.HasInlineNames(_entries);
-    public int CabCount => _entries.Count;
+    public bool HasMap => _table is not null;
+    public int CabCount => _table?.Count ?? 0;
     public string MapPath { get; private set; } = string.Empty;
 
     /// <summary>One virtual-file row for the browser: a CAB, where it lives, what it holds, how connected it is.</summary>
@@ -29,9 +26,15 @@ internal sealed class ExportCabMap
         get
         {
             HashSet<int> ids = new();
-            foreach (CabMap.Entry e in _entries.Values)
+            if (_table is { } table)
             {
-                foreach (int c in e.ClassIds) ids.Add(c);
+                for (int id = 0; id < table.Count; id++)
+                {
+                    foreach (int classId in table.ClassIds(id))
+                    {
+                        ids.Add(classId);
+                    }
+                }
             }
             return ids;
         }
@@ -39,17 +42,28 @@ internal sealed class ExportCabMap
 
     public void Clear()
     {
-        _entries = new(StringComparer.OrdinalIgnoreCase);
-        _baseFolder = string.Empty;
+        _table = null;
         MapPath = string.Empty;
     }
 
     /// <summary>Every CAB as a virtual-file row (with its Container paths — RCM4 always carries them inline).</summary>
     public IEnumerable<CabRow> EnumerateCabRows()
     {
-        foreach ((string cab, CabMap.Entry entry) in _entries)
+        if (_table is not { } table)
         {
-            yield return new CabRow(cab, entry.RelativePath, entry.ClassIds, entry.Dependencies.Count, entry.ContainerPaths);
+            yield break;
+        }
+        for (int id = 0; id < table.Count; id++)
+        {
+            int pathCount = table.ContainerPathCount(id);
+            string[] paths = new string[pathCount];
+            for (int i = 0; i < pathCount; i++)
+            {
+                paths[i] = table.ContainerPath(id, i);
+            }
+            yield return new CabRow(
+                table.CabName(id), table.RelativePath(id), table.ClassIds(id).ToArray(),
+                table.DependencyCount(id), paths);
         }
     }
 
@@ -60,17 +74,26 @@ internal sealed class ExportCabMap
     /// extracted from the (possibly 161k-bundle) chunks instead of loading each chunk whole.
     /// </summary>
     public (string[] Files, HashSet<string> LoadFilterFileNames) ResolveScopedClosure(IEnumerable<string> seedCabs)
-        => CabMap.ResolveScopedClosure(_baseFolder, _entries, seedCabs);
+    {
+        if (_table is not { } table)
+        {
+            return ([], new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
+        CabClosure closure = new CabSelection { SeedCabNames = seedCabs.ToArray() }.Resolve(table);
+        return (closure.Files, closure.LoadFilterFileNames);
+    }
 
     public void Load(string path)
     {
-        (_baseFolder, _entries) = CabMap.Load(path);
+        _table = CabMap.LoadTable(path);
         MapPath = Path.GetFullPath(path);
     }
 
     /// <summary>On-disk files hosting a CAB that contains any of <paramref name="targetClassIds"/>, plus their deps.</summary>
     public string[] ResolveFilesByTypes(IReadOnlySet<int> targetClassIds)
-        => CabMap.ResolveByTypes(_baseFolder, _entries, targetClassIds, out _);
+        => _table is { } table
+            ? new CabSelection { ClassIds = targetClassIds }.Resolve(table).Files
+            : [];
 
     /// <summary>Build a self-contained (RCM4) map over <paramref name="rootFolder"/> and write it to <paramref name="outPath"/>.
     /// The caller must already have the right game hook applied so encrypted bundles load. Returns the number of CABs indexed.</summary>

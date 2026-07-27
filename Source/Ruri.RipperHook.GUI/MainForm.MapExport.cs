@@ -52,8 +52,8 @@ public partial class MainForm
 					.OrderBy(static r => r.ContainerPaths.Count > 0 ? r.ContainerPaths[0] : r.Cab, StringComparer.OrdinalIgnoreCase)
 					.ToList();
 			});
-			string nameState = _exportMap.HasNames ? RuriLocalization.CabMapNamesLoaded : RuriLocalization.CabMapNamesMissing;
-			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath) + " " + nameState);
+			// RCM4 always carries container paths inline, so there is no name-less map to report on.
+			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath));
 			ShowVirtualRows(rows);   // populate the Virtual Asset List tab (loaded assets untouched)
 		}
 		catch (Exception ex)
