@@ -24,7 +24,7 @@ namespace Ruri.RipperHook.Core.TypeTree;
 /// </summary>
 public sealed class TypeTreeReadPlan
 {
-    private static readonly ConcurrentDictionary<(Type Target, ClassIDType ClassID, UnityVersion Version, int Revision), TypeTreeReadPlan?> Cache = new();
+    private static readonly ConcurrentDictionary<(Type Target, ClassIDType ClassID, TypeTreeVersion Version, int Revision), TypeTreeReadPlan?> Cache = new();
 
     [ThreadStatic]
     private static TypeTreeReadContext? _context;
@@ -34,11 +34,11 @@ public sealed class TypeTreeReadPlan
 
     public ClassIDType ClassID { get; }
 
-    public UnityVersion Version { get; }
+    public TypeTreeVersion Version { get; }
 
     public TypeTreeNode RootNode { get; }
 
-    private TypeTreeReadPlan(ClassIDType classID, UnityVersion version, TypeTreeNode rootNode, TypeTreeStructStep root, IReadOnlyList<Action<TypeTreeReadContext>>? postReaders)
+    private TypeTreeReadPlan(ClassIDType classID, TypeTreeVersion version, TypeTreeNode rootNode, TypeTreeStructStep root, IReadOnlyList<Action<TypeTreeReadContext>>? postReaders)
     {
         ClassID = classID;
         Version = version;
@@ -51,7 +51,7 @@ public sealed class TypeTreeReadPlan
     /// The plan for reading <paramref name="classID"/> at <paramref name="version"/> into
     /// <paramref name="targetType"/>, or <see langword="null"/> when the tpk has no tree for it.
     /// </summary>
-    public static TypeTreeReadPlan? Get(ClassIDType classID, Type targetType, UnityVersion version)
+    public static TypeTreeReadPlan? Get(ClassIDType classID, Type targetType, TypeTreeVersion version)
     {
         return Cache.GetOrAdd(
             (targetType, classID, version, TypeTreeOverrides.Revision),
@@ -74,7 +74,7 @@ public sealed class TypeTreeReadPlan
         }
     }
 
-    private static TypeTreeReadPlan? Build(ClassIDType classID, Type targetType, UnityVersion version)
+    private static TypeTreeReadPlan? Build(ClassIDType classID, Type targetType, TypeTreeVersion version)
     {
         TypeTreeNode? rootNode = TypeTreeDatabase.GetReleaseRoot(classID, version);
         if (rootNode is null)

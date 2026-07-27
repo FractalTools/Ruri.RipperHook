@@ -77,15 +77,32 @@ public abstract class RipperHookCommon : RuriHook
 
         var classIds = hookClassAttrs.Select(a => a.ClassID).ToList();
 
-        UnityVersion targetVersionVec = GetTargetVersion(ripperHookAttr);
-        if (targetVersionVec == default) return; // Skip if version resolution failed or returned empty
+        TypeTreeVersion targetVersion = GetTargetVersion(ripperHookAttr);
+        if (targetVersion.IsEmpty)
+        {
+            HookLogger.LogFailure($"[-] {type.Name} declares TypeTreeHook classes but no type tree version; override {nameof(GetTargetVersion)}.");
+            return;
+        }
 
-        HookClasses(classIds, ripperHookAttr.BaseEngineVersion, targetVersionVec);
+        HookClasses(classIds, targetVersion);
     }
 
-    protected virtual UnityVersion GetTargetVersion(RipperHookAttribute attr)
+    /// <summary>
+    /// Which dumped type tree snapshot this hook reads with. A game overrides this with its lineage
+    /// (its directory under the external TypeTree dumps) and its own build string -- the string is
+    /// free-form, so a build number never has to be squeezed into a <c>UnityVersion</c> field again.
+    /// </summary>
+    protected virtual TypeTreeVersion GetTargetVersion(RipperHookAttribute attr) => default;
+
+    /// <summary>
+    /// The Unity version this game's dumps report about themselves -- the fork's own build, read from
+    /// the packed manifest rather than hand-written next to the hook.
+    /// </summary>
+    protected UnityVersion GetEngineVersion()
     {
-        return UnityVersion.Parse(attr.BaseEngineVersion);
+        RipperHookAttribute attr = GetType().GetCustomAttribute<RipperHookAttribute>()
+            ?? throw new InvalidOperationException($"{GetType().Name} has no {nameof(RipperHookAttribute)}.");
+        return TypeTreeDatabase.GetEngineVersion(GetTargetVersion(attr));
     }
 
     /// <summary>
@@ -93,13 +110,14 @@ public abstract class RipperHookCommon : RuriHook
     /// reads it with the game's own type tree at <paramref name="targetVersion"/> (see
     /// <see cref="TypeTreeReadPlan"/>).
     ///
-    /// <paramref name="sourceUnityVersion"/> only picks *which* stock AssetRipper class version the
-    /// game's files instantiate -- the layout always comes from the tpk.
+    /// Which stock AssetRipper class the game's files instantiate comes from the engine version the
+    /// dump reports about itself, not from a hand-written one -- a fork keeps its own build there
+    /// (EndField says <c>2021.3.34f5</c>), and AssetRipper's factory resolves that to the nearest
+    /// class version it generated.
     /// </summary>
     protected void HookClasses(
         IEnumerable<ClassIDType> classIds,
-        string sourceUnityVersion,
-        UnityVersion targetVersion,
+        TypeTreeVersion targetVersion,
         Dictionary<ClassIDType, ReadReleaseDelegate>? customCallbacks = null)
     {
         Dictionary<ClassIDType, HookDispatcher.ReadReleaseDelegate>? coreCallbacks = null;
@@ -112,7 +130,7 @@ public abstract class RipperHookCommon : RuriHook
             }
         }
 
-        UnityVersion lookupVersion = UnityVersion.Parse(sourceUnityVersion);
+        UnityVersion lookupVersion = TypeTreeDatabase.GetEngineVersion(targetVersion);
 
         var universalDestMethod = typeof(HookDispatcher).GetMethod(nameof(HookDispatcher.Universal_ReadRelease), BindingFlags.Public | BindingFlags.Static);
         if (universalDestMethod == null) throw new Exception("Universal_ReadRelease missing");
@@ -133,7 +151,7 @@ public abstract class RipperHookCommon : RuriHook
 
                 if (callback == null && TypeTreeDatabase.GetReleaseRoot(classId, targetVersion) == null)
                 {
-                    HookLogger.LogFailure($"[-] Failed {classId}: no type tree at {targetVersion} in {TypeTreeDatabase.BlobOrigin}");
+                    HookLogger.LogFailure($"[-] Failed {classId}: no type tree at {targetVersion} in {TypeTreeDatabase.Origin}");
                     continue;
                 }
 

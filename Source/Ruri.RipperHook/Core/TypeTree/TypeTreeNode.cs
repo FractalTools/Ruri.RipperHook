@@ -7,7 +7,7 @@ using AssetRipper.Tpk.TypeTrees;
 namespace Ruri.RipperHook.Core.TypeTree;
 
 /// <summary>
-/// A normalized type tree node, built straight from a tpk blob.
+/// A normalized type tree node, built straight from a stock tpk type tree blob.
 ///
 /// This is a 1:1 port of <c>AssetRipper.AssemblyDumper.UniversalNode</c> restricted to what the read
 /// path needs, with the two <c>Pass002_RenameSubnodes</c> transforms that change how bytes are read
@@ -64,8 +64,9 @@ public sealed class TypeTreeNode
     public override string ToString() => $"{TypeName} {OriginalName}";
 
     /// <summary>
-    /// Builds the normalized tree for one tpk node. Secondary renaming runs bottom up, matching
-    /// <c>Pass002_RenameSubnodes.DoSecondaryRenamingRecursively</c>.
+    /// Builds the normalized tree for one tpk node. The packer already ran AssetRipper's
+    /// <c>Pass002_RenameSubnodes</c>, so the names here are final; the two normalizations below are
+    /// idempotent and stay as a safety net for a blob built without it.
     /// </summary>
     internal static TypeTreeNode FromTpk(TpkUnityNode node, TpkStringBuffer stringBuffer, TpkUnityNodeBuffer nodeBuffer)
     {

@@ -2,68 +2,209 @@ using AssetRipper.Primitives;
 using AssetRipper.Tpk;
 using AssetRipper.Tpk.TypeTrees;
 using AssetRipper.Tpk.TypeTrees.Json;
-using System.Linq;
+using Ruri.RipperHook.Core.TypeTree;
 using VersionClassPair = System.Collections.Generic.KeyValuePair<
     AssetRipper.Primitives.UnityVersion,
     AssetRipper.Tpk.TypeTrees.TpkUnityClass?>;
 
 namespace Ruri.Tpk.Pipeline;
 
+/// <summary>
+/// Packs the external TypeTree dumps into the tpk the hook interprets at runtime.
+///
+/// The tpk container is stock and stays that way. The file is a <c>TpkCollectionBlob</c> holding one
+/// <c>TpkTypeTreeBlob</c> per lineage plus a <c>TpkJsonBlob</c> manifest -- all three are blob kinds
+/// the tpk format already defines, <c>Json</c> explicitly for "custom json data".
+///
+/// A lineage is one game's dump directory. Its blob is a complete chain: the engine snapshots the
+/// game builds on, then the game's own snapshots, keyed by bare ordinals. That is what lets a lookup
+/// stay inside one lineage -- a class the game never redefines still resolves, without the resolver
+/// ever consulting another game. The previous packing put every game on one shared version axis and
+/// depended on stock Unity dumps sorting between them to keep them apart.
+/// </summary>
 internal static class TypeTreeTpkBuilder
 {
-    public static void WriteFromJsonDirectory(string jsonDirectory, string outputPath)
+    private const string CommonDirectoryName = "Common";
+
+    public static void WriteFromDumpRoot(string dumpRoot, string outputPath)
     {
-        TpkTypeTreeBlob blob = CreateFromDirectory(jsonDirectory);
+        List<Snapshot> engine = ReadEngineSnapshots(dumpRoot);
+        List<LineageSource> lineages = ReadLineageSources(dumpRoot, engine);
 
-        // The runtime interpreter binds nodes onto AssetRipper's generated fields, so the tpk has to
-        // speak AssetRipper's post-rename vocabulary rather than the raw dump's.
-        blob = TypeTreeRenamer.ApplyAssetRipperRenaming(blob);
+        TpkCollectionBlob collection = new();
+        TypeTreeManifest manifest = new();
 
-        TpkFile.FromBlob(blob, TpkCompressionType.Brotli).WriteToFile(outputPath);
-        Console.WriteLine($"[Build] Wrote RuriTypeTree.tpk from {jsonDirectory} to {outputPath}");
-    }
-
-    private static TpkTypeTreeBlob CreateFromDirectory(string directoryPath)
-    {
-        IEnumerable<string> orderedPaths = GetOrderedJsonFilePaths(directoryPath);
-        return Create(orderedPaths.Select(UnityInfo.ReadFromJsonFile));
-    }
-
-    private static IEnumerable<string> GetOrderedJsonFilePaths(string directoryPath)
-    {
-        var directory = new DirectoryInfo(directoryPath);
-        Dictionary<UnityVersion, string> files = new();
-        foreach (FileInfo file in directory.GetFiles("*.json", SearchOption.TopDirectoryOnly))
+        foreach (LineageSource lineage in lineages)
         {
-            UnityVersion version = UnityVersion.Parse(Path.GetFileNameWithoutExtension(file.Name));
-            files.Add(version, file.FullName);
+            Console.WriteLine($"[Build] lineage {lineage.Key}: {lineage.EngineChain.Count} engine + {lineage.GameChain.Count} game snapshots");
+
+            List<Snapshot> chain = new(lineage.EngineChain.Count + lineage.GameChain.Count);
+            chain.AddRange(lineage.EngineChain);
+            chain.AddRange(lineage.GameChain);
+
+            TpkTypeTreeBlob blob = BuildLineageBlob(chain, lineage.EngineChain.Count);
+
+            // The runtime binds nodes onto AssetRipper's generated fields, so the shipped trees have
+            // to speak AssetRipper's post-rename vocabulary rather than the raw dump's.
+            blob = TypeTreeRenamer.ApplyAssetRipperRenaming(blob);
+
+            collection.Add(lineage.Key, blob);
+            manifest.Lineages.Add(new TypeTreeManifest.LineageEntry
+            {
+                Key = lineage.Key,
+                Versions = chain.ConvertAll(snapshot => new TypeTreeManifest.VersionEntry
+                {
+                    Key = snapshot.VersionKey,
+                    Engine = snapshot.EngineVersion.ToString(),
+                }),
+            });
         }
 
-        List<UnityVersion> orderedVersions = files.Keys.ToList();
-        orderedVersions.Sort();
-        return orderedVersions.Select(version => files[version]);
+        collection.Add(TypeTreeManifest.BlobName, new TpkJsonBlob { Text = manifest.ToJson() });
+
+        TpkFile.FromBlob(collection, TpkCompressionType.Brotli).WriteToFile(outputPath);
+        Console.WriteLine($"[Build] Wrote {Path.GetFileName(outputPath)} from {dumpRoot} to {outputPath}");
     }
 
-    private static TpkTypeTreeBlob Create(IEnumerable<UnityInfo> infosOrderedByUnityVersion)
+    // -----------------------------------------------------------------
+    // sources
+    // -----------------------------------------------------------------
+
+    /// <summary>One dumped type tree snapshot: what to call it, where to read it, which engine it is.</summary>
+    private sealed record Snapshot(string VersionKey, string JsonPath, UnityVersion EngineVersion);
+
+    private sealed record LineageSource(string Key, List<Snapshot> EngineChain, List<Snapshot> GameChain);
+
+    /// <summary>
+    /// The stock Unity dumps, ordered by engine version. These are genuinely Unity versions, so they
+    /// are ordered as such -- it is only a *game's* build that has no business being a UnityVersion.
+    /// </summary>
+    private static List<Snapshot> ReadEngineSnapshots(string dumpRoot)
+    {
+        string commonDirectory = Path.Combine(dumpRoot, CommonDirectoryName);
+        if (!Directory.Exists(commonDirectory))
+        {
+            throw new DirectoryNotFoundException(
+                $"[Build] {commonDirectory} is missing. The stock Unity dumps are the base every game's chain starts from; " +
+                "without them a game's lookups would only see the classes it redefines itself.");
+        }
+
+        List<Snapshot> snapshots = new();
+        foreach (FileInfo file in new DirectoryInfo(commonDirectory).GetFiles("*.json"))
+        {
+            string key = Path.GetFileNameWithoutExtension(file.Name);
+            snapshots.Add(new Snapshot(key, file.FullName, UnityVersion.Parse(key)));
+        }
+
+        snapshots.Sort(static (left, right) => left.EngineVersion.CompareTo(right.EngineVersion));
+        return snapshots;
+    }
+
+    private static List<LineageSource> ReadLineageSources(string dumpRoot, List<Snapshot> engine)
+    {
+        List<LineageSource> lineages = new();
+
+        foreach (DirectoryInfo directory in new DirectoryInfo(dumpRoot).GetDirectories())
+        {
+            if (directory.Name is CommonDirectoryName or "output" || directory.Name.StartsWith('.'))
+            {
+                continue;
+            }
+
+            List<Snapshot> gameChain = new();
+            foreach (DirectoryInfo versionDirectory in directory.GetDirectories())
+            {
+                string infoPath = Path.Combine(versionDirectory.FullName, "info.json");
+                if (!File.Exists(infoPath))
+                {
+                    continue;
+                }
+                gameChain.Add(new Snapshot(versionDirectory.Name, infoPath, ReadEngineVersion(infoPath)));
+            }
+
+            if (gameChain.Count == 0)
+            {
+                continue;
+            }
+
+            gameChain.Sort(static (left, right) => VersionKeyComparer.Compare(left.VersionKey, right.VersionKey));
+
+            // The chain only needs the engine up to the build the game forked from; anything newer
+            // describes a Unity the game never shipped.
+            UnityVersion baseEngine = gameChain[^1].EngineVersion;
+            List<Snapshot> engineChain = engine.FindAll(snapshot => snapshot.EngineVersion <= baseEngine);
+            if (engineChain.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"[Build] Lineage '{directory.Name}' reports engine {baseEngine}, but no stock Unity dump is that old or older.");
+            }
+
+            lineages.Add(new LineageSource(directory.Name, engineChain, gameChain));
+        }
+
+        lineages.Sort(static (left, right) => string.CompareOrdinal(left.Key, right.Key));
+        return lineages;
+    }
+
+    private static UnityVersion ReadEngineVersion(string infoPath)
+    {
+        // The Version field is the first property of the dump; reading the whole 10 MB document just
+        // to learn it would dominate the build.
+        using StreamReader reader = new(infoPath);
+        char[] window = new char[4096];
+        int read = reader.Read(window, 0, window.Length);
+        string head = new(window, 0, read);
+
+        const string marker = "\"Version\"";
+        int start = head.IndexOf(marker, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            int open = head.IndexOf('"', head.IndexOf(':', start + marker.Length) + 1);
+            int close = head.IndexOf('"', open + 1);
+            if (open > 0 && close > open)
+            {
+                return UnityVersion.Parse(head[(open + 1)..close]);
+            }
+        }
+
+        throw new InvalidDataException($"[Build] {infoPath} has no readable \"Version\" property.");
+    }
+
+    // -----------------------------------------------------------------
+    // one lineage's blob
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a lineage's chain into a stock type tree blob. Positions are bare ordinals; the version
+    /// strings they stand for live in the manifest.
+    ///
+    /// Diffing is unchanged from the stock packer: a class only gets an entry where its dump actually
+    /// differs from the previous position, so an unchanged tree inherits the one before it.
+    /// </summary>
+    private static TpkTypeTreeBlob BuildLineageBlob(List<Snapshot> chain, int engineCount)
     {
         TpkTypeTreeBlob blob = new();
         blob.CommonString.Add(UnityVersion.MinVersion, 0);
 
         byte latestCommonStringCount = 0;
         List<string> commonStrings = new();
-        Dictionary<int, string> latestUnityClassesDumped = new();
+        Dictionary<int, string> latestDumped = new();
         Dictionary<int, TpkClassInformation> classDictionary = new();
 
-        foreach (UnityInfo info in infosOrderedByUnityVersion)
+        for (int ordinal = 0; ordinal < chain.Count; ordinal++)
         {
-            Console.WriteLine($"[Build/Tpk] {info.Version}");
-            UnityVersion version = UnityVersion.Parse(info.Version);
-            blob.Versions.Add(version);
+            Snapshot snapshot = chain[ordinal];
+            bool isEngine = ordinal < engineCount;
+            UnityVersion key = TypeTreeOrdinal.ToUnityVersion(ordinal);
+
+            UnityInfo info = UnityInfo.ReadFromJsonFile(snapshot.JsonPath);
+            Console.WriteLine($"[Build/Tpk]   [{ordinal}] {snapshot.VersionKey}{(isEngine ? " (engine)" : "")}");
+            blob.Versions.Add(key);
 
             if (info.Strings.Count != latestCommonStringCount)
             {
                 latestCommonStringCount = checked((byte)info.Strings.Count);
-                blob.CommonString.Add(version, latestCommonStringCount);
+                blob.CommonString.Add(key, latestCommonStringCount);
             }
 
             for (int i = 0; i < info.Strings.Count; i++)
@@ -72,7 +213,7 @@ internal static class TypeTreeTpkBuilder
                 {
                     if (info.Strings[i].String != commonStrings[i])
                     {
-                        throw new Exception($"String inequality at index {i} for version {version}");
+                        throw new Exception($"String inequality at index {i} for {snapshot.VersionKey}");
                     }
                 }
                 else
@@ -83,63 +224,59 @@ internal static class TypeTreeTpkBuilder
 
             foreach (UnityClass unityClass in info.Classes)
             {
-                // Custom overlays sometimes ship a STRIPPED UnityConnectSettings(310) (StarRail 2.1.0+:
-                // 6 fields, no CrashReportingSettings/UnityPurchasingSettings landmark) that breaks
-                // Pass506's IL-insertion. 310 is connect/analytics settings, never in game asset
-                // bundles, so drop the overlay's 310 and let the real full definition carry forward.
-                if (version.Type == UnityVersionType.Experimental && unityClass.TypeID == 310)
+                // Game dumps sometimes ship a STRIPPED UnityConnectSettings(310) (StarRail 2.1.0+:
+                // 6 fields, no CrashReportingSettings/UnityPurchasingSettings landmark). 310 is
+                // connect/analytics settings, never in game asset bundles, so drop the game's 310 and
+                // let the real full definition carry forward.
+                if (!isEngine && unityClass.TypeID == 310)
+                {
                     continue;
+                }
 
                 string dump = unityClass.ToJsonString();
-                if (!latestUnityClassesDumped.TryGetValue(unityClass.TypeID, out string? cachedDump) || cachedDump != dump)
+                if (!latestDumped.TryGetValue(unityClass.TypeID, out string? cachedDump) || cachedDump != dump)
                 {
-                    latestUnityClassesDumped[unityClass.TypeID] = dump;
-                    if (!classDictionary.TryGetValue(unityClass.TypeID, out TpkClassInformation? tpkClassInformation))
+                    latestDumped[unityClass.TypeID] = dump;
+                    if (!classDictionary.TryGetValue(unityClass.TypeID, out TpkClassInformation? classInformation))
                     {
-                        tpkClassInformation = new TpkClassInformation(unityClass.TypeID);
-                        classDictionary.Add(unityClass.TypeID, tpkClassInformation);
+                        classInformation = new TpkClassInformation(unityClass.TypeID);
+                        classDictionary.Add(unityClass.TypeID, classInformation);
                     }
 
-                    TpkUnityClass tpkUnityClass = ClassConversion.Convert(unityClass, blob.StringBuffer, blob.NodeBuffer);
-                    tpkClassInformation.Classes.Add(new VersionClassPair(version, tpkUnityClass));
+                    classInformation.Classes.Add(new VersionClassPair(key, ClassConversion.Convert(unityClass, blob.StringBuffer, blob.NodeBuffer)));
                 }
             }
 
-            // Custom-engine dumps (UnityVersionType.Experimental, TypeNumber = CustomEngineType) are
-            // partial OVERLAYS on their base Unity version, not full snapshots: a class they omit must
-            // keep the base-Unity definition, not be null-marked. Null-marking here would drop every
-            // ancestor an overlay doesn't re-dump (EndField is ECS — leaf components but no
-            // GameObject/Component/Behaviour/Renderer/... chain), nulling them across the overlay's
-            // version range and breaking base-class resolution (Pass005) + version-instance lookups.
-            // Skipping it lets omitted classes carry forward, which is the correct overlay model.
-            if (version.Type != UnityVersionType.Experimental)
+            // A game dump is a partial OVERLAY on its engine, not a full snapshot: a class it omits
+            // keeps the engine definition rather than being marked removed. Engine dumps are full
+            // snapshots, so there an omission really is a removal.
+            if (isEngine)
             {
-                List<int> typeIds = info.Classes.Select(c => c.TypeID).ToList();
-                foreach (int unusedId in classDictionary.Keys.Where(id => !typeIds.Contains(id)).ToList())
+                HashSet<int> present = new(info.Classes.Select(c => c.TypeID));
+                foreach (int missing in classDictionary.Keys.Where(id => !present.Contains(id)).ToList())
                 {
-                    if (!string.IsNullOrEmpty(latestUnityClassesDumped[unusedId]))
+                    if (!string.IsNullOrEmpty(latestDumped[missing]))
                     {
-                        latestUnityClassesDumped[unusedId] = string.Empty;
-                        classDictionary[unusedId].Classes.Add(new VersionClassPair(version, null));
+                        latestDumped[missing] = string.Empty;
+                        classDictionary[missing].Classes.Add(new VersionClassPair(key, null));
                     }
                 }
             }
         }
 
-        foreach (TpkClassInformation tpkClassInfo in classDictionary.Values)
+        foreach (TpkClassInformation classInformation in classDictionary.Values)
         {
-            VersionClassPair[] pairs = tpkClassInfo.Classes.ToArray();
-            TpkUnityClass? previousClass = pairs[0].Value;
+            VersionClassPair[] pairs = classInformation.Classes.ToArray();
+            TpkUnityClass? previous = pairs[0].Value;
             for (int i = 1; i < pairs.Length; i++)
             {
-                VersionClassPair pair = pairs[i];
-                if (pair.Value == previousClass)
+                if (pairs[i].Value == previous)
                 {
-                    tpkClassInfo.Classes.Remove(pair);
+                    classInformation.Classes.Remove(pairs[i]);
                 }
                 else
                 {
-                    previousClass = pair.Value;
+                    previous = pairs[i].Value;
                 }
             }
         }

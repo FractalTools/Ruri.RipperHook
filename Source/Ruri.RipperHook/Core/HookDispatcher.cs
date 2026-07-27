@@ -28,11 +28,11 @@ namespace Ruri.RipperHook.Core
         private sealed class HookInfo
         {
             public ClassIDType ClassID;
-            public UnityVersion TargetVersion;
+            public TypeTreeVersion TargetVersion;
             public ReadReleaseDelegate? Callback;
         }
 
-        public static void Register(Type sourceType, ClassIDType classID, UnityVersion targetVersion, ReadReleaseDelegate? callback)
+        public static void Register(Type sourceType, ClassIDType classID, TypeTreeVersion targetVersion, ReadReleaseDelegate? callback)
         {
             HookInfo hookInfo = new HookInfo
             {
@@ -87,7 +87,7 @@ namespace Ruri.RipperHook.Core
 
             TypeTreeReadPlan plan = TypeTreeReadPlan.Get(hookInfo.ClassID, type, hookInfo.TargetVersion)
                 ?? throw new InvalidOperationException(
-                    $"[RipperHook] No type tree for {hookInfo.ClassID} at {hookInfo.TargetVersion} in {TypeTreeDatabase.BlobOrigin}.");
+                    $"[RipperHook] No type tree for {hookInfo.ClassID} at {hookInfo.TargetVersion} in {TypeTreeDatabase.Origin}.");
 
             plan.Read((IUnityObjectBase)asset, ref reader);
         }

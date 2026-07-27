@@ -18,11 +18,11 @@ public sealed class TypeTreeReadContext
 
     public IUnityObjectBase Asset { get; private set; } = null!;
 
-    public UnityVersion Version { get; private set; }
+    public TypeTreeVersion Version { get; private set; }
 
     public ClassIDType ClassID { get; private set; }
 
-    internal void Begin(IUnityObjectBase asset, ClassIDType classID, UnityVersion version)
+    internal void Begin(IUnityObjectBase asset, ClassIDType classID, TypeTreeVersion version)
     {
         captured.Clear();
         Asset = asset;

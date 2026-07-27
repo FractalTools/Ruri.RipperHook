@@ -1065,7 +1065,15 @@ internal static class MaterialConstantBufferReader
 
     private static string TrimIdent(string s)
     {
-        const int MaxLen = 80;
+        // Preshader (uniform-expression) slot names ARE the expression: the decompiled name is the
+        // only surviving record of how that Material cbuffer slot is derived from author parameters.
+        // Truncating it destroys that information irreversibly — a consumer can no longer re-evaluate
+        // the slot and has to fall back to 0. Measured on Infinity Nikki S0165: the 80-char cap turned
+        // names like `DissolveEdgeSoftness_sub_DissolveEdgeWidth_add_1_mul_...` into `..._etc` /
+        // `DissolveEdgeSoftness_sub`, which left the dissolve mask unresolvable and rendered whole
+        // garments black. HLSL identifiers have no practical length limit, so keep the full name and
+        // only cap at a length that guards against pathological blow-ups.
+        const int MaxLen = 512;
         if (s.Length <= MaxLen) return s;
         return s.Substring(0, MaxLen - 4) + "_etc";
     }

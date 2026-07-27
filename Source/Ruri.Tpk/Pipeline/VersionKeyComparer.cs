@@ -1,0 +1,55 @@
+using System;
+
+namespace Ruri.Tpk.Pipeline;
+
+/// <summary>
+/// Orders a lineage's version keys, which is what decides the inheritance chain.
+///
+/// A key is free-form, so this compares it the way a human reads one: split on the usual separators
+/// and compare segment by segment, numerically when both segments are numeric. That makes
+/// <c>1.4.4</c> follow <c>1.3.3</c>, and <c>1.0.14</c> follow <c>1.0.9</c> rather than preceding it
+/// the way an ordinal string compare would.
+/// </summary>
+internal static class VersionKeyComparer
+{
+    private static readonly char[] Separators = ['.', '-', '_', '+'];
+
+    public static int Compare(string left, string right)
+    {
+        string[] leftParts = left.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
+        string[] rightParts = right.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
+
+        int shared = Math.Min(leftParts.Length, rightParts.Length);
+        for (int i = 0; i < shared; i++)
+        {
+            int result = CompareSegment(leftParts[i], rightParts[i]);
+            if (result != 0)
+            {
+                return result;
+            }
+        }
+
+        // "1.4" sorts before "1.4.1": the shorter key is the earlier release.
+        return leftParts.Length.CompareTo(rightParts.Length);
+    }
+
+    private static int CompareSegment(string left, string right)
+    {
+        bool leftNumeric = long.TryParse(left, out long leftValue);
+        bool rightNumeric = long.TryParse(right, out long rightValue);
+
+        if (leftNumeric && rightNumeric)
+        {
+            return leftValue.CompareTo(rightValue);
+        }
+
+        // A numeric segment sorts before an alphanumeric one ("1.4" before "1.4b"), matching how
+        // pre-release suffixes read.
+        if (leftNumeric != rightNumeric)
+        {
+            return leftNumeric ? -1 : 1;
+        }
+
+        return string.CompareOrdinal(left, right);
+    }
+}

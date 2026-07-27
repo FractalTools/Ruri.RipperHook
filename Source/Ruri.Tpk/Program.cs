@@ -20,7 +20,7 @@ namespace Ruri.Tpk;
 /// </summary>
 internal static class Program
 {
-    private const string DefaultTypeTreeJsonDirectory = @"D:\Ruri\Git\FractalTools\TypeTree\output";
+    private const string DefaultDumpRoot = @"D:\Ruri\Git\FractalTools\TypeTree";
     private const string TpkFileName = "RuriTypeTree.tpk";
 
     public static int Main(string[] args)
@@ -30,17 +30,17 @@ internal static class Program
         {
             if (args.Length > 2)
             {
-                throw new ArgumentException("Usage: Ruri.Tpk [<TypeTree JSON directory>] [<output .tpk path>]");
+                throw new ArgumentException("Usage: Ruri.Tpk [<TypeTree dump root>] [<output .tpk path>]");
             }
 
-            string jsonDirectory = ResolveTypeTreeJsonDirectory(args.Length > 0 ? args[0] : DefaultTypeTreeJsonDirectory);
+            string dumpRoot = ResolveDumpRoot(args.Length > 0 ? args[0] : DefaultDumpRoot);
             string outputPath = args.Length > 1 ? Path.GetFullPath(args[1]) : DefaultOutputPath();
 
-            Console.WriteLine($"[Build] typeTreeJsonDir={jsonDirectory}");
+            Console.WriteLine($"[Build] dumpRoot={dumpRoot}");
             Console.WriteLine($"[Build] output={outputPath}");
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            TypeTreeTpkBuilder.WriteFromJsonDirectory(jsonDirectory, outputPath);
+            TypeTreeTpkBuilder.WriteFromDumpRoot(dumpRoot, outputPath);
 
             Console.WriteLine($"[Build] Done. {new FileInfo(outputPath).Length / 1024.0 / 1024.0:F2} MB");
             return 0;
@@ -61,42 +61,17 @@ internal static class Program
     private static string DefaultOutputPath() =>
         Path.Combine(LocateRepoRoot(), "Source", "Ruri.RipperHook", "Libraries", TpkFileName);
 
-    private static string ResolveTypeTreeJsonDirectory(string path)
+    private static string ResolveDumpRoot(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException("TypeTree JSON directory path is required.", nameof(path));
+            throw new ArgumentException("TypeTree dump root is required.", nameof(path));
         }
 
         string fullPath = Path.GetFullPath(path);
-        var directory = new DirectoryInfo(fullPath);
-        if (!directory.Exists)
+        if (!Directory.Exists(fullPath))
         {
-            throw new DirectoryNotFoundException($"TypeTree JSON directory not found: {fullPath}");
-        }
-
-        if (directory.GetDirectories().Length > 0)
-        {
-            throw new ArgumentException($"Input must be the flat TypeTree JSON output directory, not a parent folder: {fullPath}", nameof(path));
-        }
-
-        FileInfo[] files = directory.GetFiles();
-        if (files.Length == 0)
-        {
-            throw new ArgumentException($"TypeTree JSON directory is empty: {fullPath}", nameof(path));
-        }
-
-        foreach (FileInfo file in files)
-        {
-            if (!file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new ArgumentException($"Input directory must contain only TypeTree version JSON files. Unexpected file: {file.FullName}", nameof(path));
-            }
-
-            if (!UnityVersion.TryParse(Path.GetFileNameWithoutExtension(file.Name), out _, out _))
-            {
-                throw new ArgumentException($"Input directory must contain only Unity-versioned TypeTree JSON files. Unexpected file: {file.FullName}", nameof(path));
-            }
+            throw new DirectoryNotFoundException($"TypeTree dump root not found: {fullPath}");
         }
 
         return fullPath;
