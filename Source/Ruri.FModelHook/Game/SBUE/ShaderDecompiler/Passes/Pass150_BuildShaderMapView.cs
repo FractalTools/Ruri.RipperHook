@@ -126,16 +126,35 @@ internal static class Pass150_BuildShaderMapView
             List<string> assets = ResolveShaderMapAssets(state, mapHash);
 
             // Material filter applies at the shader-map level: a map
-            // survives iff at least one of its assets matches.
+            // survives iff at least one of its assets matches — OR the filter token IS the
+            // shader-map hash (full or prefix).
+            //
+            // The hash form exists because asset-list matching depends on the hash->material bridge
+            // being available, and that bridge is skipped whenever UnifiedShaderMetadata.json exceeds
+            // the lean-read ceiling (measured: 2.7 GB on X6Game -> per-material inline bridge skipped
+            // -> every asset list empty -> a path filter silently matches ZERO maps). The hash, by
+            // contrast, is read straight from the material package by --find-shader-for-material, so
+            // "look up the hash, then decompile exactly that map" always works.
             if (filterVariants.Count > 0)
             {
                 bool matches = false;
-                foreach (string asset in assets)
+                foreach (string token in filterVariants)
                 {
-                    if (MaterialPathVariants.Matches(asset, filterVariants))
+                    if (token.Length >= 8 && mapHash.StartsWith(token, StringComparison.OrdinalIgnoreCase))
                     {
                         matches = true;
                         break;
+                    }
+                }
+                if (!matches)
+                {
+                    foreach (string asset in assets)
+                    {
+                        if (MaterialPathVariants.Matches(asset, filterVariants))
+                        {
+                            matches = true;
+                            break;
+                        }
                     }
                 }
                 if (!matches) continue;
