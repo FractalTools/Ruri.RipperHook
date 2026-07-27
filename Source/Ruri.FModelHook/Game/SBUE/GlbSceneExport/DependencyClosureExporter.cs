@@ -718,7 +718,7 @@ public sealed class DependencyClosureExporter
                 break;
             }
 
-            case FInstancedStruct instancedStruct when instancedStruct.NonConstIUSturct is { } innerStruct:
+            case FInstancedStruct instancedStruct when instancedStruct.ScriptStruct?.StructType is { } innerStruct:
             {
                 WalkStructTypeReferences(innerStruct, references);
                 break;

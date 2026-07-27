@@ -378,14 +378,14 @@ public sealed class CompleteSceneDataExporter
                 return;
 
             // FInstancedStruct wraps an `FStructFallback` under
-            // `NonConstIUSturct` (FInstancedStruct.cs:14-16). The payload is
+            // `ScriptStruct.StructType` (FInstancedStruct.cs:15). The payload is
             // itself an IUStruct so recurse through the same dispatch — this
             // keeps InstancedStruct/TedInstancedStruct/VinInstancedStruct
             // (FScriptStruct.cs:193,280,293) — common on data layers and
             // gameplay tag containers — surrendering their internal
             // component references.
             case FInstancedStruct instancedStruct:
-                WalkScriptStructType(instancedStruct.NonConstIUSturct, owningPackage, visitedExportIndices, queue);
+                WalkScriptStructType(instancedStruct.ScriptStruct?.StructType, owningPackage, visitedExportIndices, queue);
                 return;
 
             // FInstancedStructContainer.Structs[] is an array of nested

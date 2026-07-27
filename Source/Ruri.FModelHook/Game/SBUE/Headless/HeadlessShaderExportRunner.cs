@@ -10,6 +10,8 @@ using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.FileProvider.Vfs;
 using CUE4Parse.MappingsProvider;
+using CUE4Parse.MappingsProvider.Jmap;
+using CUE4Parse.MappingsProvider.Usmap;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Shaders;

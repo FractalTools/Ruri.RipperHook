@@ -612,11 +612,11 @@ public sealed class LightComponentExporter : IComponentExporter
             intensityRawValue: lightComponent.Intensity,
             linearColor: linearColor,
             temperatureKelvin: lightComponent.Temperature,
-            useTemperature: lightComponent.bUseTemperature != 0,
-            castShadows: lightComponent.CastShadows != 0,
+            useTemperature: lightComponent.bUseTemperature,
+            castShadows: lightComponent.CastShadows,
             maxDrawDistance: lightComponent.MaxDrawDistance,
             iesPathName: ResolveIesPathName(lightComponent),
-            useIesBrightness: lightComponent.bUseIESBrightness != 0,
+            useIesBrightness: lightComponent.bUseIESBrightness,
             iesBrightnessScale: lightComponent.IESBrightnessScale);
     }
 
@@ -631,7 +631,7 @@ public sealed class LightComponentExporter : IComponentExporter
             linearColor: linearColor,
             temperatureKelvin: 6500.0f,
             useTemperature: false,
-            castShadows: lightComponentBase.CastShadows != 0,
+            castShadows: lightComponentBase.CastShadows,
             maxDrawDistance: 0.0f,
             iesPathName: string.Empty,
             useIesBrightness: false,
@@ -647,7 +647,7 @@ public sealed class LightComponentExporter : IComponentExporter
     private static Vector3 ResolveLightColor(ULightComponent lightComponent)
     {
         Vector3 baseLinear = FLinearColorToGlbColor(lightComponent.GetLightColor());
-        if (lightComponent.bUseTemperature == 0)
+        if (!lightComponent.bUseTemperature)
         {
             return baseLinear;
         }

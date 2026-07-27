@@ -274,7 +274,7 @@ public sealed class GlbSceneContext
                 node.PunctualLight = punctual;
                 if (!string.IsNullOrEmpty(light.ExtrasJson))
                 {
-                    node.Extras = SharpGLTF.IO.JsonContent.Parse(light.ExtrasJson);
+                    node.Extras = System.Text.Json.Nodes.JsonNode.Parse(light.ExtrasJson);
                 }
             }
 
