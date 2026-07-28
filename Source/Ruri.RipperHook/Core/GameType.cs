@@ -21,4 +21,5 @@ public enum GameType
     AR_TypeFilterExport,
     AR_GlbExporter,
     AR_HumanoidToGeneric,
+    AR_SerializeReference,
 }
