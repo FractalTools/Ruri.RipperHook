@@ -468,18 +468,35 @@ public class GameBundleHook : CommonHook, IHookModule
         var fileStack = new List<FileBase>();
         UnityVersion defaultVersion = initializer is null ? default : initializer.DefaultVersion;
 
+        var phase = System.Diagnostics.Stopwatch.StartNew();
         CustomFilePreInitialize(_this, paths, fileStack, fileSystem, initializer?.DependencyProvider);
+        long preInitializeMs = phase.ElapsedMilliseconds;
 
-        while (fileStack.Count > 0)
+        phase.Restart();
+        // Deserializing a container's assets touches only that container plus the stateless
+        // static factory (GameAssetFactory is pure static readers; typetree-backed assets never
+        // consult shared assembly state), so every FileContainer's bundle is precomputed across
+        // all cores here. The stack replay below then runs in the exact LIFO order the
+        // sequential loop used, so GameBundle child order -- and everything keyed off it --
+        // is identical.
+        SerializedBundle?[] preBuiltBundles = new SerializedBundle?[fileStack.Count];
+        Parallel.For(0, fileStack.Count, index =>
         {
-            switch (RemoveLastItem(fileStack))
+            if (fileStack[index] is FileContainer container)
+            {
+                preBuiltBundles[index] = SerializedBundle.FromFileContainer(container, assetFactory, defaultVersion);
+            }
+        });
+
+        for (int index = fileStack.Count - 1; index >= 0; index--)
+        {
+            switch (fileStack[index])
             {
                 case SerializedFile serializedFile:
                     FromSerializedFile.Invoke(null, new object[] { _this, serializedFile, assetFactory, defaultVersion });
                     break;
-                case FileContainer container:
-                    var serializedBundle = SerializedBundle.FromFileContainer(container, assetFactory, defaultVersion);
-                    _this.AddBundle(serializedBundle);
+                case FileContainer:
+                    _this.AddBundle(preBuiltBundles[index]!);
                     break;
                 case ResourceFile resourceFile:
                     _this.AddResource(resourceFile);
@@ -489,6 +506,9 @@ public class GameBundleHook : CommonHook, IHookModule
                     break;
             }
         }
+        fileStack.Clear();
+        Logger.Info(LogCategory.Import,
+            $"[GameBundle] preInit={preInitializeMs}ms assetRead={phase.ElapsedMilliseconds}ms");
     }
 
     private static FileBase RemoveLastItem(List<FileBase> list)
@@ -553,12 +573,24 @@ public class GameBundleHook : CommonHook, IHookModule
         return files;
     }
 
+    // LoadFilesAndDependencies runs on parallel per-chunk workers (see the EndField
+    // GameBundlePreInitialize); everything it touches is per-call state EXCEPT the shared
+    // dependency provider, whose thread safety is not its contract -- serialize just that.
+    private static readonly object _dependencyProviderLock = new();
+
     private static void LoadDependencies(SerializedFile serializedFile, List<FileBase> files, HashSet<string> serializedFileNames, IDependencyProvider? dependencyProvider)
     {
         foreach (var fileIdentifier in serializedFile.Dependencies)
         {
             var name = fileIdentifier.GetFilePath();
-            if (serializedFileNames.Add(name) && dependencyProvider?.FindDependency(fileIdentifier) is { } dependency)
+            if (!serializedFileNames.Add(name) || dependencyProvider is null)
+                continue;
+            FileBase? dependency;
+            lock (_dependencyProviderLock)
+            {
+                dependency = dependencyProvider.FindDependency(fileIdentifier);
+            }
+            if (dependency is not null)
                 files.Add(dependency);
         }
     }

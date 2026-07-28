@@ -10,6 +10,12 @@
 		<RootNamespace>Ruri.RipperHook.CLI</RootNamespace>
 		<TargetFramework>net10.0-windows</TargetFramework>
 		<Nullable>enable</Nullable>
+		<!-- This runtimeconfig.json is ALSO what the pythonnet bridge boots CoreCLR with inside
+		     Blender/Painter (see ruri_pybridge pythonnet_bridge._runtime_config_path). The bridge's
+		     import pipeline is a throughput workload full of large parallel allocations (texture
+		     decode/encode, whole-closure exports); workstation GC serializes exactly that. -->
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+		<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
 	</PropertyGroup>
 
 	<ItemGroup>
