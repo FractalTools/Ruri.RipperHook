@@ -185,15 +185,6 @@ public partial class MainForm
 		_ => string.Empty,
 	};
 
-	private static string CabColumnValue(ExportCabMap.CabRow row, string column) => column switch
-	{
-		"Name" => CabDisplayName(row),
-		"Container" => string.Join(" | ", row.ContainerPaths),
-		"Type" => CabTypeNames(row),
-		"Source" => row.RelativePath,
-		"Deps" => row.DependencyCount.ToString(CultureInfo.InvariantCulture),
-		_ => string.Empty,
-	};
 
 	internal static string RelationLabel(FilterRelation relation)
 	{

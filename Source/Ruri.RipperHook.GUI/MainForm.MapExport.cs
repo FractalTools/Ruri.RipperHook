@@ -42,19 +42,12 @@ public partial class MainForm
 		ToggleUi(false);
 		try
 		{
-			// Load the map (the map always carries names inline — no sidecar), then materialise + sort the
-			// virtual-file rows — all off the UI thread (258k+ CABs).
-			List<ExportCabMap.CabRow> rows = [];
-			await Task.Run(() =>
-			{
-				_exportMap.Load(file);
-				rows = _exportMap.EnumerateCabRows()
-					.OrderBy(static r => r.ContainerPaths.Count > 0 ? r.ContainerPaths[0] : r.Cab, StringComparer.OrdinalIgnoreCase)
-					.ToList();
-			});
-			// the map always carries container paths inline, so there is no name-less map to report on.
+			// Load the map off the UI thread (the map always carries names inline — no sidecar).
+			// No rows are materialised: the virtual list is id-driven over the columnar table
+			// through the shared CabTableSearch engine.
+			await Task.Run(() => _exportMap.Load(file));
 			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath));
-			ShowVirtualRows(rows);   // populate the Virtual Asset List tab (loaded assets untouched)
+			ShowVirtualRows();   // populate the Virtual Asset List tab (loaded assets untouched)
 		}
 		catch (Exception ex)
 		{

@@ -1,4 +1,5 @@
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
+using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.GUI.Services;
 
 namespace Ruri.RipperHook.GUI;
@@ -90,7 +91,18 @@ public partial class MainForm
 		}
 		virtualExportWithDepsMenuItem.Enabled = _exportMap.HasMap;
 		int index = virtualListView.SelectedIndices[0];
-		Func<string, string> value = column => (uint)index < (uint)_filteredCabRows.Count ? CabColumnValue(_filteredCabRows[index], column) : string.Empty;
+		int rowId = (uint)index < (uint)_visibleCabIds.Length ? _visibleCabIds[index] : -1;
+		Func<string, string> value = column => rowId >= 0 && _cabSearch is not null
+			? column switch
+			{
+				"Name" => _cabSearch.Field(rowId, "name"),
+				"Container" => _cabSearch.Field(rowId, "container"),
+				"Type" => _cabSearch.Field(rowId, "type_names"),
+				"Source" => _cabSearch.Field(rowId, "source"),
+				"Deps" => _cabSearch.Field(rowId, "deps"),
+				_ => string.Empty,
+			}
+			: string.Empty;
 		PopulateQuickFilterMenu(virtualQuickInclude, virtualQuickExclude, value);
 	}
 
@@ -123,12 +135,16 @@ public partial class MainForm
 	}
 
 	// ── populate / filter / sort ────────────────────────────────────────────────────────────────────
+	// Column index -> the shared engine's field name (see CabTableSearch): 0 Name, 1 Container,
+	// 2 Type, 3 Source, 4 Deps.
+	private static readonly string[] VirtualColumnFields = ["name", "container", "type_names", "source", "deps"];
+
 	/// <summary>Show the loaded CAB map's virtual files; leaves loaded assets and the loaded Asset List untouched.</summary>
-	private void ShowVirtualRows(List<ExportCabMap.CabRow> rows)
+	private void ShowVirtualRows()
 	{
-		_allCabRows = rows;
+		_cabSearch = _exportMap.Table is { } table ? new CabTableSearch(table) : null;
 		_virtualPreviewCache.Clear();
-		_virtualSortColumn = -1;
+		_virtualSortColumn = 1;      // initial view: ascending by container path, as always
 		_virtualSortAscending = true;
 		virtualSearch.Clear();
 		RebuildTypeList();
@@ -142,33 +158,80 @@ public partial class MainForm
 		{
 			return;
 		}
-		string quick = virtualSearch.Text.Trim();
-		List<ExportCabMap.CabRow> rows = _allCabRows.Where(r => RowPasses(quick, column => CabColumnValue(r, column))).ToList();
-		SortCabRowsInPlace(rows);
-		_filteredCabRows = rows;
+		if (_cabSearch is null)
+		{
+			_visibleCabIds = [];
+			virtualListView.VirtualListSize = 0;
+			return;
+		}
+		// The ONE search/rule/sort engine (CabTableSearch) -- the same call the Blender/Painter
+		// bridge makes; this method owns no matching logic at all.
+		string sortColumn = (uint)_virtualSortColumn < (uint)VirtualColumnFields.Length
+			? VirtualColumnFields[_virtualSortColumn] : "name";
+		int sortDirection = _virtualSortColumn < 0 ? 0 : (_virtualSortAscending ? 1 : 2);
+		_visibleCabIds = _cabSearch.Search(virtualSearch.Text.Trim(), CabRulesForEngine(), sortColumn, sortDirection);
 
 		// VirtualListSize = 0 then count clears stale selection and forces a full redraw of the virtual rows.
 		virtualListView.VirtualListSize = 0;
-		virtualListView.VirtualListSize = _filteredCabRows.Count;
+		virtualListView.VirtualListSize = _visibleCabIds.Length;
 		UpdateVirtualSortIndicator();
-		if (_allCabRows.Count > 0)
+		if (_exportMap.CabCount > 0)
 		{
-			SetStatus($"Showing {_filteredCabRows.Count:N0} / {_allCabRows.Count:N0} virtual files.");
+			SetStatus($"Showing {_visibleCabIds.Length:N0} / {_exportMap.CabCount:N0} virtual files.");
 		}
+	}
+
+	/// <summary>The shared rule list in the engine's shape. GUI column labels map to engine field
+	/// names; PathID has no cabmap column and resolves to the empty string, exactly what the old
+	/// per-row getter returned for it.</summary>
+	private List<CabFilterRule> CabRulesForEngine()
+	{
+		List<CabFilterRule> rules = new(_filterRules.Count);
+		foreach (FilterRule rule in _filterRules)
+		{
+			string field = rule.Column switch
+			{
+				"Name" => "name",
+				"Container" => "container",
+				"Type" => "type_names",
+				"Source" => "source",
+				"Deps" => "deps",
+				_ => rule.Column.ToLowerInvariant(),
+			};
+			string relation = rule.Relation switch
+			{
+				FilterRelation.Is => "is",
+				FilterRelation.IsNot => "is_not",
+				FilterRelation.Contains => "contains",
+				FilterRelation.Excludes => "excludes",
+				FilterRelation.BeginsWith => "begins_with",
+				FilterRelation.EndsWith => "ends_with",
+				FilterRelation.LessThan => "less_than",
+				FilterRelation.MoreThan => "more_than",
+				FilterRelation.Matches => "matches_regex",
+				FilterRelation.NotMatches => "not_matches_regex",
+				_ => "contains",
+			};
+			rules.Add(new CabFilterRule(field, relation, rule.Value, rule.Include, rule.Enabled));
+		}
+		return rules;
 	}
 
 	private void virtualListView_RetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
 	{
-		if ((uint)e.ItemIndex >= (uint)_filteredCabRows.Count)
+		if (_cabSearch is null || (uint)e.ItemIndex >= (uint)_visibleCabIds.Length)
 		{
 			return;
 		}
-		ExportCabMap.CabRow row = _filteredCabRows[e.ItemIndex];
-		ListViewItem item = new(CabDisplayName(row));
-		item.SubItems.Add(row.ContainerPaths.Count > 0 ? string.Join("  |  ", row.ContainerPaths) : row.Cab);
-		item.SubItems.Add(CabTypeNames(row));
-		item.SubItems.Add(row.RelativePath);              // Source = the hosting .chk
-		item.SubItems.Add(row.DependencyCount.ToString());
+		int id = _visibleCabIds[e.ItemIndex];
+		string cab = _exportMap.Table!.CabName(id);
+		string name = _cabSearch.Field(id, "name");
+		string container = _cabSearch.Field(id, "container");
+		ListViewItem item = new(name.Length > 0 ? name : cab);
+		item.SubItems.Add(container.Length > 0 ? container : cab);
+		item.SubItems.Add(_cabSearch.Field(id, "type_names"));
+		item.SubItems.Add(_cabSearch.Field(id, "source"));   // Source = the hosting .chk
+		item.SubItems.Add(_cabSearch.Field(id, "deps"));
 		e.Item = item;
 	}
 
@@ -232,63 +295,15 @@ public partial class MainForm
 		}
 	}
 
-	private void SortCabRowsInPlace(List<ExportCabMap.CabRow> rows)
-	{
-		if (_virtualSortColumn < 0 || rows.Count <= 1)
-		{
-			return;
-		}
-		// Columns: 0 Name, 1 Container, 2 Type, 3 Source, 4 Deps.
-		Comparison<ExportCabMap.CabRow> comparison = _virtualSortColumn switch
-		{
-			0 => static (a, b) => string.Compare(CabDisplayName(a), CabDisplayName(b), StringComparison.OrdinalIgnoreCase),
-			1 => static (a, b) => string.Compare(FirstContainerPath(a), FirstContainerPath(b), StringComparison.OrdinalIgnoreCase),
-			2 => static (a, b) => string.Compare(CabTypeNames(a), CabTypeNames(b), StringComparison.OrdinalIgnoreCase),
-			3 => static (a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase),
-			4 => static (a, b) => a.DependencyCount.CompareTo(b.DependencyCount),
-			_ => static (_, _) => 0,
-		};
-		rows.Sort(comparison);
-		if (!_virtualSortAscending)
-		{
-			rows.Reverse();
-		}
-	}
-
 	private IEnumerable<string> CabMapTypeNames()
 	{
 		HashSet<string> types = new(StringComparer.OrdinalIgnoreCase);
-		foreach (ExportCabMap.CabRow row in _allCabRows)
+		foreach (int id in _exportMap.AvailableClassIds)
 		{
-			foreach (int id in row.ClassIds)
-			{
-				if (id == (int)AssetRipper.SourceGenerated.ClassIDType.AssetBundle) continue;
-				types.Add(Enum.IsDefined(typeof(AssetRipper.SourceGenerated.ClassIDType), id) ? ((AssetRipper.SourceGenerated.ClassIDType)id).ToString() : id.ToString());
-			}
+			if (id == (int)AssetRipper.SourceGenerated.ClassIDType.AssetBundle) continue;
+			types.Add(Enum.IsDefined(typeof(AssetRipper.SourceGenerated.ClassIDType), id) ? ((AssetRipper.SourceGenerated.ClassIDType)id).ToString() : id.ToString());
 		}
 		return types.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase);
-	}
-
-	private static string FirstContainerPath(ExportCabMap.CabRow row) => row.ContainerPaths.Count > 0 ? row.ContainerPaths[0] : row.Cab;
-
-	private static string CabDisplayName(ExportCabMap.CabRow row)
-	{
-		if (row.ContainerPaths.Count == 0)
-		{
-			return row.Cab;
-		}
-		string first = row.ContainerPaths[0];
-		int slash = first.LastIndexOf('/');
-		string leaf = slash >= 0 ? first[(slash + 1)..] : first;
-		return row.ContainerPaths.Count > 1 ? $"{leaf}  (+{row.ContainerPaths.Count - 1})" : leaf;
-	}
-
-	private static string CabTypeNames(ExportCabMap.CabRow row)
-	{
-		return string.Join(", ", row.ClassIds
-			.Where(static id => id != (int)AssetRipper.SourceGenerated.ClassIDType.AssetBundle)
-			.Select(static id => Enum.IsDefined(typeof(AssetRipper.SourceGenerated.ClassIDType), id) ? ((AssetRipper.SourceGenerated.ClassIDType)id).ToString() : id.ToString())
-			.DefaultIfEmpty("AssetBundle"));
 	}
 
 	// ── selection helpers ───────────────────────────────────────────────────────────────────────────
@@ -308,11 +323,15 @@ public partial class MainForm
 	private List<string> SelectedCabNames()
 	{
 		List<string> cabs = [];
+		if (_exportMap.Table is not { } table)
+		{
+			return cabs;
+		}
 		foreach (int index in virtualListView.SelectedIndices)
 		{
-			if ((uint)index < (uint)_filteredCabRows.Count)
+			if ((uint)index < (uint)_visibleCabIds.Length)
 			{
-				cabs.Add(_filteredCabRows[index].Cab);
+				cabs.Add(table.CabName(_visibleCabIds[index]));
 			}
 		}
 		return cabs;
@@ -320,12 +339,12 @@ public partial class MainForm
 
 	private ExportCabMap.CabRow? CabRowAtSelection(int nth)
 	{
-		if (virtualListView.SelectedIndices.Count <= nth)
+		if (virtualListView.SelectedIndices.Count <= nth || !_exportMap.HasMap)
 		{
 			return null;
 		}
 		int index = virtualListView.SelectedIndices[nth];
-		return (uint)index < (uint)_filteredCabRows.Count ? _filteredCabRows[index] : null;
+		return (uint)index < (uint)_visibleCabIds.Length ? _exportMap.RowAt(_visibleCabIds[index]) : null;
 	}
 
 	private static string GetObjectKey(IGameObject gameObject)

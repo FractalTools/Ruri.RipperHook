@@ -46,25 +46,24 @@ internal sealed class ExportCabMap
         MapPath = string.Empty;
     }
 
-    /// <summary>Every CAB as a virtual-file row (with its Container paths — the map always carries them inline).</summary>
-    public IEnumerable<CabRow> EnumerateCabRows()
+    /// <summary>The loaded columnar table itself -- what the virtual list's id-driven search/
+    /// render path (<see cref="CabTableSearch"/>) runs over. Null until <see cref="Load"/>.</summary>
+    public CabTable? Table => _table;
+
+    /// <summary>ONE CAB as a virtual-file row, materialized on demand (selection preview, the
+    /// right-click value menu) -- the browser itself is id-driven and never materializes rows.</summary>
+    public CabRow RowAt(int id)
     {
-        if (_table is not { } table)
+        CabTable table = _table ?? throw new InvalidOperationException("No cabmap loaded.");
+        int pathCount = table.ContainerPathCount(id);
+        string[] paths = new string[pathCount];
+        for (int i = 0; i < pathCount; i++)
         {
-            yield break;
+            paths[i] = table.ContainerPath(id, i);
         }
-        for (int id = 0; id < table.Count; id++)
-        {
-            int pathCount = table.ContainerPathCount(id);
-            string[] paths = new string[pathCount];
-            for (int i = 0; i < pathCount; i++)
-            {
-                paths[i] = table.ContainerPath(id, i);
-            }
-            yield return new CabRow(
-                table.CabName(id), table.RelativePath(id), table.ClassIds(id).ToArray(),
-                table.DependencyCount(id), paths);
-        }
+        return new CabRow(
+            table.CabName(id), table.RelativePath(id), table.ClassIds(id).ToArray(),
+            table.DependencyCount(id), paths);
     }
 
     /// <summary>

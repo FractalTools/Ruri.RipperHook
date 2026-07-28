@@ -39,11 +39,11 @@ public partial class MainForm : Form
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private List<RipperAssetEntry> _filteredAssets = [];
 	// Two decoupled tabs share the filter rules + per-tab quick search: the loaded "Asset List" (preview /
-	// scene-tree; _filteredAssets) and the "Virtual Asset List" CAB-map tab (each CAB a row; _filteredCabRows,
+	// scene-tree; _filteredAssets) and the "Virtual Asset List" CAB-map tab (id-driven over the columnar table; _visibleCabIds,
 	// in MainForm.AssetList.cs). Loading/exporting a virtual selection resolves its dependency closure and
 	// appends it into the loaded Asset List, so browsing the virtual files never resets loaded assets.
-	private List<ExportCabMap.CabRow> _allCabRows = [];
-	private List<ExportCabMap.CabRow> _filteredCabRows = [];
+	private CabMapping.CabTableSearch? _cabSearch;
+	private int[] _visibleCabIds = [];
 	// Previewing a virtual file appends its closure to the shared loaded state; mark the loaded Asset List
 	// dirty and rebuild it lazily when that tab is next shown (not mid-preview).
 	private bool _assetListDirty;
@@ -217,8 +217,8 @@ public partial class MainForm : Form
 		ResetLoadedSession();
 		_adapter.Reset();
 		_exportMap.Clear();
-		_allCabRows = [];
-		_filteredCabRows = [];
+		_cabSearch = null;
+		_visibleCabIds = [];
 		if (virtualListView is not null)
 		{
 			virtualListView.VirtualListSize = 0;
