@@ -187,6 +187,56 @@ public static class RipperBlenderBridge
         return bytes;
     }
 
+    /// <summary>
+    /// Quick search + Include/Exclude rules + sort over the loaded cabmap, on the shared
+    /// <see cref="CabTableSearch"/> engine (the same one the WinForms browser runs) -- the hosts'
+    /// own per-row scalar filters are gone. <paramref name="flatRules"/> is the rule list
+    /// flattened five strings per rule (field, relation, value, action, enabled: "1"/"0") so no
+    /// custom DTO has to cross the reflection boundary; <paramref name="sortDirection"/> is
+    /// 0 = load order, 1 = ascending, 2 = descending. Returns the visible row ids as
+    /// little-endian int32 bytes -- one buffer crossing, numpy-viewable as-is.
+    /// </summary>
+    public static byte[] SearchTable(CabMapHandle map, string query, string[]? flatRules,
+        string sortColumn, int sortDirection)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        int[] ids = map.Search.Search(query, ParseFlatRules(flatRules), sortColumn, sortDirection);
+        return IntsToBytes(ids, ids.Length);
+    }
+
+    /// <summary>Sort an explicit row-id subset (the folder view's own listing) by a display
+    /// column, same engine and encoding as <see cref="SearchTable"/>.</summary>
+    public static byte[] SortRows(CabMapHandle map, int[] rowIds, string sortColumn, int sortDirection)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(rowIds);
+        int[] ids = map.Search.SortIds(rowIds, sortColumn, sortDirection);
+        return IntsToBytes(ids, ids.Length);
+    }
+
+    private static List<CabFilterRule>? ParseFlatRules(string[]? flatRules)
+    {
+        if (flatRules is null || flatRules.Length == 0)
+        {
+            return null;
+        }
+        if (flatRules.Length % 5 != 0)
+        {
+            throw new ArgumentException($"flatRules length {flatRules.Length} is not a multiple of 5 (field, relation, value, action, enabled)");
+        }
+        List<CabFilterRule> rules = new(flatRules.Length / 5);
+        for (int i = 0; i < flatRules.Length; i += 5)
+        {
+            rules.Add(new CabFilterRule(
+                Field: flatRules[i],
+                Relation: flatRules[i + 1],
+                Value: flatRules[i + 2],
+                Include: flatRules[i + 3] != "exclude",
+                Enabled: flatRules[i + 4] == "1"));
+        }
+        return rules;
+    }
+
     /// <summary>Resolve a set of addressable container paths (e.g. <see cref="DiscoverScenePlacements"/>'
     /// <see cref="ScenePlacementDto.AssetPath"/> values) to the CAB names that host them, via
     /// <see cref="CabMap.ResolveCabsForPaths(CabTable, IEnumerable{string})"/>.
@@ -1151,9 +1201,15 @@ public static class RipperBlenderBridge
 /// offsets + int dependency graph; see CabTable.cs for why nothing per-entry is materialized).</summary>
 public sealed class CabMapHandle
 {
+    private CabTableSearch? _search;
+
     public string CabMapPath { get; }
     public CabTable Table { get; }
     public string BaseFolder => Table.BaseFolder;
+
+    /// <summary>The handle's one search engine -- lazily built so its folded-blob and
+    /// derived-column caches live exactly as long as the loaded map does.</summary>
+    public CabTableSearch Search => _search ??= new CabTableSearch(Table);
 
     internal CabMapHandle(string cabMapPath, CabTable table)
     {
