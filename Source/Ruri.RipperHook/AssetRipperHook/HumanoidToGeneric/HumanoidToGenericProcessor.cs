@@ -29,6 +29,16 @@ namespace Ruri.RipperHook.AR;
 /// </summary>
 public sealed class HumanoidToGenericProcessor : IAssetProcessor
 {
+    /// <summary>
+    /// Game-registered policy (dependency inversion): may a clip no Animator references be solved
+    /// with any humanoid referential in scope? Some games attach controllers from code, so their
+    /// clips arrive unreferenced while the muscle names are avatar-relative but plaintext and
+    /// path-hash independent -- any humanoid referential decodes them identically. That is a fact
+    /// about a GAME, so the game's own hook opts in (EndFieldCommon_Hook does); the generic
+    /// default stays "no Animator, no solve".
+    /// </summary>
+    public static bool SolveUnreferencedClipsWithAnyAvatarInScope { get; set; }
+
     public void Process(GameData gameData)
     {
         // A clip carries no avatar reference of its own: the muscle values are meaningless without
@@ -60,10 +70,8 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
 
         foreach (IAnimationClip clip in clips)
         {
-            // Pair the clip with the rig that plays it. A clip no Animator references still gets
-            // solved: EndField attaches battle controllers from game code, so those clips arrive
-            // unreferenced, and their muscle names are avatar-relative but plaintext and
-            // path-hash independent, so any humanoid referential in scope decodes them identically.
+            // Pair the clip with the rig that plays it -- the Animator is the only thing that
+            // joins a clip to an Avatar, so that join is the default and the whole default.
             AvatarMuscleReferential? referential = null;
             foreach ((IAnimator animator, IAvatar avatar) in rigs)
             {
@@ -73,7 +81,15 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
                     break;
                 }
             }
-            referential ??= FirstHumanoid(referentialByAvatar, rigs);
+            // A clip no Animator references is a GAME property, not a generic one (some games
+            // attach controllers from code, so their clips arrive unreferenced), and whether any
+            // humanoid referential in scope may decode such a clip is that game's own call --
+            // registered by its hook (see SolveUnreferencedClipsWithAnyAvatarInScope), never
+            // assumed here.
+            if (referential is null && SolveUnreferencedClipsWithAnyAvatarInScope)
+            {
+                referential = FirstHumanoid(referentialByAvatar, rigs);
+            }
             if (referential is null)
             {
                 continue;
