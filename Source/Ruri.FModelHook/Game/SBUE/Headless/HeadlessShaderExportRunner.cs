@@ -18,6 +18,8 @@ using CUE4Parse.UE4.Shaders;
 using CUE4Parse.UE4.Versions;
 using Newtonsoft.Json.Linq;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
+using CUE4Parse.UE4.Assets.Exports.Texture;
+using CUE4Parse_Conversion.Textures;
 
 namespace Ruri.FModelHook.Game.SBUE.Headless;
 
@@ -264,6 +266,38 @@ public static class HeadlessShaderExportRunner
             {
                 try
                 {
+                    // Standalone textures: CUE4Parse's generic Exporter throws NotSupportedException
+                    // for UTexture (it only handles meshes/materials/animations), so --export-asset
+                    // silently reported everything as "skipped-unsupported" when asked for a texture
+                    // package. Decode + encode directly — the same Decode/Encode pair the material
+                    // sidecar path already uses (DependencyClosureExporter.WriteTextureSidecar).
+                    // This matters because a character's shared textures (fabric arrays, matcap
+                    // arrays, gem/studio HDRs) live in their own packages, not inside the mesh's
+                    // dependency closure, and without them the material graph samples neutral dummies.
+                    if (export is CUE4Parse.UE4.Assets.Exports.Texture.UTexture texture)
+                    {
+                        CUE4Parse_Conversion.Textures.CTexture? decoded = texture.Decode(exportOptions.Platform);
+                        if (decoded is null)
+                        {
+                            logError($"[Headless] --export-asset: '{export.Name}' decode returned null (unsupported pixel format?).");
+                            result.ExportsSkippedUnsupported++;
+                            continue;
+                        }
+                        byte[] imageBytes = decoded.Encode(exportOptions.TextureFormat, exportOptions.ExportHdrTexturesAsHdr, out string extension);
+                        if (imageBytes.Length == 0)
+                        {
+                            logError($"[Headless] --export-asset: '{export.Name}' encoded to 0 bytes.");
+                            result.ExportsSkippedUnsupported++;
+                            continue;
+                        }
+                        Directory.CreateDirectory(outDir.FullName);
+                        string texturePath = Path.Combine(outDir.FullName, export.Name + "." + extension);
+                        File.WriteAllBytes(texturePath, imageBytes);
+                        result.ExportsWritten++;
+                        log($"[Headless] --export-asset: wrote texture {export.Name} -> {texturePath}");
+                        continue;
+                    }
+
                     var exporter = new CUE4Parse_Conversion.Exporter(export, exportOptions);
                     if (exporter.TryWriteToDir(outDir, out string label, out string savedFilePath))
                     {
