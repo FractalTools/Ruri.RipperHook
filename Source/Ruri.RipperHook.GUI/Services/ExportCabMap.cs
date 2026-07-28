@@ -4,7 +4,7 @@ namespace Ruri.RipperHook.GUI.Services;
 
 /// <summary>
 /// GUI façade over <see cref="CabMap"/> — the same cabmap reader/writer the CLI and the Blender pythonnet
-/// bridge use (RCM5, columnar, self-contained: names inline, no sidecar). A map built by any of the three
+/// bridge use (RCM6, columnar, self-contained: names inline, no sidecar, location-independent). A map built by any of the three
 /// producers loads identically in the other two. Build it once over the whole game (parallel, bounded
 /// memory), then resolve exactly which on-disk files to load for a given target — every resolve goes
 /// through <see cref="CabSelection"/> on the columnar int graph, never a materialized dictionary.
@@ -95,7 +95,7 @@ internal sealed class ExportCabMap
             ? new CabSelection { ClassIds = targetClassIds }.Resolve(table).Files
             : [];
 
-    /// <summary>Build a self-contained (RCM5) map over <paramref name="rootFolder"/> and write it to <paramref name="outPath"/>.
+    /// <summary>Build a self-contained (RCM6) map over <paramref name="rootFolder"/> and write it to <paramref name="outPath"/>.
     /// The caller must already have the right game hook applied so encrypted bundles load. Returns the number of CABs indexed.</summary>
     public static int Build(string rootFolder, string outPath) => CabMap.Build(rootFolder, outPath);
 }

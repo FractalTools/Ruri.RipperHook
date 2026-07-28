@@ -23,7 +23,7 @@ namespace Ruri.RipperHook.CabMapping;
 ///   * <see cref="ResolveClosureCabNames"/> / <see cref="ResolveReverseClosureCabNames"/> — pure
 ///     in-memory transitive closure over dependencies / dependents, by CAB name.
 ///
-/// Format: RCM5 only -- the columnar layout documented in <see cref="CabTable"/>. A cabmap is a
+/// Format: RCM6 only -- the columnar layout documented in <see cref="CabTable"/>. A cabmap is a
 /// regenerable cache: a format bump means rebuild, never a multi-format compatibility reader.
 /// </summary>
 public static class CabMap

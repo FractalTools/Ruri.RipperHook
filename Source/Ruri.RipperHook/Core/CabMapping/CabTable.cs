@@ -7,7 +7,7 @@ namespace Ruri.RipperHook.CabMapping;
 /// <summary>
 /// Columnar in-memory form of a cabmap: UTF-8 string blobs + offset tables per column, an
 /// int-indexed dependency graph in BOTH directions, and NO per-entry string/record
-/// materialization. This is the load-time and interop-time optimum: the RCM5 on-disk format
+/// materialization. This is the load-time and interop-time optimum: the RCM6 on-disk format
 /// stores exactly these buffers, so loading is one sequential stream read straight into the
 /// final arrays -- no intermediate whole-file buffer, no per-string parse -- and a pythonnet
 /// caller receives the same buffers in one crossing and slices them at C speed.
@@ -346,12 +346,14 @@ public sealed class CabTable
         public int[] Offsets() => _offsets.ToArray();
     }
 
-    // ── RCM5 serialization ────────────────────────────────────────────────────
+    // ── RCM6 serialization ────────────────────────────────────────────────────
     //
     // Layout (little-endian throughout; this is a same-machine cache format, not an
     // interchange format):
-    //   u32 magic "RCM5", i32 version
-    //   i32 baseLen, utf8 baseFolder (relative to the map file's directory)
+    //   u32 magic "RCM6", i32 version
+    //   i32 baseLen, utf8 baseFolder (ABSOLUTE game root -- the map file itself is
+    //     location-independent: copy it anywhere and it behaves identically. Moving the
+    //     GAME invalidates the cache; rebuild, never re-anchor.)
     //   i32 count, i32 phantomCount, i32 fileCount, i32 pathCount, i32 classTotal, i32 depTotal
     //   int32[count+phantomCount+1] cabOffsets,  i32 blobLen + bytes cabBlob
     //   int32[fileCount+1] fileOffsets,          i32 blobLen + bytes fileBlob
@@ -363,19 +365,18 @@ public sealed class CabTable
     // The reverse adjacency is NOT stored: its rebuild is one counting pass at load (~3ms at
     // 549k edges), cheaper than the disk bytes and impossible to let drift out of sync.
 
-    internal const uint Magic5 = 0x52434D35; // "RCM5"
+    internal const uint Magic6 = 0x52434D36; // "RCM6"
 
     public void Save(string outPath)
     {
         string outDir = Path.GetDirectoryName(Path.GetFullPath(outPath))!;
         Directory.CreateDirectory(outDir);
-        string relativeBase = Path.GetRelativePath(outDir, BaseFolder);
-        byte[] baseUtf8 = Encoding.UTF8.GetBytes(relativeBase);
+        byte[] baseUtf8 = Encoding.UTF8.GetBytes(Path.GetFullPath(BaseFolder));
 
         using FileStream stream = new(outPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20);
         using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
-        writer.Write(Magic5);
-        writer.Write(5);
+        writer.Write(Magic6);
+        writer.Write(6);
         writer.Write(baseUtf8.Length);
         writer.Write(baseUtf8);
         writer.Write(Count);
@@ -403,28 +404,27 @@ public sealed class CabTable
 
     /// <summary>One sequential pass straight into the final arrays -- no whole-file intermediate
     /// buffer, no per-string parse. Throws <see cref="InvalidDataException"/> for anything that is
-    /// not RCM5: a cabmap is a regenerable cache, so a format bump means rebuild, never a
+    /// not RCM6: a cabmap is a regenerable cache, so a format bump means rebuild, never a
     /// multi-format compatibility reader.</summary>
     public static CabTable Load(string path)
     {
-        string mapDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? AppContext.BaseDirectory;
         using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
 
         Span<byte> header = stackalloc byte[8];
         if (stream.Length < header.Length)
         {
-            throw new InvalidDataException($"'{path}' is not an RCM5 cabmap -- rebuild it (Build writes RCM5 only).");
+            throw new InvalidDataException($"'{path}' is not an RCM6 cabmap -- rebuild it (Build writes RCM6 only).");
         }
         stream.ReadExactly(header);
-        if (BinaryPrimitives.ReadUInt32LittleEndian(header) != Magic5)
+        if (BinaryPrimitives.ReadUInt32LittleEndian(header) != Magic6)
         {
-            throw new InvalidDataException($"'{path}' is not an RCM5 cabmap -- rebuild it (Build writes RCM5 only).");
+            throw new InvalidDataException($"'{path}' is not an RCM6 cabmap -- rebuild it (Build writes RCM6 only).");
         }
 
         int baseLen = ReadInt(stream);
         byte[] baseUtf8 = new byte[baseLen];
         stream.ReadExactly(baseUtf8);
-        string baseFolder = Path.GetFullPath(Path.Combine(mapDir, Encoding.UTF8.GetString(baseUtf8)));
+        string baseFolder = Encoding.UTF8.GetString(baseUtf8);
 
         int count = ReadInt(stream);
         int phantomCount = ReadInt(stream);
@@ -437,6 +437,28 @@ public sealed class CabTable
         byte[] cabBlob = ReadBlob(stream);
         int[] fileOffsets = ReadInts(stream, fileCount + 1);
         byte[] fileBlob = ReadBlob(stream);
+
+        // The map is location-independent (the base is absolute), so the only way this probe can
+        // come up empty is the GAME having moved or shrunk since the scan. Every downstream miss
+        // would be silent (scopes match nothing, closures resolve to zero files), so refuse the
+        // stale cache loudly: with entries present, at least one chunk file must still exist.
+        if (fileCount > 0)
+        {
+            bool anyChunkExists = false;
+            for (int fileId = 0; fileId < fileCount && !anyChunkExists; fileId++)
+            {
+                string relative = Encoding.UTF8.GetString(fileBlob, fileOffsets[fileId], fileOffsets[fileId + 1] - fileOffsets[fileId]);
+                anyChunkExists = File.Exists(Path.Combine(baseFolder, relative));
+            }
+            if (!anyChunkExists)
+            {
+                throw new InvalidDataException(
+                    $"'{path}' indexes chunk files under '{baseFolder}', but none of its {fileCount} chunk files exist "
+                    + "there anymore. The game folder was moved or the cache is stale -- rebuild the map against the "
+                    + "game's current location.");
+            }
+        }
+
         int[] fileIndex = ReadInts(stream, count);
         int[] nameOffsets = ReadInts(stream, count + 1);
         byte[] nameBlob = ReadBlob(stream);
