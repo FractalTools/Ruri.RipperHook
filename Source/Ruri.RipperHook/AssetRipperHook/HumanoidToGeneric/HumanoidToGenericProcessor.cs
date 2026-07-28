@@ -42,14 +42,23 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
     public void Process(GameData gameData)
     {
         // A clip carries no avatar reference of its own: the muscle values are meaningless without
-        // the referential that says which bone each one drives and with what limits. The Animator
-        // component is what pairs the two, so that is the join -- never a name or path guess.
+        // the referential that says which bone each one drives and with what limits. An Animator
+        // component pairs the two exactly, so that join is preferred -- but the avatar POOL is
+        // collected from the Avatar assets themselves, because a scope can hold an avatar with no
+        // Animator anywhere in it: importing a clip on its own pulls in the clip's CAB plus the
+        // rig FBX's, and a rig FBX carries an Avatar asset while the Animator component lives on
+        // the character prefab, which is not in that closure at all. Keying the pool off Animators
+        // (as this first did) made exactly that case a no-op and left the clip as muscle floats.
+        List<IAvatar> avatars = new();
         List<(IAnimator Animator, IAvatar Avatar)> rigs = new();
         List<IAnimationClip> clips = new();
         foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
         {
             switch (asset)
             {
+                case IAvatar avatarAsset:
+                    avatars.Add(avatarAsset);
+                    break;
                 case IAnimator animator when animator.AvatarP is { } avatar:
                     rigs.Add((animator, avatar));
                     break;
@@ -59,7 +68,7 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
             }
         }
 
-        if (rigs.Count == 0 || clips.Count == 0)
+        if (avatars.Count == 0 || clips.Count == 0)
         {
             return;
         }
@@ -88,7 +97,7 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
             // assumed here.
             if (referential is null && SolveUnreferencedClipsWithAnyAvatarInScope)
             {
-                referential = FirstHumanoid(referentialByAvatar, rigs);
+                referential = FirstHumanoid(referentialByAvatar, avatars);
             }
             if (referential is null)
             {
@@ -155,9 +164,9 @@ public sealed class HumanoidToGenericProcessor : IAssetProcessor
     /// heuristic would be exactly the kind of guessing this pipeline avoids everywhere else.
     /// </summary>
     private static AvatarMuscleReferential? FirstHumanoid(
-        Dictionary<IAvatar, AvatarMuscleReferential?> cache, List<(IAnimator Animator, IAvatar Avatar)> rigs)
+        Dictionary<IAvatar, AvatarMuscleReferential?> cache, List<IAvatar> avatars)
     {
-        foreach ((_, IAvatar avatar) in rigs)
+        foreach (IAvatar avatar in avatars)
         {
             if (GetReferential(cache, avatar) is { } referential)
             {
