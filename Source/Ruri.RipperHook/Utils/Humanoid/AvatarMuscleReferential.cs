@@ -648,6 +648,15 @@ public sealed class AvatarMuscleReferential
         Vector3 up = Vector3.Normalize(shoulderCenter - hipCenter);
         Vector3 right = Vector3.Normalize((rightUpperArm - leftUpperArm) + (rightUpperLeg - leftUpperLeg));
         Vector3 forward = Vector3.Normalize(Vector3.Cross(right, up));
+        // The raw right vector is NOT orthogonal to up away from rest -- a twisted pose points the
+        // arm-diff + leg-diff sum well off the torso plane -- and quaternion extraction is only
+        // defined for an orthonormal matrix: feeding the unorthogonalized frame to
+        // MatrixToQuaternion makes its trace-branch selection discontinuous. Measured on
+        // battle_skill_ult's spin, one frame jumped the body frame ~5.75 degrees while every muscle
+        // input and both centers moved smoothly, kicking the hips ~4.9 degrees about world X.
+        // Rebuilding right from up x forward closes the frame orthonormally; at rest the vectors
+        // are orthogonal anyway, so the validated rest agreement is untouched.
+        right = Vector3.Cross(up, forward);
         return MatrixToQuaternion(right, up, forward);
     }
 
