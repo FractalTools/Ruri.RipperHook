@@ -64,16 +64,33 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         // for an all-materials cache are surfaced by UnifiedMaterialReader,
         // which has the same cap — export a narrower archive set for them.)
         long length = new FileInfo(unifiedPath).Length;
-        bool lean = length > MaxFullReadBytes;
+
+        // 体积上限是为了兜住**内存**(全材质 cache 的 MaterialInterfaces 有 23k 条,整块反序列化
+        // 会撑爆)。但用户给了 `--material-filter` 时,逐条过滤后留在内存里的只有匹配的那几条 ——
+        // 内存本来就有界,再按体积整段跳过就纯属误伤。
+        //
+        // 误伤的后果不是"少点信息":per-material inline bridge 一旦被跳过,hash→材质 的桥就只剩
+        // 容器头那 24 条,绝大多数 shader map 认不出自己属于哪个材质,于是 `UnifiedMaterialReader`
+        // 拿不到该材质的 UES,cbuffer 符号只能沿用**别的材质**的名字。实测 S0165 这套 15 个材质
+        // 里只有 2 个拿到了真 UES —— 而那 2 个正是渲染结果最干净的两个;其余 13 个内核背着别家的
+        // 参数名,出现"红色反照率乘以下雨淋湿程度"这种荒谬读法,整条材质图因此算不对。
+        string? materialFilter = state.Options.MaterialFilter;
+        bool filtered = !string.IsNullOrWhiteSpace(materialFilter);
+        bool lean = length > MaxFullReadBytes && !filtered;
         if (lean)
         {
             state.Log($"    UnifiedShaderMetadata.json: {length / (1024 * 1024)} MB (> {MaxFullReadBytes / (1024 * 1024)} MB) — lean read: package + Niagara hash bridges only, per-material inline bridge skipped.");
+        }
+        else if (filtered && length > MaxFullReadBytes)
+        {
+            state.Log($"    UnifiedShaderMetadata.json: {length / (1024 * 1024)} MB,但有 --material-filter「{materialFilter}」—— 逐条流式过滤读取 per-material bridge(内存有界)。");
         }
 
         UnifiedRoot? root;
         try
         {
-            root = ReadUnifiedRootStreaming(unifiedPath, includeMaterialInterfaces: !lean);
+            root = ReadUnifiedRootStreaming(unifiedPath, includeMaterialInterfaces: !lean,
+                materialKeyFilter: filtered ? materialFilter : null);
         }
         catch (Exception ex)
         {
@@ -207,7 +224,7 @@ internal static class Pass140_LoadUnifiedMetadataIndex
     // `MaterialInterfaces` (the multi-GB bulk) is read only when the file is
     // small enough, else skipped. Never builds a whole-file string, so it is
     // immune to the ~1GB string / 2GB array limits that File.ReadAllText hits.
-    private static UnifiedRoot ReadUnifiedRootStreaming(string path, bool includeMaterialInterfaces)
+    private static UnifiedRoot ReadUnifiedRootStreaming(string path, bool includeMaterialInterfaces, string? materialKeyFilter = null)
     {
         var root = new UnifiedRoot();
         NewtonsoftJsonSerializer serializer = NewtonsoftJsonSerializer.CreateDefault();
@@ -236,10 +253,38 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                     root.MaterialResourceHashes = serializer.Deserialize<Dictionary<string, List<string>>>(reader);
                     break;
                 case nameof(UnifiedRoot.MaterialInterfaces):
-                    if (includeMaterialInterfaces)
-                        root.MaterialInterfaces = serializer.Deserialize<Dictionary<string, UnifiedMaterialEntry>>(reader);
-                    else
+                    if (!includeMaterialInterfaces)
+                    {
                         reader.Skip();
+                    }
+                    else if (materialKeyFilter == null)
+                    {
+                        root.MaterialInterfaces = serializer.Deserialize<Dictionary<string, UnifiedMaterialEntry>>(reader);
+                    }
+                    else
+                    {
+                        // 逐条过滤:只把键里含过滤串的条目materialise,其余 Skip()。
+                        // 这样多大的文件都只占"匹配条目"那点内存,不需要体积上限兜底。
+                        var kept = new Dictionary<string, UnifiedMaterialEntry>(StringComparer.OrdinalIgnoreCase);
+                        if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject)
+                        {
+                            while (reader.Read() && reader.TokenType == Newtonsoft.Json.JsonToken.PropertyName)
+                            {
+                                string key = (string)reader.Value!;
+                                if (!reader.Read()) break;
+                                if (key.IndexOf(materialKeyFilter, StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    UnifiedMaterialEntry? entry = serializer.Deserialize<UnifiedMaterialEntry>(reader);
+                                    if (entry != null) kept[key] = entry;
+                                }
+                                else
+                                {
+                                    reader.Skip();
+                                }
+                            }
+                        }
+                        root.MaterialInterfaces = kept;
+                    }
                     break;
                 default:
                     reader.Skip(); // ShaderCodeArchives, CacheFormatVersion, NiagaraBridgeComplete — unused here

@@ -248,6 +248,8 @@ internal static class Pass200_EmitShaderLabFiles
             // primary asset's UniformExpressionSet. Empty when the
             // pipeline ran without a UnifiedShaderMetadata.json.
             PropertiesBlock = map.PropertiesBlock,
+            MaterialTextureOrder = new List<string>(map.MaterialTextureOrder),
+            MaterialCbufferValues = LookupCbufferValues(map),
             // Render-state blocks are pre-rendered by Pass 175 from the
             // primary asset's RenderState UProperty bag.
             SubShaderTags = map.SubShaderTags,
@@ -297,6 +299,48 @@ internal static class Pass200_EmitShaderLabFiles
         return null;
     }
 
+    /// <summary>
+    /// 写 <c>// MaterialCbufferValues:</c> 头块 —— 每个 <c>Material</c> cbuffer 成员**实算出来的值**。
+    ///
+    /// 为什么 Properties 块不够:Properties 导的是**作者参数**的缺省值,而 cbuffer 成员是
+    /// preshader 的**求值结果**。两者只有在"成员 = 某个参数"的恒等情形才相等;凡是派生表达式
+    /// (成员 = 若干参数的运算)就对不上,而成员名看不出是哪一种 —— 消费侧按名字查参数值必然
+    /// 取错,且无从察觉。名字还原不出来的成员(<c>Material_Unmapped_at_&lt;offset&gt;</c>)更是完全没辙。
+    /// 这张表把真值直接给出来,消费侧优先用它、查不到再回落到名字路径。
+    /// </summary>
+    private static void WriteMaterialCbufferValues(StringBuilder sb, UeShaderLabContainerMetadata metadata)
+    {
+        if (metadata.MaterialCbufferValues.Count == 0) return;
+        sb.AppendLine("    // MaterialCbufferValues:");
+        foreach (KeyValuePair<string, string> kv in metadata.MaterialCbufferValues.OrderBy(static p => p.Key, StringComparer.Ordinal))
+        {
+            sb.AppendLine($"    //   {kv.Key} = {kv.Value}");
+        }
+    }
+
+    /// <summary>
+    /// 取这张 shader map 的**代表材质**那份实算 cbuffer 值。cbuffer 布局的作用域就是
+    /// shader map(母材质 + 静态开关集),同一张 map 下所有材质实例共用同一套成员,
+    /// 所以取任一已算出的 UsedMaterials 条目即可 —— 按 PrimaryName 优先,取不到再顺着找。
+    /// </summary>
+    private static Dictionary<string, string> LookupCbufferValues(ShaderMapInfo map)
+    {
+        var table = MaterialConstantBufferReader.EvaluatedCbufferValues;
+        foreach (string candidate in new[] { map.PrimaryName }.Concat(map.Assets))
+        {
+            if (string.IsNullOrEmpty(candidate)) continue;
+            foreach (KeyValuePair<string, Dictionary<string, string>> entry in table)
+            {
+                if (entry.Key.EndsWith(candidate, StringComparison.OrdinalIgnoreCase)
+                    || candidate.EndsWith(entry.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new Dictionary<string, string>(entry.Value, StringComparer.Ordinal);
+                }
+            }
+        }
+        return new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
     private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem, HashSet<string> splittableStages)
     {
         StringBuilder sb = new();
@@ -311,6 +355,17 @@ internal static class Pass200_EmitShaderLabFiles
                 sb.AppendLine($"    //   {material}");
             }
         }
+        if (metadata.MaterialTextureOrder.Count > 0)
+        {
+            // 完整声明序(所有 UES 贴图桶展平)。Properties 只有 Standard2D,消费端靠这张表
+            // 才能无歧义地把匿名贴图槽对回参数名。
+            sb.AppendLine("    // MaterialTextureOrder:");
+            for (int i = 0; i < metadata.MaterialTextureOrder.Count; i++)
+            {
+                sb.AppendLine($"    //   [{i}] {metadata.MaterialTextureOrder[i]}");
+            }
+        }
+        WriteMaterialCbufferValues(sb, metadata);
         // Shaderlab Properties — sourced from FUniformExpressionSet, the
         // same member-set the cooked Material cbuffer is built from.
         // Renders BEFORE SubShader per shaderlab convention.
@@ -1542,6 +1597,24 @@ internal static class Pass200_EmitShaderLabFiles
         public string ContainerKey { get; set; } = string.Empty;
         public string MaterialName { get; set; } = string.Empty;
         public List<string> UsedMaterials { get; set; } = new();
+
+        /// <summary>
+        /// 材质贴图的**完整声明序**(UES 的 UniformTextureParameters,所有桶展平:
+        /// Standard2D → Array2D → Cube → Volume → …)。
+        ///
+        /// 为什么要单独导出:`Properties {}` 块只覆盖 Standard2D 那一桶,数组/立方体桶的参数
+        /// 在里面没有对应项。消费端要把 HLSL 里的匿名贴图槽按声明序对回参数名时,只有
+        /// Standard2D 一份表就会产生大量歧义(实测某半透布料 shader:9 项 Properties 对 27 个
+        /// 匿名槽,对齐必然猜错,整层纱因此渲成黑)。这张表是无歧义的权威顺序。
+        /// </summary>
+        public List<string> MaterialTextureOrder { get; set; } = new();
+
+        /// <summary>
+        /// <c>Material</c> cbuffer 每个成员**实算出来的值**(成员名 → 逗号分隔的分量)。
+        /// 源 = preshader opcode 流的数值求值(见 MaterialConstantBufferReader.EvaluatedCbufferValues)。
+        /// 求不出值的成员不在表里。
+        /// </summary>
+        public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
         public List<UeShaderLabProgramData> Programs { get; set; } = new();
         // Pre-rendered shaderlab `Properties { ... }` block, sourced from
         // the primary asset's UniformExpressionSet. Empty when no asset

@@ -64,6 +64,16 @@ internal static class Pass170_BuildShaderLabProperties
                 map.PropertiesBlock = block;
                 populated++;
             }
+
+            // 同一份 UES 再取一次**全桶展平的贴图声明序**。Properties 只导出 Standard2D,
+            // 数组/立方体桶的参数没有对应项 —— 消费端按声明序对匿名槽时会因此产生歧义。
+            foreach (string asset in map.Assets)
+            {
+                System.Text.Json.JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset);
+                if (ues == null) continue;
+                map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(ues.Value));
+                if (map.MaterialTextureOrder.Count > 0) break;
+            }
         }
 
         state.Log($"    Properties: populated {populated}/{state.ShaderMaps.Count} shader-maps.");

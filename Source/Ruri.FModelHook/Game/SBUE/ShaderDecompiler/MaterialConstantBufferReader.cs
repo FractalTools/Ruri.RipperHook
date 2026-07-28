@@ -66,6 +66,34 @@ internal static class MaterialConstantBufferReader
     //   —          43        44         SparseVolumeTextureUniform (no 5.1 equiv)
     //   43-53      44-54     45-55      GetField..GreaterEqual
     //   —          55/56/57  56/57/58   Exp/Exp2/Log (no 5.1 equiv)
+    /// <summary>
+    /// 每个材质的 <c>Material</c> cbuffer 成员**实算出来的值**:材质路径 → (成员名 → 分量文本)。
+    ///
+    /// 这是 <see cref="TryEvaluatePreshaderNumeric"/> 的产物,给导出侧(Pass200)写进容器头用。
+    /// 键用**最终成员名**(已过 <c>_at_&lt;offset&gt;</c> 去重),因为消费侧在反编译出来的 HLSL 里
+    /// 看到的就是这个名字。求不出值的成员**不出现在表里** —— 消费侧照旧回落到名字路径,
+    /// 缺一条只是少一次修正,记一条错的会污染整个材质。
+    /// </summary>
+    public static readonly Dictionary<string, Dictionary<string, string>> EvaluatedCbufferValues = new(StringComparer.Ordinal);
+
+    /// <summary>把一个成员的实算值记进 <see cref="EvaluatedCbufferValues"/>(按字段的真实分量数裁剪)。</summary>
+    private static void RecordEvaluated(string materialPath, string memberName, int rows, float[]? value)
+    {
+        if (value == null || string.IsNullOrEmpty(materialPath)) return;
+        if (!EvaluatedCbufferValues.TryGetValue(materialPath, out Dictionary<string, string>? byName))
+        {
+            byName = new Dictionary<string, string>(StringComparer.Ordinal);
+            EvaluatedCbufferValues[materialPath] = byName;
+        }
+        int comps = Math.Clamp(rows, 1, 4);
+        string[] parts = new string[comps];
+        for (int c = 0; c < comps; c++)
+        {
+            parts[c] = value[c].ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        byName[memberName] = string.Join(",", parts);
+    }
+
     private static byte TranslateOpcode(byte raw)
     {
         switch (PreshaderVersion)
@@ -194,12 +222,22 @@ internal static class MaterialConstantBufferReader
             uint opcodeSize = ReadUInt32(preshader, "OpcodeSize");
             uint fieldIndex = ReadUInt32(preshader, "FieldIndex");
             uint numFields = ReadUInt32(preshader, "NumFields");
-            if (numFields != 1 || fieldIndex >= uniformPreshaderFields.GetArrayLength())
+            // **多字段 preshader 也要收**。原来这里是 `numFields != 1 → continue`,整段跳过——
+            // 于是它覆盖的那几个 cbuffer 偏移在成员表里根本不存在,反编译产物只能给它们编号占位
+            // (`Material_Unmapped_at_<offset>`),消费侧永远解不出值、留 0。
+            // 实测皮肤内核:`Unmapped_at_276` 是 `pow(x, k)` 的**指数**,留 0 让 `pow(x,0)=1`,
+            // 直接选中"全湿"支路把整条基色顶掉 —— 一个被跳过的成员废掉一整条手臂。
+            if (numFields < 1 || fieldIndex + numFields > (uint)uniformPreshaderFields.GetArrayLength())
             {
                 continue;
             }
 
-            JsonElement field = uniformPreshaderFields[checked((int)fieldIndex)];
+            // 一段 opcode 求一次值:多字段时栈底到栈顶依次对应 field 0..N-1。
+            List<float[]>? stackValues = TryEvaluatePreshaderStack(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters);
+
+            for (uint fieldSlot = 0; fieldSlot < numFields; fieldSlot++)
+            {
+            JsonElement field = uniformPreshaderFields[checked((int)(fieldIndex + fieldSlot))];
             FieldKind kind = TryMapFieldType(ReadString(field, "Type"), out int rows);
             if (kind == FieldKind.Unknown)
             {
@@ -213,18 +251,46 @@ internal static class MaterialConstantBufferReader
             }
 
             string baseName = DerivePreshaderName(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows, preshaderNames, uniformTextureParameters);
+            // 多字段时一段 opcode 对应多个成员,名字会撞;按字段序号区分(去重层还会再补 `_at_<offset>`)。
+            if (numFields > 1) baseName = $"{baseName}_f{fieldSlot}";
+
+            // 名字之外**再算一份真值**。多字段时按"栈底到栈顶 = field 0..N-1"取对应那一项;
+            // 单字段就是栈顶。算不出来就不记 —— 缺一条只是回落到名字路径,记一条错的会污染整个材质。
+            float[]? evaluated = stackValues == null ? null
+                : numFields == 1 ? stackValues[^1]
+                : stackValues.Count == numFields ? stackValues[checked((int)fieldSlot)]
+                : null;
+            // 成员名只是「这段 preshader 的**主导参数**」的描述,不等于「这个槽 = 那个参数」。
+            // 消费侧按名字查参数值时,凡是**派生**表达式(名字来自 TryRecoverViaSingleParamScan
+            // 的单参数兜底)都会取错值——实测某皮肤材质的基色三元组,R/G/B 三个分量分别叫
+            // WW_RainWetAmount / WW_WetNoiseSize / …,按名字取值出来是蓝的。
+            // 要判定「这个名字是恒等还是派生」,唯一可靠的办法是看它的 opcode 流,
+            // 所以调试开关打开时**逐成员**都 dump 一份,而不是只 dump 兜底成匿名的那些。
+            DumpPreshaderDebug(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows, baseName);
             switch (kind)
             {
                 case FieldKind.Float:
                 case FieldKind.Numeric:
-                    AddVectorMember(vectorParams, RegisterUniqueName(seenNames, baseName, byteOffset), byteOffset, rows, ShaderParamType.Float);
+                {
+                    string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated);
+                    AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Float);
                     break;
+                }
                 case FieldKind.Int:
-                    AddVectorMember(vectorParams, RegisterUniqueName(seenNames, baseName, byteOffset), byteOffset, rows, ShaderParamType.Int);
+                {
+                    string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated);
+                    AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Int);
                     break;
+                }
                 case FieldKind.Bool:
-                    AddVectorMember(vectorParams, RegisterUniqueName(seenNames, baseName, byteOffset), byteOffset, rows, ShaderParamType.Bool);
+                {
+                    string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated);
+                    AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Bool);
                     break;
+                }
                 case FieldKind.LwcDouble:
                     {
                         int totalComponents = rows * 2;
@@ -253,6 +319,7 @@ internal static class MaterialConstantBufferReader
                         AddMatrixMember(matrixParams, RegisterUniqueName(seenNames, $"{baseName}_LwcOffset", offsetPart), offsetPart, ShaderParamType.Float);
                         break;
                     }
+            }
             }
         }
 
@@ -976,6 +1043,265 @@ internal static class MaterialConstantBufferReader
         }
 
         return $"Texture_{textureIdx}";
+    }
+
+    /// <summary>
+    /// **数值求值版的 preshader 解释器**(与 <see cref="TryEvaluatePreshader"/> 逐 opcode 同构,
+    /// 只是栈里放的是 4 分量数值而不是标识符字符串)。
+    ///
+    /// 为什么必须有:名字版只能回答"这段 preshader 的**主导参数**叫什么",回答不了"这个 cbuffer
+    /// 槽**等于多少**"。消费侧拿名字去材质里查参数值,对**恒等**表达式(槽 = 某个参数)是对的,
+    /// 对**派生**表达式(槽 = 若干参数的运算结果)就取错值,而且两者名字长得一模一样、分不出来
+    /// (实测某皮肤材质基色三元组的 R/G/B 分别叫 WW_RainWetAmount / WW_WetNoiseSize / …,
+    /// 按名字取值渲出来是蓝的)。名字还原不出来的那些(<c>Unmapped_at_&lt;offset&gt;</c>)更是彻底没辙。
+    ///
+    /// 求值需要的东西**全都在同一份 UES JSON 里**:<c>UniformNumericParameters[i].Value</c> 就是
+    /// 参数的真值(标量在 <c>R</c>,向量在 <c>R/G/B/A</c>),opcode 流在 <c>UniformPreshaderData.Data</c>。
+    /// 所以这里不引入任何新数据源,只是把已有数据算完。
+    ///
+    /// 求不出来就返回 null(未知 opcode / 栈不平 / 取不到参数值),调用方照旧回落到名字路径 ——
+    /// **算不出来要说算不出来,不能编一个值**。
+    /// </summary>
+    private static float[]? TryEvaluatePreshaderNumeric(byte[] data, uint offset, uint size, JsonElement parameters)
+        => TryEvaluatePreshaderStack(data, offset, size, parameters) is { Count: > 0 } s ? s[^1] : null;
+
+    /// <summary>
+    /// 同 <see cref="TryEvaluatePreshaderNumeric"/>,但返回**整个栈**(栈底 → 栈顶)。
+    /// 一段 opcode 可以一次算出多个值(<c>NumFields &gt; 1</c> 的 preshader 就是),
+    /// 此时栈底到栈顶依次对应 field 0..N-1。
+    /// </summary>
+    private static List<float[]>? TryEvaluatePreshaderStack(byte[] data, uint offset, uint size, JsonElement parameters)
+    {
+        int n = checked((int)size);
+        int dataStart = checked((int)offset);
+        if (dataStart < 0 || dataStart > data.Length) return null;
+        if (dataStart + n > data.Length) n = data.Length - dataStart;
+        if (n < 1) return null;
+
+        Stack<float[]> stack = new();
+        int i = 0;
+        while (i < n)
+        {
+            byte op = TranslateOpcode(data[dataStart + i]);
+            i++;
+
+            switch (op)
+            {
+                case 0: break;                                   // Nop
+                case 1: stack.Push(new float[4]); break;         // ConstantZero
+
+                case 2:                                          // Constant:类型字节 + 载荷
+                {
+                    if (i >= n) return null;
+                    byte ctype = data[dataStart + i];
+                    int comps = ctype switch { 1 => 1, 2 => 2, 3 => 3, 4 => 4, _ => -1 };
+                    if (comps < 0 || i + 1 + comps * 4 > n) return null;
+                    float[] v = new float[4];
+                    for (int c = 0; c < comps; c++) v[c] = BitConverter.ToSingle(data, dataStart + i + 1 + c * 4);
+                    // 标量常量按 HLSL 语义广播到各分量,后续与向量运算才对得上。
+                    if (comps == 1) { v[1] = v[0]; v[2] = v[0]; v[3] = v[0]; }
+                    stack.Push(v);
+                    i += 1 + comps * 4;
+                    break;
+                }
+
+                case 3:                                          // Parameter:u16 下标
+                {
+                    if (i + 2 > n) return null;
+                    ushort idx = BitConverter.ToUInt16(data, dataStart + i);
+                    if (idx >= parameters.GetArrayLength()) return null;
+                    float[]? pv = ReadParameterValue(parameters[idx]);
+                    if (pv == null) return null;
+                    stack.Push(pv);
+                    i += 2;
+                    break;
+                }
+
+                case 36:                                         // ComponentSwizzle:numE + 4 个分量下标
+                {
+                    if (i + 5 > n) return null;
+                    int numE = data[dataStart + i];
+                    byte[] idxs = { data[dataStart + i + 1], data[dataStart + i + 2], data[dataStart + i + 3], data[dataStart + i + 4] };
+                    i += 5;
+                    if (stack.Count == 0) return null;
+                    float[] x = stack.Pop();
+                    float[] r = new float[4];
+                    for (int c = 0; c < 4; c++)
+                    {
+                        int src = c < numE ? idxs[c] : idxs[numE > 0 ? numE - 1 : 0];
+                        r[c] = src < 4 ? x[src] : 0f;
+                    }
+                    stack.Push(r);
+                    break;
+                }
+
+                case 37:                                         // AppendVector
+                {
+                    if (stack.Count < 2) return null;
+                    float[] b = stack.Pop();
+                    float[] a = stack.Pop();
+                    // 分量数在这份 JSON 里拿不到(要看字段类型),按 UE 最常见的
+                    // `append(float3, float1)` 语义拼:a 占前三、b 的首分量补第四。
+                    stack.Push(new[] { a[0], a[1], a[2], b[0] });
+                    break;
+                }
+
+                case 4: case 5: case 6: case 7: case 8: case 9: case 10:
+                case 18: case 19: case 20:
+                case 49: case 51: case 52: case 53:
+                {
+                    if (stack.Count < 2) return null;
+                    float[] b = stack.Pop();
+                    float[] a = stack.Pop();
+                    float[]? r = ApplyBinary(op, a, b);
+                    if (r == null) return null;
+                    stack.Push(r);
+                    break;
+                }
+
+                case 11:                                         // Clamp(x, lo, hi)
+                {
+                    if (stack.Count < 3) return null;
+                    float[] hi = stack.Pop();
+                    float[] lo = stack.Pop();
+                    float[] x = stack.Pop();
+                    float[] r = new float[4];
+                    for (int c = 0; c < 4; c++) r[c] = MathF.Min(MathF.Max(x[c], lo[c]), hi[c]);
+                    stack.Push(r);
+                    break;
+                }
+
+                case 12: case 13: case 14: case 15: case 16: case 17:
+                case 21: case 22: case 23: case 24: case 25: case 26:
+                case 27: case 28: case 29: case 30: case 31: case 32:
+                case 33: case 34: case 35: case 45:
+                {
+                    if (stack.Count < 1) return null;
+                    float[] x = stack.Pop();
+                    float[]? r = ApplyUnary(op, x);
+                    if (r == null) return null;
+                    stack.Push(r);
+                    break;
+                }
+
+                default:
+                    return null;                                 // 未知/变长 opcode:不猜
+            }
+        }
+
+        if (stack.Count == 0) return null;
+        var bottomToTop = new List<float[]>(stack);   // Stack 的枚举序是栈顶 → 栈底
+        bottomToTop.Reverse();
+        return bottomToTop;
+    }
+
+    /// <summary>读 <c>UniformNumericParameters[i].Value</c>(标量只有 R 有意义,按 HLSL 广播)。</summary>
+    private static float[]? ReadParameterValue(JsonElement parameter)
+    {
+        if (parameter.ValueKind != JsonValueKind.Object) return null;
+        if (!parameter.TryGetProperty("Value", out JsonElement value)) return null;
+
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            float f = value.GetSingle();
+            return new[] { f, f, f, f };
+        }
+        if (value.ValueKind != JsonValueKind.Object) return null;
+
+        float[] v = new float[4];
+        string[] names = { "R", "G", "B", "A" };
+        bool any = false;
+        for (int c = 0; c < 4; c++)
+        {
+            if (value.TryGetProperty(names[c], out JsonElement comp) && comp.ValueKind == JsonValueKind.Number)
+            {
+                v[c] = comp.GetSingle();
+                any = true;
+            }
+        }
+        if (!any) return null;
+        if (string.Equals(ReadString(parameter, "ParameterType"), "Scalar", StringComparison.Ordinal))
+        {
+            v[1] = v[0];
+            v[2] = v[0];
+            v[3] = v[0];
+        }
+        return v;
+    }
+
+    /// <summary>二元 opcode 的数值语义(与 <see cref="FormatBinary"/> 的命名表逐条对应)。</summary>
+    private static float[]? ApplyBinary(byte op, float[] a, float[] b)
+    {
+        float[] r = new float[4];
+        switch (op)
+        {
+            case 4: for (int c = 0; c < 4; c++) r[c] = a[c] + b[c]; return r;
+            case 5: for (int c = 0; c < 4; c++) r[c] = a[c] - b[c]; return r;
+            case 6: for (int c = 0; c < 4; c++) r[c] = a[c] * b[c]; return r;
+            case 7: for (int c = 0; c < 4; c++) r[c] = b[c] != 0f ? a[c] / b[c] : 0f; return r;
+            case 8: for (int c = 0; c < 4; c++) r[c] = b[c] != 0f ? a[c] - b[c] * MathF.Truncate(a[c] / b[c]) : 0f; return r;
+            case 9: for (int c = 0; c < 4; c++) r[c] = MathF.Min(a[c], b[c]); return r;
+            case 10: for (int c = 0; c < 4; c++) r[c] = MathF.Max(a[c], b[c]); return r;
+            case 18: for (int c = 0; c < 4; c++) r[c] = MathF.Atan2(a[c], b[c]); return r;
+            case 19:                                             // dot:标量结果,广播
+            {
+                float d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+                return new[] { d, d, d, d };
+            }
+            case 20:                                             // cross(float3)
+                return new[]
+                {
+                    a[1] * b[2] - a[2] * b[1],
+                    a[2] * b[0] - a[0] * b[2],
+                    a[0] * b[1] - a[1] * b[0],
+                    0f,
+                };
+            case 49: for (int c = 0; c < 4; c++) r[c] = a[c] < b[c] ? 1f : 0f; return r;
+            case 51: for (int c = 0; c < 4; c++) r[c] = a[c] > b[c] ? 1f : 0f; return r;
+            case 52: for (int c = 0; c < 4; c++) r[c] = a[c] <= b[c] ? 1f : 0f; return r;
+            case 53: for (int c = 0; c < 4; c++) r[c] = a[c] >= b[c] ? 1f : 0f; return r;
+            default: return null;
+        }
+    }
+
+    /// <summary>一元 opcode 的数值语义(与 <see cref="MapUnaryOp"/> 的命名表逐条对应)。</summary>
+    private static float[]? ApplyUnary(byte op, float[] x)
+    {
+        float[] r = new float[4];
+        switch (op)
+        {
+            case 12: for (int c = 0; c < 4; c++) r[c] = MathF.Sin(x[c]); return r;
+            case 13: for (int c = 0; c < 4; c++) r[c] = MathF.Cos(x[c]); return r;
+            case 14: for (int c = 0; c < 4; c++) r[c] = MathF.Tan(x[c]); return r;
+            case 15: for (int c = 0; c < 4; c++) r[c] = MathF.Asin(x[c]); return r;
+            case 16: for (int c = 0; c < 4; c++) r[c] = MathF.Acos(x[c]); return r;
+            case 17: for (int c = 0; c < 4; c++) r[c] = MathF.Atan(x[c]); return r;
+            case 21: for (int c = 0; c < 4; c++) r[c] = x[c] > 0f ? MathF.Sqrt(x[c]) : 0f; return r;
+            case 22: for (int c = 0; c < 4; c++) r[c] = x[c] != 0f ? 1f / x[c] : 0f; return r;
+            case 23:                                             // length:标量结果,广播
+            {
+                float l = MathF.Sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
+                return new[] { l, l, l, l };
+            }
+            case 24:                                             // normalize(float3)
+            {
+                float l = MathF.Sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
+                if (l <= 0f) return new float[4];
+                return new[] { x[0] / l, x[1] / l, x[2] / l, x[3] };
+            }
+            case 25: for (int c = 0; c < 4; c++) r[c] = MathF.Min(MathF.Max(x[c], 0f), 1f); return r;
+            case 26: for (int c = 0; c < 4; c++) r[c] = MathF.Abs(x[c]); return r;
+            case 27: for (int c = 0; c < 4; c++) r[c] = MathF.Floor(x[c]); return r;
+            case 28: for (int c = 0; c < 4; c++) r[c] = MathF.Ceiling(x[c]); return r;
+            case 29: for (int c = 0; c < 4; c++) r[c] = MathF.Round(x[c]); return r;
+            case 30: for (int c = 0; c < 4; c++) r[c] = MathF.Truncate(x[c]); return r;
+            case 31: for (int c = 0; c < 4; c++) r[c] = MathF.Sign(x[c]); return r;
+            case 32: case 33: for (int c = 0; c < 4; c++) r[c] = x[c] - MathF.Floor(x[c]); return r;
+            case 34: for (int c = 0; c < 4; c++) r[c] = x[c] > 0f ? MathF.Log2(x[c]) : 0f; return r;
+            case 35: for (int c = 0; c < 4; c++) r[c] = x[c] > 0f ? MathF.Log10(x[c]) : 0f; return r;
+            case 45: for (int c = 0; c < 4; c++) r[c] = -x[c]; return r;
+            default: return null;
+        }
     }
 
     private static string FormatConstLiteral(float v)

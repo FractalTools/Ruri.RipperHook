@@ -211,6 +211,13 @@ internal sealed class ShaderMapInfo
     // by Pass080 emission. Empty when no UES is available (e.g. global
     // archive shader-maps that have no material side at all).
     public string PropertiesBlock { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 材质贴图的**完整声明序**(UES 的 UniformTextureParameters,所有桶展平)。
+    /// Properties 块只覆盖 Standard2D 一桶,数组/立方体桶的参数在里面没有对应项;
+    /// 消费端把 HLSL 匿名贴图槽对回参数名时,只有那一份表会产生大量歧义。
+    /// </summary>
+    public List<string> MaterialTextureOrder { get; set; } = new();
     // Pre-rendered SubShader-level Tags + Pass-level render-state lines —
     // populated by Pass175 from the primary asset's RenderState UProperty
     // bag (see UnifiedMaterialMetadata.RenderState). Two outputs:

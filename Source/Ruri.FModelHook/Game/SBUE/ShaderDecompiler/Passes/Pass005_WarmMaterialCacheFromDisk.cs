@@ -82,7 +82,19 @@ internal static class Pass005_WarmMaterialCacheFromDisk
             return;
         }
 
-        int materials = SeedMaterials(state, cached);
+        // 强制重拉材质符号的逃生口:`RURI_FORCE_MATERIAL_SYMBOLS=1`。
+        //
+        // 为什么需要:种缓存种的是**已经构建好的符号**(SerializedProgramData),种上之后
+        // `MaterialConstantBufferReader` 对这些材质**一次都不会跑**。于是任何"从 UES 现算"的
+        // 新产出(比如 preshader 的**数值求值**结果)在暖启动下永远是空的 —— 而且失败是静默的:
+        // 导出照常成功,只是新头块不出现,看日志根本看不出来(实测白跑一小时才发现)。
+        // 凡是给 cbuffer 读取器加新产出,验证时都要走这条路,否则测的是缓存不是新代码。
+        bool forceSymbols = Environment.GetEnvironmentVariable("RURI_FORCE_MATERIAL_SYMBOLS") == "1";
+        if (forceSymbols)
+        {
+            state.Log("    Warm cache: RURI_FORCE_MATERIAL_SYMBOLS=1 — 不种材质符号,逼 MaterialConstantBufferReader 从 UES 现算。");
+        }
+        int materials = forceSymbols ? 0 : SeedMaterials(state, cached);
         int bridge = SeedResourceHashBridge(state, cached);
         int niagara = SeedNiagara(state, cached);
 
@@ -91,7 +103,18 @@ internal static class Pass005_WarmMaterialCacheFromDisk
         // same all-or-nothing contract as the Niagara bridge. A pre-marker
         // (older tool) or empty bridge leaves the flag false, so Pass 030
         // re-builds the full hash->material bridge and re-stamps it.
-        if (cached.MaterialScanComplete && bridge > 0)
+        // 强制重建逃生口:`RURI_FORCE_MATERIAL_BRIDGE=1`。
+        //
+        // 为什么需要:`MaterialScanComplete` 是**持久化**的"我已经扫全了"标记,一旦某次运行在
+        // 覆盖不全的情况下把它盖上,后面每一次运行都会跳过 Pass 030 的桥重建,缺的材质**永远**
+        // 补不回来 —— 而且失败是静默的:桥断了只表现为"某些 shader map 认不出自己属于哪个材质",
+        // 于是它们的 cbuffer 符号沿用别的材质的名字,材质图算出来是错的但不报错。
+        // (实测 S0165 一套 15 个材质只有 2 个在桥里,其余 13 个内核背着别家的参数名。)
+        if (Environment.GetEnvironmentVariable("RURI_FORCE_MATERIAL_BRIDGE") == "1")
+        {
+            state.Log("    Warm cache: RURI_FORCE_MATERIAL_BRIDGE=1 — 忽略持久化的 MaterialScanComplete,强制重建 hash->material 桥。");
+        }
+        else if (cached.MaterialScanComplete && bridge > 0)
         {
             state.MaterialScanComplete = true;
             // Re-stamp the completion marker on the live Root so Pass 080
