@@ -333,7 +333,7 @@ public static class RipperBlenderBridge
     /// Resolve the seed CABs' full dependency closure, load exactly those bundles, run AssetRipper's real
     /// Unity-project exporter against an <see cref="InMemoryFileSystem"/> (the same exporter that backs
     /// the CLI's --export and the GUI's project export — byte-identical output, just memory-backed instead
-    /// of disk-backed), and return the result partitioned into GUID-keyed YAML text / PNG bytes.
+    /// of disk-backed), and return the result keyed by GUID.
     /// </summary>
     public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames)
     {
@@ -527,8 +527,7 @@ public static class RipperBlenderBridge
         CabTable table, string[] seedCabNames,
         List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips)
     {
-        Dictionary<string, string> documents = new(StringComparer.Ordinal);
-        Dictionary<string, byte[]> textures = new(StringComparer.Ordinal);
+        Dictionary<string, byte[]> assets = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> other = new(StringComparer.OrdinalIgnoreCase);
         List<string> roots = new();
         List<string> sceneRoots = new();
@@ -559,13 +558,14 @@ public static class RipperBlenderBridge
                 continue;
             }
             pathToGuid[NormalizeExportPath(path)] = guid;
-            if (IsPng(bytes))
-            {
-                textures[guid] = bytes;
-                continue;
-            }
 
-            documents[guid] = utf8.GetString(bytes);
+            // Every exported asset is handed over as its own bytes, whatever AssetRipper wrote. The
+            // caller already knows what it asked for -- a material's texture slot wants image bytes, a
+            // prefab walk wants YAML -- so there is nothing here to classify. Sniffing the payload
+            // instead (this used to keep PNGs and utf8-decode everything else) silently destroyed any
+            // asset the exporter emitted in another format the moment one appeared: a TGA or EXR
+            // texture became mojibake in the document stream and vanished from every material.
+            assets[guid] = bytes;
             if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
             {
                 roots.Add(guid);
@@ -661,7 +661,7 @@ public static class RipperBlenderBridge
             }
         }
 
-        return new ClosureResult(documents, textures, other, roots.ToArray(), seedRoots, clipGuidsByCab,
+        return new ClosureResult(assets, other, roots.ToArray(), seedRoots, clipGuidsByCab,
             sceneRoots.ToArray(), clipCurveMeta, clipCurveData);
     }
 
@@ -680,10 +680,11 @@ public static class RipperBlenderBridge
             (int)ClassIDType.Material => ".mat",
             (int)ClassIDType.Shader => ".shader",
             (int)ClassIDType.AnimatorController => ".controller",
-            (int)ClassIDType.Texture2D or (int)ClassIDType.Cubemap => ".png",
             (int)ClassIDType.GameObject => ".prefab",
             (int)ClassIDType.MonoScript => ".cs",
-            (int)ClassIDType.AudioClip => null, // exporter emits the source container format (.ogg/.wav/...)
+            // Images and audio: the exporter picks the container from the asset's own pixel/sample
+            // format (png/tga/exr/..., ogg/wav/...), so there is no single extension to expect.
+            (int)ClassIDType.Texture2D or (int)ClassIDType.Cubemap or (int)ClassIDType.AudioClip => null,
             _ => ".asset",
         };
 
@@ -743,8 +744,6 @@ public static class RipperBlenderBridge
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    private static bool IsPng(byte[] bytes) =>
-        bytes.Length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
 }
 
 /// <summary>Opaque handle to a loaded cabmap — the columnar <see cref="CabTable"/> (blobs +
@@ -819,9 +818,12 @@ public sealed record ScenePlacementDto(
 /// YAML document carries, handed over as raw numbers so the Blender side never spends seconds
 /// re-parsing them out of the text. A guid absent here (blob build failed) still has its YAML
 /// document -- consumers fall back to parsing.
+/// <see cref="Assets"/> is every exported asset keyed by guid, each one exactly the bytes AssetRipper
+/// wrote. There is deliberately no split by kind here: a consumer asks for a guid because it already
+/// knows what it wants it as, so decoding is its business and nothing in the bridge has to guess a
+/// payload's format.
 public sealed record ClosureResult(
-    IReadOnlyDictionary<string, string> Documents,
-    IReadOnlyDictionary<string, byte[]> Textures,
+    IReadOnlyDictionary<string, byte[]> Assets,
     IReadOnlyDictionary<string, byte[]> OtherFiles,
     string[] Roots,
     IReadOnlyDictionary<string, string> SeedRoots,
@@ -831,7 +833,6 @@ public sealed record ClosureResult(
     IReadOnlyDictionary<string, byte[]> ClipCurveData)
 {
     public static ClosureResult Empty { get; } = new(
-        new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
         new Dictionary<string, byte[]>(),
         Array.Empty<string>(),
