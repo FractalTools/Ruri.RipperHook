@@ -20,4 +20,5 @@ public enum GameType
     AR_DisassemblyExporter,
     AR_TypeFilterExport,
     AR_GlbExporter,
+    AR_HumanoidToGeneric,
 }

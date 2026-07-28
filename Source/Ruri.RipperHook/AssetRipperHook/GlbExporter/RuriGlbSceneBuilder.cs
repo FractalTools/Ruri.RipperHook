@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json.Nodes;
+using Ruri.RipperHook.Humanoid;
 using AssetRipper.Assets;
 using AssetRipper.Export.Modules.Models;
 using AssetRipper.Import.Logging;
@@ -454,7 +455,7 @@ public static class RuriGlbSceneBuilder
                 string trackName = UniqueTrackName(usedTrackNames, clip.GetBestName());
                 try
                 {
-                    AddClip(context, animatorEntry, clip, referential, trackName);
+                    AddClip(context, animatorEntry, clip, trackName);
                 }
                 catch (Exception ex)
                 {
@@ -464,24 +465,17 @@ public static class RuriGlbSceneBuilder
         }
     }
 
+    /// <summary>
+    /// Every clip reaching here is already generic: <c>HumanoidToGenericProcessor</c> resolved any
+    /// muscle encoding into ordinary per-bone transform curves back at asset-processing time, so
+    /// this exporter has no humanoid case to handle and no muscle referential to consult.
+    /// </summary>
     private static void AddClip(BuildContext context, AnimatorEntry animatorEntry, IAnimationClip clip,
-        AvatarMuscleReferential? referential, string trackName)
+        string trackName)
     {
         string basePath = animatorEntry.Path;
         AddGenericCurves(context, clip, basePath, trackName);
         AddMorphWeightCurves(context, clip, basePath, trackName);
-
-        if (referential is not null)
-        {
-            int humanoidTracks = HumanoidClipBaker.Bake(clip, referential,
-                new PrefixedPathLookup<NodeBuilder>(context.NodeByPath, basePath),
-                new PrefixedPathLookup<UnityLocalTransform>(context.RestByPath, basePath),
-                trackName);
-            if (humanoidTracks > 0)
-            {
-                Logger.Info(LogCategory.Export, $"[GLB] humanoid clip '{trackName}': baked {humanoidTracks} bone tracks");
-            }
-        }
     }
 
     private static void AddGenericCurves(BuildContext context, IAnimationClip clip, string basePath, string trackName)

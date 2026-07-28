@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Ruri.RipperHook.Humanoid;
 using AssetRipper.Assets;
 using AssetRipper.Export.PrimaryContent.Models;
 using AssetRipper.Import.Logging;
