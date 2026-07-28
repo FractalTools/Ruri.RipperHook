@@ -110,13 +110,17 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             "--names",
             parseArgument: result =>
             {
+                // Interpreted on purpose: CabSelection's parallel scan clones per partition (a
+                // Compiled original would re-JIT per clone), and the export-side filter runs these
+                // a few hundred times at most.
+                const RegexOptions options = RegexOptions.IgnoreCase;
                 List<Regex> items = new();
                 if (result.Tokens.Count == 1 && File.Exists(result.Tokens[0].Value))
                 {
                     foreach (string line in File.ReadLines(result.Tokens[0].Value))
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
-                        try { items.Add(new Regex(line, RegexOptions.IgnoreCase)); }
+                        try { items.Add(new Regex(line, options)); }
                         catch (ArgumentException) { }
                     }
                 }
@@ -124,7 +128,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
                 {
                     foreach (var token in result.Tokens)
                     {
-                        try { items.Add(new Regex(token.Value, RegexOptions.IgnoreCase)); }
+                        try { items.Add(new Regex(token.Value, options)); }
                         catch (ArgumentException) { }
                     }
                 }

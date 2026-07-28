@@ -48,10 +48,11 @@ public class GameBundleHook : CommonHook, IHookModule
     /// </summary>
     public static bool CabScanIncludeFile(string name)
     {
-        string n = name.Replace('\\', '/');
+        ReadOnlySpan<char> n = name;
         if (n.EndsWith(".ab", StringComparison.OrdinalIgnoreCase)) return true;
-        if (n.Contains("/bundles/", StringComparison.OrdinalIgnoreCase)) return true;
-        string leaf = n.Contains('/') ? n[(n.LastIndexOf('/') + 1)..] : n;
+        if (HasBundlesSegment(n)) return true;
+        int cut = n.LastIndexOfAny('/', '\\');
+        ReadOnlySpan<char> leaf = cut >= 0 ? n[(cut + 1)..] : n;
         // .resS/.resource are raw payload siblings, not SerializedFiles -- keep them excluded even
         // though their base names start with "sharedassets"/"level".
         if (leaf.EndsWith(".resS", StringComparison.OrdinalIgnoreCase)
@@ -67,6 +68,29 @@ public class GameBundleHook : CommonHook, IHookModule
             || leaf.EndsWith(".assets", StringComparison.OrdinalIgnoreCase)
             || leaf.Equals("data.unity3d", StringComparison.OrdinalIgnoreCase)
             || leaf.Equals("mainData", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A "bundles" path segment delimited by either separator on both sides — the
+    /// zero-allocation equivalent of normalizing separators and searching "/bundles/". The filter
+    /// runs once per inner file of every chunk (hundreds of thousands of calls per scan).</summary>
+    private static bool HasBundlesSegment(ReadOnlySpan<char> name)
+    {
+        int from = 0;
+        while (true)
+        {
+            int index = name[from..].IndexOf("bundles", StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                return false;
+            }
+            int start = from + index;
+            int end = start + "bundles".Length;
+            if (start > 0 && name[start - 1] is '/' or '\\' && end < name.Length && name[end] is '/' or '\\')
+            {
+                return true;
+            }
+            from = start + 1;
+        }
     }
 
     /// <summary>
@@ -189,7 +213,7 @@ public class GameBundleHook : CommonHook, IHookModule
     /// <summary>
     /// Set by a VFS game hook: the COMBINED scan — one decrypt+parse pass per bundle that projects both the
     /// CAB-map metadata (deps, ClassIDs) and the readable names (chunk-entry file name, AssetBundle
-    /// Container addressable paths). One pass over the game builds the RCM3 map that needs no sidecar;
+    /// Container addressable paths). One pass over the game builds the self-contained map;
     /// <c>null</c> when no VFS hook is active (the builder then falls back to a generic per-file read).
     /// </summary>
     public delegate List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanChunkFullDelegate(string path);

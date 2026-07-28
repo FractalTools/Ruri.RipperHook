@@ -1,3 +1,6 @@
+using System.Buffers;
+using System.Collections.Concurrent;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.CabMapping;
@@ -32,9 +35,10 @@ public readonly struct CabClosure
 /// skeleton); dropping it would export a broken reference. Narrowing what you ask for must never
 /// narrow what it needs.</para>
 ///
-/// <para>Everything runs on <see cref="CabTable"/>'s int graph. A 237k-CAB library resolved through
-/// a <c>Dictionary&lt;string, Entry&gt;</c> with string queues costs the whole materialization plus a
-/// hash per edge; the columnar table is already loaded and indexes by id.</para>
+/// <para>The predicate scan runs over all cores and materializes nothing: container paths are
+/// regex-matched as spans decoded into a pooled buffer, the file scope collapses to one bool per
+/// DISTINCT chunk file (a 237k-CAB game has a few dozen), and seed names binary-search the sorted
+/// name column. The scan's only allocations are the seed lists themselves.</para>
 /// </summary>
 public sealed class CabSelection
 {
@@ -62,26 +66,66 @@ public sealed class CabSelection
         bool hasPredicate = NamePatterns.Length > 0 || ClassIds is not null || FileScopes.Length > 0;
         if (hasPredicate)
         {
-            // Scopes are relativized to the map's base ONCE, so the per-CAB test is a string prefix
-            // compare against RelativePath instead of 237k Path.GetFullPath calls.
-            string[] relativeScopes = RelativeScopes(table);
-            for (int id = 0; id < table.Count; id++)
+            bool[]? scopeByFile = ScopeMatchesByFile(table);
+            // Partitions are clamped to core count because each one clones the patterns: Regex
+            // caches a single matcher state internally, so concurrent IsMatch on a shared instance
+            // degenerates into a per-call allocation storm. A private interpreted clone per
+            // partition (~µs each) keeps the whole scan contention- and allocation-free.
+            int rangeSize = Math.Max(4096, table.Count / Environment.ProcessorCount + 1);
+            ConcurrentBag<(int Start, List<int> Ids)> partitions = new();
+            Parallel.ForEach(Partitioner.Create(0, table.Count, rangeSize), range =>
             {
-                if (Matches(table, id, relativeScopes))
+                (int start, int end) = range;
+                List<int> local = new();
+                char[]? buffer = null;
+                Regex[] patterns = NamePatterns;
+                if (patterns.Length > 0)
                 {
-                    seeds.Add(id);
+                    buffer = ArrayPool<char>.Shared.Rent(Math.Max(1, table.MaxContainerPathUtf8Length));
+                    patterns = new Regex[NamePatterns.Length];
+                    for (int i = 0; i < NamePatterns.Length; i++)
+                    {
+                        patterns[i] = new Regex(NamePatterns[i].ToString(), NamePatterns[i].Options & ~RegexOptions.Compiled);
+                    }
                 }
+                try
+                {
+                    for (int id = start; id < end; id++)
+                    {
+                        if (Matches(table, id, scopeByFile, patterns, buffer))
+                        {
+                            local.Add(id);
+                        }
+                    }
+                }
+                finally
+                {
+                    if (buffer is not null)
+                    {
+                        ArrayPool<char>.Shared.Return(buffer);
+                    }
+                }
+                if (local.Count > 0)
+                {
+                    partitions.Add((start, local));
+                }
+            });
+            foreach ((_, List<int> ids) in partitions.OrderBy(static p => p.Start))
+            {
+                seeds.AddRange(ids);
             }
         }
         foreach (string cab in SeedCabNames)
         {
-            if (table.CabToId.TryGetValue(cab, out int id))
+            if (table.TryGetId(cab, out int id))
             {
                 seeds.Add(id);
             }
         }
 
-        HashSet<string> files = new(StringComparer.OrdinalIgnoreCase);
+        // Closure output, file-deduplicated up front: chunk files repeat across the whole closure,
+        // so full-path resolution and the exists-probe run once per DISTINCT file, not per CAB.
+        bool[] fileSeen = new bool[table.FileCount];
         HashSet<string> loadFilter = new(StringComparer.OrdinalIgnoreCase);
         int closureCount = 0;
         foreach (int id in table.ClosureIds(seeds))
@@ -91,15 +135,25 @@ public sealed class CabSelection
                 continue; // phantom dependency: named in the graph, no file behind it
             }
             closureCount++;
-            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.RelativePath(id)));
-            if (File.Exists(full))
-            {
-                files.Add(full);
-            }
+            fileSeen[table.FileIndex[id]] = true;
             string entryFileName = table.EntryFileName(id);
             if (entryFileName.Length > 0)
             {
                 loadFilter.Add(entryFileName);
+            }
+        }
+
+        HashSet<string> files = new(StringComparer.OrdinalIgnoreCase);
+        for (int fileId = 0; fileId < table.FileCount; fileId++)
+        {
+            if (!fileSeen[fileId])
+            {
+                continue;
+            }
+            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.DistinctFile(fileId)));
+            if (File.Exists(full))
+            {
+                files.Add(full);
             }
         }
 
@@ -112,13 +166,14 @@ public sealed class CabSelection
         };
     }
 
-    /// <summary><see cref="FileScopes"/> expressed relative to the map's base folder, normalized to
-    /// the separator <see cref="CabTable.RelativePath"/> stores. Empty when no scope was given.</summary>
-    private string[] RelativeScopes(CabTable table)
+    /// <summary><see cref="FileScopes"/> collapsed to one bool per distinct chunk file: relativize
+    /// each scope to the map's base ONCE, prefix-compare against the few dozen distinct rows, and
+    /// the per-CAB test becomes a single array read. Null when no scope was given.</summary>
+    private bool[]? ScopeMatchesByFile(CabTable table)
     {
         if (FileScopes.Length == 0)
         {
-            return [];
+            return null;
         }
         string[] scopes = new string[FileScopes.Length];
         for (int i = 0; i < FileScopes.Length; i++)
@@ -127,11 +182,30 @@ public sealed class CabSelection
             // The whole base folder as scope constrains nothing; "" would prefix-match everything anyway.
             scopes[i] = relative == "." ? string.Empty : relative.TrimEnd(Path.DirectorySeparatorChar);
         }
-        return scopes;
+
+        bool[] match = new bool[table.FileCount];
+        for (int fileId = 0; fileId < table.FileCount; fileId++)
+        {
+            string relative = table.DistinctFile(fileId);
+            foreach (string scope in scopes)
+            {
+                if (scope.Length == 0 || relative.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
+                {
+                    match[fileId] = true;
+                    break;
+                }
+            }
+        }
+        return match;
     }
 
-    private bool Matches(CabTable table, int id, string[] relativeScopes)
+    private bool Matches(CabTable table, int id, bool[]? scopeByFile, Regex[] namePatterns, char[]? pathBuffer)
     {
+        if (scopeByFile is not null && !scopeByFile[table.FileIndex[id]])
+        {
+            return false;
+        }
+
         if (ClassIds is { } classIds)
         {
             bool hit = false;
@@ -149,31 +223,14 @@ public sealed class CabSelection
             }
         }
 
-        if (relativeScopes.Length > 0)
-        {
-            string relative = table.RelativePath(id);
-            bool inScope = false;
-            foreach (string scope in relativeScopes)
-            {
-                if (scope.Length == 0 || relative.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
-                {
-                    inScope = true;
-                    break;
-                }
-            }
-            if (!inScope)
-            {
-                return false;
-            }
-        }
-
-        if (NamePatterns.Length > 0)
+        if (namePatterns.Length > 0)
         {
             int pathCount = table.ContainerPathCount(id);
             for (int i = 0; i < pathCount; i++)
             {
-                string path = table.ContainerPath(id, i);
-                foreach (Regex pattern in NamePatterns)
+                int written = Encoding.UTF8.GetChars(table.ContainerPathUtf8(id, i), pathBuffer);
+                ReadOnlySpan<char> path = pathBuffer.AsSpan(0, written);
+                foreach (Regex pattern in namePatterns)
                 {
                     if (pattern.IsMatch(path))
                     {

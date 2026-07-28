@@ -130,6 +130,19 @@ public static class RipperBlenderBridge
         byte[] cabBlob = new byte[table.CabOffsets[count]];
         Buffer.BlockCopy(table.CabBlob, 0, cabBlob, 0, cabBlob.Length);
 
+        // The table stores each chunk file ONCE (see CabTable's distinct-file invariant); the DTO
+        // contract is per-row source strings, so expand the few dozen distinct rows back out here.
+        int[] sourceOffsets = new int[count + 1];
+        for (int id = 0; id < count; id++)
+        {
+            sourceOffsets[id + 1] = sourceOffsets[id] + table.DistinctFileUtf8(table.FileIndex[id]).Length;
+        }
+        byte[] sourceBlob = new byte[sourceOffsets[count]];
+        for (int id = 0; id < count; id++)
+        {
+            table.DistinctFileUtf8(table.FileIndex[id]).CopyTo(sourceBlob.AsSpan(sourceOffsets[id]));
+        }
+
         int[] dependencyCounts = new int[count];
         for (int id = 0; id < count; id++)
         {
@@ -154,8 +167,8 @@ public static class RipperBlenderBridge
             Count: count,
             CabBlob: cabBlob,
             CabOffsets: IntsToBytes(table.CabOffsets, count + 1),
-            SourceBlob: table.RelativePathBlob,
-            SourceOffsets: IntsToBytes(table.RelativePathOffsets, count + 1),
+            SourceBlob: sourceBlob,
+            SourceOffsets: IntsToBytes(sourceOffsets, count + 1),
             PathBlob: table.ContainerPathBlob,
             PathOffsets: IntsToBytes(table.ContainerPathOffsets, table.ContainerPathOffsets.Length),
             PathStarts: IntsToBytes(table.ContainerPathStarts, count + 1),
@@ -194,10 +207,20 @@ public static class RipperBlenderBridge
         return CabMap.ResolveClosureCabNames(map.Table, seedCabNames);
     }
 
+    /// <summary>Transitive DEPENDENT closure by CAB name: every CAB that directly or indirectly
+    /// references a seed — the full mirror of <see cref="ResolveClosureCabNames"/> on the transposed
+    /// graph (<see cref="FindDirectDependents"/> is its one-hop special case). Same cost class: a
+    /// pure in-memory walk over the eagerly built reverse adjacency.</summary>
+    public static string[] ResolveReverseClosureCabNames(CabMapHandle map, string[] seedCabNames)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return CabMap.ResolveReverseClosureCabNames(map.Table, seedCabNames);
+    }
+
     /// <summary>
     /// Reverse dependency lookup: every CAB that DIRECTLY depends on (references) any of the given
-    /// seed CABs -- the mirror of <see cref="ResolveClosureCabNames"/>'s forward walk, via
-    /// <see cref="CabTable.ReverseAdjacency"/> (built once per loaded map, lazily). No VFS decrypt,
+    /// seed CABs -- the one-hop mirror of <see cref="ResolveClosureCabNames"/>'s forward walk, via
+    /// <see cref="CabTable.Dependents"/> (the transpose every loaded map carries). No VFS decrypt,
     /// no AssetRipper export; a pure in-memory graph lookup, same cost class as the forward closure.
     /// Useful when an asset's real usage context isn't reachable from its OWN forward dependencies
     /// at all -- e.g. a Mesh-only FBX sub-asset carries no Material of its own; the Prefab whose
@@ -211,13 +234,12 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
         CabTable table = map.Table;
-        int[][] reverse = table.ReverseAdjacency;
         HashSet<int> found = new();
         foreach (string seedName in seedCabNames)
         {
-            if (table.CabToId.TryGetValue(seedName, out int seedId))
+            if (table.TryGetId(seedName, out int seedId))
             {
-                foreach (int dependent in reverse[seedId])
+                foreach (int dependent in table.Dependents(seedId))
                 {
                     found.Add(dependent);
                 }
@@ -247,18 +269,17 @@ public static class RipperBlenderBridge
     /// dependents themselves (those are the AnimatorController, then the character prefabs) -- it lives in
     /// the FORWARD closure of those dependents. So: breadth-first over reverse dependents (nearest first,
     /// pure in-memory cabmap graph), scanning each one's forward closure for Avatar-classed CABs. Empty
-    /// when the clip has no Avatar anywhere in its neighborhood. Cheap: the reverse adjacency index is
-    /// built once per loaded map (lazily, cached on the handle).
+    /// when the clip has no Avatar anywhere in its neighborhood. Cheap: every loaded map already
+    /// carries the dependency transpose (<see cref="CabTable.Dependents"/>).
     /// </summary>
     public static string[] FindAssociatedAvatarCabs(CabMapHandle map, string clipCabName, int maxCandidates = 4)
     {
         ArgumentNullException.ThrowIfNull(map);
         CabTable table = map.Table;
-        if (!table.CabToId.TryGetValue(clipCabName, out int clipId))
+        if (!table.TryGetId(clipCabName, out int clipId))
         {
             return Array.Empty<string>();
         }
-        int[][] reverse = table.ReverseAdjacency;
 
         List<string> found = new();
         HashSet<int> foundSet = new();
@@ -270,7 +291,7 @@ public static class RipperBlenderBridge
         while (queue.Count > 0 && found.Count < maxCandidates)
         {
             int current = queue.Dequeue();
-            foreach (int dependent in reverse[current])
+            foreach (int dependent in table.Dependents(current))
             {
                 if (visited[dependent])
                 {
@@ -566,7 +587,7 @@ public static class RipperBlenderBridge
         Dictionary<string, string> seedRoots = new(StringComparer.Ordinal);
         foreach (string seedCab in seedCabNames)
         {
-            if (!table.CabToId.TryGetValue(seedCab, out int seedId) || seedId >= table.Count)
+            if (!table.TryGetId(seedCab, out int seedId) || seedId >= table.Count)
             {
                 continue;
             }

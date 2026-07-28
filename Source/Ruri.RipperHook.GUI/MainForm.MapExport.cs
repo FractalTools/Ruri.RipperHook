@@ -42,7 +42,7 @@ public partial class MainForm
 		ToggleUi(false);
 		try
 		{
-			// Load the map (RCM4 always carries names inline — no sidecar), then materialise + sort the
+			// Load the map (the map always carries names inline — no sidecar), then materialise + sort the
 			// virtual-file rows — all off the UI thread (258k+ CABs).
 			List<ExportCabMap.CabRow> rows = [];
 			await Task.Run(() =>
@@ -52,7 +52,7 @@ public partial class MainForm
 					.OrderBy(static r => r.ContainerPaths.Count > 0 ? r.ContainerPaths[0] : r.Cab, StringComparer.OrdinalIgnoreCase)
 					.ToList();
 			});
-			// RCM4 always carries container paths inline, so there is no name-less map to report on.
+			// the map always carries container paths inline, so there is no name-less map to report on.
 			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath));
 			ShowVirtualRows(rows);   // populate the Virtual Asset List tab (loaded assets untouched)
 		}

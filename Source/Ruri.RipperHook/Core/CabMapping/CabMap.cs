@@ -2,29 +2,29 @@ using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.SerializedFiles;
-using AssetRipper.IO.Files.SerializedFiles.Parser;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.CabMapping;
 
 /// <summary>
-/// CABMap: CAB name → (relative file path, chunk-entry file name, dependencies, ClassIDs, readable
-/// AssetBundle Container addressable paths). One self-contained file — load it and the whole game is
-/// browsable by dependency graph AND by readable name, no sidecar needed. Build it ONCE over the whole
-/// game folder (single combined scan, bounded memory), then:
-///   * <see cref="ResolveDeps"/> — transitive dependency closure of some seed files,
-///   * <see cref="ResolveByTypes"/> — every CAB that contains an asset of a wanted ClassID (+ deps),
-///   * <see cref="ResolveByNames"/> — every CAB whose addressable path matches a regex (+ deps),
-///     including the chunk-entry names a scoped bundle-granular load must filter by,
-///   * <see cref="ResolveScopedClosure"/> — same as ResolveByNames' closure step, but seeded directly
-///     by known CAB names (no regex) — what a Blender-side browser selection resolves through.
+/// CABMap: CAB name → (chunk file, chunk-entry file name, dependencies, ClassIDs, readable
+/// AssetBundle Container addressable paths). One self-contained file — load it and the whole game
+/// is browsable by dependency graph (both directions) AND by readable name. Build it ONCE over the
+/// whole game folder (parallel across chunk files AND across the bundles inside each), then every
+/// resolve goes through <see cref="CabSelection"/> on the columnar <see cref="CabTable"/>; the
+/// helpers here cover the remaining shapes:
+///   * <see cref="ResolveCabsForFiles"/> — on-disk chunk files → the CABs they host (the seed step
+///     of a plain "load exactly these files" request),
+///   * <see cref="ResolveCabsForPaths"/> — addressable container paths → their hosting CABs (the
+///     seed step of a scene-placement or Blender-side path selection),
+///   * <see cref="ResolveClosureCabNames"/> / <see cref="ResolveReverseClosureCabNames"/> — pure
+///     in-memory transitive closure over dependencies / dependents, by CAB name.
 ///
-/// Format: RCM4 only -- the columnar layout documented in <see cref="CabTable"/> (UTF-8 blobs +
-/// offset tables + int-indexed dependency graph), loading as one ReadAllBytes plus buffer
-/// slices. A cabmap is a regenerable cache: a format bump means rebuild, never a
-/// multi-format compatibility reader.
+/// Format: RCM5 only -- the columnar layout documented in <see cref="CabTable"/>. A cabmap is a
+/// regenerable cache: a format bump means rebuild, never a multi-format compatibility reader.
 /// </summary>
 public static class CabMap
 {
@@ -46,35 +46,47 @@ public static class CabMap
             return 1;
         }
 
-        Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
-        int scanned = 0;
-
         // Scan mode: tell the VFS extractor to skip resource payloads (video/audio/tables/streaming),
         // decrypting only the AssetBundles that host a CAB. Reset afterwards so normal loading is unaffected.
-        // The parallelism that matters lives *inside* the VFS extractor (one worker per inner bundle file):
-        // EndField packs ~62% of all CABs into a single .chk, so per-chunk parallelism barely helps — the
-        // per-bundle decrypt + decompress + metadata parse is what has to scale across cores.
+        //
+        // Two parallel axes: the VFS extractor fans out one worker per inner bundle, and the outer
+        // lanes here pipeline the many small chunk files behind the giant ones (EndField packs ~62%
+        // of all CABs into a single .chk whose inner scan alone saturates the machine; without outer
+        // lanes every other chunk would wait for it). Outer width stays low on purpose — both axes
+        // share the thread pool, and each in-flight chunk holds decrypt buffers.
         GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
+        List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)>?[] perFile = new List<(string, string, List<string>, List<int>, List<string>)>?[files.Length];
         try
         {
-            foreach (string file in files)
-            {
-                scanned++;
-                string relativeFilePath = Path.GetRelativePath(fullRoot, file);
-                foreach ((string cab, string entryFileName, List<string> deps, List<int> classIds, List<string> paths) in ScanFullMetadata(file))
-                {
-                    entries[cab] = new Entry(relativeFilePath, entryFileName, deps, classIds, paths);
-                }
-            }
+            ParallelOptions outerLanes = new() { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 4, 2, 8) };
+            Parallel.For(0, files.Length, outerLanes, i => perFile[i] = ScanFullMetadata(files[i]));
         }
         finally
         {
             GameBundleHook.ScanIncludeFile = null;
         }
 
-        Save(fullOut, fullRoot, entries);
+        // Deterministic merge in directory-enumeration order, exactly like the serial scan wrote it:
+        // on a duplicate CAB name the later file wins.
+        Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < files.Length; i++)
+        {
+            List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)>? rows = perFile[i];
+            if (rows is null || rows.Count == 0)
+            {
+                continue;
+            }
+            string relativeFilePath = Path.GetRelativePath(fullRoot, files[i]);
+            foreach ((string cab, string entryFileName, List<string> deps, List<int> classIds, List<string> paths) in rows)
+            {
+                entries[cab] = new Entry(relativeFilePath, entryFileName, deps, classIds, paths);
+            }
+            perFile[i] = null;
+        }
+
+        CabTable.FromEntries(fullRoot, entries).Save(fullOut);
         int named = entries.Values.Count(static e => e.ContainerPaths.Count > 0);
-        Console.Error.WriteLine($"[CabMap] {scanned} files scanned, {entries.Count} CABs ({named} with addressable paths) → {fullOut}");
+        Console.Error.WriteLine($"[CabMap] {files.Length} files scanned, {entries.Count} CABs ({named} with addressable paths) → {fullOut}");
         return 0;
     }
 
@@ -172,82 +184,32 @@ public static class CabMap
         return result;
     }
 
-    /// <summary>
-    /// Load a cabmap as the columnar <see cref="CabTable"/>: one ReadAllBytes plus buffer
-    /// slices, no per-string parse at all. RCM4 is the ONLY format -- a cabmap is a
-    /// regenerable cache, so a format bump means rebuild, never a compatibility reader.
-    /// </summary>
+    /// <summary>Load a cabmap as the columnar <see cref="CabTable"/> — one sequential stream read
+    /// straight into the final buffers (see <see cref="CabTable.Load"/>).</summary>
     public static CabTable LoadTable(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        byte[] file = File.ReadAllBytes(path);
-        if (file.Length < 8 || BitConverter.ToUInt32(file, 0) != CabTable.Magic4)
-        {
-            throw new InvalidDataException(
-                $"'{path}' is not an RCM4 cabmap -- rebuild it (Build writes RCM4 only).");
-        }
-        return CabTable.LoadRcm4(path, file);
+        return CabTable.Load(path);
     }
 
-
-
-
-
-
-    // ── name index (CAB → chunk-entry file name + its AssetBundle Container addressable paths) ─────
-    //
-    // RCM3 maps carry these inline (NameIndexFromEntries). The RNM2 sidecar machinery below remains for
-    // legacy RCM2 maps: built once by a bounded scan that reads ONLY the AssetBundle object per CAB. Each
-    // CAB also records the chunk-entry file name that hosts it (e.g. Data/Bundles/Windows/main/<hash>.ab)
-    // — which differs from the inner CAB name — because a scoped load must filter chunk entries by THAT
-    // name. Pair a name match with the CAB map's dependency graph and you get "every asset called pelica,
-    // plus its full dependency closure".
-
-
-    private const uint NameMagic = 0x524E4D32; // "RNM2" (v2 adds the per-CAB chunk-entry file name)
-
-
-
-
-
-
-
-
-
-
-
-    private static string NormalizeContainerPath(string path)
-    {
-        int hashIdx = path.IndexOf("##", StringComparison.Ordinal);
-        return (hashIdx >= 0 ? path[..hashIdx] : path).ToLowerInvariant();
-    }
-
-
-
-
-    private static void Save(string outPath, string baseFolder, IReadOnlyDictionary<string, Entry> entries)
-    {
-        // RCM4 (columnar) is the only written format now -- it loads via buffer slices instead
-        // of a per-string walk, stores dependencies as int ids instead of repeated name strings
-        // (the bulk of RCM3's size), and is what the pythonnet bridge hands across unchanged.
-        // Load() still reads every older format.
-        CabTable.FromEntries(baseFolder, new Dictionary<string, Entry>(entries, StringComparer.OrdinalIgnoreCase))
-            .Save(outPath);
-    }
-
-    // ── columnar (CabTable) resolver overloads ───────────────────────────────
-    //
-    // Same contracts as the Dictionary-of-Entry overloads above, executed on the int graph:
-    // closure output includes unknown seeds and phantom dependency names exactly like the
-    // classic BFS did (visited.Add happened before the entry lookup), results sorted the same.
-
+    /// <summary>Transitive dependency closure by CAB name (seeds included). An unknown seed name is
+    /// reported back in the output — classic BFS "visited" semantics — it just expands nothing.</summary>
     public static string[] ResolveClosureCabNames(CabTable table, IEnumerable<string> seedCabNames)
+        => ResolveWalkCabNames(table, seedCabNames, reverse: false);
+
+    /// <summary>Transitive DEPENDENT closure by CAB name (seeds included): every CAB that directly
+    /// or indirectly references a seed. The mirror of <see cref="ResolveClosureCabNames"/> on the
+    /// transposed graph, same unknown-seed semantics.</summary>
+    public static string[] ResolveReverseClosureCabNames(CabTable table, IEnumerable<string> seedCabNames)
+        => ResolveWalkCabNames(table, seedCabNames, reverse: true);
+
+    private static string[] ResolveWalkCabNames(CabTable table, IEnumerable<string> seedCabNames, bool reverse)
     {
         HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
         List<int> seedIds = new();
         foreach (string seed in seedCabNames)
         {
-            if (table.CabToId.TryGetValue(seed, out int id))
+            if (table.TryGetId(seed, out int id))
             {
                 seedIds.Add(id);
             }
@@ -256,17 +218,17 @@ public static class CabMap
                 names.Add(seed); // unknown seed: classic Bfs still reported it as visited
             }
         }
-        foreach (int id in table.ClosureIds(seedIds))
+        foreach (int id in reverse ? table.ReverseClosureIds(seedIds) : table.ClosureIds(seedIds))
         {
             names.Add(table.CabName(id));
         }
         return names.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-
     /// <summary>
     /// On-disk chunk files -> the CAB names they host. The seed step for a plain
-    /// "load exactly these files (plus what they need)" request.
+    /// "load exactly these files (plus what they need)" request. Distinct-file resolution runs once
+    /// per chunk file the map knows (a few dozen), never per CAB.
     /// </summary>
     public static string[] ResolveCabsForFiles(CabTable table, IEnumerable<string> files)
     {
@@ -278,11 +240,21 @@ public static class CabMap
                 wanted.Add(Path.GetFullPath(file));
             }
         }
+        bool[] matchByFile = new bool[table.FileCount];
+        bool any = false;
+        for (int fileId = 0; fileId < table.FileCount; fileId++)
+        {
+            matchByFile[fileId] = wanted.Contains(Path.GetFullPath(Path.Combine(table.BaseFolder, table.DistinctFile(fileId))));
+            any |= matchByFile[fileId];
+        }
+        if (!any)
+        {
+            return [];
+        }
         List<string> cabs = new();
         for (int id = 0; id < table.Count; id++)
         {
-            string full = Path.GetFullPath(Path.Combine(table.BaseFolder, table.RelativePath(id)));
-            if (wanted.Contains(full))
+            if (matchByFile[table.FileIndex[id]])
             {
                 cabs.Add(table.CabName(id));
             }
@@ -290,33 +262,73 @@ public static class CabMap
         return cabs.ToArray();
     }
 
+    /// <summary>
+    /// Addressable container paths -> the CAB names hosting them. Case-insensitive, and a path's
+    /// <c>##subname</c> suffix (a multi-object FBX sub-asset) is ignored on both sides. One parallel
+    /// pass over the path column probing a span lookup of the queries — no 438k-string index is ever
+    /// materialized for what is always a handful-to-thousands of queries.
+    /// </summary>
     public static string[] ResolveCabsForPaths(CabTable table, IEnumerable<string> containerPaths)
     {
-        Dictionary<string, List<int>> index = new(StringComparer.OrdinalIgnoreCase);
-        for (int id = 0; id < table.Count; id++)
-        {
-            int pathCount = table.ContainerPathCount(id);
-            for (int p = 0; p < pathCount; p++)
-            {
-                string key = NormalizeContainerPath(table.ContainerPath(id, p));
-                if (!index.TryGetValue(key, out List<int>? ids))
-                {
-                    index[key] = ids = new List<int>();
-                }
-                ids.Add(id);
-            }
-        }
-        HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> queries = new(StringComparer.OrdinalIgnoreCase);
         foreach (string path in containerPaths)
         {
-            if (index.TryGetValue(NormalizeContainerPath(path), out List<int>? matches))
+            int hashIndex = path.IndexOf("##", StringComparison.Ordinal);
+            queries.Add(hashIndex >= 0 ? path[..hashIndex] : path);
+        }
+        if (queries.Count == 0)
+        {
+            return [];
+        }
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup = queries.GetAlternateLookup<ReadOnlySpan<char>>();
+
+        ConcurrentBag<List<int>> partitions = new();
+        Parallel.ForEach(Partitioner.Create(0, table.Count), range =>
+        {
+            (int start, int end) = range;
+            List<int> local = new();
+            char[] buffer = ArrayPool<char>.Shared.Rent(Math.Max(1, table.MaxContainerPathUtf8Length));
+            try
             {
-                foreach (int id in matches)
+                for (int id = start; id < end; id++)
                 {
-                    cabs.Add(table.CabName(id));
+                    int pathCount = table.ContainerPathCount(id);
+                    for (int i = 0; i < pathCount; i++)
+                    {
+                        ReadOnlySpan<byte> utf8 = table.ContainerPathUtf8(id, i);
+                        int hashIndex = utf8.IndexOf("##"u8);
+                        if (hashIndex >= 0)
+                        {
+                            utf8 = utf8[..hashIndex];
+                        }
+                        int written = Encoding.UTF8.GetChars(utf8, buffer);
+                        if (lookup.Contains(buffer.AsSpan(0, written)))
+                        {
+                            local.Add(id);
+                            break;
+                        }
+                    }
                 }
             }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(buffer);
+            }
+            if (local.Count > 0)
+            {
+                partitions.Add(local);
+            }
+        });
+
+        List<string> cabs = new();
+        foreach (List<int> local in partitions)
+        {
+            foreach (int id in local)
+            {
+                cabs.Add(table.CabName(id));
+            }
         }
-        return cabs.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
+        cabs.Sort(StringComparer.OrdinalIgnoreCase);
+        return cabs.ToArray();
     }
 }
