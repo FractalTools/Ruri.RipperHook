@@ -124,7 +124,7 @@ internal static class TypeTreeDrift
                 Console.WriteLine($"[Drift] {lineageDirectory.Name}/{version}: claims {claimed} -> official {resolved}");
 
                 UnityInfo stock = official.Fetch(resolved);
-                Dictionary<string, StructShape> stockTypes = FlattenAll(stock);
+                Dictionary<string, List<StructShape>> stockTypes = FlattenAll(stock);
 
                 foreach (UnityClass gameClass in game.Classes)
                 {
@@ -134,17 +134,21 @@ internal static class TypeTreeDrift
                         continue;
                     }
 
-                    Dictionary<string, StructShape> gameTypes = new(StringComparer.Ordinal);
+                    Dictionary<string, List<StructShape>> gameTypes = new(StringComparer.Ordinal);
                     Flatten(root, string.Empty, gameTypes);
 
-                    foreach ((string typeName, StructShape gameShape) in gameTypes)
+                    foreach ((string typeName, List<StructShape> gameShapes) in gameTypes)
                     {
-                        if (!stockTypes.TryGetValue(typeName, out StructShape? stockShape))
+                        if (!stockTypes.TryGetValue(typeName, out List<StructShape>? stockShapes))
                         {
                             continue; // A type stock Unity has no counterpart for -- nothing to diff against.
                         }
 
-                        foreach (Drift drift in DiffFields(typeName, gameShape, stockShape))
+                        // A game shape that matches ANY stock instantiation of this name exactly is
+                        // not drift -- it is the same template with the same payload.
+                        foreach (StructShape gameShape in gameShapes.Where(g => !stockShapes.Exists(st => FieldsEqual(st.Fields, g.Fields))))
+                        {
+                        foreach (Drift drift in DiffFields(typeName, gameShape, ClosestShape(stockShapes, gameShape.Fields)))
                         {
                             string className = $"{gameClass.Name}({gameClass.TypeID})";
                             if (aggregated.TryGetValue(drift.Key, out Aggregated? existing))
@@ -159,6 +163,7 @@ internal static class TypeTreeDrift
                                     new SortedSet<string>(StringComparer.Ordinal) { className },
                                     new SortedSet<string>(StringComparer.Ordinal) { version }));
                             }
+                        }
                         }
                     }
                 }
@@ -181,27 +186,34 @@ internal static class TypeTreeDrift
     /// rather than walking the two trees in lockstep is what makes an inserted field show up as one
     /// drift instead of desynchronising everything after it.
     /// </summary>
-    private static void Flatten(UnityNode node, string? path, Dictionary<string, StructShape> into)
+    /// <summary>
+    /// Collects every DISTINCT shape a type name appears with. Unity's dumps monomorphize
+    /// templates -- <c>Keyframe</c> shows up once per curve payload (<c>float</c>,
+    /// <c>Quaternionf</c>, ...), <c>OffsetPtr</c> once per pointee -- so one name genuinely has
+    /// several field lists at once. An earlier cut of this kept a single "richest" shape per name,
+    /// and the cross-instantiation comparisons that fell out of it produced confidently wrong rows
+    /// like "Keyframe.value is `float` in the fork but `Quaternionf` officially".
+    /// </summary>
+    private static void Flatten(UnityNode node, string? path, Dictionary<string, List<StructShape>> into)
     {
         if (node.SubNodes.Count > 0 && !ContainerTypes.Contains(node.TypeName))
         {
             List<(string Name, string Type)> fields = node.SubNodes.ConvertAll(sub => (sub.Name, sub.TypeName));
-            if (into.TryGetValue(node.TypeName, out StructShape? existing))
+            if (!into.TryGetValue(node.TypeName, out List<StructShape>? shapes))
             {
-                // Same struct reached twice in one dump: keep the richer definition rather than
-                // letting a stripped instance mask the full one, and prefer an addressable path.
-                if (fields.Count > existing.Fields.Count)
-                {
-                    into[node.TypeName] = new StructShape(fields, path ?? existing.Path);
-                }
-                else if (existing.Path is null && path is not null)
-                {
-                    into[node.TypeName] = existing with { Path = path };
-                }
+                shapes = new List<StructShape>();
+                into.Add(node.TypeName, shapes);
             }
-            else
+
+            int index = shapes.FindIndex(shape => FieldsEqual(shape.Fields, fields));
+            if (index < 0)
             {
-                into.Add(node.TypeName, new StructShape(fields, path));
+                shapes.Add(new StructShape(fields, path));
+            }
+            else if (shapes[index].Path is null && path is not null)
+            {
+                // Same shape seen again, this time somewhere addressable -- keep the usable path.
+                shapes[index] = shapes[index] with { Path = path };
             }
         }
 
@@ -219,9 +231,9 @@ internal static class TypeTreeDrift
         }
     }
 
-    private static Dictionary<string, StructShape> FlattenAll(UnityInfo info)
+    private static Dictionary<string, List<StructShape>> FlattenAll(UnityInfo info)
     {
-        Dictionary<string, StructShape> types = new(StringComparer.Ordinal);
+        Dictionary<string, List<StructShape>> types = new(StringComparer.Ordinal);
         foreach (UnityClass unityClass in info.Classes)
         {
             UnityNode? root = unityClass.ReleaseRootNode ?? unityClass.EditorRootNode;
@@ -231,6 +243,45 @@ internal static class TypeTreeDrift
             }
         }
         return types;
+    }
+
+    private static bool FieldsEqual(List<(string Name, string Type)> left, List<(string Name, string Type)> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (!string.Equals(left[i].Name, right[i].Name, StringComparison.Ordinal)
+                || !string.Equals(left[i].Type, right[i].Type, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The stock shape a drifted game shape is diffed against: the one sharing the most field
+    /// names. With template monomorphs in the set, "closest" is what pairs the float Keyframe with
+    /// the float Keyframe instead of whichever instantiation happened to be visited first.
+    /// </summary>
+    private static StructShape ClosestShape(List<StructShape> candidates, List<(string Name, string Type)> fields)
+    {
+        HashSet<string> names = new(fields.Select(static f => f.Name), StringComparer.Ordinal);
+        StructShape best = candidates[0];
+        int bestScore = -1;
+        foreach (StructShape candidate in candidates)
+        {
+            int score = candidate.Fields.Count(f => names.Contains(f.Name));
+            if (score > bestScore)
+            {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
     }
 
     private static IEnumerable<Drift> DiffFields(string typeName, StructShape gameShape, StructShape stockShape)

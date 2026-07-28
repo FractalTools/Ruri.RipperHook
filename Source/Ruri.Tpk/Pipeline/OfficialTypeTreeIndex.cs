@@ -21,7 +21,11 @@ namespace Ruri.Tpk.Pipeline;
 /// </summary>
 internal sealed class OfficialTypeTreeIndex
 {
-    private const string ListUrl = "https://api.github.com/repos/AssetRipper/TypeTreeDumps/contents/InfoJson";
+    // The git TREES endpoint, not the contents endpoint: contents caps at 1000 entries per
+    // directory and truncates SILENTLY -- upstream publishes 1420+ dumps, so a contents listing
+    // dropped 400+ versions and the nearest-version snap could quietly pick a worse baseline.
+    // The trees response carries an explicit `truncated` flag instead, which is checked below.
+    private const string ListUrl = "https://api.github.com/repos/AssetRipper/TypeTreeDumps/git/trees/main:InfoJson";
     private const string RawUrlFormat = "https://raw.githubusercontent.com/AssetRipper/TypeTreeDumps/main/InfoJson/{0}.json";
 
     private readonly HttpClient _http;
@@ -48,14 +52,22 @@ internal sealed class OfficialTypeTreeIndex
     private List<UnityVersion> FetchAvailable()
     {
         string json = _http.GetStringAsync(ListUrl).GetAwaiter().GetResult();
-        List<UnityVersion> versions = new();
-        foreach (JsonElement entry in JsonDocument.Parse(json).RootElement.EnumerateArray())
+        JsonElement root = JsonDocument.Parse(json).RootElement;
+        if (root.TryGetProperty("truncated", out JsonElement truncated) && truncated.GetBoolean())
         {
-            if (entry.GetProperty("type").GetString() != "file")
+            throw new InvalidOperationException(
+                $"[Drift] {ListUrl} was truncated by GitHub -- the version list would be incomplete and the "
+                + "nearest-version snap unreliable. Fetch the listing another way before diffing.");
+        }
+
+        List<UnityVersion> versions = new();
+        foreach (JsonElement entry in root.GetProperty("tree").EnumerateArray())
+        {
+            if (entry.GetProperty("type").GetString() != "blob")
             {
                 continue;
             }
-            string name = entry.GetProperty("name").GetString() ?? string.Empty;
+            string name = entry.GetProperty("path").GetString() ?? string.Empty;
             if (!name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
