@@ -455,14 +455,17 @@ public static class RipperBlenderBridge
         }
         long processMs = phase.ElapsedMilliseconds;
 
-        // Image encode is the dominant export cost and every texture is independent -- queue every
-        // encode across all cores here, so the (sequential) export loop overlaps its YAML work with
-        // them and each texture write just awaits its own result. Skipped entirely when a class
-        // filter excludes Texture2D.
+        // Image encode is the dominant export cost, so it runs across all cores here -- and it
+        // must FINISH before the export loop starts. Both stages resolve .resS-backed pixels and
+        // vertex buffers through the same per-ResourceFile shared Stream (seek-then-read, not
+        // atomic), so overlapping them is a torn read: an asset silently receives another's
+        // bytes. Skipped entirely when a class filter excludes Texture2D.
+        phase.Restart();
         if (exportClassIds is null || exportClassIds.Contains((int)ClassIDType.Texture2D))
         {
             textureExporter.Prewarm(gameData);
         }
+        long prewarmMs = phase.ElapsedMilliseconds;
 
         InMemoryFileSystem memoryFileSystem = new();
         phase.Restart();
@@ -474,7 +477,7 @@ public static class RipperBlenderBridge
             clipCapture.Captured, meshCapture.Captured);
         Logger.Info(LogCategory.Export,
             $"[ImportCabs] closure={closure.ClosureCount} files={closureFiles.Length} " +
-            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms " +
+            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms prewarm={prewarmMs}ms " +
             $"export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
             $"texcache(hit={textureExporter.HitStats.Hits} miss={textureExporter.HitStats.Misses})");
         textureExporter.LogStats();
@@ -606,12 +609,15 @@ public static class RipperBlenderBridge
     /// </summary>
     private sealed class PrewarmedTextureExporter : TextureAssetExporter
     {
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<IUnityObjectBase, Task<byte[]?>> _encoded =
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<IUnityObjectBase, byte[]?> _encoded =
             new(ReferenceEqualityComparer.Instance);
         private int _hits;
         private int _misses;
         private long _decodeTicks;
         private long _encodeTicks;
+        private long _prewarmWallMs;
+        private int _streamedFileCount;
+        private int _streamedTextureCount;
 
         public (int Hits, int Misses) HitStats => (_hits, _misses);
 
@@ -635,18 +641,58 @@ public static class RipperBlenderBridge
             // MainAsset gate TryCreateCollection applies. Engine/builtin textures (whose
             // MainAsset stays null; SpriteProcessor skips those collections) are never
             // exported, so encoding them here would be pure wasted work.
-            // Fire-and-forget per texture: the export loop overlaps its own (sequential,
-            // CPU-light) YAML work with these encodes and only synchronizes per texture at
-            // that texture's own write.
+            List<AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D> targets = new();
             foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
             {
                 if (asset is AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture
                     && asset.MainAsset is AssetRipper.Processing.Textures.SpriteInformationObject
                     && texture.CheckAssetIntegrity())
                 {
-                    _encoded[texture] = Task.Run(() => EncodeOne(texture));
+                    targets.Add(texture);
                 }
             }
+
+            // Pixels that live in a .resS stream cannot be read concurrently from the same
+            // resource FILE: StreamedResourceExtensions.GetContent does `Stream.Position = offset`
+            // then `ReadExactly` on the ResourceFile's ONE shared Stream, so two workers on the
+            // same file interleave into a torn read -- one texture silently decodes another's
+            // bytes (observed: a character face exporting as colour noise, intermittently).
+            // Group by resource path: one worker per file serializes those reads, different
+            // files never share a Stream, and inline-pixel textures touch no stream at all.
+            List<AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D> inlineTargets = new();
+            Dictionary<string, List<AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D>> streamedByFile =
+                new(StringComparer.OrdinalIgnoreCase);
+            foreach (var texture in targets)
+            {
+                string resourcePath = texture.ImageData_C28.Length == 0 && texture.StreamData_C28 is { } stream && stream.IsSet()
+                    ? stream.Path.String
+                    : string.Empty;
+                if (resourcePath.Length == 0)
+                {
+                    inlineTargets.Add(texture);
+                }
+                else if (streamedByFile.TryGetValue(resourcePath, out var group))
+                {
+                    group.Add(texture);
+                }
+                else
+                {
+                    streamedByFile[resourcePath] = [texture];
+                }
+            }
+            _streamedFileCount = streamedByFile.Count;
+            _streamedTextureCount = targets.Count - inlineTargets.Count;
+
+            System.Diagnostics.Stopwatch wall = System.Diagnostics.Stopwatch.StartNew();
+            Parallel.ForEach(inlineTargets, texture => _encoded[texture] = EncodeOne(texture));
+            Parallel.ForEach(streamedByFile.Values, group =>
+            {
+                foreach (var texture in group)
+                {
+                    _encoded[texture] = EncodeOne(texture);
+                }
+            });
+            _prewarmWallMs = wall.ElapsedMilliseconds;
         }
 
         private byte[]? EncodeOne(AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture)
@@ -669,21 +715,18 @@ public static class RipperBlenderBridge
         {
             double frequency = System.Diagnostics.Stopwatch.Frequency;
             Logger.Info(LogCategory.Export,
-                $"[TexPrewarm] decodeSum={_decodeTicks * 1000.0 / frequency:F0}ms " +
-                $"encodeSum={_encodeTicks * 1000.0 / frequency:F0}ms cores={Environment.ProcessorCount}");
+                $"[TexPrewarm] wall={_prewarmWallMs}ms decodeSum={_decodeTicks * 1000.0 / frequency:F0}ms " +
+                $"encodeSum={_encodeTicks * 1000.0 / frequency:F0}ms cores={Environment.ProcessorCount} " +
+                $"streamed={_streamedTextureCount} over {_streamedFileCount} resource file(s)");
         }
 
         public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
         {
-            if (_encoded.TryRemove(asset, out Task<byte[]?>? pending))
+            if (_encoded.TryRemove(asset, out byte[]? bytes) && bytes is not null)
             {
-                byte[]? bytes = pending.GetAwaiter().GetResult();
-                if (bytes is not null)
-                {
-                    Interlocked.Increment(ref _hits);
-                    fileSystem.File.WriteAllBytes(path, bytes);
-                    return true;
-                }
+                Interlocked.Increment(ref _hits);
+                fileSystem.File.WriteAllBytes(path, bytes);
+                return true;
             }
             Interlocked.Increment(ref _misses);
             return base.Export(container, asset, path, fileSystem);
