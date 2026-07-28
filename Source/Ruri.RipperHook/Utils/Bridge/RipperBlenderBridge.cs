@@ -2,11 +2,13 @@ using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Project;
+using AssetRipper.Export.UnityProjects.Textures;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
+using AssetRipper.SourceGenerated.Extensions;
 using Ruri.Hook.Config;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
@@ -337,12 +339,35 @@ public static class RipperBlenderBridge
     /// </summary>
     public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames)
     {
+        return ImportCabsCore(map, seedCabNames, null);
+    }
+
+    /// <summary>
+    /// <see cref="ImportCabs"/> with an export-side allowlist of ClassIDs: the whole closure is
+    /// still RESOLVED, LOADED and PROCESSED identically (a humanoid clip's muscle solve and hashed
+    /// curve-path restore both need the rig in scope at load time), but only assets of the listed
+    /// classes are exported/serialized. The standalone-clip flow consumes nothing but the exported
+    /// .anim documents and their curve blobs, while its closure co-seeds the whole character for
+    /// scope -- re-serializing that character's textures and meshes was most of its wall time.
+    /// A distinct method name (not an overload): the pythonnet caller binds methods via
+    /// Type.GetMethod(name), which throws on ambiguity.
+    /// </summary>
+    public static ClosureResult ImportCabsFiltered(CabMapHandle map, string[] seedCabNames, int[] exportClassIds)
+    {
+        ArgumentNullException.ThrowIfNull(exportClassIds);
+        return ImportCabsCore(map, seedCabNames, exportClassIds);
+    }
+
+    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds)
+    {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
 
+        System.Diagnostics.Stopwatch phase = System.Diagnostics.Stopwatch.StartNew();
         CabClosure closure = new CabSelection { SeedCabNames = seedCabNames }.Resolve(map.Table);
         string[] closureFiles = closure.Files;
         HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
+        long resolveMs = phase.ElapsedMilliseconds;
         if (closureFiles.Length == 0)
         {
             return ClosureResult.Empty;
@@ -351,24 +376,84 @@ public static class RipperBlenderBridge
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
         settings.ExportSettings.ShaderExportMode = ShaderExportMode.Decompile;
+        // No bridge consumer reads scripts (MonoBehaviour structure comes from the bundles' own
+        // typetrees), while Level1+ makes every ImportCabs call re-run the whole IL2Cpp assembly
+        // scan and decompile-export ~1000 .cs stubs per closure -- pure fixed cost per call.
+        settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
         ClipCaptureExporter clipCapture = new();
-        BridgeExportHandler handler = new(settings, clipCapture);
+        MeshCaptureExporter meshCapture = new();
+        PrewarmedTextureExporter textureExporter = new(settings);
+        BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter, exportClassIds);
 
         GameData gameData;
         GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0 ? name => loadFilterFileNames.Contains(name) : null;
+        phase.Restart();
         try
         {
-            gameData = handler.LoadAndProcess(closureFiles, LocalFileSystem.Instance);
+            gameData = handler.Load(closureFiles, LocalFileSystem.Instance);
         }
         finally
         {
             GameBundleHook.LoadIncludeFile = null;
         }
+        long loadMs = phase.ElapsedMilliseconds;
+
+        phase.Restart();
+        if (gameData.GameBundle.HasAnyAssetCollections())
+        {
+            handler.Process(gameData);
+        }
+        long processMs = phase.ElapsedMilliseconds;
+
+        // Image encode is the dominant export cost and every texture is independent -- queue every
+        // encode across all cores here, so the (sequential) export loop overlaps its YAML work with
+        // them and each texture write just awaits its own result. Skipped entirely when a class
+        // filter excludes Texture2D.
+        if (exportClassIds is null || exportClassIds.Contains((int)ClassIDType.Texture2D))
+        {
+            textureExporter.Prewarm(gameData);
+        }
 
         InMemoryFileSystem memoryFileSystem = new();
+        phase.Restart();
         handler.Export(gameData, "mem:/out", memoryFileSystem);
+        long exportMs = phase.ElapsedMilliseconds;
 
-        return Partition(memoryFileSystem.Files, map.Table, seedCabNames, clipCapture.Captured);
+        phase.Restart();
+        ClosureResult result = Partition(memoryFileSystem.Files, map.Table, seedCabNames,
+            clipCapture.Captured, meshCapture.Captured);
+        Logger.Info(LogCategory.Export,
+            $"[ImportCabs] closure={closure.ClosureCount} files={closureFiles.Length} " +
+            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms " +
+            $"export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
+            $"texcache(hit={textureExporter.HitStats.Hits} miss={textureExporter.HitStats.Misses})");
+        textureExporter.LogStats();
+        LogExportCostByExtension(memoryFileSystem);
+        return result;
+    }
+
+    /// <summary>Export-cost attribution from the in-memory commit timeline (sequential export:
+    /// the gap before each commit is that file's own cost) -- by extension plus the slowest
+    /// individual files, so "what are the export seconds spent on" is answerable from the log.</summary>
+    private static void LogExportCostByExtension(InMemoryFileSystem memoryFileSystem)
+    {
+        Dictionary<string, (int Count, long Bytes, double Ms)> byExtension = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string path, long bytes, double ms) in memoryFileSystem.CommitTimeline)
+        {
+            string extension = Path.GetExtension(path);
+            byExtension[extension] = byExtension.TryGetValue(extension, out (int Count, long Bytes, double Ms) sum)
+                ? (sum.Count + 1, sum.Bytes + bytes, sum.Ms + ms)
+                : (1, bytes, ms);
+        }
+        foreach ((string extension, (int count, long bytes, double ms)) in byExtension.OrderByDescending(static p => p.Value.Ms))
+        {
+            Logger.Info(LogCategory.Export,
+                $"[ExportCost] {extension,-9} files={count,3} bytes={bytes,10} ms={ms,8:F1}");
+        }
+        foreach ((string path, long bytes, double ms) in memoryFileSystem.CommitTimeline.OrderByDescending(static c => c.Ms).Take(5))
+        {
+            Logger.Info(LogCategory.Export, $"[ExportCost] slowest {ms,8:F1}ms {bytes,10}B {path}");
+        }
     }
 
     /// <summary>
@@ -381,14 +466,178 @@ public static class RipperBlenderBridge
     private sealed class BridgeExportHandler : ExportHandler
     {
         private readonly ClipCaptureExporter _clipCapture;
+        private readonly MeshCaptureExporter _meshCapture;
+        private readonly PrewarmedTextureExporter _textureExporter;
+        private readonly int[]? _exportClassIds;
 
-        public BridgeExportHandler(FullConfiguration settings, ClipCaptureExporter clipCapture) : base(settings)
+        public BridgeExportHandler(FullConfiguration settings, ClipCaptureExporter clipCapture,
+            MeshCaptureExporter meshCapture, PrewarmedTextureExporter textureExporter,
+            int[]? exportClassIds) : base(settings)
         {
             _clipCapture = clipCapture;
+            _meshCapture = meshCapture;
+            _textureExporter = textureExporter;
+            _exportClassIds = exportClassIds;
         }
 
-        protected override void BeforeExport(ProjectExporter projectExporter) =>
+        protected override void BeforeExport(ProjectExporter projectExporter)
+        {
             projectExporter.OverrideExporter<IAnimationClip>(_clipCapture, allowInheritance: true);
+            projectExporter.OverrideExporter<AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh>(
+                _meshCapture, allowInheritance: true);
+            // Mirror the default stack's THREE texture registrations (ITexture2D + SpriteInformationObject
+            // + ISprite): a texture's collection is routinely created via its SpriteInformationObject
+            // MainAsset (whichever of the pair FetchAssets yields first claims both), so overriding
+            // ITexture2D alone leaves the default exporter handling every texture reached that way.
+            projectExporter.OverrideExporter<AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D>(
+                _textureExporter, allowInheritance: true);
+            projectExporter.OverrideExporter<AssetRipper.Processing.Textures.SpriteInformationObject>(
+                _textureExporter, allowInheritance: true);
+            if (_exportClassIds is not null)
+            {
+                // Registered last = consulted first: allowed classes fall through to the normal
+                // stack (including the two overrides above), everything else resolves to a
+                // SkipExportCollection (references to it become missing refs, never a throw).
+                projectExporter.OverrideExporter<IUnityObjectBase>(
+                    new ClassFilterExporter(_exportClassIds), allowInheritance: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Export-side ClassID allowlist for <see cref="ImportCabsFiltered"/>: anything not listed is
+    /// claimed into a <see cref="SkipExportCollection"/> (same collection AssetRipper's own
+    /// DummyAssetExporter uses for "don't write this, missing-reference anyone who points at it").
+    /// Allowed assets fall through to the rest of the exporter stack untouched.
+    /// </summary>
+    private sealed class ClassFilterExporter(int[] allowedClassIds) : IAssetExporter
+    {
+        public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
+        {
+            if (allowedClassIds.Contains(asset.ClassID))
+            {
+                exportCollection = null;
+                return false;
+            }
+            exportCollection = new SkipExportCollection(this, asset);
+            return true;
+        }
+
+        public bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem) => false;
+
+        public void Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback)
+        {
+        }
+
+        public bool Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem) => false;
+
+        public void Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback)
+        {
+        }
+
+        public AssetType ToExportType(IUnityObjectBase asset) => AssetType.Serialized;
+
+        public bool ToUnknownExportType(Type type, out AssetType assetType)
+        {
+            assetType = AssetType.Serialized;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="TextureAssetExporter"/> whose image decode+encode runs for every closure texture
+    /// in parallel BEFORE the (sequential) export loop starts -- the loop's own Export call then
+    /// just writes the finished bytes. Same converter, same per-texture container decision, same
+    /// encoder as the base class, so output bytes are identical; a texture missing from the cache
+    /// (or whose parallel encode failed) falls back to the base implementation, keeping its
+    /// warnings and return codes exactly as before. Lightmap textures (MainAsset is
+    /// ILightingDataAsset) are explicitly ceded to LightmapTextureAssetExporter, which this
+    /// late-registered override would otherwise preempt.
+    /// </summary>
+    private sealed class PrewarmedTextureExporter : TextureAssetExporter
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<IUnityObjectBase, Task<byte[]?>> _encoded =
+            new(ReferenceEqualityComparer.Instance);
+        private int _hits;
+        private int _misses;
+        private long _decodeTicks;
+        private long _encodeTicks;
+
+        public (int Hits, int Misses) HitStats => (_hits, _misses);
+
+        public PrewarmedTextureExporter(FullConfiguration configuration) : base(configuration)
+        {
+        }
+
+        public override bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
+        {
+            if (asset.MainAsset is AssetRipper.SourceGenerated.Classes.ClassID_1120.ILightingDataAsset)
+            {
+                exportCollection = null;
+                return false;
+            }
+            return base.TryCreateCollection(asset, out exportCollection);
+        }
+
+        public void Prewarm(GameData gameData)
+        {
+            // Exactly the set the export loop will route through this exporter -- the same
+            // MainAsset gate TryCreateCollection applies. Engine/builtin textures (whose
+            // MainAsset stays null; SpriteProcessor skips those collections) are never
+            // exported, so encoding them here would be pure wasted work.
+            // Fire-and-forget per texture: the export loop overlaps its own (sequential,
+            // CPU-light) YAML work with these encodes and only synchronizes per texture at
+            // that texture's own write.
+            foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
+            {
+                if (asset is AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture
+                    && asset.MainAsset is AssetRipper.Processing.Textures.SpriteInformationObject
+                    && texture.CheckAssetIntegrity())
+                {
+                    _encoded[texture] = Task.Run(() => EncodeOne(texture));
+                }
+            }
+        }
+
+        private byte[]? EncodeOne(AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (!AssetRipper.Export.Modules.Textures.TextureConverter.TryConvertToBitmap(
+                    texture, out AssetRipper.Export.Modules.Textures.DirectBitmap bitmap))
+            {
+                return null;
+            }
+            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+            Interlocked.Add(ref _decodeTicks, t1 - t0);
+            using MemoryStream stream = new();
+            bitmap.Save(stream, texture.GetTextureExportFormat(PreferOriginalTextureExtension, ImageExportFormat));
+            Interlocked.Add(ref _encodeTicks, System.Diagnostics.Stopwatch.GetTimestamp() - t1);
+            return stream.ToArray();
+        }
+
+        public void LogStats()
+        {
+            double frequency = System.Diagnostics.Stopwatch.Frequency;
+            Logger.Info(LogCategory.Export,
+                $"[TexPrewarm] decodeSum={_decodeTicks * 1000.0 / frequency:F0}ms " +
+                $"encodeSum={_encodeTicks * 1000.0 / frequency:F0}ms cores={Environment.ProcessorCount}");
+        }
+
+        public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
+        {
+            if (_encoded.TryRemove(asset, out Task<byte[]?>? pending))
+            {
+                byte[]? bytes = pending.GetAwaiter().GetResult();
+                if (bytes is not null)
+                {
+                    Interlocked.Increment(ref _hits);
+                    fileSystem.File.WriteAllBytes(path, bytes);
+                    return true;
+                }
+            }
+            Interlocked.Increment(ref _misses);
+            return base.Export(container, asset, path, fileSystem);
+        }
     }
 
     /// <summary>
@@ -437,6 +686,65 @@ public static class RipperBlenderBridge
                 }
             }
             Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, metaJson, curves));
+            return _inner.Export(container, asset, path, fileSystem);
+        }
+
+        public void Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback)
+        {
+            Export(container, asset, path, fileSystem);
+            callback?.Invoke(container, asset, path, fileSystem);
+        }
+
+        public bool Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem) =>
+            _inner.Export(container, assets, path, fileSystem);
+
+        public void Export(IExportContainer container, IEnumerable<IUnityObjectBase> assets, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback) =>
+            _inner.Export(container, assets, path, fileSystem, callback);
+
+        public AssetType ToExportType(IUnityObjectBase asset) => _inner.ToExportType(asset);
+
+        public bool ToUnknownExportType(Type type, out AssetType assetType) => _inner.ToUnknownExportType(type, out assetType);
+    }
+
+    /// <summary>
+    /// The mesh counterpart of <see cref="ClipCaptureExporter"/>: same YAML output as the default
+    /// stack (a <see cref="YamlStreamedAssetExportCollection"/>, which restores external stream
+    /// data into VertexData before serializing -- this exporter's Export runs INSIDE that window,
+    /// so <see cref="MeshRawBlob"/> reads the exact bytes the YAML inlines), plus the raw blob
+    /// captured per exported path for the guid join in Partition. A mesh the blob builder declines
+    /// (compressed / channel-less / unresolvable stream) is still exported as YAML alone and the
+    /// host's existing fallback + diagnosis wording applies unchanged.
+    /// </summary>
+    internal sealed class MeshCaptureExporter : IAssetExporter
+    {
+        private readonly YamlStreamedAssetExporter _inner = new();
+
+        /// <summary>(exported file path, blob JSON index, blob payload) per captured Mesh.</summary>
+        public List<(string Path, string MetaJson, byte[] Payload)> Captured { get; } = new();
+
+        public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
+        {
+            exportCollection = new YamlStreamedAssetExportCollection(this, asset);
+            return true;
+        }
+
+        public bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
+        {
+            if (asset is AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh mesh)
+            {
+                try
+                {
+                    (string MetaJson, byte[] Payload)? blob = MeshRawBlob.Build(mesh);
+                    if (blob is not null)
+                    {
+                        Captured.Add((path, blob.Value.MetaJson, blob.Value.Payload));
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Logger.Warning(LogCategory.Export, $"Mesh raw blob failed for '{asset.GetBestName()}': {exception.Message} -- host side falls back to YAML parsing.");
+                }
+            }
             return _inner.Export(container, asset, path, fileSystem);
         }
 
@@ -525,7 +833,8 @@ public static class RipperBlenderBridge
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
         CabTable table, string[] seedCabNames,
-        List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips)
+        List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips,
+        List<(string Path, string MetaJson, byte[] Payload)> capturedMeshes)
     {
         Dictionary<string, byte[]> assets = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> other = new(StringComparer.OrdinalIgnoreCase);
@@ -539,6 +848,9 @@ public static class RipperBlenderBridge
         // CAB's own ContainerPaths entries key into this map directly, no name/identity guessing.
         Dictionary<string, string> pathToGuid = new(StringComparer.OrdinalIgnoreCase);
         UTF8Encoding utf8 = new(false);
+
+        // Root guid -> its normalized export path, feeding the CAB-attribution pass below.
+        List<(string Guid, string NormalizedPath)> rootPaths = new();
 
         foreach ((string path, byte[] bytes) in files)
         {
@@ -569,6 +881,7 @@ public static class RipperBlenderBridge
             if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
             {
                 roots.Add(guid);
+                rootPaths.Add((guid, NormalizeExportPath(path)));
             }
             else if (path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
             {
@@ -581,8 +894,11 @@ public static class RipperBlenderBridge
                 // consumes it.
                 roots.Add(guid);
                 sceneRoots.Add(guid);
+                rootPaths.Add((guid, NormalizeExportPath(path)));
             }
         }
+
+        Dictionary<string, string> rootCabs = BuildRootCabs(table, rootPaths);
 
         Dictionary<string, string> seedRoots = new(StringComparer.Ordinal);
         foreach (string seedCab in seedCabNames)
@@ -661,8 +977,93 @@ public static class RipperBlenderBridge
             }
         }
 
+        // And the mesh raw blobs (see MeshRawBlob) -- the geometry counterpart of the clip fast path.
+        Dictionary<string, string> meshBlobMeta = new(StringComparer.Ordinal);
+        Dictionary<string, byte[]> meshBlobData = new(StringComparer.Ordinal);
+        foreach ((string path, string metaJson, byte[] payload) in capturedMeshes)
+        {
+            string? guid = pathToGuid.GetValueOrDefault(NormalizeExportPath(path));
+            if (guid is not null)
+            {
+                meshBlobMeta[guid] = metaJson;
+                meshBlobData[guid] = payload;
+            }
+        }
+
         return new ClosureResult(assets, other, roots.ToArray(), seedRoots, clipGuidsByCab,
-            sceneRoots.ToArray(), clipCurveMeta, clipCurveData);
+            sceneRoots.ToArray(), clipCurveMeta, clipCurveData, meshBlobMeta, meshBlobData, rootCabs);
+    }
+
+    /// <summary>
+    /// Root guid -> hosting CAB name, through the cabmap's own container-path identity (the same
+    /// join <see cref="ClosureResult.SeedRoots"/> uses, generalized to EVERY root): one parallel
+    /// pass over the path column probing the root paths, plus the non-bundled scene spelling
+    /// ("assets/scenes/&lt;cab&gt;.unity", whose stem IS the cab key). This is what lets a caller
+    /// that resolved a UNION closure (hierarchy rows + clip co-seeds in one call) attribute each
+    /// root to the sub-closure it belongs to, instead of paying a second load+export per group.
+    /// </summary>
+    private static Dictionary<string, string> BuildRootCabs(CabTable table,
+        List<(string Guid, string NormalizedPath)> rootPaths)
+    {
+        Dictionary<string, string> rootCabs = new(StringComparer.Ordinal);
+        if (rootPaths.Count == 0)
+        {
+            return rootCabs;
+        }
+
+        Dictionary<string, List<string>> guidsByPath = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string guid, string normalizedPath) in rootPaths)
+        {
+            // Non-bundled scene: the file name is the cabmap key itself.
+            if (normalizedPath.StartsWith("assets/scenes/", StringComparison.Ordinal)
+                && normalizedPath.EndsWith(".unity", StringComparison.Ordinal))
+            {
+                string stem = Path.GetFileNameWithoutExtension(normalizedPath);
+                if (table.TryGetId(stem, out _))
+                {
+                    rootCabs[guid] = stem;
+                    continue;
+                }
+            }
+            if (!guidsByPath.TryGetValue(normalizedPath, out List<string>? guids))
+            {
+                guidsByPath[normalizedPath] = guids = new List<string>();
+            }
+            guids.Add(guid);
+        }
+        if (guidsByPath.Count == 0)
+        {
+            return rootCabs;
+        }
+
+        System.Collections.Concurrent.ConcurrentDictionary<string, string> pathToCab = new(StringComparer.OrdinalIgnoreCase);
+        Parallel.ForEach(System.Collections.Concurrent.Partitioner.Create(0, table.Count), range =>
+        {
+            (int start, int end) = range;
+            for (int id = start; id < end; id++)
+            {
+                int pathCount = table.ContainerPathCount(id);
+                for (int i = 0; i < pathCount; i++)
+                {
+                    string containerPath = table.ContainerPath(id, i);
+                    if (guidsByPath.ContainsKey(containerPath))
+                    {
+                        pathToCab.TryAdd(containerPath, table.CabName(id));
+                    }
+                }
+            }
+        });
+        foreach ((string path, List<string> guids) in guidsByPath)
+        {
+            if (pathToCab.TryGetValue(path, out string? cab))
+            {
+                foreach (string guid in guids)
+                {
+                    rootCabs[guid] = cab;
+                }
+            }
+        }
+        return rootCabs;
     }
 
     /// <summary>Resolve a per-asset virtual row (asset m_Name + ClassID) to its exported guid: scan the
@@ -830,7 +1231,10 @@ public sealed record ClosureResult(
     IReadOnlyDictionary<string, string[]> ClipGuidsByCab,
     string[] SceneRoots,
     IReadOnlyDictionary<string, string> ClipCurveMeta,
-    IReadOnlyDictionary<string, byte[]> ClipCurveData)
+    IReadOnlyDictionary<string, byte[]> ClipCurveData,
+    IReadOnlyDictionary<string, string> MeshBlobMeta,
+    IReadOnlyDictionary<string, byte[]> MeshBlobData,
+    IReadOnlyDictionary<string, string> RootCabs)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, byte[]>(),
@@ -840,5 +1244,8 @@ public sealed record ClosureResult(
         new Dictionary<string, string[]>(),
         Array.Empty<string>(),
         new Dictionary<string, string>(),
-        new Dictionary<string, byte[]>());
+        new Dictionary<string, byte[]>(),
+        new Dictionary<string, string>(),
+        new Dictionary<string, byte[]>(),
+        new Dictionary<string, string>());
 }

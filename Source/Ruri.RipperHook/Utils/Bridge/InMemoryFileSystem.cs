@@ -16,9 +16,16 @@ public sealed class InMemoryFileSystem : FileSystem
 {
     private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _dirs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    private long _lastCommitTicks;
 
     /// <summary>Every path the exporter wrote, virtual-path keyed, in the order first committed.</summary>
     public IReadOnlyDictionary<string, byte[]> Files => _files;
+
+    /// <summary>Per-commit (path, bytes, ms since the previous commit). The export loop is
+    /// sequential, so the inter-commit gap attributes wall time to the file just written --
+    /// the whole cost-attribution story for "what is Export spending its seconds on".</summary>
+    public List<(string Path, long Bytes, double Ms)> CommitTimeline { get; } = new();
 
     public override InMemoryFileImplementation File { get; }
     public override InMemoryDirectoryImplementation Directory { get; }
@@ -40,6 +47,10 @@ public sealed class InMemoryFileSystem : FileSystem
         {
             _dirs.Add(dir);
         }
+        long now = _clock.ElapsedTicks;
+        CommitTimeline.Add((path, bytes.LongLength,
+            (now - _lastCommitTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency));
+        _lastCommitTicks = now;
     }
 
     public sealed class InMemoryFileImplementation(InMemoryFileSystem fileSystem) : FileImplementation(fileSystem)
