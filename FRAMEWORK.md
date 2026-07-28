@@ -234,7 +234,7 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 
 | 产物 | 格式 | 内容 |
 |---|---|---|
-| **CAB map** `<game>.cabmap` | **RCM5 `0x52434D35`（唯一格式，自包含列式）** | 列式 blob + 偏移表：CAB 名（**按 OrdinalIgnoreCase 排序**，查名走二分、无字典）、**distinct chunk 文件表 + 每 CAB 一个 int 索引**（237k CAB 实际只落 ~40 个 chunk，按行存路径是 231× 冗余）、chunk 条目文件名、AssetBundle Container 可读寻址路径、ClassID[]、int 依赖图。加载 = 单趟顺序流读直入最终数组（无整文件中间缓冲），加载时**顺手转置出反向邻接**（~3ms，`Dependents`/`ReverseClosureIds` 双向依赖查询零构建成本、与正向按构造一致）。`--build-cab-map` 生成：外层多 lane 并行流水 .chk × 内层每 bundle 一 worker，合并按目录枚举序确定性落盘。 |
+| **CAB map** `<game>.cabmap` | **RCM6 `0x52434D36`（唯一格式，自包含列式）** | 列式 blob + 偏移表：CAB 名（**按 OrdinalIgnoreCase 排序**，查名走二分、无字典）、**distinct chunk 文件表 + 每 CAB 一个 int 索引**（237k CAB 实际只落 ~40 个 chunk，按行存路径是 231× 冗余）、chunk 条目文件名、AssetBundle Container 可读寻址路径、ClassID[]、int 依赖图。**base 存绝对游戏根 → map 文件位置无关，放哪/复制到哪行为都等价**（曾因存相对 base，map 一被复制就静默重锚、种子归零）；游戏本体搬家 = 缓存失效，加载时 40 个 chunk 一个都探不到就响亮报错要求重建，绝不静默空结果。加载 = 单趟顺序流读直入最终数组（无整文件中间缓冲），加载时**顺手转置出反向邻接**（~3ms，`Dependents`/`ReverseClosureIds` 双向依赖查询零构建成本、与正向按构造一致）。`--build-cab-map` 生成：外层多 lane 并行流水 .chk × 内层每 bundle 一 worker，合并按目录枚举序确定性落盘。 |
 
 cabmap 是**可重建缓存**：格式一变即 bump magic 整体重建，绝不写多格式兼容 reader（旧 RCM2/3/4 及 `.names`/`--build-name-index` sidecar 机制已全部删除）。
 
