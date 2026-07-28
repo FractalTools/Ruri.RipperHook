@@ -47,8 +47,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="AsmResolver.DotNet" Version="6.0.0-beta.5" />
-		<PackageReference Include="AsmResolver.Symbols.Pdb" Version="6.0.0-beta.5" />
+		<!-- Must match what AssetRipper.AssemblyDumper was compiled against: it is referenced as a
+		     built assembly (below), so a lower pin here resolves at runtime, not at build time. -->
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.1" />
+		<PackageReference Include="AsmResolver.Symbols.Pdb" Version="6.0.1" />
+		<!-- AssemblyDumper's SharedState ctor reads the doc-history file through AssetRipper.DocExtraction,
+		     which binds this version. Referenced explicitly so it lands in the packer's output folder. -->
+		<PackageReference Include="System.Text.Json" Version="11.0.0-preview.6.26359.118" />
 		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

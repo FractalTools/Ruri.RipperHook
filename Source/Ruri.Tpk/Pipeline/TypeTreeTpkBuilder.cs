@@ -185,10 +185,9 @@ internal static class TypeTreeTpkBuilder
     private static TpkTypeTreeBlob BuildLineageBlob(List<Snapshot> chain, int engineCount)
     {
         TpkTypeTreeBlob blob = new();
-        blob.CommonString.Add(UnityVersion.MinVersion, 0);
+        blob.CommonString.Add(UnityVersion.MinVersion, []);
 
-        byte latestCommonStringCount = 0;
-        List<string> commonStrings = new();
+        TpkCommonString.Entry[] latestCommonString = [];
         Dictionary<int, string> latestDumped = new();
         Dictionary<int, TpkClassInformation> classDictionary = new();
 
@@ -202,25 +201,21 @@ internal static class TypeTreeTpkBuilder
             Console.WriteLine($"[Build/Tpk]   [{ordinal}] {snapshot.VersionKey}{(isEngine ? " (engine)" : "")}");
             blob.Versions.Add(key);
 
-            if (info.Strings.Count != latestCommonStringCount)
-            {
-                latestCommonStringCount = checked((byte)info.Strings.Count);
-                blob.CommonString.Add(key, latestCommonStringCount);
-            }
-
+            // The common string is an explicit (byte offset, string) table as of tpk 2: Unity 6.6
+            // stopped laying its strings out so that the offsets could be re-derived from a count,
+            // which is exactly what the format bump was for. The dump gives both halves directly --
+            // UnityString.Index is the offset into Unity's blob -- so a version's table is carried
+            // over verbatim, and only recorded when it actually differs from the version before it.
+            TpkCommonString.Entry[] commonString = new TpkCommonString.Entry[info.Strings.Count];
             for (int i = 0; i < info.Strings.Count; i++)
             {
-                if (i < commonStrings.Count)
-                {
-                    if (info.Strings[i].String != commonStrings[i])
-                    {
-                        throw new Exception($"String inequality at index {i} for {snapshot.VersionKey}");
-                    }
-                }
-                else
-                {
-                    commonStrings.Add(info.Strings[i].String);
-                }
+                UnityString unityString = info.Strings[i];
+                commonString[i] = new TpkCommonString.Entry(checked((ushort)unityString.Index), unityString.String, blob.StringBuffer);
+            }
+            if (!commonString.AsSpan().SequenceEqual(latestCommonString))
+            {
+                latestCommonString = commonString;
+                blob.CommonString.Add(key, commonString);
             }
 
             foreach (UnityClass unityClass in info.Classes)
@@ -283,7 +278,6 @@ internal static class TypeTreeTpkBuilder
         }
 
         blob.ClassInformation.AddRange(classDictionary.Values);
-        blob.CommonString.SetIndices(blob.StringBuffer, commonStrings);
         blob.CreationTime = DateTime.UtcNow;
         return blob;
     }

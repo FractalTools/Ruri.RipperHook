@@ -34,6 +34,19 @@ public static class TypeTreeDatabase
 
     private static readonly object SyncRoot = new();
     private static readonly ConcurrentDictionary<(int ClassID, string Lineage, string Version), TypeTreeNode?> ReleaseRootCache = new();
+    private static readonly ConcurrentDictionary<(int ClassID, string Lineage, string Version), TypeTreeNode?> EditorRootCache = new();
+
+    /// <summary>
+    /// The lineage version the enabled game hook targets, published by
+    /// <c>RipperHookCommon.HookClasses</c>.
+    ///
+    /// Registered classes carry their own version through <c>HookDispatcher</c>, but AssetRipper's
+    /// unknown-class fallback (<c>TypeTreeNodeStruct.TryMakeFromTpk</c>) is reached without any of
+    /// that context -- it only gets a ClassID and the serialized file's engine version, which says
+    /// nothing about which game build produced it. This is where that fallback learns which lineage
+    /// snapshot to read, so it resolves exactly like every other read path instead of guessing.
+    /// </summary>
+    public static TypeTreeVersion ActiveVersion { get; set; }
 
     private static TypeTreeManifest? _manifest;
     private static Dictionary<string, Lineage>? _lineages;
@@ -100,10 +113,27 @@ public static class TypeTreeDatabase
 
         return ReleaseRootCache.GetOrAdd(
             ((int)classID, version.Lineage, version.Version),
-            static key => BuildReleaseRoot(key.ClassID, key.Lineage, key.Version));
+            static key => BuildRoot(key.ClassID, key.Lineage, key.Version, editor: false));
     }
 
-    private static TypeTreeNode? BuildReleaseRoot(int classID, string lineageKey, string versionKey)
+    /// <summary>
+    /// The editor (authoring) tree for the same class, or <see langword="null"/> when the lineage
+    /// carries none -- a game dump describes a build, and a build has no editor-only layout unless
+    /// the snapshot happens to record one.
+    /// </summary>
+    public static TypeTreeNode? GetEditorRoot(ClassIDType classID, TypeTreeVersion version)
+    {
+        if (version.IsEmpty)
+        {
+            return null;
+        }
+
+        return EditorRootCache.GetOrAdd(
+            ((int)classID, version.Lineage, version.Version),
+            static key => BuildRoot(key.ClassID, key.Lineage, key.Version, editor: true));
+    }
+
+    private static TypeTreeNode? BuildRoot(int classID, string lineageKey, string versionKey, bool editor)
     {
         EnsureLoaded();
 
@@ -132,7 +162,14 @@ public static class TypeTreeDatabase
             return null;
         }
 
-        return TypeTreeNode.FromTpk(lineage.Blob.NodeBuffer[unityClass.ReleaseRootNode], lineage.Blob.StringBuffer, lineage.Blob.NodeBuffer);
+        TpkUnityClassFlags required = editor ? TpkUnityClassFlags.HasEditorRootNode : TpkUnityClassFlags.HasReleaseRootNode;
+        if ((unityClass.Flags & required) == 0)
+        {
+            return null;
+        }
+
+        ushort root = editor ? unityClass.EditorRootNode : unityClass.ReleaseRootNode;
+        return TypeTreeNode.FromTpk(lineage.Blob.NodeBuffer[root], lineage.Blob.StringBuffer, lineage.Blob.NodeBuffer);
     }
 
     /// <summary>

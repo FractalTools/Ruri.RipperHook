@@ -26,7 +26,9 @@ internal sealed class Il2CppAsmCommentTransform : IAstTransform
                 Accessor ac => ac.Body,
                 _ => null
             };
-            if (body == null || body.IsNull) continue;
+            // Decompiler 11 removed the null-object pattern (AstNode.Null / IsNull), so an absent body
+            // is now just a null reference.
+            if (body == null) continue;
             if (decl.GetSymbol() is not IMethod method) continue;
 
             string asm = Il2CppAsmLookup.GetDisassembly(method);
@@ -39,12 +41,14 @@ internal sealed class Il2CppAsmCommentTransform : IAstTransform
             {
                 body.Statements.Add(new EmptyStatement());
             }
+            // Decompiler 11 deleted the Role system (Roles.Comment / InsertChildBefore with a role),
+            // and comments are no longer AST children — they attach to a node as leading trivia.
             Statement first = body.Statements.First();
             foreach (string line in asm.Split('\n'))
             {
                 string text = line.TrimEnd('\r', '\t', ' ');
                 if (text.Length == 0) continue; // 跳过反汇编尾部的空行
-                body.InsertChildBefore(first, new Comment(" " + text, CommentType.SingleLine), Roles.Comment);
+                first.AddLeadingTrivia(new Comment(" " + text, CommentType.SingleLine));
             }
         }
     }

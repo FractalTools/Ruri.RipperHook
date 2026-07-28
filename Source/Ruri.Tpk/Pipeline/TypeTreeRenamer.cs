@@ -35,10 +35,11 @@ internal static class TypeTreeRenamer
 
         PrepareSharedStateWorkingDirectory();
 
+        // The common string is no longer passed separately -- as of tpk 2 it travels inside the blob
+        // bytes, which SharedState keeps opaque (it only stores them for Pass557 to embed).
         SharedState.Initialize(
             blob.Versions.ToArray(),
             classes,
-            UniversalCommonString.FromBlob(blob),
             TpkFile.FromBlob(blob, TpkCompressionType.Brotli).WriteToMemory());
 
         Pass002_RenameSubnodes.DoPass();
@@ -93,11 +94,17 @@ internal static class TypeTreeRenamer
         result.Versions.AddRange(source.Versions);
         result.CreationTime = source.CreationTime;
 
-        foreach (KeyValuePair<UnityVersion, byte> pair in source.CommonString.VersionInformation)
+        // Entry.String indexes the string buffer it was built against, and this is a fresh blob with a
+        // fresh buffer, so each entry is re-added by value rather than copied by index.
+        foreach (KeyValuePair<UnityVersion, TpkCommonString.Entry[]> pair in source.CommonString.VersionInformation)
         {
-            result.CommonString.Add(pair.Key, pair.Value);
+            TpkCommonString.Entry[] entries = new TpkCommonString.Entry[pair.Value.Length];
+            for (int i = 0; i < entries.Length; i++)
+            {
+                entries[i] = new TpkCommonString.Entry(pair.Value[i].Offset, source.StringBuffer[pair.Value[i].String], result.StringBuffer);
+            }
+            result.CommonString.Add(pair.Key, entries);
         }
-        result.CommonString.SetIndices(result.StringBuffer, source.CommonString.GetStrings(source.StringBuffer).ToList());
 
         foreach (TpkClassInformation sourceClassInformation in source.ClassInformation)
         {

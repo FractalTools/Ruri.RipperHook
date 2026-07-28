@@ -26,6 +26,10 @@ internal sealed class Il2CppTypeModel
     private static Il2CppTypeModel _cached;
     private static ApplicationAnalysisContext _cachedApp;
 
+    // Cpp2IL 1.0.8 moved ResolveIl2CppType off AssemblyAnalysisContext onto the application context,
+    // so the model keeps the app it was built for rather than reaching through a declaring assembly.
+    private readonly ApplicationAnalysisContext _app;
+
     private readonly Dictionary<Il2CppTypeDefinition, TypeAnalysisContext> _byDefinition = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _instanceFields = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
@@ -91,6 +95,7 @@ internal sealed class Il2CppTypeModel
 
     private Il2CppTypeModel(ApplicationAnalysisContext app)
     {
+        _app = app;
         foreach (AssemblyAnalysisContext assembly in app.Assemblies)
         {
             foreach (TypeAnalysisContext type in assembly.Types)
@@ -553,14 +558,14 @@ internal sealed class Il2CppTypeModel
                                     int take = rawParams.Length < 4 ? rawParams.Length : 4;
                                     TypeAnalysisContext[] resolvedParams = new TypeAnalysisContext[take];
                                     for (int p = 0; p < take; p++)
-                                        resolvedParams[p] = rawParams[p] != null ? type.DeclaringAssembly.ResolveIl2CppType(rawParams[p]) : null;
+                                        resolvedParams[p] = rawParams[p] != null ? _app.ResolveIl2CppType(rawParams[p]) : null;
                                     paramTypes[i] = resolvedParams;
                                 }
                             }
                             catch { }
                             if (method.RawReturnType != null)
                             {
-                                TypeAnalysisContext resolved = type.DeclaringAssembly.ResolveIl2CppType(method.RawReturnType);
+                                TypeAnalysisContext resolved = _app.ResolveIl2CppType(method.RawReturnType);
                                 kinds[i] = ClassifyReturn(resolved);
                                 if (resolved != null && !resolved.IsValueType)
                                     returns[i] = resolved; // only reference returns are useful for chaining

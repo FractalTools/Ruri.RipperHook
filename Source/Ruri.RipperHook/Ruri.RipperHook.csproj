@@ -29,12 +29,19 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="AsmResolver.DotNet" Version="6.0.0-beta.5" />
-		<PackageReference Include="AsmResolver.PE.File" Version="6.0.0-beta.5" />
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.1" />
+		<PackageReference Include="AsmResolver.PE.File" Version="6.0.1" />
 		<PackageReference Include="AssetRipper.Checksum" Version="1.1.0" />
+		<!-- Pins the whole graph to the tpk container format the packer writes. AssetRipper's own
+		     projects still ask for 1.2.0 while its AssemblyDumper is already on 2.0.0; NuGet resolves
+		     to the highest, and declaring it here rather than editing the submodule keeps AssetRipper
+		     at a pristine upstream checkout. The two payloads that the published SourceGenerated
+		     package froze at format 1 are served from our own files instead: see TypeTreeFallbackHook
+		     and EngineAssetsTpkHook. -->
+		<PackageReference Include="AssetRipper.Tpk" Version="2.0.0" />
 		<!-- IL2CPP native-method disassembly (AR_Il2CppMethodDump). Same versions AssetRipper.Import / .Export pull. -->
-		<PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.1" />
-		<PackageReference Include="AssetRipper.ICSharpCode.Decompiler" Version="10.1.0.8388" />
+		<PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.8" />
+		<PackageReference Include="AssetRipper.ICSharpCode.Decompiler" Version="11.0.0.9209-preview1" />
 		<!-- Real Iced (x86 decode for the loc_ listing). Aliased: MonoMod.Iced (via MonoMod.RuntimeDetour) also exposes Iced.Intel. -->
 		<PackageReference Include="Iced" Version="1.21.0" Aliases="icedreal" />
 		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
@@ -74,6 +81,16 @@
 	<ItemGroup Condition="'$(PureRelease)' != 'true'">
 		<EmbeddedResource Include="AssetRipperGameHook\TypeTree\RuriTypeTree.tpk">
 			<LogicalName>RuriTypeTree.tpk</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<!-- Unity's built-in engine resources, straight from the Tpk repo's own CI (the same artifact
+	     AssetRipper.AssemblyDumper.Downloader fetches). It replaces the copy frozen into the published
+	     AssetRipper.SourceGenerated package, which is stale enough to predate the current container
+	     format. Not game-specific, so it survives PureRelease. See EngineAssetsTpkHook. -->
+	<ItemGroup>
+		<EmbeddedResource Include="AssetRipperHook\EngineAssets\EngineAssets.tpk">
+			<LogicalName>EngineAssets.tpk</LogicalName>
 		</EmbeddedResource>
 	</ItemGroup>
 

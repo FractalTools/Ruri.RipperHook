@@ -141,6 +141,12 @@ public abstract class RipperHookCommon : RuriHook
 
         UnityVersion lookupVersion = TypeTreeDatabase.GetEngineVersion(targetVersion);
 
+        // Classes hooked below carry their version through HookDispatcher, but AssetRipper's
+        // unknown-class fallback is reached without that context -- publish it for the fallback.
+        TypeTreeDatabase.ActiveVersion = targetVersion;
+        RegisterModule(new HookUtils.TypeTreeFallbackHook.TypeTreeFallbackHook());
+        RegisterModule(new AR.EngineAssetsTpkHook());
+
         var universalDestMethod = typeof(HookDispatcher).GetMethod(nameof(HookDispatcher.Universal_ReadRelease), BindingFlags.Public | BindingFlags.Static);
         if (universalDestMethod == null) throw new Exception("Universal_ReadRelease missing");
 
