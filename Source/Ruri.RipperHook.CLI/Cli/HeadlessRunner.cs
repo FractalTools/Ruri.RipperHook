@@ -131,7 +131,13 @@ internal static class HeadlessRunner
                 };
                 CabClosure closure = selection.Resolve(table);
                 loadFilterFileNames = closure.LoadFilterFileNames;
-                paths = closure.Files;
+                // 闭包只含 CAB 分块;IL2CPP 的 GameAssembly.dll 与 global-metadata.dat 不是 CAB,
+                // 直接替换 paths 会把它们丢掉 —— 没有它们 AR 拿不到脚本字段布局,
+                // MonoBehaviour 会全部导成空壳(m_EditorClassIdentifier 之后什么都没有)。
+                List<string> il2cpp = CollectIl2CppPaths(options.LoadPaths);
+                paths = [.. closure.Files, .. il2cpp];
+                Console.Error.WriteLine($"[Ruri.CLI] il2cpp inputs appended: {il2cpp.Count}"
+                    + (il2cpp.Count > 0 ? $" ({string.Join(", ", il2cpp)})" : string.Empty));
                 Console.Error.WriteLine(
                     $"[Ruri.CLI] cab-map: {options.Names.Length} name(s) + {options.LoadTypes.Length} type(s)"
                     + $"{(selection.FileScopes.Length > 0 ? $" scoped to {selection.FileScopes.Length} path(s)" : string.Empty)}"
@@ -324,6 +330,34 @@ internal static class HeadlessRunner
             }
         }
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// From each --load root, pick out the IL2CPP script-metadata inputs: <c>GameAssembly.dll</c> and
+    /// <c>*_Data/il2cpp_data/Metadata/global-metadata.dat</c>. These are not CABs, so a CABMap closure
+    /// never contains them — yet without them AssetRipper has no field layouts and every MonoBehaviour
+    /// exports as an empty stub. Appending them keeps scoped loads cheap while restoring script data.
+    /// </summary>
+    private static List<string> CollectIl2CppPaths(string[] loadPaths)
+    {
+        var result = new List<string>();
+        foreach (string raw in loadPaths)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            string root = Directory.Exists(raw) ? raw : Path.GetDirectoryName(Path.GetFullPath(raw)) ?? string.Empty;
+            if (root.Length == 0) continue;
+
+            // 必须交**游戏根目录**,不能只交 GameAssembly.dll + global-metadata.dat 两个散文件:
+            // AssetRipper 靠 "<name>_Data 目录 + 同级 GameAssembly.dll" 做平台探测才会启用 IL2CPP 解析;
+            // 散文件只会被认成普通输入(日志里 dll "has been found" 但程序集一个都不落盘)。
+            string assembly = Path.Combine(root, "GameAssembly.dll");
+            bool hasDataDir = Directory.Exists(root) && Directory.GetDirectories(root, "*_Data").Length > 0;
+            if (File.Exists(assembly) && hasDataDir && !result.Contains(root))
+            {
+                result.Add(root);
+            }
+        }
+        return result;
     }
 
     private static HashSet<int> ResolveTypes(string[] typeNames)
