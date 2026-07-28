@@ -17,6 +17,13 @@
 	     the two sides could drift apart on. -->
 	<ItemGroup>
 		<Compile Include="..\Ruri.RipperHook\Core\VersionKey.cs" Link="Contract\VersionKey.cs" />
+		<!-- The dump root's directory names ARE these enum values, and a generated hook has to name a
+		     real GameType, so both are linked rather than mirrored into a lookup that could drift. -->
+		<Compile Include="..\Ruri.RipperHook\Core\CustomEngineType.cs" Link="Contract\CustomEngineType.cs" />
+		<Compile Include="..\Ruri.RipperHook\Core\GameType.cs" Link="Contract\GameType.cs" />
+		<!-- Capture paths are matched against the SANITIZED node names the runtime builds, so the drift
+		     pass has to speak the same vocabulary instead of the raw dump's. -->
+		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeNameFixer.cs" Link="Contract\TypeTreeNameFixer.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeManifest.cs" Link="Contract\TypeTreeManifest.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeOrdinal.cs" Link="Contract\TypeTreeOrdinal.cs" />
 	</ItemGroup>

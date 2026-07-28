@@ -28,12 +28,33 @@ internal static class Program
         var sw = Stopwatch.StartNew();
         try
         {
+            // --drift does not pack anything: it diffs the same dumps against the closest OFFICIAL
+            // Unity trees (fetched from AssetRipper/TypeTreeDumps into memory, never cached to disk)
+            // and reports every place the fork deviates -- i.e. every place a hook is or should be.
+            bool drift = args.Length > 0 && args[0] is "--drift";
+            if (drift)
+            {
+                args = args[1..];
+            }
+
             if (args.Length > 2)
             {
-                throw new ArgumentException("Usage: Ruri.Tpk [<TypeTree dump root>] [<output .tpk path>]");
+                throw new ArgumentException("Usage: Ruri.Tpk [--drift] [<TypeTree dump root>] [<output path>]");
             }
 
             string dumpRoot = ResolveDumpRoot(args.Length > 0 ? args[0] : DefaultDumpRoot);
+
+            if (drift)
+            {
+                string reportDirectory = args.Length > 1
+                    ? Path.GetFullPath(args[1])
+                    : Path.Combine(AppContext.BaseDirectory, "drift");
+                Console.WriteLine($"[Drift] dumpRoot={dumpRoot}");
+                Console.WriteLine($"[Drift] output={reportDirectory}");
+                TypeTreeDrift.Run(dumpRoot, reportDirectory);
+                return 0;
+            }
+
             string outputPath = args.Length > 1 ? Path.GetFullPath(args[1]) : DefaultOutputPath();
 
             Console.WriteLine($"[Build] dumpRoot={dumpRoot}");
@@ -62,7 +83,7 @@ internal static class Program
     /// so it is versioned and embedded with them rather than sitting loose in the core project.
     /// </summary>
     private static string DefaultOutputPath() =>
-        Path.Combine(LocateRepoRoot(), "Source", "Ruri.RipperHook", "AssetRipperGameHook", "TypeTree", TpkFileName);
+        Path.Combine(RepoLayout.HookSourceRoot, "TypeTree", TpkFileName);
 
     private static string ResolveDumpRoot(string path)
     {
@@ -78,19 +99,5 @@ internal static class Program
         }
 
         return fullPath;
-    }
-
-    private static string LocateRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Directory.Build.props")) &&
-                Directory.Exists(Path.Combine(dir.FullName, "AssetRipper")) &&
-                Directory.Exists(Path.Combine(dir.FullName, "Source")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
     }
 }
