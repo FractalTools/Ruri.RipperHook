@@ -62,6 +62,35 @@ internal static class HeadlessRunner
         // these bundles out of the (possibly 161k-bundle) chunks.
         HashSet<string>? loadFilterFileNames = null;
 
+        // 原始 VFS 转储:只碰 VFS 层,不进 AssetRipper 的装载流程,做完即退。
+        if (options.DumpVfsPath is { Length: > 0 } dumpVfsPath)
+        {
+            if (options.LoadPaths.Length == 0 || !Directory.Exists(Path.Combine(options.LoadPaths[0], "Endfield_Data")))
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, "--dump-vfs needs --load <gameRoot> (the directory containing Endfield_Data).");
+                return 1;
+            }
+            try
+            {
+                Directory.CreateDirectory(dumpVfsPath);
+                (int matched, SortedDictionary<string, int> blockTypes) =
+                    VfsDumper.Dump(options.LoadPaths[0], dumpVfsPath, options.Names,
+                        options.VfsTypes.Length > 0 ? options.VfsTypes : null);
+                Console.WriteLine($"VFS 文件类型直方图({blockTypes.Count} 种):");
+                foreach ((string blockType, int count) in blockTypes)
+                {
+                    Console.WriteLine($"  {count,8}  {blockType}");
+                }
+                Console.WriteLine($"匹配并落盘 {matched} 个 → {dumpVfsPath}");
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                EmitJson(SummaryStatus.Error, options, 0, new(), 0, [], null, $"--dump-vfs failed: {exception.Message}");
+                return 1;
+            }
+        }
+
         // Scene-map export: --load[0] is the game install root (VFS-root derivation only, never a load
         // seed); the load set is the placement closure the resolver computes. Exclusive with the generic
         // cab-map seed expansion below — the manifest is written after a successful export.

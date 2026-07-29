@@ -69,6 +69,12 @@ internal sealed class CliOptions
     /// VFS-game <c>--hook</c>.
     /// </summary>
     public string? ExportSceneMap { get; init; }
+
+    /// <summary>转储原始 VFS 文件的目标目录。非 bundle 的战斗表就住在这层,AssetRipper 看不到它们。</summary>
+    public string? DumpVfsPath { get; init; }
+
+    /// <summary>--dump-vfs 的块类型过滤(VFS 自己的分类,与 AR 的 ClassID 无关)。</summary>
+    public string[] VfsTypes { get; init; } = [];
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -88,6 +94,10 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string[]> LoadTypes { get; }
     public Option<string?> ExportGlb { get; }
     public Option<string?> ExportScene { get; }
+
+    public Option<string?> DumpVfs { get; }
+
+    public Option<string[]> VfsTypesOption { get; }
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -151,6 +161,11 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
         ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
+        DumpVfs = new Option<string?>("--dump-vfs", "Dump raw VFS files (including non-bundle payloads AssetRipper never sees) into this directory and exit. --names filters by file name; needs --load <gameRoot> and a VFS-game --hook.");
+        VfsTypesOption = new Option<string[]>("--vfs-types", "With --dump-vfs, keep only these VFS block types (e.g. Table JsonData Lua). These are VFS categories, not AssetRipper ClassIDs.")
+        {
+            AllowMultipleArgumentsPerToken = true,
+        };
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -174,6 +189,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes,
             ExportGlb,
             ExportScene,
+            DumpVfs,
+            VfsTypesOption,
             Passthrough,
         };
         return root;
@@ -199,6 +216,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             ExportGlbPath = pr.GetValueForOption(ExportGlb),
             ExportSceneMap = pr.GetValueForOption(ExportScene),
+            DumpVfsPath = pr.GetValueForOption(DumpVfs),
+            VfsTypes = pr.GetValueForOption(VfsTypesOption) ?? [],
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }
