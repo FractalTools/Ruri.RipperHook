@@ -156,11 +156,24 @@ namespace Ruri.Hook.Utils
                         }
                     }
                     ilCursor.Emit(OpCodes.Call, targetMethod);
-                    if (isReturn)
+                    if (isReturn && targetMethod.ReturnType == typeof(bool) && srcMethod.ReturnType == typeof(void))
+                    {
+                        // 条件前缀:钩子返回 true 表示"我处理完了",立即 ret;false 落回原方法。
+                        // 用于只想拦截部分调用的场合(拦不到的分支原样走原实现,不必复刻其全部逻辑)。
+                        var resume = ilCursor.DefineLabel();
+                        ilCursor.Emit(OpCodes.Brfalse, resume);
+                        ilCursor.Emit(OpCodes.Ret);
+                        ilCursor.MarkLabel(resume);
+                    }
+                    else if (isReturn)
                     {
                         ilCursor.Emit(OpCodes.Ret);
                     }
-                    ilCursor.SearchTarget = SearchTarget.Next; 
+                    else if (targetMethod.ReturnType != typeof(void))
+                    {
+                        ilCursor.Emit(OpCodes.Pop); // 非返回式前缀:丢弃钩子返回值,保持求值栈平衡
+                    }
+                    ilCursor.SearchTarget = SearchTarget.Next;
                 };
 
                 if (!isBefore) 

@@ -42,6 +42,8 @@ internal static class Program
             config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
             config.Save(configPath);
         }
+        // 不做成开关:关掉它含 [SerializeReference] 的 MonoBehaviour 就导成空壳,那是错的产物不是可选行为。
+        config.EnabledHooks.Add("AR_SerializeReference_");
         // Module settings load BEFORE hooks fire so any hook-side static
         // accessor (ShaderDecompilerSettingsAccess.Current) sees the
         // persisted value at first read.
