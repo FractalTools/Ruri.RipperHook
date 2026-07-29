@@ -16,6 +16,7 @@ using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Shaders;
 using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 using CUE4Parse.UE4.Assets.Exports.Texture;
@@ -301,6 +302,24 @@ public static class HeadlessShaderExportRunner
                         // 会恒得 0。把格式记下来,才能区分"通道本就不存在"与"解码丢了通道"。
                         log($"[Headless] --export-asset: wrote texture {export.Name} " +
                             $"({texture.Format}, {decoded.Width}x{decoded.Height}{(slices > 1 ? $" 条带×{slices}" : "")}) -> {texturePath}");
+                        continue;
+                    }
+
+                    // MaterialParameterCollection: CUE4Parse's generic Exporter doesn't handle it
+                    // either, so it was silently counted as "skipped-unsupported". The shader side
+                    // needs it badly — UE names the MPC constant buffer after the collection's GUID
+                    // (`MaterialCollection<GUID>_Stripped_0`), and leaving that buffer zeroed makes
+                    // any material reading a direction from it normalize a zero vector:
+                    // rsqrt(0) = +Inf, Inf * 0 = NaN, and the NaN rides the chain down to a clamped
+                    // 0 — measured on S0004's fur, which rendered pure black because of exactly this.
+                    // Dump the raw properties plus the GUID so the consumer can match buffer to asset.
+                    if (export.ExportType is "MaterialParameterCollection")
+                    {
+                        Directory.CreateDirectory(outDir.FullName);
+                        string mpcPath = Path.Combine(outDir.FullName, export.Name + ".json");
+                        File.WriteAllText(mpcPath, JsonConvert.SerializeObject(export, Formatting.Indented));
+                        result.ExportsWritten++;
+                        log($"[Headless] --export-asset: wrote MaterialParameterCollection {export.Name} -> {mpcPath}");
                         continue;
                     }
 
