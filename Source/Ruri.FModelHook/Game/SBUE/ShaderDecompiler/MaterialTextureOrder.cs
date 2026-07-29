@@ -24,7 +24,18 @@ internal static class MaterialTextureOrder
 {
     public static List<string> Extract(JsonElement uniformExpressionSet)
     {
+        return Extract(uniformExpressionSet, out _);
+    }
+
+    /// <summary>
+    /// 同上,外加与返回表同序的**桶号**(0=Standard2D 1=Cube 2=Array2D 3=ArrayCube 4=Volume 5=Virtual)。
+    /// 消费侧靠它把 UES 项与 HLSL 字段**按类型**配对:<c>Texture2D</c> 字段只能吃 Standard2D 桶。
+    /// 少这条约束会跨桶错配 —— 实测裙料 t14 那个 Texture2D 拿到了数组桶的 Fabric_NArray。
+    /// </summary>
+    public static List<string> Extract(JsonElement uniformExpressionSet, out List<int> bucketIndices)
+    {
         var names = new List<string>();
+        bucketIndices = new List<int>();
         if (uniformExpressionSet.ValueKind != JsonValueKind.Object) return names;
         if (!uniformExpressionSet.TryGetProperty("UniformTextureParameters", out JsonElement buckets)
             || buckets.ValueKind != JsonValueKind.Array)
@@ -32,13 +43,16 @@ internal static class MaterialTextureOrder
             return names;
         }
 
+        int bucketIndex = -1;
         foreach (JsonElement bucket in buckets.EnumerateArray())
         {
+            bucketIndex++;
             if (bucket.ValueKind != JsonValueKind.Array) continue;
             foreach (JsonElement entry in bucket.EnumerateArray())
             {
                 if (entry.ValueKind != JsonValueKind.Object) continue;
                 names.Add(ReadName(entry) ?? $"Texture_{names.Count}");
+                bucketIndices.Add(bucketIndex);
             }
         }
         return names;

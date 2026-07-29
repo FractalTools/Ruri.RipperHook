@@ -249,6 +249,7 @@ internal static class Pass200_EmitShaderLabFiles
             // pipeline ran without a UnifiedShaderMetadata.json.
             PropertiesBlock = map.PropertiesBlock,
             MaterialTextureOrder = new List<string>(map.MaterialTextureOrder),
+            MaterialTextureBuckets = new List<int>(map.MaterialTextureBuckets),
             MaterialCbufferValues = new Dictionary<string, string>(map.MaterialCbufferValues, StringComparer.Ordinal),
             MaterialCbufferOffsets = new Dictionary<string, int>(map.MaterialCbufferOffsets, StringComparer.Ordinal),
             MaterialCbufferPrograms = new Dictionary<string, string>(map.MaterialCbufferPrograms, StringComparer.Ordinal),
@@ -393,7 +394,9 @@ internal static class Pass200_EmitShaderLabFiles
             sb.AppendLine("    // MaterialTextureOrder:");
             for (int i = 0; i < metadata.MaterialTextureOrder.Count; i++)
             {
-                sb.AppendLine($"    //   [{i}] {metadata.MaterialTextureOrder[i]}");
+                // 带上桶号:消费侧要靠它把 UES 项与 HLSL 字段按类型配对,否则会跨桶错配。
+                string bucket = i < metadata.MaterialTextureBuckets.Count ? $" bucket={metadata.MaterialTextureBuckets[i]}" : "";
+                sb.AppendLine($"    //   [{i}] {metadata.MaterialTextureOrder[i]}{bucket}");
             }
         }
         WriteMaterialCbufferValues(sb, metadata);
@@ -1639,6 +1642,9 @@ internal static class Pass200_EmitShaderLabFiles
         /// 匿名槽,对齐必然猜错,整层纱因此渲成黑)。这张表是无歧义的权威顺序。
         /// </summary>
         public List<string> MaterialTextureOrder { get; set; } = new();
+
+        /// <summary>与 MaterialTextureOrder 同序的桶号,消费侧据此按类型配对。</summary>
+        public List<int> MaterialTextureBuckets { get; set; } = new();
 
         /// <summary>
         /// <c>Material</c> cbuffer 每个成员**实算出来的值**(成员名 → 逗号分隔的分量)。

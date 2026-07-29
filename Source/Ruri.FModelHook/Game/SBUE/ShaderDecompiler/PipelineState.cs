@@ -219,6 +219,9 @@ internal sealed class ShaderMapInfo
     /// </summary>
     public List<string> MaterialTextureOrder { get; set; } = new();
 
+    /// <summary>与 <see cref="MaterialTextureOrder"/> 同序的桶号,消费侧据此按类型配对。</summary>
+    public List<int> MaterialTextureBuckets { get; set; } = new();
+
     /// <summary>
     /// <c>Material</c> cbuffer 每个成员的**实算值**(成员名 → 逗号分隔分量)。
     /// 在 Pass170 里与 Properties / 贴图声明序**用同一个 asset 的同一份 UES**产出 ——

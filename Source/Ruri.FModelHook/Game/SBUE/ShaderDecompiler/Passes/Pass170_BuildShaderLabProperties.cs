@@ -73,7 +73,8 @@ internal static class Pass170_BuildShaderLabProperties
                 // 每份 UES 的 PreshaderBuffer 布局不同,不指名就会拿到别人的布局。
                 System.Text.Json.JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset, shaderMapHash: map.ShaderMapHash);
                 if (ues == null) continue;
-                map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(ues.Value));
+                map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(ues.Value, out List<int> textureBuckets));
+                map.MaterialTextureBuckets = textureBuckets;
 
                 // cbuffer 成员的**实算值**必须在**这里**产出:与 Properties / 贴图声明序用的是
                 // **同一个 asset 的同一份 UES**。之前是让 cbuffer 读取器写进一张全局字典、
