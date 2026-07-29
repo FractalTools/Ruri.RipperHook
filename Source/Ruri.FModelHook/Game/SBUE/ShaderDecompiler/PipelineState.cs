@@ -218,6 +218,31 @@ internal sealed class ShaderMapInfo
     /// 消费端把 HLSL 匿名贴图槽对回参数名时,只有那一份表会产生大量歧义。
     /// </summary>
     public List<string> MaterialTextureOrder { get; set; } = new();
+
+    /// <summary>
+    /// <c>Material</c> cbuffer 每个成员的**实算值**(成员名 → 逗号分隔分量)。
+    /// 在 Pass170 里与 Properties / 贴图声明序**用同一个 asset 的同一份 UES**产出 ——
+    /// 之前走全局字典 + 按 PrimaryName 匹配,两边材质身份对不上,值表会静默整块缺失。
+    /// </summary>
+    public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>成员名 → 它在 cbuffer 里的字节偏移。preshader 段按 float4 数组声明后,
+    /// 消费侧要靠 (寄存器, 分量) = (offset/16, offset%16/4) 才能把值填进数组。</summary>
+    public Dictionary<string, int> MaterialCbufferOffsets { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 成员名 → 它的**运算程序**(S 表达式)。值是"按这份 UES 的参数缺省算出的一个数",
+    /// 程序才是算法本身;消费侧渲染的材质实例覆盖了参数时,得拿程序重算。
+    /// 见 <c>MaterialConstantBufferReader.EvaluatedCbufferPrograms</c>。
+    /// </summary>
+    public Dictionary<string, string> MaterialCbufferPrograms { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 导出侧求值时**实际用的那套参数值**(参数原名 → 4 分量)。消费侧拿它跑一遍程序、
+    /// 能复现导出值,才敢改用自己实例的参数重算 —— 见
+    /// <c>MaterialConstantBufferReader.EvaluatedCbufferParams</c>。
+    /// </summary>
+    public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
     // Pre-rendered SubShader-level Tags + Pass-level render-state lines —
     // populated by Pass175 from the primary asset's RenderState UProperty
     // bag (see UnifiedMaterialMetadata.RenderState). Two outputs:

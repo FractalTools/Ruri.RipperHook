@@ -327,7 +327,11 @@ internal static class Pass180_PrepareShaderBinaries
 
         // Pick the best symbol source for this shader's material(s).
         bool hadUsage = state.UsageByShaderIndex.TryGetValue(shaderIndex, out HashSet<string>? usedBy) && usedBy.Count > 0;
-        MaterialSymbolSource? bestSource = hadUsage ? ResolveBestSymbolSource(state, usedBy!, entry.Frequency) : null;
+        // 传本容器的 shader-map 哈希:一个材质编了多份 shader map,每份的 UES 布局不同,
+        // 不指名就会拿到别人那份(见 MaterialSymbolReaders.SelectUniformExpressionSet)。
+        MaterialSymbolSource? bestSource = hadUsage
+            ? ResolveBestSymbolSource(state, usedBy!, entry.Frequency, container?.ShaderMapHash)
+            : null;
 
         if (hadUsage && bestSource == null)
         {
@@ -500,7 +504,7 @@ internal static class Pass180_PrepareShaderBinaries
         };
     }
 
-    private static MaterialSymbolSource? ResolveBestSymbolSource(PipelineState state, HashSet<string> usedBy, byte frequency)
+    private static MaterialSymbolSource? ResolveBestSymbolSource(PipelineState state, HashSet<string> usedBy, byte frequency, string? shaderMapHash)
     {
         string shaderPlatform = frequency switch
         {
@@ -510,7 +514,7 @@ internal static class Pass180_PrepareShaderBinaries
 
         foreach (string material in usedBy)
         {
-            MaterialSymbolSource? candidate = state.UnifiedMaterialReader?.GetSource(material, shaderPlatform)
+            MaterialSymbolSource? candidate = state.UnifiedMaterialReader?.GetSource(material, shaderPlatform, shaderMapHash)
                                             ?? state.MaterialJsonSymbolReader?.GetSource(material, shaderPlatform);
             // UnifiedMaterialReader's source doesn't carry MaterialCollection<i>
             // cbuffers (unified metadata strips ParameterCollectionInfos to keep

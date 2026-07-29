@@ -427,7 +427,11 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    public JsonElement? TryGetUniformExpressionSet(string materialPath, string? shaderPlatform = null)
+    /// <param name="shaderMapHash">
+    /// 正在解码的容器的库哈希(<c>ShaderMapInfo.ShaderMapHash</c>)。传进来才能挑到
+    /// **这份 shader map 自己那一份** UES —— 详见 <see cref="SelectUniformExpressionSet"/>。
+    /// </param>
+    public JsonElement? TryGetUniformExpressionSet(string materialPath, string? shaderPlatform = null, string? shaderMapHash = null)
     {
         if (!HasSource)
         {
@@ -440,7 +444,7 @@ internal sealed class UnifiedMaterialReader
             return null;
         }
 
-        return SelectUniformExpressionSet(materialEntry, shaderPlatform);
+        return SelectUniformExpressionSet(materialEntry, shaderPlatform, shaderMapHash);
     }
 
     // Iterates every (libraryShaderMapHash, ParameterMapInfo-by-ResourceIndex)
@@ -595,7 +599,12 @@ internal sealed class UnifiedMaterialReader
         return renderState.Clone();
     }
 
-    public MaterialSymbolSource? GetSource(string materialPath, string? shaderPlatform = null)
+    /// <param name="shaderMapHash">
+    /// 正在解码的容器的库哈希(<c>ShaderMapInfo.ShaderMapHash</c>)。缓存键**必须**带上它 ——
+    /// 同一个材质在不同 shader map 下的 cbuffer 布局本来就不同,共用一份缓存等于把 A 的布局
+    /// 发给 B。
+    /// </param>
+    public MaterialSymbolSource? GetSource(string materialPath, string? shaderPlatform = null, string? shaderMapHash = null)
     {
         if (!HasSource)
         {
@@ -606,6 +615,11 @@ internal sealed class UnifiedMaterialReader
         string cacheKey = string.IsNullOrWhiteSpace(shaderPlatform)
             ? normalizedPath
             : normalizedPath + "|" + shaderPlatform;
+        if (!string.IsNullOrWhiteSpace(shaderMapHash))
+        {
+            cacheKey += "|" + shaderMapHash;
+        }
+
         if (_cache.TryGetValue(cacheKey, out MaterialSymbolSource? cached))
         {
             return cached;
@@ -621,7 +635,7 @@ internal sealed class UnifiedMaterialReader
         // non-IoStore cooks). When present, this is the gold standard
         // because it carries name + byte-offset + type for every CB
         // member in `Material_m0[N]`.
-        JsonElement? uniformExpressionSet = SelectUniformExpressionSet(materialEntry, shaderPlatform);
+        JsonElement? uniformExpressionSet = SelectUniformExpressionSet(materialEntry, shaderPlatform, shaderMapHash);
         if (uniformExpressionSet.HasValue)
         {
             SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(normalizedPath, shaderPlatform, uniformExpressionSet.Value);
@@ -818,16 +832,45 @@ internal sealed class UnifiedMaterialReader
 
     private static string NormalizeKey(string key) => key.Replace('\\', '/').Trim().TrimStart('/');
 
-    private static JsonElement? SelectUniformExpressionSet(JsonElement materialEntry, string? preferredShaderPlatform)
+    /// <summary>
+    /// 从一个材质的 <c>LoadedShaderMaps</c> 里挑出**这份 shader map 自己那一份**
+    /// <c>UniformExpressionSet</c>。
+    ///
+    /// **判据是 shader map 哈希,不是数组位置、也不是"哪份 preshader 多"。**
+    /// 一个材质会编出多份 shader map(static switch 组合不同 = Unity 语义里的不同变体),
+    /// 每份有自己的 UES,`PreshaderBuffer` 布局互不相同。拿 A 的布局去解 B 的 shader,
+    /// 结果是 cbuffer 成员整体错位 —— 实测皮肤材质因此把 <c>PartIDInt</c>/<c>SubsurfaceProfile</c>
+    /// 错塞进自发光的 lerp 目标色,手臂腿整片发绿(正确布局下那里是 <c>SelectionColor</c>,值为 0)。
+    ///
+    /// <paramref name="targetShaderMapHash"/> = 正在解码的那个容器的库哈希,与
+    /// <c>LoadedShaderMaps[i].ResourceHash</c> 同一个 ID 空间(材质连接桥用的就是这个字段,
+    /// 见 <see cref="EnumerateShaderMapShaders"/> 的注释)。匹配上就是**唯一正确**的那份。
+    /// 匹配不上(哈希没落地)才退回平台 + 覆盖最全的启发式。
+    /// </summary>
+    private static JsonElement? SelectUniformExpressionSet(JsonElement materialEntry, string? preferredShaderPlatform, string? targetShaderMapHash = null)
     {
         if (!materialEntry.TryGetProperty("LoadedShaderMaps", out JsonElement loadedShaderMaps) || loadedShaderMaps.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
+        List<string?> packageHashes = new();
+        if (materialEntry.TryGetProperty("PackageShaderMapHashes", out JsonElement pkgHashes) && pkgHashes.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement h in pkgHashes.EnumerateArray())
+            {
+                packageHashes.Add(h.ValueKind == JsonValueKind.String ? h.GetString() : null);
+            }
+        }
+
         JsonElement? fallback = null;
+        JsonElement? bestMatch = null;
+        int bestMatchCount = -1;
+        int fallbackCount = -1;
+        int mapIndex = -1;
         foreach (JsonElement shaderMap in loadedShaderMaps.EnumerateArray())
         {
+            mapIndex++;
             if (shaderMap.ValueKind != JsonValueKind.Object)
             {
                 continue;
@@ -843,16 +886,129 @@ internal sealed class UnifiedMaterialReader
                 continue;
             }
 
-            string? shaderPlatform = ReadString(shaderMap, "ShaderPlatform");
-            if (!string.IsNullOrWhiteSpace(preferredShaderPlatform) && string.Equals(shaderPlatform, preferredShaderPlatform, StringComparison.OrdinalIgnoreCase))
+            // **精确判据:哈希对上的就是它,直接返回。**
+            // 解析序与 `EnumerateShaderMapShaders` 完全一致(ResourceHash 优先,
+            // PackageShaderMapHashes 位置配对次之,cook 内部哈希兜底)。
+            if (!string.IsNullOrWhiteSpace(targetShaderMapHash))
             {
-                return ues.Clone();
+                string? mapHash = ReadString(shaderMap, "ResourceHash");
+                if (string.IsNullOrWhiteSpace(mapHash))
+                {
+                    mapHash = mapIndex < packageHashes.Count ? packageHashes[mapIndex] : null;
+                }
+
+                if (string.IsNullOrWhiteSpace(mapHash))
+                {
+                    mapHash = ReadString(shaderMap, "CookedShaderMapIdHash") ?? ReadString(shaderMap, "ShaderContentHash");
+                }
+
+                if (!string.IsNullOrWhiteSpace(mapHash)
+                    && mapHash.StartsWith(targetShaderMapHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    HashMatchedSelections++;
+                    return ues.Clone();
+                }
             }
 
-            fallback ??= ues.Clone();
+            string? shaderPlatform = ReadString(shaderMap, "ShaderPlatform");
+            bool platformMatches = !string.IsNullOrWhiteSpace(preferredShaderPlatform)
+                && string.Equals(shaderPlatform, preferredShaderPlatform, StringComparison.OrdinalIgnoreCase);
+
+            // 哈希对不上时的兜底:同一平台里取 preshader 覆盖最全的那份。
+            // 覆盖越全"洞"越少;多出来的尾部寄存器至多是没人读的冗余,而缺覆盖会直接喂错值进着色。
+            // 这只是启发式 —— 它对皮肤材质选对了,对白纱裙 `MI_S0165D_02` 选错过(整只材质被 clip 掉、
+            // 一个片元不出)。所以哈希路径能走就必须走哈希。
+            int preshaderCount = ues.TryGetProperty("UniformPreshaders", out JsonElement preshaderArray)
+                                 && preshaderArray.ValueKind == JsonValueKind.Array
+                ? preshaderArray.GetArrayLength()
+                : 0;
+
+            if (platformMatches)
+            {
+                if (preshaderCount > bestMatchCount)
+                {
+                    bestMatchCount = preshaderCount;
+                    bestMatch = ues.Clone();
+                }
+
+                continue;
+            }
+
+            if (preshaderCount > fallbackCount)
+            {
+                fallbackCount = preshaderCount;
+                fallback = ues.Clone();
+            }
         }
 
-        return fallback;
+        if (bestMatch.HasValue || fallback.HasValue)
+        {
+            HeuristicSelections++;
+        }
+
+        return bestMatch ?? fallback;
+    }
+
+    /// <summary>哈希精确命中的 UES 选取次数。</summary>
+    public static int HashMatchedSelections;
+
+    /// <summary>
+    /// 退回"平台 + 覆盖最全"启发式的次数。**这个数不为 0 就说明还有容器在赌布局** ——
+    /// 它对了是运气,错了就是整只材质被 clip 掉或整片偏色,所以要打出来盯着。
+    /// </summary>
+    public static int HeuristicSelections;
+
+    /// <summary>
+    /// 诊断:列出一个材质的**所有** UES 候选及其 preshader 段大小。
+    ///
+    /// 为什么要看这个:`SelectUniformExpressionSet` 只按 <c>ShaderPlatform</c> 取
+    /// <c>LoadedShaderMaps</c> 里的第一份 —— 而同一 shader map 下不同 permutation
+    /// (静态开关组合不同)的 <c>UniformExpressionSet</c> 可以不同,`PreshaderBuffer` 布局自然也不同。
+    /// 拿 A 的布局去解 B 的 shader,就会出现"某个分量没有任何 preshader 覆盖、shader 却在读它"
+    /// 的矛盾(实测皮肤材质 `PreshaderBuffer[21].w`)。这里把所有候选的
+    /// `UniformPreshaderBufferSize` 打出来,不一致就直接坐实了这个猜测。
+    /// </summary>
+    public IEnumerable<(string ShaderPlatform, int PreshaderBufferSize, int NumPreshaders)>
+        EnumerateUniformExpressionSets(string materialPath)
+    {
+        if (!HasSource) yield break;
+        if (!TryResolveMaterialEntry(materialPath.Replace('\\', '/'), out JsonElement materialEntry)) yield break;
+        if (!materialEntry.TryGetProperty("LoadedShaderMaps", out JsonElement maps) || maps.ValueKind != JsonValueKind.Array) yield break;
+
+        foreach (JsonElement shaderMap in maps.EnumerateArray())
+        {
+            if (shaderMap.ValueKind != JsonValueKind.Object) continue;
+            if (!shaderMap.TryGetProperty("MaterialShaderMapContent", out JsonElement content) || content.ValueKind != JsonValueKind.Object) continue;
+            if (!content.TryGetProperty("UniformExpressionSet", out JsonElement ues) || ues.ValueKind != JsonValueKind.Object) continue;
+
+            int size = ues.TryGetProperty("UniformPreshaderBufferSize", out JsonElement sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt32() : -1;
+            int count = ues.TryGetProperty("UniformPreshaders", out JsonElement pre) && pre.ValueKind == JsonValueKind.Array ? pre.GetArrayLength() : -1;
+
+            // 数值段的两个边界也一起打出来 —— 判"这份 UES 配不配得上这个 shader"要靠它们,
+            // 而不是靠 preshader 条数(那只是覆盖多寡)。
+            //   ConstantBufferSize      = 数值段总字节(UE 侧 FRHIUniformBufferLayout 的字段)
+            //   Resources[0].MemberOffset = 资源段起点,即数值段末尾
+            int cbSize = -1;
+            if (ues.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement ubl) && ubl.ValueKind == JsonValueKind.Object)
+            {
+                if (ubl.TryGetProperty("ConstantBufferSize", out JsonElement cbs) && cbs.ValueKind == JsonValueKind.Number)
+                {
+                    cbSize = cbs.GetInt32();
+                }
+
+                if (ubl.TryGetProperty("Resources", out JsonElement res) && res.ValueKind == JsonValueKind.Array && res.GetArrayLength() > 0
+                    && res[0].TryGetProperty("MemberOffset", out JsonElement mo) && mo.ValueKind == JsonValueKind.Number)
+                {
+                    Console.WriteLine($"    [ues-bounds] cbSize={cbSize} resource0Offset={mo.GetInt32()} preshaderBytes={size * 16}");
+                }
+                else
+                {
+                    Console.WriteLine($"    [ues-bounds] cbSize={cbSize} resource0Offset=<无> preshaderBytes={size * 16}");
+                }
+            }
+
+            yield return (ReadString(shaderMap, "ShaderPlatform") ?? "?", size, count);
+        }
     }
 
     private static string? ReadString(JsonElement element, string propertyName)

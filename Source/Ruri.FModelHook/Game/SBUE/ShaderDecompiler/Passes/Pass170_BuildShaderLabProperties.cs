@@ -69,14 +69,50 @@ internal static class Pass170_BuildShaderLabProperties
             // 数组/立方体桶的参数没有对应项 —— 消费端按声明序对匿名槽时会因此产生歧义。
             foreach (string asset in map.Assets)
             {
-                System.Text.Json.JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset);
+                // **必须带上本容器的 shader-map 哈希**:同一个材质编了多份 shader map,
+                // 每份 UES 的 PreshaderBuffer 布局不同,不指名就会拿到别人的布局。
+                System.Text.Json.JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset, shaderMapHash: map.ShaderMapHash);
                 if (ues == null) continue;
                 map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(ues.Value));
+
+                // cbuffer 成员的**实算值**必须在**这里**产出:与 Properties / 贴图声明序用的是
+                // **同一个 asset 的同一份 UES**。之前是让 cbuffer 读取器写进一张全局字典、
+                // Pass200 再按 `map.PrimaryName` 去匹配 —— 两边的材质身份根本对不上
+                // (实测某容器 PrimaryName 是 `MI_NY0039AHC_01`,而 cbuffer 是按
+                // `MI_MagicalMirror_Template…` 读的),结果整块值表静默缺失,
+                // 消费侧 194 个数值字段只能全靠名字查、51 个查不到 → 材质渲成花的。
+                MaterialConstantBufferReader.Read(ues.Value, asset);
+                if (MaterialConstantBufferReader.EvaluatedCbufferValues.TryGetValue(asset, out var vals))
+                {
+                    map.MaterialCbufferValues = new Dictionary<string, string>(vals, StringComparer.Ordinal);
+                }
+                if (Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG") == "1")
+                {
+                    foreach ((string plat, int size, int count) in state.UnifiedMaterialReader!.EnumerateUniformExpressionSets(asset))
+                    {
+                        state.Log($"    [ues-candidate] {asset} platform={plat} PreshaderBufferSize={size} NumPreshaders={count}");
+                    }
+                }
+                if (MaterialConstantBufferReader.EvaluatedCbufferOffsets.TryGetValue(asset, out var offs))
+                {
+                    map.MaterialCbufferOffsets = new Dictionary<string, int>(offs, StringComparer.Ordinal);
+                }
+                if (MaterialConstantBufferReader.EvaluatedCbufferPrograms.TryGetValue(asset, out var progs))
+                {
+                    map.MaterialCbufferPrograms = new Dictionary<string, string>(progs, StringComparer.Ordinal);
+                }
+                if (MaterialConstantBufferReader.EvaluatedCbufferParams.TryGetValue(asset, out var pars))
+                {
+                    map.MaterialCbufferParams = new Dictionary<string, string>(pars, StringComparer.Ordinal);
+                }
+
                 if (map.MaterialTextureOrder.Count > 0) break;
             }
         }
 
         state.Log($"    Properties: populated {populated}/{state.ShaderMaps.Count} shader-maps.");
+        state.Log($"    UES 选取:哈希精确命中 {UnifiedMaterialReader.HashMatchedSelections} 次,"
+                  + $"退回启发式 {UnifiedMaterialReader.HeuristicSelections} 次(退回的都是在赌 cbuffer 布局)。");
     }
 
     private static string BuildBlockForMap(PipelineState state, ShaderMapInfo map)
@@ -87,7 +123,7 @@ internal static class Pass170_BuildShaderLabProperties
         // them yields the same Property surface.
         foreach (string asset in map.Assets)
         {
-            JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset);
+            JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset, shaderMapHash: map.ShaderMapHash);
             if (!ues.HasValue) continue;
 
             var lines = new List<string>();

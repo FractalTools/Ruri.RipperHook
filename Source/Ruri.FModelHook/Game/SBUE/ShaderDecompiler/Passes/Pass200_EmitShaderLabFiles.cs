@@ -249,7 +249,10 @@ internal static class Pass200_EmitShaderLabFiles
             // pipeline ran without a UnifiedShaderMetadata.json.
             PropertiesBlock = map.PropertiesBlock,
             MaterialTextureOrder = new List<string>(map.MaterialTextureOrder),
-            MaterialCbufferValues = LookupCbufferValues(map),
+            MaterialCbufferValues = new Dictionary<string, string>(map.MaterialCbufferValues, StringComparer.Ordinal),
+            MaterialCbufferOffsets = new Dictionary<string, int>(map.MaterialCbufferOffsets, StringComparer.Ordinal),
+            MaterialCbufferPrograms = new Dictionary<string, string>(map.MaterialCbufferPrograms, StringComparer.Ordinal),
+            MaterialCbufferParams = new Dictionary<string, string>(map.MaterialCbufferParams, StringComparer.Ordinal),
             // Render-state blocks are pre-rendered by Pass 175 from the
             // primary asset's RenderState UProperty bag.
             SubShaderTags = map.SubShaderTags,
@@ -311,10 +314,38 @@ internal static class Pass200_EmitShaderLabFiles
     private static void WriteMaterialCbufferValues(StringBuilder sb, UeShaderLabContainerMetadata metadata)
     {
         if (metadata.MaterialCbufferValues.Count == 0) return;
+        if (metadata.MaterialCbufferParams.Count > 0)
+        {
+            // 上面那些值是用**这套参数**算出来的。消费侧先拿它跑一遍程序、复现得出同样的值,
+            // 才说明两边的求值语义逐条对齐了,这时改用自己实例的参数重算才是安全的。
+            sb.AppendLine("    // MaterialCbufferParams:");
+            foreach (KeyValuePair<string, string> kv in metadata.MaterialCbufferParams.OrderBy(static p => p.Key, StringComparer.Ordinal))
+            {
+                sb.AppendLine($"    //   \"{kv.Key}\" = {kv.Value}");
+            }
+        }
+
         sb.AppendLine("    // MaterialCbufferValues:");
         foreach (KeyValuePair<string, string> kv in metadata.MaterialCbufferValues.OrderBy(static p => p.Key, StringComparer.Ordinal))
         {
-            sb.AppendLine($"    //   {kv.Key} = {kv.Value}");
+            // 带上 (寄存器, 分量):preshader 段按 UE 原样声明成 float4 数组之后,
+            // 消费侧是按下标填数组的,名字只作可读性,定位靠这两个数。
+            // 值之后再挂一段 `:= <程序>` —— 值是"按这份 UES 的参数缺省算出的一个数",
+            // 程序才是算法。消费侧渲染的材质实例改了参数时,得拿程序 + 自己的参数重算,
+            // 否则只能从有损的成员名反推算式(实测头发的 `1 - Retouch Tex Intensity`
+            // 就是这么反推失败、停在缺省值 0,把整头头发压暗 5 倍的)。
+            string program = metadata.MaterialCbufferPrograms.TryGetValue(kv.Key, out string? prog) && !string.IsNullOrEmpty(prog)
+                ? $" := {prog}"
+                : string.Empty;
+
+            if (metadata.MaterialCbufferOffsets.TryGetValue(kv.Key, out int off))
+            {
+                sb.AppendLine($"    //   [{off / 16}][{off % 16 / 4}] {kv.Key} = {kv.Value}{program}");
+            }
+            else
+            {
+                sb.AppendLine($"    //   {kv.Key} = {kv.Value}{program}");
+            }
         }
     }
 
@@ -1615,6 +1646,15 @@ internal static class Pass200_EmitShaderLabFiles
         /// 求不出值的成员不在表里。
         /// </summary>
         public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>成员名 → cbuffer 字节偏移(见 MaterialCbufferValues 的说明)。</summary>
+        public Dictionary<string, int> MaterialCbufferOffsets { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>成员名 → 它的**运算程序**(S 表达式)。消费侧拿它 + 自己材质实例的参数重算。</summary>
+        public Dictionary<string, string> MaterialCbufferPrograms { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>导出侧求值时用的那套参数值(参数原名 → 4 分量),给消费侧做求值器自检。</summary>
+        public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
         public List<UeShaderLabProgramData> Programs { get; set; } = new();
         // Pre-rendered shaderlab `Properties { ... }` block, sourced from
         // the primary asset's UniformExpressionSet. Empty when no asset
