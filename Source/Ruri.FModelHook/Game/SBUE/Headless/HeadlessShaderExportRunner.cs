@@ -276,12 +276,8 @@ public static class HeadlessShaderExportRunner
                     // dependency closure, and without them the material graph samples neutral dummies.
                     if (export is CUE4Parse.UE4.Assets.Exports.Texture.UTexture texture)
                     {
-                        // 数组贴图各层竖向拼成一张条带(消费侧 RenderTexture.arraySlices 就是这个载体)。
-                        // 走通用 Decode 只出第 0 层,而 shader 会按 slice 取到后面的层。
                         CUE4Parse_Conversion.Textures.CTexture? decoded =
-                            texture is CUE4Parse.UE4.Assets.Exports.Texture.UTexture2DArray array
-                                ? StackArraySlices(array.DecodeTextureArray(exportOptions.Platform))
-                                : texture.Decode(exportOptions.Platform);
+                            TextureStripExport.Decode(texture, exportOptions.Platform, out int slices);
                         if (decoded is null)
                         {
                             logError($"[Headless] --export-asset: '{export.Name}' decode returned null (unsupported pixel format?).");
@@ -298,14 +294,12 @@ public static class HeadlessShaderExportRunner
                         Directory.CreateDirectory(outDir.FullName);
                         string texturePath = Path.Combine(outDir.FullName, export.Name + "." + extension);
                         File.WriteAllBytes(texturePath, imageBytes);
+                        TextureStripExport.WriteSliceCount(texturePath, slices);
                         result.ExportsWritten++;
                         // 打印源像素格式:BC5 只有 RG 两通道,解码后 B 恒 0 —— 消费端若拿 .z 当遮罩
                         // 会恒得 0。把格式记下来,才能区分"通道本就不存在"与"解码丢了通道"。
-                        string slices = decoded.Height > decoded.Width && decoded.Height % decoded.Width == 0
-                            ? $" 条带×{decoded.Height / decoded.Width}"
-                            : string.Empty;
                         log($"[Headless] --export-asset: wrote texture {export.Name} " +
-                            $"({texture.Format}, {decoded.Width}x{decoded.Height}{slices}) -> {texturePath}");
+                            $"({texture.Format}, {decoded.Width}x{decoded.Height}{(slices > 1 ? $" 条带×{slices}" : "")}) -> {texturePath}");
                         continue;
                     }
 
@@ -455,29 +449,6 @@ public static class HeadlessShaderExportRunner
             log($"[Headless]   {loc.MaterialPath}{ownerNote} hash={loc.ResourceHash} archives=[{string.Join(", ", loc.ArchivePaths)}]");
         }
         return locations;
-    }
-
-    /// <summary>数组各层竖向拼成一张条带图(高 = 层高 × 层数)。层数 &lt;2 时原样返回。</summary>
-    private static CUE4Parse_Conversion.Textures.CTexture? StackArraySlices(CUE4Parse_Conversion.Textures.CTexture?[]? slices)
-    {
-        CUE4Parse_Conversion.Textures.CTexture[] present = (slices ?? [])
-            .Where(static slice => slice is not null)
-            .Select(static slice => slice!)
-            .ToArray();
-        if (present.Length == 0) return null;
-        if (present.Length == 1) return present[0];
-
-        CUE4Parse_Conversion.Textures.CTexture head = present[0];
-        byte[] strip = new byte[present.Sum(static slice => slice.Data.Length)];
-        int at = 0;
-        foreach (CUE4Parse_Conversion.Textures.CTexture slice in present)
-        {
-            slice.Data.CopyTo(strip, at);
-            at += slice.Data.Length;
-        }
-
-        return new CUE4Parse_Conversion.Textures.CTexture(
-            head.Width, head.Height * present.Length, head.PixelFormat, strip);
     }
 
     private static bool IsTargetArchive(GameFile file, Options options)

@@ -403,7 +403,7 @@ public sealed class DependencyClosureExporter
     // false so the JSON-only fallback remains visible in the manifest.
     private bool WriteTextureSidecar(UTexture texture, ExporterOptions exporterOptions, DirectoryInfo binarySidecarRoot)
     {
-        var decoded = texture.Decode(exporterOptions.Platform);
+        var decoded = TextureStripExport.Decode(texture, exporterOptions.Platform, out int slices);
         if (decoded is null) return false;
 
         byte[] imageBytes = decoded.Encode(exporterOptions.TextureFormat, exporterOptions.ExportHdrTexturesAsHdr, out string extension);
@@ -412,6 +412,7 @@ public sealed class DependencyClosureExporter
         string safeName = MakeFilesystemSafe(texture.Name);
         string outputPath = Path.Combine(binarySidecarRoot.FullName, safeName + "." + extension);
         File.WriteAllBytes(outputPath, imageBytes);
+        TextureStripExport.WriteSliceCount(outputPath, slices);
         return true;
     }
 
