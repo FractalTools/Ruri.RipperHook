@@ -138,6 +138,10 @@ internal static class MaterialConstantBufferReader
     }
 
     /// <summary>把一个成员的实算值记进 <see cref="EvaluatedCbufferValues"/>(按字段的真实分量数裁剪)。</summary>
+    /// <param name="byteOffset">
+    /// **相对 preshader 段起点**的字节偏移 —— 与消费侧 <c>Material_PreshaderBuffer</c> 数组同一坐标系。
+    /// 用绝对偏移会在带 VT 的材质上整体错位(VT 页表占在前面,实测裙料偏 66 个寄存器)。
+    /// </param>
     private static void RecordEvaluated(string materialPath, string memberName, int rows, float[]? value, int byteOffset, string? program = null)
     {
         if (!string.IsNullOrEmpty(materialPath) && !string.IsNullOrEmpty(program))
@@ -375,7 +379,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Numeric:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset, opcodeProgram);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
                     // 一个字段按它声明的类型**占满槽位**(UE 的 FillUniformBuffer:结果分量不够就补零),
                     // 所以它后续的分量偏移也已被占用 —— 不登记的话补洞循环会把它们当成洞。
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
@@ -385,7 +389,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Int:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset, opcodeProgram);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
                     // 一个字段按它声明的类型**占满槽位**(UE 的 FillUniformBuffer:结果分量不够就补零),
                     // 所以它后续的分量偏移也已被占用 —— 不登记的话补洞循环会把它们当成洞。
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
@@ -395,7 +399,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Bool:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset, opcodeProgram);
+                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
                     // 一个字段按它声明的类型**占满槽位**(UE 的 FillUniformBuffer:结果分量不够就补零),
                     // 所以它后续的分量偏移也已被占用 —— 不登记的话补洞循环会把它们当成洞。
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
@@ -1492,6 +1496,32 @@ internal static class MaterialConstantBufferReader
                     if (r == null) return null;
                     stack.Push(r);
                     widths.Push(op == 23 ? 1 : xw);   // 23 = length,标量结果
+                    break;
+                }
+
+                // 贴图信息族(38 TextureSize / 39 TexelSize / 40,41 外部纹理变换 / 42 RVT)。
+                // 尺寸这边拿不到(只有 JSON、没加载贴图),压 0 占位 + 按正确操作数长度跳过 ——
+                // 要紧的是**别放弃整段**:实测裙料的寄存器 2 承载 MPT 的 uv 缩放,整段放弃后它恒 0,
+                // MPT 永远采 (0,0),所有布块拿同一组参数。真值由消费侧按程序里的 x"…" 记号重算。
+                case 38:
+                case 39:
+                case 42:
+                {
+                    int operand = op == 42 ? 15 : 11;
+                    if (i + operand > n) return null;
+                    i += operand;
+                    stack.Push(new float[4]);
+                    widths.Push(op == 42 ? 4 : 2);
+                    break;
+                }
+
+                case 40:
+                case 41:
+                {
+                    if (i + 22 > n) return null;
+                    i += 22;
+                    stack.Push(new float[4]);
+                    widths.Push(4);
                     break;
                 }
 
