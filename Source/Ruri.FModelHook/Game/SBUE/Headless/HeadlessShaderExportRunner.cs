@@ -295,6 +295,7 @@ public static class HeadlessShaderExportRunner
                         string texturePath = Path.Combine(outDir.FullName, export.Name + "." + extension);
                         File.WriteAllBytes(texturePath, imageBytes);
                         TextureStripExport.WriteSliceCount(texturePath, slices);
+                        TextureStripExport.WriteFloatSidecar(texturePath, decoded);
                         result.ExportsWritten++;
                         // 打印源像素格式:BC5 只有 RG 两通道,解码后 B 恒 0 —— 消费端若拿 .z 当遮罩
                         // 会恒得 0。把格式记下来,才能区分"通道本就不存在"与"解码丢了通道"。

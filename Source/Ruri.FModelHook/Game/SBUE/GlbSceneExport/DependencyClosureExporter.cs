@@ -413,6 +413,7 @@ public sealed class DependencyClosureExporter
         string outputPath = Path.Combine(binarySidecarRoot.FullName, safeName + "." + extension);
         File.WriteAllBytes(outputPath, imageBytes);
         TextureStripExport.WriteSliceCount(outputPath, slices);
+        TextureStripExport.WriteFloatSidecar(outputPath, decoded);
         return true;
     }
 
