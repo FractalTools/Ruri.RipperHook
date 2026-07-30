@@ -13,51 +13,16 @@ using AssetRipper.SourceGenerated.Subclasses.Xform;
 
 namespace Ruri.RipperHook.Humanoid;
 
-/// <summary>
-/// Unity humanoid muscle referential extracted from an Avatar: per driven human bone the Axes
-/// (preQ/postQ/sgn/limit) and the TOS transform path.
-/// Muscle math: a normalized muscle value in [-1,1] scales to a radian angle via the per-axis
-/// limit and sign, the three axes compose via Unity's tan-half-angle (Rodrigues parameter)
-/// formula (see ``SwingTwist``), and ``preQ * swingTwist * postQ^-1`` (see ``LocalRotation``) IS
-/// the bone's FULL absolute local rotation for the frame -- not a delta, and not composed with
-/// or divided by any rest quaternion. The swing/twist COMPOSITION must use the coupled cross-term
-/// form in ``SwingTwist``; a plain sequential product of a combined-axis swing and a separate
-/// twist only agrees with Unity in the small-angle limit and diverges sharply for larger swings.
-/// RootT/RootQ do NOT drive the hips directly: they are Unity's internal humanoid "root
-/// reference" -- a mass-weighted center of mass across the 25 body bones (RootT) and an
-/// orientation frame built from the shoulder/hip bone positions (RootQ), relative to the same
-/// quantities computed once from the avatar's rest pose. The orientation-frame formula matches
-/// Unity's rest-pose computation to ~0.00002 degrees, and the resulting hips rotation and (Y, X)
-/// position track Unity output to a few degrees / centimeters across a full multi-frame gait
-/// cycle. See <see cref="BodyTransform"/> for the full derivation (a provisional FK with hips
-/// forced to the origin/identity, whose mass-center and orientation are solved against
-/// RootT/RootQ for the hips' true transform).
-///
-/// KNOWN LIMITATION: clips authored without a separate MotionT/MotionQ curve (ground-projected
-/// root motion) still bake full world-space walking progress into RootT itself; since that
-/// motion belongs on the character's root GameObject rather than on the hips, this shows up as
-/// drift along the walk direction when no MotionT curve exists to subtract it back out first.
-/// This is the same class of issue the MotionT subtraction in <see cref="BodyTransform"/>
-/// already exists for -- a pre-existing limitation for MotionT-less clips, not a regression
-/// introduced by this formula.
-/// </summary>
 public sealed class AvatarMuscleReferential
 {
-    private const int BodySlots = 25;                       // BoneType.Hips .. BoneType.Jaw
-    private const int FingerSlotsPerHand = 15;              // 5 fingers x 3 phalanges
+    private const int BodySlots = 25;
+    private const int FingerSlotsPerHand = 15;
     private const int LeftFingerBase = BodySlots;
     private const int RightFingerBase = BodySlots + FingerSlotsPerHand;
     private const int TotalSlots = BodySlots + 2 * FingerSlotsPerHand;
 
-    /// <summary>muscle attribute string -> (bone slot, dof axis 0=X twist / 1=Y / 2=Z)。</summary>
     private static readonly Dictionary<string, (int Slot, int Axis)> MuscleDofTable = BuildMuscleDofTable();
 
-    /// <summary>
-    /// Per-body-slot mass-center table for the humanoid root reference: most bones use the
-    /// midpoint of their own and an adjacent bone's provisional position. Any body slot not
-    /// listed here (feet, hands, toes, eyes, head, jaw) uses its own provisional position
-    /// directly.
-    /// </summary>
     private static readonly Dictionary<BoneType, (BoneType Neighbor, float Weight)[]> MassCenterFormula = new()
     {
         [BoneType.Hips] = new[] { (BoneType.LeftUpperLeg, 1f / 3f), (BoneType.RightUpperLeg, 1f / 3f), (BoneType.Spine, 1f / 3f) },
@@ -77,17 +42,6 @@ public sealed class AvatarMuscleReferential
         [BoneType.RightLowerArm] = new[] { (BoneType.RightLowerArm, 0.5f), (BoneType.RightHand, 0.5f) },
     };
 
-    /// <summary>
-    /// The 8 fixed (parent, child, avatar-configurable factor) pairs Unity's twist-solve stage
-    /// processes, in order, after every bone's own independent muscle solve. Each pair rescales
-    /// the PARENT's own twist angle by the factor (default 0.5 for all four) and adjusts the
-    /// CHILD's local rotation to keep the child's WORLD orientation exactly unchanged -- see
-    /// <see cref="BodyLocalQuats"/> for the derivation and where this is applied. Order matters:
-    /// e.g. LeftLowerArm is a CHILD in the first pair and a PARENT in the second, applied
-    /// sequentially. Note that a single-bone test exercising only one bone's own muscles observes
-    /// just the "rescale this bone's own twist" half; the child-compensation half only appears
-    /// once the PARENT's twist muscle is active and the CHILD's resulting rotation is read back.
-    /// </summary>
     private static readonly (BoneType Parent, BoneType Child, Func<AvatarMuscleReferential, float> Factor)[] TwistSolvePairs =
     {
         (BoneType.LeftLowerArm, BoneType.LeftHand, r => r._foreArmTwist),
@@ -103,27 +57,20 @@ public sealed class AvatarMuscleReferential
     private readonly MuscleBone?[] _bones = new MuscleBone?[TotalSlots];
     private readonly List<MuscleBone> _drivenBones = new();
 
-    // Root-motion (hips) reconstruction inputs -- see the class doc comment and BodyTransform.
     private float[] _humanBoneMass = Array.Empty<float>();
     private Quaternion _qRest = Quaternion.Identity;
     private int[] _nodeParent = Array.Empty<int>();
     private Vector3[] _nodeRestT = Array.Empty<Vector3>();
     private Quaternion[] _nodeRestQ = Array.Empty<Quaternion>();
 
-    // Raw skeleton node -> body slot (-1 = not a human bone), built once rather than rebuilt as a
-    // dictionary on every frame's provisional FK.
     private int[] _nodeToSlot = Array.Empty<int>();
 
-    // Provisional-FK scratch, reused across frames. A referential is bound to one clip at a time
-    // and solved single-threaded, so per-frame allocation here buys nothing.
     private Vector3[] _fkPos = Array.Empty<Vector3>();
     private Quaternion[] _fkRot = Array.Empty<Quaternion>();
     private bool[] _fkDone = Array.Empty<bool>();
     private readonly Quaternion[] _frameQuats = new Quaternion[TotalSlots];
     private readonly bool[] _frameDriven = new bool[TotalSlots];
 
-    // Twist-solve parent<->child redistribution factors (see TwistSolvePairs/BodyLocalQuats) --
-    // avatar-configurable, default 0.5 for all four.
     private float _armTwist = 0.5f;
     private float _foreArmTwist = 0.5f;
     private float _upperLegTwist = 0.5f;
@@ -131,14 +78,12 @@ public sealed class AvatarMuscleReferential
 
     public MuscleBone? Hips { get; private init; }
 
-    /// <summary>Every bone this referential drives (hips included).</summary>
     public IReadOnlyList<MuscleBone> DrivenBones => _drivenBones;
 
     private AvatarMuscleReferential(MuscleBone? hips) => Hips = hips;
 
     public static bool IsMuscleAttribute(string attribute) => MuscleDofTable.ContainsKey(attribute);
 
-    /// <summary>RootT/RootQ (body pose) and MotionT/MotionQ (root motion) channels.</summary>
     public static bool IsRootAttribute(string attribute)
     {
         int dot = attribute.IndexOf('.');
@@ -146,10 +91,6 @@ public sealed class AvatarMuscleReferential
         return head is "RootT" or "RootQ" or "MotionT" or "MotionQ";
     }
 
-    /// <summary>
-    /// Build the referential from an Avatar. Returns null when the avatar carries no human
-    /// (generic rig) or the human skeleton is degenerate.
-    /// </summary>
     public static AvatarMuscleReferential? TryCreate(IAvatar avatar)
     {
         IHuman human = avatar.Avatar.Human.Data;
@@ -258,7 +199,6 @@ public sealed class AvatarMuscleReferential
 
         int axesId = skeleton.Node[nodeIndex].AxesId;
         IAxes? axes = axesId >= 0 && axesId < skeleton.AxesArray.Count ? skeleton.AxesArray[axesId] : null;
-        // Hips 没有 Axes(不被肌肉驱动)但仍需 TOS 路径与 rest 来接 RootT/RootQ。
         if (axes is null && slot != (int)BoneType.Hips)
         {
             return;
@@ -279,23 +219,6 @@ public sealed class AvatarMuscleReferential
         driven.Add(bone);
     }
 
-    /// <summary>
-    /// The bone's FULL absolute local rotation for this frame:
-    /// preQ * swingTwist(angles) * inv(postQ), WITHOUT the twist-solve parent&lt;-&gt;child
-    /// redistribution (see <see cref="BodyLocalQuats"/> for the final version every caller outside
-    /// this class should use). This is NOT a delta and is NOT identity at muscle=0 -- it already IS
-    /// the answer the caller wants in place of the bone's rest local rotation, with no further
-    /// composition or division by any rest quaternion (character's own, or the avatar's
-    /// ``m_SkeletonPose`` "normalized rest") needed or correct. preQ and postQ are NOT
-    /// interchangeable -- on a real rig they differ by 60-280+ degrees per bone, so the
-    /// sandwich is asymmetric, not a similarity-transform conjugation by postQ alone.
-    ///
-    /// The pre/post-Q sandwich is used directly, with no per-bone table and no rest division of
-    /// any kind. Two related effects must be applied alongside it: the coupled swing/twist
-    /// composition in <see cref="SwingTwist"/> and the twist-solve parent&lt;-&gt;child
-    /// redistribution in <see cref="BodyLocalQuats"/>. Both are negligible at low swing angles but
-    /// grow large once two swing axes are simultaneously large (e.g. arms/legs mid-stride).
-    /// </summary>
     public static Quaternion LocalRotation(MuscleBone bone, ReadOnlySpan<float> frame)
         => ComposeFromAngles(bone, ComputeAngles(bone, frame));
 
@@ -328,21 +251,6 @@ public sealed class AvatarMuscleReferential
         return bone.PreQ * swingTwist * Quaternion.Inverse(bone.PostQ);
     }
 
-    /// <summary>
-    /// Every body/finger bone's local rotation this referential drives (hips excluded --
-    /// <see cref="BodyTransform"/> reconstructs its actual transform separately) for this
-    /// frame's muscle values, WITH the twist-solve parent&lt;-&gt;child twist redistribution
-    /// applied (see <see cref="TwistSolvePairs"/> for the mechanism). Keyed by
-    /// <see cref="MuscleBone.Slot"/>.
-    ///
-    /// Derivation of the child compensation (algebraic necessity, not curve-fit):
-    /// child_world = parent_world * child_local must hold both before and after the parent's
-    /// local rotation changes by delta = inverse(parent_local_old) * parent_local_new (only the
-    /// parent's OWN local changes; its ancestors don't) -- parent_world_new = parent_world_old *
-    /// delta, so preserving child_world requires child_local_new = inverse(delta) *
-    /// child_local_old. Uses this class's own <see cref="SwingTwist"/>/pre-post-Q formula for the
-    /// parent's before/after local rotation as the basis for delta.
-    /// </summary>
     public void BodyLocalQuats(ReadOnlySpan<float> frame, Span<Quaternion> quats, Span<bool> driven)
     {
         driven.Clear();
@@ -372,14 +280,8 @@ public sealed class AvatarMuscleReferential
         }
     }
 
-    /// <summary>Length every <see cref="BodyLocalQuats"/> span argument must have.</summary>
     public static int SlotCount => TotalSlots;
 
-    /// <summary>
-    /// Resolve every muscle attribute this referential drives, plus the fourteen root channels, to
-    /// column indices in one clip's sampled value table. Done once per clip so the per-frame solve
-    /// never touches a string. Rebinding for another clip overwrites the previous plan.
-    /// </summary>
     public RootChannelPlan BindClip(IReadOnlyDictionary<string, int> channelIndex)
     {
         foreach (MuscleBone bone in _drivenBones)
@@ -389,29 +291,6 @@ public sealed class AvatarMuscleReferential
         return RootChannelPlan.Bind(channelIndex);
     }
 
-    /// <summary>
-    /// The hips' own FULL absolute local position+rotation for this frame, reconstructed from
-    /// the clip's Root curves, plus whatever root motion was extracted onto the character's own
-    /// root object, or null when the clip carries no root translation channels. The hips value is
-    /// NOT a delta -- used directly, like <see cref="LocalRotation"/>'s contract for every other bone -- and
-    /// RootT/RootQ are NOT the hips' own transform (see the class doc comment): they are the
-    /// avatar's mass-center/orientation reference, so recovering the hips' transform means
-    /// building a PROVISIONAL pose with the hips forced to the origin/identity (every other body
-    /// bone at its frame's absolute local rotation), then solving the rigid transform that makes
-    /// the provisional pose's mass-center/orientation match RootT/RootQ:
-    /// mass_center(actual) = T + R @ mass_center(provisional),
-    /// orientation(actual) = R @ orientation(provisional).
-    /// MotionT is the ground-projected root motion; subtracting it here (as before) removes
-    /// that same rigid drift from the mass-center target.
-    ///
-    /// ``keepPositionXz``/``keepPositionY``/``keepOrientation`` mirror the clip's own
-    /// ``MuscleClipInfo.KeepOriginalPosition{Xz,Y}``/``KeepOriginalOrientation``. When a setting
-    /// is False, Unity extracts that component as root motion belonging to the character's root
-    /// GameObject rather than the hips. The returned ``Motion`` is exactly that extracted amount (zero
-    /// for any axis where the corresponding ``keep*`` is True) -- the caller MUST bake it onto
-    /// the character's root object separately (see <see cref="HumanoidClipBaker"/>) or the
-    /// character will animate its stride in place with no actual locomotion.
-    /// </summary>
     public (Vector3 Position, Quaternion Rotation, (Vector3 Position, Quaternion Rotation) Motion)? BodyTransform(
         ReadOnlySpan<float> frame, in RootChannelPlan root, ReadOnlySpan<Quaternion> bodyQuats,
         ReadOnlySpan<bool> driven, bool keepPositionXz = true, bool keepPositionY = true,
@@ -438,22 +317,6 @@ public sealed class AvatarMuscleReferential
         Quaternion motionQ;
         if (root.HasMotion)
         {
-            // Trajectory-authored clip. MotionT/MotionQ ARE the character root's motion and
-            // RootT/RootQ are the ABSOLUTE body reference (they already include the displacement),
-            // so the split is exact and settings-free: the object takes Motion, the hips take the
-            // trajectory-relative remainder, and their scene composition (motion outer, hips inner)
-            // reconstructs the absolute Root curves bit for bit. Verified against the real game --
-            // a 0.94m dash clip carries MotionT.z 0 -> -0.9378 with RootT.z tracking the same span,
-            // and MotionQ stays identity through a swing-heavy clip, i.e. turning belongs to the
-            // BODY, not the trajectory.
-            //
-            // The keep-original flags deliberately do NOT participate here. Consuming them (what
-            // this did before) annihilated the displacement: with keep=false the hips were zeroed
-            // and the extracted motion became RootT-MotionT, the bounded sway residual rather than
-            // the trajectory, so a walk animated its stride in place. Those flags only parameterize
-            // the runtime's applyRootMotion deltas and loop blending; they do not describe how the
-            // curves are stored. They still apply to the motion-less branch below, which is the
-            // only authoring shape that actually needs them.
             motionT = new Vector3(RootChannelPlan.Read(frame, root.MotionTx),
                 RootChannelPlan.Read(frame, root.MotionTy),
                 RootChannelPlan.Read(frame, root.MotionTz));
@@ -476,8 +339,6 @@ public sealed class AvatarMuscleReferential
         }
         else
         {
-            // Motion-less clip (older authoring): the locomotion is baked straight into RootT/RootQ
-            // and the keep flags say which components the runtime would extract as root motion.
             float rootX = keepPositionXz ? fullT.X : 0f;
             float rootY = keepPositionY ? fullT.Y : 0f;
             float rootZ = keepPositionXz ? fullT.Z : 0f;
@@ -490,27 +351,11 @@ public sealed class AvatarMuscleReferential
             }
             else
             {
-                // Extract only the yaw (Y-axis) twist component -- drop it, keep any residual
-                // swing (lean/tilt), the same swing-twist shape LocalRotation already uses.
-                //
-                // Composition order matters: in the baked scene the root object's rotation is
-                // the OUTER transform and the hips' local rotation is INNER (world = motionQ *
-                // rHips, standard parent-then-child composition), so recovering fullQ from that
-                // product needs rootQ = inverse(motionQ) * fullQ -- NOT fullQ * inverse(motionQ),
-                // which solves the decomposition for the opposite (hips-outer) composition order
-                // and silently produces a wrong residual rotation whenever fullQ and twistY don't
-                // commute (i.e. whenever there is also swing/lean, exactly the walking-with-
-                // natural-gait-lean case). This showed up visually as feet not meeting the ground.
                 Quaternion twistY = Quaternion.Normalize(new Quaternion(0f, fullQ.Y, 0f, fullQ.W));
                 rootQ = Quaternion.Normalize(Quaternion.Inverse(twistY) * fullQ);
                 motionQ = twistY;
             }
         }
-        // rootTSimple is expressed in the same (unrotated) frame as fullT; since the object's
-        // rotation (motionQ) sits between it and the hips in the scene composition, the hips'
-        // own position must be counter-rotated by the same amount so world = motionQ *
-        // (rootT + ...) recomposes back to rootTSimple exactly (see the rotation comment above
-        // for why order matters here).
         Vector3 rootT = Vector3.Transform(rootTSimple, Quaternion.Inverse(motionQ));
         (Vector3, Quaternion) motion = (motionT, motionQ);
 
@@ -518,7 +363,7 @@ public sealed class AvatarMuscleReferential
         if (fk[(int)BoneType.LeftUpperArm] is null || fk[(int)BoneType.RightUpperArm] is null
             || fk[(int)BoneType.LeftUpperLeg] is null || fk[(int)BoneType.RightUpperLeg] is null)
         {
-            return (rootT, rootQ, motion); // avatar too incomplete to solve; best-effort fallback
+            return (rootT, rootQ, motion);
         }
 
         Quaternion qProvisional = ComputeOrientation(fk);
@@ -529,29 +374,17 @@ public sealed class AvatarMuscleReferential
         return (tHips, rHips, motion);
     }
 
-    /// <summary>
-    /// Every body bone's world position+rotation for this frame, treating the hips as sitting at
-    /// the origin with identity rotation (see <see cref="BodyTransform"/>). Walks the raw
-    /// skeleton node hierarchy (not just human-to-human parenting) since some human bones'
-    /// immediate parent is an unmapped intermediate node.
-    /// </summary>
     private (Vector3 Pos, Quaternion Rot)?[] ProvisionalFk(ReadOnlySpan<Quaternion> bodyQuats,
         ReadOnlySpan<bool> driven)
     {
-        // The caller has already solved this frame's BodyLocalQuats -- taking them as an argument
-        // rather than recomputing is not just an allocation saving: the previous shape solved the
-        // whole muscle stack a SECOND time for every hips frame.
-        //
-        // Copied into fields first because the recursive walk below is a local function, and a
-        // local function cannot close over a ref-like span parameter.
         bodyQuats.CopyTo(_frameQuats);
         driven.CopyTo(_frameDriven);
         Quaternion[] frameQuats = _frameQuats;
         bool[] frameDriven = _frameDriven;
 
         int hipsNode = Hips?.NodeIndex ?? -1;
-        int[] nodeToSlot = _nodeToSlot;                 // built once in TryCreate
-        Vector3[] fkPos = _fkPos;                       // per-referential scratch, reused per frame
+        int[] nodeToSlot = _nodeToSlot;
+        Vector3[] fkPos = _fkPos;
         Quaternion[] fkRot = _fkRot;
         bool[] fkDone = _fkDone;
         Array.Clear(fkDone);
@@ -591,9 +424,6 @@ public sealed class AvatarMuscleReferential
         return fk;
     }
 
-    /// <summary>
-    /// Per-body-slot mass-center lookup; see <see cref="MassCenterFormula"/>.
-    /// </summary>
     private static Vector3 MassCenterOf(BoneType type, (Vector3 Pos, Quaternion Rot)?[] fk)
     {
         if (!MassCenterFormula.TryGetValue(type, out (BoneType Neighbor, float Weight)[]? formula))
@@ -608,9 +438,6 @@ public sealed class AvatarMuscleReferential
         return total;
     }
 
-    /// <summary>
-    /// The mass-weighted center-of-mass loop over the body bones.
-    /// </summary>
     private Vector3 ComputeMassCenter((Vector3 Pos, Quaternion Rot)?[] fk)
     {
         Vector3 total = Vector3.Zero;
@@ -632,10 +459,6 @@ public sealed class AvatarMuscleReferential
         return total * (1f / totalMass);
     }
 
-    /// <summary>
-    /// The body's orientation frame from the shoulder-center/hip-center world positions. Matches
-    /// Unity's rest-pose orientation (m_RootX.q) to ~0.00002 degrees.
-    /// </summary>
     private static Quaternion ComputeOrientation((Vector3 Pos, Quaternion Rot)?[] fk)
     {
         Vector3 leftUpperArm = fk[(int)BoneType.LeftUpperArm]!.Value.Pos;
@@ -648,20 +471,10 @@ public sealed class AvatarMuscleReferential
         Vector3 up = Vector3.Normalize(shoulderCenter - hipCenter);
         Vector3 right = Vector3.Normalize((rightUpperArm - leftUpperArm) + (rightUpperLeg - leftUpperLeg));
         Vector3 forward = Vector3.Normalize(Vector3.Cross(right, up));
-        // The raw right vector is NOT orthogonal to up away from rest -- a twisted pose points the
-        // arm-diff + leg-diff sum well off the torso plane -- and quaternion extraction is only
-        // defined for an orthonormal matrix: feeding the unorthogonalized frame to
-        // MatrixToQuaternion makes its trace-branch selection discontinuous. Measured on
-        // battle_skill_ult's spin, one frame jumped the body frame ~5.75 degrees while every muscle
-        // input and both centers moved smoothly, kicking the hips ~4.9 degrees about world X.
-        // Rebuilding right from up x forward closes the frame orthonormally; at rest the vectors
-        // are orthogonal anyway, so the validated rest agreement is untouched.
         right = Vector3.Cross(up, forward);
         return MatrixToQuaternion(right, up, forward);
     }
 
-    /// <summary>3x3 rotation matrix (given as its 3 columns, each a world-space unit vector for a
-    /// local axis) -> quaternion, Shepperd's method.</summary>
     private static Quaternion MatrixToQuaternion(Vector3 colX, Vector3 colY, Vector3 colZ)
     {
         float m00 = colX.X, m10 = colX.Y, m20 = colX.Z;
@@ -704,32 +517,12 @@ public sealed class AvatarMuscleReferential
         return Quaternion.Normalize(new Quaternion(x, y, z, w));
     }
 
-    /// <summary>
-    /// Map a normalized muscle in [-1,1] to a radian angle via the per-axis limit and sign:
-    /// -1 -> min, 0 -> 0, +1 -> max.
-    /// </summary>
     private static float MuscleAngle(float muscle, float sgn, float limitMin, float limitMax)
     {
         float scale = muscle >= 0f ? limitMax : -limitMin;
         return sgn * muscle * scale;
     }
 
-    /// <summary>
-    /// Compose three per-axis angles into a quaternion via Unity's tan-half-angle (Rodrigues
-    /// parameter) formula: tx,ty,tz = tan(angle/2) per axis, then
-    /// normalize(1, tx, ty + tx*tz, tz - tx*ty) as (w,x,y,z). This is NOT
-    /// ``swing(Y,Z) * twist(X)`` (a plain sequential product of a combined-axis swing and a
-    /// separate twist) -- that only agrees with Unity in the small-angle limit and diverges
-    /// sharply as the swing grows, since twist and swing couple through the cross terms below,
-    /// and twist-free swing itself is the raw per-axis tan-half pair (ty, tz), not a single
-    /// combined axis-angle rotation around (0, angleY, angleZ).
-    ///
-    /// This is the kZYRoll case all 25 human body bones use: halfTan of the muscle-scaled angle
-    /// vector, then the X (twist) lane combined with the Y/Z (swing) lanes via exactly these
-    /// cross terms before normalizing the whole 4-vector as a quaternion. A combined-axis-angle
-    /// formula matches single-axis-only poses perfectly (no cross term to get wrong) but diverges
-    /// 5-85 degrees the moment two axes are simultaneously non-zero.
-    /// </summary>
     private static Quaternion SwingTwist(float angleX, float angleY, float angleZ)
     {
         float tx = MathF.Tan(angleX * 0.5f);
@@ -785,19 +578,11 @@ public sealed class AvatarMuscleReferential
 
     private static Vector3 ToVector3(IVector3Float? v) => v is null ? Vector3.Zero : new Vector3(v.X, v.Y, v.Z);
 
-    /// <summary>The Xform translation is versioned (Vector3 vs Vector4 layout), same
-    /// version-guard shape as GetSgn/GetLimit above.</summary>
     private static Vector3 ToXformTranslation(IXform xform)
     {
         return xform.Has_T3() ? ToVector3(xform.T3) : new Vector3(xform.T4!.X, xform.T4.Y, xform.T4.Z);
     }
 
-    /// <summary>
-    /// Body rows map each Unity muscle attribute to its (bone slot, DoF axis), including the
-    /// eye/jaw muscles; finger rows are generated from the Unity muscle taxonomy (attribute
-    /// pattern "&lt;Hand&gt;.&lt;Finger&gt;.&lt;DoF&gt;", 1/2/3 Stretched -> Z of
-    /// proximal/intermediate/distal phalange, Spread -> Y of proximal).
-    /// </summary>
     private static Dictionary<string, (int Slot, int Axis)> BuildMuscleDofTable()
     {
         Dictionary<string, (int, int)> table = new(95, StringComparer.Ordinal)
@@ -874,99 +659,5 @@ public sealed class AvatarMuscleReferential
             }
         }
         return table;
-    }
-}
-
-/// <summary>One human bone the muscle referential drives: its Axes plus the TOS transform path.</summary>
-/// <summary>
-/// The fourteen root channels resolved to column indices in one clip's sampled value table (-1 =
-/// the clip does not carry that channel). RootT/RootQ are the body's pose in the animation-root
-/// frame; MotionT/MotionQ are the trajectory the runtime applies to the GameObject.
-/// </summary>
-public readonly struct RootChannelPlan
-{
-    public readonly int RootTx, RootTy, RootTz;
-    public readonly int RootQx, RootQy, RootQz, RootQw;
-    public readonly int MotionTx, MotionTy, MotionTz;
-    public readonly int MotionQx, MotionQy, MotionQz, MotionQw;
-
-    private RootChannelPlan(IReadOnlyDictionary<string, int> index)
-    {
-        static int Find(IReadOnlyDictionary<string, int> index, string attribute)
-            => index.TryGetValue(attribute, out int column) ? column : -1;
-
-        RootTx = Find(index, "RootT.x"); RootTy = Find(index, "RootT.y"); RootTz = Find(index, "RootT.z");
-        RootQx = Find(index, "RootQ.x"); RootQy = Find(index, "RootQ.y");
-        RootQz = Find(index, "RootQ.z"); RootQw = Find(index, "RootQ.w");
-        MotionTx = Find(index, "MotionT.x"); MotionTy = Find(index, "MotionT.y"); MotionTz = Find(index, "MotionT.z");
-        MotionQx = Find(index, "MotionQ.x"); MotionQy = Find(index, "MotionQ.y");
-        MotionQz = Find(index, "MotionQ.z"); MotionQw = Find(index, "MotionQ.w");
-    }
-
-    internal static RootChannelPlan Bind(IReadOnlyDictionary<string, int> index) => new(index);
-
-    /// <summary>No RootT channel at all: the clip carries no body root reference to solve against.</summary>
-    public bool HasRootTranslation => RootTx >= 0 || RootTy >= 0 || RootTz >= 0;
-
-    /// <summary>
-    /// A trajectory-authored clip: MotionT/MotionQ exist, so the object/hips split is exact and the
-    /// clip's keep-original flags do not participate (see
-    /// <see cref="AvatarMuscleReferential.BodyTransform"/>).
-    /// </summary>
-    public bool HasMotion => MotionTx >= 0 || MotionTy >= 0 || MotionTz >= 0 || MotionQw >= 0;
-
-    public static float Read(ReadOnlySpan<float> frame, int column) => column >= 0 ? frame[column] : 0f;
-}
-
-public sealed class MuscleBone
-{
-    public string Path { get; }
-    public int NodeIndex { get; }
-    /// <summary>BoneType enum value for body slots, or the extended finger slot number
-    /// (LeftFingerBase/RightFingerBase-relative) for finger bones -- see
-    /// AvatarMuscleReferential.HalfTwistBones for why this needs to travel with the bone.</summary>
-    public int Slot { get; }
-    public Quaternion PreQ { get; }
-    public Quaternion PostQ { get; }
-    public Vector3 Sgn { get; }
-    public Vector3 LimitMin { get; }
-    public Vector3 LimitMax { get; }
-    public bool IsHips { get; internal set; }
-
-    private readonly string?[] _dofMuscles = new string?[3];
-
-    internal MuscleBone(string path, int nodeIndex, int slot, Quaternion preQ, Quaternion postQ, Vector3 sgn,
-        Vector3 limitMin, Vector3 limitMax)
-    {
-        Path = path;
-        NodeIndex = nodeIndex;
-        Slot = slot;
-        PreQ = preQ;
-        PostQ = postQ;
-        Sgn = sgn;
-        LimitMin = limitMin;
-        LimitMax = limitMax;
-    }
-
-    internal void SetDofMuscle(int axis, string muscle) => _dofMuscles[axis] = muscle;
-    public string? GetDofMuscle(int axis) => _dofMuscles[axis];
-
-    /// <summary>
-    /// This bone's three muscle attributes resolved to column indices in one clip's sampled value
-    /// table, or -1 for an axis that clip does not drive. Bound once per clip
-    /// (<see cref="AvatarMuscleReferential.BindClip"/>) so the solve reads a muscle by array index
-    /// instead of hashing its attribute string once per axis per bone per frame.
-    /// </summary>
-    internal readonly int[] DofChannel = { -1, -1, -1 };
-
-    internal void BindDofChannels(IReadOnlyDictionary<string, int> channelIndex)
-    {
-        for (int axis = 0; axis < 3; axis++)
-        {
-            string? muscle = _dofMuscles[axis];
-            DofChannel[axis] = muscle is not null && channelIndex.TryGetValue(muscle, out int column)
-                ? column
-                : -1;
-        }
     }
 }

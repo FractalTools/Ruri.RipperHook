@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json.Nodes;
+using Ruri.RipperHook.Animation;
 using Ruri.RipperHook.Humanoid;
 using AssetRipper.Assets;
 using AssetRipper.Export.Modules.Models;

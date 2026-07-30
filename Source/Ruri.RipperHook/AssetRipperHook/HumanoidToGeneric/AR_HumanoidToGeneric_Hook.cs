@@ -6,12 +6,6 @@ using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// Resolves humanoid (muscle) AnimationClips into ordinary generic clips during asset processing,
-/// so every exporter and every importer downstream sees one kind of clip. See
-/// <see cref="HumanoidToGenericProcessor"/> for why this belongs at the asset level rather than
-/// inside any one consumer.
-/// </summary>
 [RipperHook(GameType.AR_HumanoidToGeneric)]
 public partial class AR_HumanoidToGeneric_Hook : RipperHookCommon
 {

@@ -1,12 +1,7 @@
-using System.Numerics;
 using AssetRipper.SourceGenerated.Subclasses.Keyframe_Single;
 
-namespace Ruri.RipperHook.Humanoid;
+namespace Ruri.RipperHook.Animation;
 
-/// <summary>
-/// A single scalar Unity AnimationCurve channel with cubic-Hermite evaluation:
-/// keys sorted by time, clamped outside the key range, slopes scaled by the segment length.
-/// </summary>
 public sealed class HermiteCurve
 {
     private readonly float[] _times;
@@ -40,7 +35,6 @@ public sealed class HermiteCurve
             inSlopes[i] = key.InSlope;
             outSlopes[i] = key.OutSlope;
         }
-        // Unity 序列化的 key 本应有序;仅在乱序时重排一次,保证求值二分成立。
         SortByTime(times, values, inSlopes, outSlopes);
         return new HermiteCurve(times, values, inSlopes, outSlopes);
     }
@@ -82,14 +76,6 @@ public sealed class HermiteCurve
         }
     }
 
-    /// <summary>
-    /// Evaluate this curve at every frame of a uniform <paramref name="sampleRate"/> timeline,
-    /// writing into one column of a row-major (frame, channel) table.
-    ///
-    /// Sample times only ever increase, so the key segment only ever advances: one cursor walk
-    /// costs O(keys + frames), where calling <see cref="Evaluate"/> per frame binary-searches the
-    /// whole key array again for every one of them.
-    /// </summary>
     public void SampleUniform(float[] destination, int column, int stride, int frameCount, float sampleRate)
     {
         int n = _times.Length;
@@ -191,6 +177,3 @@ public sealed class HermiteCurve
         return h00 * v0 + h10 * m0 + h01 * v1 + h11 * m1;
     }
 }
-
-/// <summary>One node's Unity-space local rest transform.</summary>
-public readonly record struct UnityLocalTransform(Vector3 Position, Quaternion Rotation, Vector3 Scale);

@@ -8,45 +8,15 @@ using AssetRipper.SourceGenerated.Subclasses.Keyframe_Quaternionf;
 using AssetRipper.SourceGenerated.Subclasses.Keyframe_Vector3f;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using Ruri.RipperHook.Animation;
 using Ruri.RipperHook.Humanoid;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// Rewrites a humanoid AnimationClip into a plain generic one, in place, on the asset itself.
-///
-/// A humanoid clip stores the main skeleton as ~95 normalised muscle floats plus a root reference
-/// (RootT/RootQ) rather than per-bone transform curves, so anything that does not implement Unity's
-/// Mecanim solver sees a body that never moves. Solving it at the ASSET level -- once, here -- means
-/// every downstream consumer (the .anim YAML the project exporter writes, the glTF exporter, the
-/// in-process Blender bridge) reads one ordinary generic clip and needs no humanoid knowledge at
-/// all. The alternative, which this replaces, was one solver per consumer: a C# one living inside
-/// the glTF exporter and a second, independently maintained Python one inside the Blender importer,
-/// each obliged to stay bit-identical to Unity and to each other.
-///
-/// What the rewrite produces, per driven human bone, at the clip's own sample rate:
-///   * a rotation curve at the bone's Avatar-TOS transform path, carrying the bone's FULL absolute
-///     local rotation (see <see cref="AvatarMuscleReferential.BodyLocalQuats"/> -- already including
-///     Unity's twist-solve parent/child redistribution);
-///   * for the hips, additionally a position curve, since its own transform is reconstructed rather
-///     than stored (see <see cref="AvatarMuscleReferential.BodyTransform"/>);
-///   * on the animator root path (the empty string), the extracted root motion, so that
-///     root ∘ hips reproduces the original RootT/RootQ exactly.
-/// The consumed muscle/root float curves are then dropped, because leaving them in would present
-/// the same motion twice in two encodings.
-///
-/// Curves already present for other bones (IK markers, twist helpers, cloth) are untouched: they
-/// are ordinary transform curves that were never part of the muscle encoding.
-/// </summary>
 public static class HumanoidClipGenericizer
 {
-    /// <summary>Keyframe tangent weight AssetRipper's own converter writes for unweighted keys.</summary>
     private const float DefaultFloatWeight = 1f / 3f;
 
-    /// <summary>
-    /// Convert one clip. Returns the number of bone curves written, or 0 when the clip carries no
-    /// muscle data (already generic -- left completely untouched).
-    /// </summary>
     public static int Convert(IAnimationClip clip, AvatarMuscleReferential referential)
     {
         List<(string Attribute, HermiteCurve Curve)> channels = CollectMuscleChannels(clip);
@@ -63,8 +33,6 @@ public static class HumanoidClipGenericizer
         }
         int frameCount = Math.Max(1, (int)MathF.Round(duration * sampleRate) + 1);
 
-        // One column per muscle/root channel, one row per frame, flat so a frame is a contiguous
-        // span the solver can index by column without hashing an attribute string.
         int columnCount = channels.Count;
         Dictionary<string, int> channelIndex = new(columnCount, StringComparer.Ordinal);
         float[] values = new float[(long)frameCount * columnCount <= int.MaxValue
@@ -86,8 +54,6 @@ public static class HumanoidClipGenericizer
         Quaternion[] quats = new Quaternion[slotCount];
         bool[] driven = new bool[slotCount];
 
-        // Per driven bone, its rotation for every frame; hips also gets a position track, and the
-        // extracted root motion is accumulated alongside.
         Dictionary<int, Quaternion[]> rotationBySlot = new();
         foreach (MuscleBone bone in referential.DrivenBones)
         {
@@ -146,7 +112,7 @@ public static class HumanoidClipGenericizer
             }
             if (!isHips && !AnyMuscleBound(bone))
             {
-                continue;   // clip drives none of this bone's axes: leave it at rest, write nothing
+                continue;
             }
             WriteRotationCurve(clip, bone.Path, rotationBySlot[bone.Slot], frameCount, sampleRate);
             written++;
@@ -159,8 +125,6 @@ public static class HumanoidClipGenericizer
 
         if (hasMotion)
         {
-            // The animator root is the clip's own empty path -- root ∘ hips == the original
-            // RootT/RootQ, which is the whole point of the split.
             WritePositionCurve(clip, string.Empty, motionPositions, frameCount, sampleRate);
             WriteRotationCurve(clip, string.Empty, motionRotations, frameCount, sampleRate);
             written += 2;
@@ -187,10 +151,6 @@ public static class HumanoidClipGenericizer
     {
         IQuaternionCurve curve = clip.RotationCurves_C74.AddNew();
         curve.SetValues(path);
-        // q and -q are the same rotation, but a consumer interpolating the four components
-        // independently sweeps through a degenerate quaternion between an antipodal pair -- the
-        // classic one-frame whole-bone twitch on any bone that turns through 180 degrees. Align
-        // each key with its predecessor once, here, so no consumer has to.
         for (int f = 1; f < frameCount; f++)
         {
             if (Quaternion.Dot(rotations[f], rotations[f - 1]) < 0f)
@@ -233,10 +193,6 @@ public static class HumanoidClipGenericizer
         }
     }
 
-    /// <summary>
-    /// Remove the muscle/root float curves the rewrite just consumed. Any other float curve
-    /// (blendshape weights, custom material properties) is genuinely independent data and stays.
-    /// </summary>
     private static void DropConsumedFloatCurves(IAnimationClip clip)
     {
         var floats = clip.FloatCurves_C74;
