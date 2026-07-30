@@ -8,8 +8,9 @@ using AssetRipper.SourceGenerated.Subclasses.Keyframe_Quaternionf;
 using AssetRipper.SourceGenerated.Subclasses.Keyframe_Vector3f;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using Ruri.RipperHook.Humanoid;
 
-namespace Ruri.RipperHook.Humanoid;
+namespace Ruri.RipperHook.AR;
 
 /// <summary>
 /// Rewrites a humanoid AnimationClip into a plain generic one, in place, on the asset itself.

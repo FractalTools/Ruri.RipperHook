@@ -37,7 +37,7 @@ using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Subclasses.GLTextureSettings;
 using AssetRipper.Yaml;
-using Ruri.RipperHook.AssetRipperHook.Exporting;
+using Ruri.RipperHook.HookUtils;
 using Ruri.RipperHook.GUI.Components;
 using System.Text;
 

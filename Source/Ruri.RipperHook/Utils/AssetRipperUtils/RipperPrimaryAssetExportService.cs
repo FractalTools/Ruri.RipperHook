@@ -1,22 +1,21 @@
 using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.PrimaryContent;
-using AssetRipper.Export.UnityProjects;
-using AssetRipper.Export.UnityProjects.Shaders;
 using AssetRipper.GUI.Web;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
-using AssetRipper.Primitives;
-using AssetRipper.SourceGenerated.Classes.ClassID_48;
-using Ruri.RipperHook.AR;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace Ruri.RipperHook.AssetRipperHook.Exporting;
+namespace Ruri.RipperHook.HookUtils;
 
 public static class RipperPrimaryAssetExportService
 {
+	public delegate IEnumerable<(Type AssetType, IContentExtractor Extractor)> ContentExtractorDelegate(FullConfiguration settings);
+
+	public static readonly List<ContentExtractorDelegate> CustomContentExtractors = new();
+
 	private static readonly PropertyInfo GameDataProperty = typeof(GameFileLoader).GetProperty("GameData", BindingFlags.Static | BindingFlags.NonPublic)
 		?? throw new MissingMemberException(typeof(GameFileLoader).FullName, "GameData");
 
@@ -49,7 +48,13 @@ public static class RipperPrimaryAssetExportService
 		settings.ExportRootPath = outputPath;
 
 		PrimaryContentExporter exporter = PrimaryContentExporter.CreateDefault(gameData, settings);
-		exporter.RegisterHandler<IShader>(ShaderContentExtractor.Instance);
+		foreach (ContentExtractorDelegate customContentExtractor in CustomContentExtractors)
+		{
+			foreach ((Type assetType, IContentExtractor extractor) in customContentExtractor(settings))
+			{
+				exporter.RegisterHandler(assetType, extractor);
+			}
+		}
 
 		List<ExportCollectionBase> collections = CreateCollections(exporter, requestedAssets);
 		int exportableCount = collections.Count(static collection => collection.Exportable);
@@ -115,59 +120,6 @@ public static class RipperPrimaryAssetExportService
 		}
 
 		return collections;
-	}
-
-	private sealed class ShaderContentExtractor : IContentExtractor
-	{
-		public static ShaderContentExtractor Instance { get; } = new();
-
-		private static readonly SimpleShaderExporter SimpleExporter = new();
-		private static readonly ShaderRuriDecompileExporter DecompiledExporter = new();
-
-		public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out ExportCollectionBase? exportCollection)
-		{
-			if (asset is IShader shader)
-			{
-				exportCollection = new ShaderExportCollection(this, shader);
-				return true;
-			}
-
-			exportCollection = null;
-			return false;
-		}
-
-		public bool Export(IUnityObjectBase asset, string filePath, FileSystem fileSystem)
-		{
-			MinimalExportContainer container = new(asset.Collection);
-			if (SimpleExporter.TryCreateCollection(asset, out _))
-			{
-				return SimpleExporter.Export(container, asset, filePath, fileSystem);
-			}
-
-			return DecompiledExporter.Export(container, asset, filePath, fileSystem);
-		}
-
-		private sealed class ShaderExportCollection(ShaderContentExtractor extractor, IShader shader) : SingleExportCollection<IShader>(extractor, shader)
-		{
-			protected override string ExportExtension => "shader";
-		}
-
-		private sealed class MinimalExportContainer(AssetRipper.Assets.Collections.AssetCollection file) : IExportContainer
-		{
-			public long GetExportID(IUnityObjectBase asset) => ExportIdHandler.GetMainExportID(asset);
-
-			public AssetType ToExportType(Type type) => AssetType.Meta;
-
-			public MetaPtr CreateExportPointer(IUnityObjectBase asset) => new(GetExportID(asset));
-
-			public UnityGuid ScenePathToGUID(string name) => default;
-
-			public bool IsSceneDuplicate(int sceneID) => false;
-
-			public AssetRipper.Assets.Collections.AssetCollection File => file;
-
-			public UnityVersion ExportVersion => file.Version;
-		}
 	}
 
 	private sealed class AssetReferenceComparer : IEqualityComparer<IUnityObjectBase>
