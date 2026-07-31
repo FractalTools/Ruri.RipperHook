@@ -43,11 +43,14 @@ internal static class MaterialTextureOrder
             return names;
         }
 
+        // 桶号只按**数组元素**计数:UniformTextureParameters 里夹着非数组元素时,对每个元素都自增
+        // 会让整张桶号偏一位 —— 实测导出的 Standard2D 标成 bucket=1、Array2D 标成 3(应为 0 与 2),
+        // 消费侧按桶做的类型约束据此全部判错。
         int bucketIndex = -1;
         foreach (JsonElement bucket in buckets.EnumerateArray())
         {
-            bucketIndex++;
             if (bucket.ValueKind != JsonValueKind.Array) continue;
+            bucketIndex++;
             foreach (JsonElement entry in bucket.EnumerateArray())
             {
                 if (entry.ValueKind != JsonValueKind.Object) continue;
