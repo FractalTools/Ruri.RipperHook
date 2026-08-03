@@ -165,10 +165,20 @@ public class GameBundleHook : CommonHook, IHookModule
     /// "text" (Blobs[i] is UTF-8 and Offsets[i] is RowCount+1 little-endian int32s), "int" (RowCount
     /// little-endian int64s, Offsets[i] empty) or "real" (RowCount little-endian float64s). Column 0
     /// is the row's own key. <c>null</c> when no VFS hook is active.</summary>
-    public delegate (string Name, int RowCount, string[] Columns, string[] Kinds, byte[][] Blobs, byte[][] Offsets)
+    /// <summary><paramref name="distinctBy"/> (empty for none) collapses the result to one row per
+    /// distinct value of that column, keeping whichever row has a non-empty
+    /// <paramref name="preferNonEmpty"/>. Handle names the projected table for
+    /// <see cref="SearchDataTable"/>.</summary>
+    public delegate (string Handle, string Name, int RowCount, string[] Columns, string[] Kinds, byte[][] Blobs, byte[][] Offsets)
         QueryDataTableDelegate(string[] vfsRoots, string containerFile, string[] flatColumnSpecs,
-            CancellationToken cancellation);
+            string distinctBy, string preferNonEmpty, CancellationToken cancellation);
     public static QueryDataTableDelegate? QueryDataTable;
+
+    /// <summary>Set by a VFS game hook: row ids of an already-projected table whose text matches the
+    /// query, on the same vectorized engine the cabmap browser searches with -- one folded blob per
+    /// column, swept in parallel, no per-row strings. <c>null</c> when no VFS hook is active.</summary>
+    public delegate int[] SearchDataTableDelegate(string handle, string query);
+    public static SearchDataTableDelegate? SearchDataTable;
 
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of

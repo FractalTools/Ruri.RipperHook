@@ -174,9 +174,9 @@ public sealed class CabTableSearch
             return everything;
         }
 
-        byte[] foldedNeedle = FoldNeedle(needle);
+        byte[] foldedNeedle = Utf8Search.FoldNeedle(needle);
         bool[] mask = new bool[count];
-        string foldedQuery = FoldString(needle);
+        string foldedQuery = Utf8Search.FoldString(needle);
 
         // Source column, via the distinct-file invariant: match the few dozen distinct chunk
         // files once, then mark every row whose FileIndex points at a matching one.
@@ -184,7 +184,7 @@ public sealed class CabTableSearch
         bool anyFileMatch = false;
         for (int fileId = 0; fileId < fileMatches.Length; fileId++)
         {
-            if (FoldString(_table.DistinctFile(fileId)).Contains(foldedQuery, StringComparison.Ordinal))
+            if (Utf8Search.FoldString(_table.DistinctFile(fileId)).Contains(foldedQuery, StringComparison.Ordinal))
             {
                 fileMatches[fileId] = true;
                 anyFileMatch = true;
@@ -203,9 +203,9 @@ public sealed class CabTableSearch
         }
 
         // Container paths: path row -> entry row via the per-row path starts.
-        _foldedPaths ??= FoldBlob(_table.ContainerPathBlob, _table.ContainerPathOffsets[^1]);
+        _foldedPaths ??= Utf8Search.FoldBlob(_table.ContainerPathBlob, _table.ContainerPathOffsets[^1]);
         int[] pathStarts = _table.ContainerPathStarts;
-        ScanColumn(_foldedPaths, _table.ContainerPathOffsets, foldedNeedle, mask, (rowMask, pathId) =>
+        Utf8Search.ScanColumn(_foldedPaths, _table.ContainerPathOffsets, foldedNeedle, mask, (rowMask, pathId) =>
         {
             int row = UpperBoundMinusOne(pathStarts, pathId);
             if ((uint)row < (uint)rowMask.Length)
@@ -216,9 +216,9 @@ public sealed class CabTableSearch
 
         // CAB names: value id == row id (the blob's tail may hold phantom names -- the offsets
         // slice stops at the last REAL entry, so phantoms never scan).
-        _foldedCabs ??= FoldBlob(_table.CabBlob, _table.CabOffsets[count]);
+        _foldedCabs ??= Utf8Search.FoldBlob(_table.CabBlob, _table.CabOffsets[count]);
         _cabOffsetsReal ??= _table.CabOffsets.AsSpan(0, count + 1).ToArray();
-        ScanColumn(_foldedCabs, _cabOffsetsReal, foldedNeedle, mask,
+        Utf8Search.ScanColumn(_foldedCabs, _cabOffsetsReal, foldedNeedle, mask,
             static (rowMask, valueId) => rowMask[valueId] = true);
 
         // Type names: needle -> matching class ids -> rows carrying one (AssetBundle elided,
@@ -237,66 +237,10 @@ public sealed class CabTableSearch
         return hits.ToArray();
     }
 
-    /// <summary>Vectorized sweep of one folded blob for the needle, partitioned across cores on
-    /// value boundaries; every hit that does not straddle a value boundary reports its value id.</summary>
-    private static void ScanColumn(byte[] foldedBlob, int[] offsets, byte[] needle, bool[] mask, Action<bool[], int> onValueHit)
-    {
-        int valueCount = offsets.Length - 1;
-        if (valueCount <= 0 || foldedBlob.Length == 0 || needle.Length > foldedBlob.Length)
-        {
-            return;
-        }
-        int partitions = Math.Clamp(Environment.ProcessorCount, 1, Math.Max(1, valueCount));
-        int valuesPerPartition = (valueCount + partitions - 1) / partitions;
-        Parallel.For(0, partitions, partition =>
-        {
-            int firstValue = partition * valuesPerPartition;
-            if (firstValue >= valueCount)
-            {
-                return;
-            }
-            int lastValue = Math.Min(firstValue + valuesPerPartition, valueCount);
-            int begin = offsets[firstValue];
-            int end = offsets[lastValue];
-            ReadOnlySpan<byte> span = foldedBlob.AsSpan(begin, end - begin);
-            int cursor = 0;
-            int valueId = firstValue;
-            while (true)
-            {
-                int found = span[cursor..].IndexOf(needle);
-                if (found < 0)
-                {
-                    break;
-                }
-                int position = begin + cursor + found;
-                // Map the hit position to its value id (offsets ascending; hits arrive in
-                // ascending position, so advance the cached cursor instead of re-bisecting).
-                while (offsets[valueId + 1] <= position)
-                {
-                    valueId++;
-                }
-                if (position + needle.Length <= offsets[valueId + 1])
-                {
-                    onValueHit(mask, valueId);
-                    // Whole value already matched: skip straight past it.
-                    cursor = offsets[valueId + 1] - begin;
-                }
-                else
-                {
-                    cursor = cursor + found + 1; // straddles a boundary -- not a match in either value
-                }
-                if (cursor >= span.Length)
-                {
-                    break;
-                }
-            }
-        });
-    }
-
     private void MarkTypeNameMatches(string needle, bool[] mask)
     {
         (int ClassId, string FoldedName)[] typeNames = _typeNames ??= BuildTypeNames();
-        string foldedQuery = FoldString(needle);
+        string foldedQuery = Utf8Search.FoldString(needle);
 
         HashSet<int> matchingClassIds = new();
         foreach ((int classId, string foldedName) in typeNames)
@@ -355,7 +299,7 @@ public sealed class CabTableSearch
             distinct.Add(classId);
         }
         return distinct
-            .Select(classId => (classId, FoldString(Enum.IsDefined(typeof(ClassIDType), classId)
+            .Select(classId => (classId, Utf8Search.FoldString(Enum.IsDefined(typeof(ClassIDType), classId)
                 ? ((ClassIDType)classId).ToString() : classId.ToString())))
             .ToArray();
     }
@@ -564,61 +508,6 @@ public sealed class CabTableSearch
 
     // ── ASCII case folding ───────────────────────────────────────────────────────────────────────
 
-
-    /// <summary>ASCII-lowercase a UTF-8 blob with full-width SIMD: every 'A'..'Z' lane ORs in
-    /// 0x20, everything else (including all non-ASCII UTF-8 bytes, whose high bit keeps them out
-    /// of the A-Z window) passes through untouched.</summary>
-    private static byte[] FoldBlob(byte[] blob, int length)
-    {
-        byte[] folded = new byte[length];
-        int i = 0;
-        if (Vector.IsHardwareAccelerated && length >= Vector<byte>.Count)
-        {
-            Vector<byte> lowerA = new((byte)('A' - 1));
-            Vector<byte> upperZ = new((byte)('Z' + 1));
-            Vector<byte> caseBit = new((byte)0x20);
-            int lastBlock = length - Vector<byte>.Count;
-            for (; i <= lastBlock; i += Vector<byte>.Count)
-            {
-                Vector<byte> lanes = new(blob.AsSpan(i, Vector<byte>.Count));
-                Vector<byte> isUpper = Vector.BitwiseAnd(
-                    Vector.GreaterThan(lanes, lowerA),
-                    Vector.LessThan(lanes, upperZ));
-                Vector<byte> foldedLanes = Vector.BitwiseOr(lanes, Vector.BitwiseAnd(isUpper, caseBit));
-                foldedLanes.CopyTo(folded.AsSpan(i));
-            }
-        }
-        for (; i < length; i++)
-        {
-            byte b = blob[i];
-            folded[i] = b is >= (byte)'A' and <= (byte)'Z' ? (byte)(b | 0x20) : b;
-        }
-        return folded;
-    }
-
-    private static byte[] FoldNeedle(string needle)
-    {
-        byte[] utf8 = Encoding.UTF8.GetBytes(needle);
-        for (int i = 0; i < utf8.Length; i++)
-        {
-            if (utf8[i] is >= (byte)'A' and <= (byte)'Z')
-            {
-                utf8[i] |= 0x20;
-            }
-        }
-        return utf8;
-    }
-
-    private static string FoldString(string value)
-    {
-        Span<char> folded = value.Length <= 256 ? stackalloc char[value.Length] : new char[value.Length];
-        for (int i = 0; i < value.Length; i++)
-        {
-            char c = value[i];
-            folded[i] = c is >= 'A' and <= 'Z' ? (char)(c | 0x20) : c;
-        }
-        return new string(folded);
-    }
 
     private static int UpperBoundMinusOne(int[] ascending, int position)
     {

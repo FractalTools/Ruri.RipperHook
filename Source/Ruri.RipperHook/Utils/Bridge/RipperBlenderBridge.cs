@@ -939,11 +939,24 @@ public static class RipperBlenderBridge
     /// reaches this through <c>MethodInfo.Invoke</c>, which binds by exact parameter count and would
     /// never supply an omitted optional argument.</remarks>
     public static ColumnTableDto QueryDataTable(string[] vfsRoots, string containerFile, string[] flatColumnSpecs,
-        CancellationToken cancellation)
+        string distinctBy, string preferNonEmpty, CancellationToken cancellation)
     {
-        (string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
-            VfsFuncOrThrow(GameBundleHook.QueryDataTable)(vfsRoots, containerFile, flatColumnSpecs, cancellation);
-        return new ColumnTableDto(name, rowCount, columns, kinds, blobs, offsets);
+        (string handle, string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
+            VfsFuncOrThrow(GameBundleHook.QueryDataTable)(vfsRoots, containerFile, flatColumnSpecs,
+                distinctBy, preferNonEmpty, cancellation);
+        return new ColumnTableDto(handle, name, rowCount, columns, kinds, blobs, offsets);
+    }
+
+    /// <summary>Row ids of a table returned by <see cref="QueryDataTable"/> whose text matches
+    /// <paramref name="query"/> -- the SAME vectorized engine the cabmap browser searches with
+    /// (<see cref="CabMapping.Utf8Search"/>: one ASCII fold per column, then a parallel IndexOf
+    /// sweep), so a game's own config tables search exactly as fast as the row table does and
+    /// there is only one implementation of "does this row match". Returns little-endian int32
+    /// bytes, numpy-viewable as-is.</summary>
+    public static byte[] SearchDataTable(string handle, string query)
+    {
+        int[] rows = VfsFuncOrThrow(GameBundleHook.SearchDataTable)(handle, query);
+        return IntsToBytes(rows, rows.Length);
     }
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
@@ -1306,7 +1319,7 @@ public sealed record PackedTableDto(
 /// Offsets[i] is RowCount+1 little-endian int32s), "int" (Blobs[i] is RowCount little-endian int64s,
 /// Offsets[i] empty) or "real" (RowCount little-endian float64s). Column 0 is the row key.</summary>
 public sealed record ColumnTableDto(
-    string Name, int RowCount, string[] Names, string[] Kinds, byte[][] Blobs, byte[][] Offsets);
+    string Handle, string Name, int RowCount, string[] Names, string[] Kinds, byte[][] Blobs, byte[][] Offsets);
 
 /// <summary>One file inside the VFS, as returned by <see cref="RipperBlenderBridge.EnumerateVfsFiles"/> — its
 /// exact original name (the lookup key <see cref="RipperBlenderBridge.ExtractVfsFile"/> takes), its
