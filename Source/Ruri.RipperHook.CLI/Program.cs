@@ -84,9 +84,8 @@ internal static class Program
         // run again without an explicit opt-in). --hook AR_SkipStreamingAssetsCopy still works too; this
         // just removes the need to remember it every single invocation.
         config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
-        // 同样无条件常开:[SerializeReference] 是 AssetRipper 的通用读取能力,不是某个游戏的特化。
-        // 不开时含该属性的 MonoBehaviour 会被整个放弃(结构置 null),导出成没有字段的空壳。
-        config.EnabledHooks.Add("AR_SerializeReference_");
+        // AR_SerializeReference_ 不在这里加:每个 host 都必开,已收敛到 Bootstrap.AlwaysOnHookIds,
+        // 由下面的 Bootstrap.ApplyHooks 统一补上。
         // --load-types implies the export should be filtered to those same types.
         if (opts.LoadTypes.Length > 0)
         {
