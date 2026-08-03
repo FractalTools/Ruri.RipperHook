@@ -155,6 +155,21 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate string[] DiagnoseSchemaDriftDelegate(string[] vfsRoots, string mapName);
     public static DiagnoseSchemaDriftDelegate? DiagnoseSchemaDrift;
 
+    /// <summary>Set by a VFS game hook: read one of the game's own self-describing data containers
+    /// out of the VFS and project it into columns. <paramref name="flatColumnSpecs"/> is four strings
+    /// per column -- name, dotted path, the container to resolve that value through (empty for no
+    /// join), and the path taken inside the joined row -- the same flattened encoding the cabmap's
+    /// filter rules already use, so no custom DTO crosses the reflection boundary.
+    ///
+    /// The result is a plain tuple of buffers, like every other delegate here: <c>Kinds[i]</c> is
+    /// "text" (Blobs[i] is UTF-8 and Offsets[i] is RowCount+1 little-endian int32s), "int" (RowCount
+    /// little-endian int64s, Offsets[i] empty) or "real" (RowCount little-endian float64s). Column 0
+    /// is the row's own key. <c>null</c> when no VFS hook is active.</summary>
+    public delegate (string Name, int RowCount, string[] Columns, string[] Kinds, byte[][] Blobs, byte[][] Offsets)
+        QueryDataTableDelegate(string[] vfsRoots, string containerFile, string[] flatColumnSpecs,
+            CancellationToken cancellation);
+    public static QueryDataTableDelegate? QueryDataTable;
+
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each

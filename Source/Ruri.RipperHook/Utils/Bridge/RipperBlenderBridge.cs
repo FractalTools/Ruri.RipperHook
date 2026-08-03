@@ -920,6 +920,32 @@ public static class RipperBlenderBridge
     public static string[] DiagnoseSchemaDrift(string[] vfsRoots, string mapName) =>
         VfsFuncOrThrow(GameBundleHook.DiagnoseSchemaDrift)(vfsRoots, mapName);
 
+    /// <summary>
+    /// Project one of the game's own self-describing data containers into columns. The container
+    /// names itself (<paramref name="containerFile"/> is a VFS file name such as
+    /// "Data/TableCfg/CharacterTable.bytes") and carries its own schema, so nothing here -- and
+    /// nothing generated -- knows what a character or a localization is.
+    ///
+    /// <paramref name="flatColumnSpecs"/> is four strings per column: display name, dotted path into
+    /// the row, the container to resolve that value through (empty = no join), and the path taken
+    /// inside the joined row. "name.id" through "Data/TableCfg/I18nTextTable_CN.bytes" with an empty
+    /// joined path is how a roster gets its localized names. Column 0 of the result is always the
+    /// row's own key.
+    ///
+    /// The returned buffers are the columns as-is: a python caller maps them with numpy and never
+    /// parses a byte.
+    /// </summary>
+    /// <remarks><paramref name="cancellation"/> is required, not defaulted: the in-process caller
+    /// reaches this through <c>MethodInfo.Invoke</c>, which binds by exact parameter count and would
+    /// never supply an omitted optional argument.</remarks>
+    public static ColumnTableDto QueryDataTable(string[] vfsRoots, string containerFile, string[] flatColumnSpecs,
+        CancellationToken cancellation)
+    {
+        (string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
+            VfsFuncOrThrow(GameBundleHook.QueryDataTable)(vfsRoots, containerFile, flatColumnSpecs, cancellation);
+        return new ColumnTableDto(name, rowCount, columns, kinds, blobs, offsets);
+    }
+
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(
             "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
@@ -1274,6 +1300,13 @@ public sealed record PackedTableDto(
     byte[] ClassFlat, byte[] ClassStarts,
     byte[] DependencyCounts,
     string ClassIdNames);
+
+/// <summary>One projected data table as raw buffers -- see <see cref="RipperBlenderBridge.QueryDataTable"/>.
+/// One entry per column, parallel across all four arrays. <c>Kinds[i]</c> is "text" (Blobs[i] is UTF-8,
+/// Offsets[i] is RowCount+1 little-endian int32s), "int" (Blobs[i] is RowCount little-endian int64s,
+/// Offsets[i] empty) or "real" (RowCount little-endian float64s). Column 0 is the row key.</summary>
+public sealed record ColumnTableDto(
+    string Name, int RowCount, string[] Names, string[] Kinds, byte[][] Blobs, byte[][] Offsets);
 
 /// <summary>One file inside the VFS, as returned by <see cref="RipperBlenderBridge.EnumerateVfsFiles"/> — its
 /// exact original name (the lookup key <see cref="RipperBlenderBridge.ExtractVfsFile"/> takes), its
