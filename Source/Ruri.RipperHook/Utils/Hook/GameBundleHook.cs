@@ -189,6 +189,14 @@ public class GameBundleHook : CommonHook, IHookModule
         NpcPrefabPartsDelegate(string[] vfsRoots, string templateId);
     public static NpcPrefabPartsDelegate? NpcPrefabParts;
 
+    /// <summary>Set by a VFS game hook: pull each character's model prefab name and its
+    /// expression-table tag out of the exported character data assets. Four strings per
+    /// character (id, model, tag, asset name). Takes already-exported text so the loading stays
+    /// on the generic side and only the field names live with the game. <c>null</c> when no VFS
+    /// hook is active.</summary>
+    public delegate string[] CharacterModelsDelegate(string[] assetTexts);
+    public static CharacterModelsDelegate? CharacterModels;
+
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each

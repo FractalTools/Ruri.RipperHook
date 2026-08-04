@@ -959,6 +959,25 @@ public static class RipperBlenderBridge
         return IntsToBytes(rows, rows.Length);
     }
 
+    /// <summary>
+    /// Each character's authoritative model prefab name and expression-table tag, read out of the
+    /// character data assets in <paramref name="cabNames"/>. Four strings per character: id, model
+    /// prefab name, morph tag id, source asset name.
+    ///
+    /// The closure is loaded here (generic) and only MonoBehaviours are serialized, so pulling
+    /// three fields does not cost a full character export; the field names live with the game (see
+    /// <see cref="GameBundleHook.CharacterModels"/>). A character's model is NOT derivable from its
+    /// id -- no config table carries one -- which is why this asset has to be read at all.
+    /// </summary>
+    public static string[] ReadCharacterModels(CabMapHandle map, string[] cabNames)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour]);
+        UTF8Encoding utf8 = new(false);
+        string[] texts = closure.Assets.Values.Select(bytes => utf8.GetString(bytes)).ToArray();
+        return VfsFuncOrThrow(GameBundleHook.CharacterModels)(texts);
+    }
+
     /// <summary>What an npc template is assembled from -- see
     /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
     /// reflection boundary: [characterId, lodCount, facialMorph, part, part, ...].</summary>
