@@ -1125,6 +1125,10 @@ public static class RipperBlenderBridge
         List<(string Path, string MetaJson, byte[] Payload)> capturedMeshes)
     {
         Dictionary<string, byte[]> assets = new(StringComparer.Ordinal);
+        // The exported path IS the asset's real name (AssetRipper names files from m_Name /
+        // the addressable path) -- dropping it here was how every texture crossed the bridge
+        // as a bare guid and hosts had nothing better to display.
+        Dictionary<string, string> assetPaths = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> other = new(StringComparer.OrdinalIgnoreCase);
         List<string> roots = new();
         List<string> sceneRoots = new();
@@ -1166,6 +1170,7 @@ public static class RipperBlenderBridge
             // asset the exporter emitted in another format the moment one appeared: a TGA or EXR
             // texture became mojibake in the document stream and vanished from every material.
             assets[guid] = bytes;
+            assetPaths[guid] = path;
             if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
             {
                 roots.Add(guid);
@@ -1279,7 +1284,8 @@ public static class RipperBlenderBridge
         }
 
         return new ClosureResult(assets, other, roots.ToArray(), seedRoots, clipGuidsByCab,
-            sceneRoots.ToArray(), clipCurveMeta, clipCurveData, meshBlobMeta, meshBlobData, rootCabs);
+            sceneRoots.ToArray(), clipCurveMeta, clipCurveData, meshBlobMeta, meshBlobData, rootCabs,
+            assetPaths);
     }
 
     /// <summary>
@@ -1535,7 +1541,8 @@ public sealed record ClosureResult(
     IReadOnlyDictionary<string, byte[]> ClipCurveData,
     IReadOnlyDictionary<string, string> MeshBlobMeta,
     IReadOnlyDictionary<string, byte[]> MeshBlobData,
-    IReadOnlyDictionary<string, string> RootCabs)
+    IReadOnlyDictionary<string, string> RootCabs,
+    IReadOnlyDictionary<string, string> AssetPaths)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, byte[]>(),
@@ -1548,5 +1555,6 @@ public sealed record ClosureResult(
         new Dictionary<string, byte[]>(),
         new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
+        new Dictionary<string, string>(),
         new Dictionary<string, string>());
 }
