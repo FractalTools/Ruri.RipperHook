@@ -984,6 +984,10 @@ public static class RipperBlenderBridge
         return VfsFuncOrThrow(GameBundleHook.CharacterModels)(texts);
     }
 
+    /// <summary>Every npc template the game ships an assembled model for.</summary>
+    public static string[] NpcPrefabManifest(string[] vfsRoots)
+        => VfsFuncOrThrow(GameBundleHook.NpcPrefabManifest)(vfsRoots);
+
     /// <summary>What an npc template is assembled from -- see
     /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
     /// reflection boundary: [characterId, lodCount, facialMorph, part, part, ...].</summary>

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
@@ -188,6 +188,11 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph)
         NpcPrefabPartsDelegate(string[] vfsRoots, string templateId);
     public static NpcPrefabPartsDelegate? NpcPrefabParts;
+
+    /// <summary>Set by a VFS game hook: every npc template the game ships an assembled model for.
+    /// <c>null</c> when no VFS hook is active.</summary>
+    public delegate string[] NpcPrefabManifestDelegate(string[] vfsRoots);
+    public static NpcPrefabManifestDelegate? NpcPrefabManifest;
 
     /// <summary>Set by a VFS game hook: pull each character's model prefab name and its
     /// expression-table tag out of the exported character data assets. Four strings per
