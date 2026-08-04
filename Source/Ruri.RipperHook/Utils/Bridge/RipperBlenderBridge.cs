@@ -959,6 +959,21 @@ public static class RipperBlenderBridge
         return IntsToBytes(rows, rows.Length);
     }
 
+    /// <summary>What an npc template is assembled from -- see
+    /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
+    /// reflection boundary: [characterId, lodCount, facialMorph, part, part, ...].</summary>
+    public static string[] NpcPrefabParts(string[] vfsRoots, string templateId)
+    {
+        (string[] parts, string characterId, int lodCount, string facialMorph) =
+            VfsFuncOrThrow(GameBundleHook.NpcPrefabParts)(vfsRoots, templateId);
+        string[] flat = new string[3 + parts.Length];
+        flat[0] = characterId;
+        flat[1] = lodCount.ToString();
+        flat[2] = facialMorph;
+        parts.CopyTo(flat, 3);
+        return flat;
+    }
+
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(
             "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");

@@ -180,6 +180,15 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate int[] SearchDataTableDelegate(string handle, string query);
     public static SearchDataTableDelegate? SearchDataTable;
 
+    /// <summary>Set by a VFS game hook: the part prefab names one npc template is assembled from,
+    /// plus the character it corresponds to (empty when generic), how many detail levels it has,
+    /// and its facial-morph avatar name. A generic npc ships no model prefab of its own -- the
+    /// bundle index cannot answer this, only the game's own per-template manifest can.
+    /// <c>null</c> when no VFS hook is active.</summary>
+    public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph)
+        NpcPrefabPartsDelegate(string[] vfsRoots, string templateId);
+    public static NpcPrefabPartsDelegate? NpcPrefabParts;
+
     /// <summary>
     /// Set by a VFS game hook: given an on-disk path, decrypt + parse JUST the SerializedFile metadata of
     /// every CAB-hosting bundle the path contains, and return one tuple per SerializedFile — releasing each
