@@ -990,16 +990,17 @@ public static class RipperBlenderBridge
 
     /// <summary>What an npc template is assembled from -- see
     /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
-    /// reflection boundary: [characterId, lodCount, facialMorph, part, part, ...].</summary>
+    /// reflection boundary: [characterId, lodCount, facialMorph, avatarTemplet, part, part, ...].</summary>
     public static string[] NpcPrefabParts(string[] vfsRoots, string templateId)
     {
-        (string[] parts, string characterId, int lodCount, string facialMorph) =
+        (string[] parts, string characterId, int lodCount, string facialMorph, string avatarTemplet) =
             VfsFuncOrThrow(GameBundleHook.NpcPrefabParts)(vfsRoots, templateId);
-        string[] flat = new string[3 + parts.Length];
+        string[] flat = new string[4 + parts.Length];
         flat[0] = characterId;
         flat[1] = lodCount.ToString();
         flat[2] = facialMorph;
-        parts.CopyTo(flat, 3);
+        flat[3] = avatarTemplet;
+        parts.CopyTo(flat, 4);
         return flat;
     }
 

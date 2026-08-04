@@ -185,7 +185,7 @@ public class GameBundleHook : CommonHook, IHookModule
     /// and its facial-morph avatar name. A generic npc ships no model prefab of its own -- the
     /// bundle index cannot answer this, only the game's own per-template manifest can.
     /// <c>null</c> when no VFS hook is active.</summary>
-    public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph)
+    public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph, string AvatarTemplet)
         NpcPrefabPartsDelegate(string[] vfsRoots, string templateId);
     public static NpcPrefabPartsDelegate? NpcPrefabParts;
 
