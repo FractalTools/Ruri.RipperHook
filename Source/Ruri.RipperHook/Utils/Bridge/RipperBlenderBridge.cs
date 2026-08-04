@@ -706,7 +706,13 @@ public static class RipperBlenderBridge
             long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             Interlocked.Add(ref _decodeTicks, t1 - t0);
             using MemoryStream stream = new();
-            bitmap.Save(stream, texture.GetTextureExportFormat(PreferOriginalTextureExtension, ImageExportFormat));
+            // PNG unconditionally, NOT the texture's original container. Preserving
+            // the source extension is a disk-export nicety -- there is no file name
+            // out here, only bytes handed to an in-process consumer that has to
+            // decode them. Painter decodes through Qt, which ships no TGA codec, so
+            // a texture authored as .tga came back "could not be decoded" while its
+            // PNG neighbours were fine. One container, always readable.
+            bitmap.Save(stream, AssetRipper.Export.Configuration.ImageExportFormat.Png);
             Interlocked.Add(ref _encodeTicks, System.Diagnostics.Stopwatch.GetTimestamp() - t1);
             return stream.ToArray();
         }
