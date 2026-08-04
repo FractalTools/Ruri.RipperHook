@@ -387,9 +387,15 @@ public static class RipperBlenderBridge
     /// the CLI's --export and the GUI's project export — byte-identical output, just memory-backed instead
     /// of disk-backed), and return the result keyed by GUID.
     /// </summary>
-    public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames)
+    /// <param name="acceptedTextureFormats">The image containers THIS consumer can decode, lowercase
+    /// extensions in preference order ("png", "tga", "exr", ...). Empty accepts everything: every
+    /// texture keeps the container the game authored it in, byte-identical to a disk export. A
+    /// texture whose natural container is not in the set is encoded into the set's first entry
+    /// instead -- conversion happens exactly for what the consumer cannot read, never globally.
+    /// The capability is the consumer's own data; nothing here prefers any format.</param>
+    public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames, string[] acceptedTextureFormats)
     {
-        return ImportCabsCore(map, seedCabNames, null);
+        return ImportCabsCore(map, seedCabNames, null, acceptedTextureFormats);
     }
 
     /// <summary>
@@ -402,14 +408,36 @@ public static class RipperBlenderBridge
     /// A distinct method name (not an overload): the pythonnet caller binds methods via
     /// Type.GetMethod(name), which throws on ambiguity.
     /// </summary>
-    public static ClosureResult ImportCabsFiltered(CabMapHandle map, string[] seedCabNames, int[] exportClassIds)
+    public static ClosureResult ImportCabsFiltered(CabMapHandle map, string[] seedCabNames, int[] exportClassIds,
+        string[] acceptedTextureFormats)
     {
         ArgumentNullException.ThrowIfNull(exportClassIds);
-        return ImportCabsCore(map, seedCabNames, exportClassIds);
+        return ImportCabsCore(map, seedCabNames, exportClassIds, acceptedTextureFormats);
     }
 
-    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds)
+    /// <summary>The consumer's accepted-container declaration, parsed. An extension nobody can
+    /// encode is a caller bug and must say so at the boundary, not decode into a wrong image.</summary>
+    private static AssetRipper.Export.Configuration.ImageExportFormat[] ParseTextureFormats(string[] extensions)
     {
+        AssetRipper.Export.Configuration.ImageExportFormat[] formats =
+            new AssetRipper.Export.Configuration.ImageExportFormat[extensions.Length];
+        for (int i = 0; i < extensions.Length; i++)
+        {
+            if (!AssetRipper.Export.Configuration.ImageExportFormat.TryGetFromExtension(
+                    extensions[i], out formats[i]))
+            {
+                throw new ArgumentException(
+                    $"'{extensions[i]}' is not an image container this exporter can produce "
+                    + "(bmp/exr/hdr/jpeg/jpg/png/tga).");
+            }
+        }
+        return formats;
+    }
+
+    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds,
+        string[] acceptedTextureFormats)
+    {
+        ArgumentNullException.ThrowIfNull(acceptedTextureFormats);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
 
@@ -430,9 +458,17 @@ public static class RipperBlenderBridge
         // typetrees), while Level1+ makes every ImportCabs call re-run the whole IL2Cpp assembly
         // scan and decompile-export ~1000 .cs stubs per closure -- pure fixed cost per call.
         settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
+        // The bridge's texture behavior is EXPLICIT, never inherited from whatever
+        // AssetRipper.Settings.json a GUI run happened to save next to the DLL: naturals are the
+        // game's own container whenever the asset records one, and png -- a lossless encode of the
+        // decoded pixels -- when it records none. A settings file silently flipping this per bin
+        // directory is exactly how the same closure once produced tga bytes under Debug and png
+        // bytes under Release with nobody able to say why.
+        settings.ExportSettings.PreferOriginalTextureExtension = true;
+        settings.ExportSettings.ImageExportFormat = AssetRipper.Export.Configuration.ImageExportFormat.Png;
         ClipCaptureExporter clipCapture = new();
         MeshCaptureExporter meshCapture = new();
-        PrewarmedTextureExporter textureExporter = new(settings);
+        PrewarmedTextureExporter textureExporter = new(settings, ParseTextureFormats(acceptedTextureFormats));
         BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter, exportClassIds);
 
         GameData gameData;
@@ -621,8 +657,35 @@ public static class RipperBlenderBridge
 
         public (int Hits, int Misses) HitStats => (_hits, _misses);
 
-        public PrewarmedTextureExporter(FullConfiguration configuration) : base(configuration)
+        private readonly AssetRipper.Export.Configuration.ImageExportFormat[] _acceptedFormats;
+        private readonly bool _exportSprites;
+
+        public PrewarmedTextureExporter(FullConfiguration configuration,
+            AssetRipper.Export.Configuration.ImageExportFormat[] acceptedFormats) : base(configuration)
         {
+            _acceptedFormats = acceptedFormats;
+            // Mirrors the base's private ExportSprites, from the same setting it reads.
+            _exportSprites = configuration.ExportSettings.SpriteExportMode
+                is not AssetRipper.Export.Configuration.SpriteExportMode.Yaml;
+        }
+
+        /// <summary>
+        /// Content negotiation, the whole of it: the texture's NATURAL container is whatever a disk
+        /// export would produce (the game's own authoring format); it survives untouched whenever
+        /// the consumer declared nothing (raw truth) or declared it acceptable, and only a container
+        /// the consumer cannot decode is re-encoded -- into the consumer's first preference. The
+        /// producer holds no format opinion of its own.
+        /// </summary>
+        public AssetRipper.Export.Configuration.ImageExportFormat Negotiate(
+            AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture)
+        {
+            AssetRipper.Export.Configuration.ImageExportFormat natural =
+                texture.GetTextureExportFormat(PreferOriginalTextureExtension, ImageExportFormat);
+            if (_acceptedFormats.Length == 0 || Array.IndexOf(_acceptedFormats, natural) >= 0)
+            {
+                return natural;
+            }
+            return _acceptedFormats[0];
         }
 
         public override bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
@@ -632,7 +695,18 @@ public static class RipperBlenderBridge
                 exportCollection = null;
                 return false;
             }
-            return base.TryCreateCollection(asset, out exportCollection);
+            // Same gate as the base, but the collection is the negotiating one, so the file
+            // EXTENSION follows the same decision as the encoded bytes -- the two must never be
+            // allowed to disagree (a .tga file holding png bytes is a silent lie to any consumer
+            // that trusts names).
+            if (asset.MainAsset is AssetRipper.Processing.Textures.SpriteInformationObject spriteInformation
+                && (_exportSprites || asset is not AssetRipper.SourceGenerated.Classes.ClassID_213.ISprite))
+            {
+                exportCollection = new NegotiatedTextureExportCollection(this, spriteInformation, _exportSprites);
+                return true;
+            }
+            exportCollection = null;
+            return false;
         }
 
         public void Prewarm(GameData gameData)
@@ -705,25 +779,40 @@ public static class RipperBlenderBridge
             }
             long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             Interlocked.Add(ref _decodeTicks, t1 - t0);
+            AssetRipper.Export.Configuration.ImageExportFormat natural =
+                texture.GetTextureExportFormat(PreferOriginalTextureExtension, ImageExportFormat);
+            AssetRipper.Export.Configuration.ImageExportFormat negotiated = Negotiate(texture);
+            _naturalCounts.AddOrUpdate(natural, 1, static (_, count) => count + 1);
+            if (negotiated != natural)
+            {
+                Interlocked.Increment(ref _convertedCount);
+            }
             using MemoryStream stream = new();
-            // PNG unconditionally, NOT the texture's original container. Preserving
-            // the source extension is a disk-export nicety -- there is no file name
-            // out here, only bytes handed to an in-process consumer that has to
-            // decode them. Painter decodes through Qt, which ships no TGA codec, so
-            // a texture authored as .tga came back "could not be decoded" while its
-            // PNG neighbours were fine. One container, always readable.
-            bitmap.Save(stream, AssetRipper.Export.Configuration.ImageExportFormat.Png);
+            bitmap.Save(stream, negotiated);
             Interlocked.Add(ref _encodeTicks, System.Diagnostics.Stopwatch.GetTimestamp() - t1);
             return stream.ToArray();
         }
 
+        // Observability for the negotiation itself: which containers the game actually authored,
+        // and how many the consumer's declaration forced into another one. A run whose naturals
+        // all collapse to one format is how a broken OriginalPath pipeline gets NOTICED.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<
+            AssetRipper.Export.Configuration.ImageExportFormat, int> _naturalCounts = new();
+        private int _convertedCount;
+
         public void LogStats()
         {
             double frequency = System.Diagnostics.Stopwatch.Frequency;
+            string naturals = string.Join(' ', _naturalCounts.OrderByDescending(static pair => pair.Value)
+                .Select(static pair => $"{pair.Key.ToString().ToLowerInvariant()}={pair.Value}"));
+            string accepted = _acceptedFormats.Length == 0
+                ? "raw"
+                : string.Join(',', _acceptedFormats.Select(static format => format.ToString().ToLowerInvariant()));
             Logger.Info(LogCategory.Export,
                 $"[TexPrewarm] wall={_prewarmWallMs}ms decodeSum={_decodeTicks * 1000.0 / frequency:F0}ms " +
                 $"encodeSum={_encodeTicks * 1000.0 / frequency:F0}ms cores={Environment.ProcessorCount} " +
-                $"streamed={_streamedTextureCount} over {_streamedFileCount} resource file(s)");
+                $"streamed={_streamedTextureCount} over {_streamedFileCount} resource file(s) " +
+                $"naturals[{naturals}] accepted={accepted} converted={_convertedCount}");
         }
 
         public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
@@ -737,6 +826,27 @@ public static class RipperBlenderBridge
             Interlocked.Increment(ref _misses);
             return base.Export(container, asset, path, fileSystem);
         }
+    }
+
+    /// <summary>The stock texture collection with one behavioural change: the exported file's
+    /// extension is the NEGOTIATED container (see <see cref="PrewarmedTextureExporter.Negotiate"/>),
+    /// the same decision the encoded bytes followed.</summary>
+    private sealed class NegotiatedTextureExportCollection
+        : AssetRipper.Export.UnityProjects.Textures.TextureExportCollection
+    {
+        private readonly PrewarmedTextureExporter _exporter;
+
+        public NegotiatedTextureExportCollection(PrewarmedTextureExporter exporter,
+            AssetRipper.Processing.Textures.SpriteInformationObject spriteInformation, bool exportSprites)
+            : base(exporter, spriteInformation, exportSprites)
+        {
+            _exporter = exporter;
+        }
+
+        protected override string GetExportExtension(IUnityObjectBase asset)
+            => asset is AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture
+                ? _exporter.Negotiate(texture).GetFileExtension()
+                : base.GetExportExtension(asset);
     }
 
     /// <summary>
@@ -978,7 +1088,8 @@ public static class RipperBlenderBridge
     public static string[] ReadCharacterModels(CabMapHandle map, string[] cabNames)
     {
         ArgumentNullException.ThrowIfNull(map);
-        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour]);
+        // Textures are excluded by the class filter, so there is no container to negotiate.
+        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour], []);
         UTF8Encoding utf8 = new(false);
         string[] texts = closure.Assets.Values.Select(bytes => utf8.GetString(bytes)).ToArray();
         return VfsFuncOrThrow(GameBundleHook.CharacterModels)(texts);
