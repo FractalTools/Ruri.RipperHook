@@ -29,8 +29,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Tpk\Tpk.TypeTrees.Json\Tpk.TypeTrees.Json.csproj" />
-		<ProjectReference Include="..\..\Tpk\Tpk\Tpk.csproj" />
+		<PackageReference Include="AssetRipper.Tpk" Version="2.0.0" />
+		<PackageReference Include="AssetRipper.Tpk.TypeTrees.Json" Version="2.0.0" />
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
 		<!-- Build AR.AssemblyDumper but reference its output via Reference (below) so the
 		     IgnoresAccessChecksToGenerator publicizer kicks in for internals access: the tpk packer
