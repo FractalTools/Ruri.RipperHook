@@ -22,6 +22,41 @@ internal static class SceneSeedResolver
         float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz,
         string[] MaterialAssetPaths);
 
+    /// <summary>Which piece of a map to read: a disc of <see cref="Radius"/> chunk cells around
+    /// (<see cref="CenterX"/>, <see cref="CenterY"/>), restricted to <see cref="SceneStateIds"/> (empty =
+    /// every state the map ships). Parsed from --scene-window; see <see cref="Parse"/> for the default,
+    /// which is the whole map.</summary>
+    internal sealed record SceneWindow(int CenterX, int CenterY, int Radius, int[] SceneStateIds);
+
+    /// <summary>
+    /// Parses --scene-window. Empty/absent is the whole map. Otherwise
+    /// <c>&lt;centerX&gt;,&lt;centerY&gt;,&lt;radius&gt;[,&lt;sceneStateId&gt;...]</c>, e.g.
+    /// <c>-11,-2,1</c> for the 3x3 cells around (-11,-2) in every scene state, or <c>-11,-2,1,0</c> for
+    /// the same cells in scene state 0 only.
+    /// </summary>
+    internal static SceneWindow Parse(string? spec)
+    {
+        if (spec is not { Length: > 0 })
+        {
+            return new SceneWindow(0, 0, int.MaxValue, []);
+        }
+        string[] fields = spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (fields.Length < 3)
+        {
+            throw new ArgumentException(
+                $"--scene-window '{spec}' needs at least <centerX>,<centerY>,<radius>, optionally followed by scene state ids.");
+        }
+        int[] values = new int[fields.Length];
+        for (int i = 0; i < fields.Length; i++)
+        {
+            if (!int.TryParse(fields[i], out values[i]))
+            {
+                throw new ArgumentException($"--scene-window '{spec}': '{fields[i]}' is not an integer.");
+            }
+        }
+        return new SceneWindow(values[0], values[1], values[2], values[3..]);
+    }
+
     /// <summary>VFS root search order — hot-update overlay first, then base client.</summary>
     private static string[] VfsRoots(string gameRoot) =>
     [
@@ -30,12 +65,14 @@ internal static class SceneSeedResolver
     ];
 
     /// <summary>
-    /// Discover the map's placements, keep the best available LOD sibling per instance, resolve the
-    /// mesh+material container paths to their hosting CABs, and expand to the load-file closure --
-    /// the seed set the shared ImportCabs export flow consumes.
+    /// Discover the placements inside one streaming window of the map, keep the best available LOD
+    /// sibling per instance, resolve the mesh+material container paths to their hosting CABs, and expand
+    /// to the load-file closure -- the seed set the shared ImportCabs export flow consumes.
+    /// The window is the game's own (a disc of chunk cells around a centre, gated by scene state); see
+    /// EndfieldSceneBridge.DiscoverScenePlacements. A radius past the map's grid extent is the whole map.
     /// </summary>
     internal static (string[] LoadFiles, HashSet<string> LoadFilterFileNames, List<Placement> Placements)
-        Resolve(CabTable table, string gameRoot, string mapName)
+        Resolve(CabTable table, string gameRoot, string mapName, SceneWindow window)
     {
         if (GameBundleHook.DiscoverScenePlacements is not { } discover)
         {
@@ -48,7 +85,7 @@ internal static class SceneSeedResolver
         // A placement without a usable transform or a resolved asset path isn't geometry and
         // doesn't get placed (not "placed at the origin").
         var withTransform = new List<Placement>();
-        foreach (var p in discover(vfsRoots, mapName))
+        foreach (var p in discover(vfsRoots, mapName, window.CenterX, window.CenterY, window.Radius, window.SceneStateIds))
         {
             rawCount++;
             if (p.HasTransform && p.AssetPath.Length > 0)
@@ -60,7 +97,9 @@ internal static class SceneSeedResolver
         List<Placement> rows = SelectBestLod(withTransform);
 
         Console.Error.WriteLine(
-            $"[Ruri.CLI] scene '{mapName}': {rawCount} placements → {withTransform.Count} with transform+asset → {rows.Count} after best-LOD selection");
+            $"[Ruri.CLI] scene '{mapName}' window centre=({window.CenterX},{window.CenterY}) radius={window.Radius} " +
+            $"states=[{(window.SceneStateIds.Length == 0 ? "all" : string.Join(' ', window.SceneStateIds))}]: " +
+            $"{rawCount} placements → {withTransform.Count} with transform+asset → {rows.Count} after best-LOD selection");
 
         // Distinct mesh paths ∪ distinct material paths, sorted, resolved to hosting CABs;
         // unmatched paths are silently dropped by the resolver.

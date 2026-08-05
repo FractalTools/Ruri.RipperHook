@@ -135,16 +135,30 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate string[] EnumerateSceneMapsDelegate(string[] vfsRoots);
     public static EnumerateSceneMapsDelegate? EnumerateSceneMaps;
 
+    /// <summary>One of a map's placement-bearing chunk files, as a plain tuple (no concrete game-hook
+    /// type): its VFS file name, which scene-data family it belongs to, the root schema that decodes it,
+    /// and -- when its name carries them (HasGrid) -- the streaming-grid cell, scene state and area it
+    /// holds. Manifest-only, so this is what a caller windows a decode by before paying for one.</summary>
+    public delegate IEnumerable<(string FileName, string Family, string Schema, bool HasGrid, int GridX, int GridY, int SceneStateId, int AreaId, long Length)> EnumerateSceneChunksDelegate(string[] vfsRoots, string mapName);
+    /// <summary>Set by a VFS game hook: every placement-bearing chunk file of one map, without reading
+    /// a single chunk byte. <c>null</c> when no VFS hook is active.</summary>
+    public static EnumerateSceneChunksDelegate? EnumerateSceneChunks;
+
     /// <summary>One mesh-bearing scene-entity placement, as a plain tuple (no concrete game-hook type):
-    /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, source chunk file
-    /// name, whether a usable transform source was found, the transform itself
-    /// (identity/zero when HasTransform is false -- treat as "don't place", not "place at the origin"),
-    /// and the entity's own resolved material asset path(s) (empty array if it has none or none resolved
-    /// -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1 instead of ==2,
-    /// so no separate lookup mechanism, no naming-convention guess).</summary>
-    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName);
-    /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement for a map's
-    /// streaming chunks. <c>null</c> when no VFS hook is active.</summary>
+    /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, the VFS name of
+    /// the chunk it came from (the very name the caller asked for, so placements join straight back onto
+    /// <see cref="EnumerateSceneChunks"/>' inventory), whether a usable transform source was found, the
+    /// transform itself (identity/zero when HasTransform is false -- treat as "don't place", not "place
+    /// at the origin"), and the entity's own resolved material asset path(s) (empty array if it has none
+    /// or none resolved -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1
+    /// instead of ==2, so no separate lookup mechanism, no naming-convention guess).</summary>
+    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName, int centerX, int centerY, int radius, int[] sceneStateIds);
+    /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement inside one streaming
+    /// window of a map -- a disc of <c>radius</c> chunk cells around (<c>centerX</c>, <c>centerY</c>),
+    /// gated by scene state, which is the shape the running game itself streams. A whole map is just a
+    /// radius past its grid extent, never the default: a real one runs to thousands of chunks whose
+    /// dependency closure no machine holds at once. <c>sceneStateIds</c> empty means every state the map
+    /// ships. <c>null</c> when no VFS hook is active.</summary>
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
 
     /// <summary>Set by a VFS game hook: binary/vtable-level schema-drift diagnostic -- one report line

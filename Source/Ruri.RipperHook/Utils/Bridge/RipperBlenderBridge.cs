@@ -1014,17 +1014,36 @@ public static class RipperBlenderBridge
         VfsFuncOrThrow(GameBundleHook.EnumerateSceneMaps)(vfsRoots);
 
     /// <summary>
-    /// Discover every mesh-bearing entity placement for <paramref name="mapName"/>'s STREAMING chunks
-    /// (Data/Streaming/PC/&lt;map&gt;/Streaming/*.bytes -- static world geometry/props/colliders), across
-    /// <paramref name="vfsRoots"/> in priority order. Cheap: only the hash LUT + chunk files are
+    /// Every placement-bearing chunk file of <paramref name="mapName"/>, read out of the VFS manifests
+    /// alone -- no chunk byte is touched, so this stays instant on a map with thousands of them. The
+    /// grid cell / scene state / area on each entry is the map's own streaming addressing, which is what
+    /// makes a windowed <see cref="DiscoverScenePlacements"/> possible at all. See
+    /// EndfieldSceneBridge.EnumerateSceneChunks.
+    /// </summary>
+    public static SceneChunkDto[] EnumerateSceneChunks(string[] vfsRoots, string mapName) =>
+        VfsFuncOrThrow(GameBundleHook.EnumerateSceneChunks)(vfsRoots, mapName)
+            .Select(c => new SceneChunkDto(c.FileName, c.Family, c.Schema, c.HasGrid,
+                c.GridX, c.GridY, c.SceneStateId, c.AreaId, c.Length))
+            .ToArray();
+
+    /// <summary>
+    /// Discover every mesh-bearing entity placement inside one streaming window of
+    /// <paramref name="mapName"/>: the disc of <paramref name="radius"/> chunk cells around
+    /// (<paramref name="centerX"/>, <paramref name="centerY"/>) that the running game itself streams,
+    /// gated by <paramref name="sceneStateIds"/> (empty = every state the map ships), across
+    /// <paramref name="vfsRoots"/> in priority order. A radius past the map's grid extent is the whole
+    /// map -- worth knowing what that costs first: <see cref="EnumerateSceneChunks"/> prices a window
+    /// without decoding anything. Cheap per chunk: only the hash LUT + the selected files are
     /// extracted/decoded, no dependency closure is resolved and no CAB is loaded -- the caller resolves
     /// AssetPath -> CAB separately (see <see cref="ResolveCabsForPaths"/>) only for whichever placements
     /// it actually wants to import. See EndfieldSceneBridge.DiscoverScenePlacements for the full
-    /// implementation notes (transform-resolution priority, the STREAMING-vs-DynamicStreaming scope
-    /// boundary, and the ReverseNotes.md caveat on Mono/Proxy entities).
+    /// implementation notes (how the non-grid chunks are bounded, transform-resolution priority, the
+    /// STREAMING-vs-DynamicStreaming scope boundary, and the ReverseNotes.md caveat on Mono/Proxy
+    /// entities).
     /// </summary>
-    public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName) =>
-        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName)
+    public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName,
+        int centerX, int centerY, int radius, int[] sceneStateIds) =>
+        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName, centerX, centerY, radius, sceneStateIds)
             .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
                 p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths))
             .ToArray();
@@ -1488,6 +1507,17 @@ public sealed record ColumnTableDto(
 /// EVFSBlockType name (e.g. "Streaming", "ExtendData"), its decrypted length, and which .chk it lives in
 /// (informational only; callers extract by name, not by chunk path).</summary>
 public sealed record VfsFileDto(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath);
+
+/// <summary>One placement-bearing chunk file listed by <see cref="RipperBlenderBridge.EnumerateSceneChunks"/> —
+/// its VFS name (the key <see cref="RipperBlenderBridge.DiscoverScenePlacements"/> takes, and the name that
+/// comes back as a placement's SourceChunk), which scene-data family it belongs to ("Streaming" /
+/// "DynamicStreaming"), the root schema that decodes it, and its place in the map's own streaming addressing.
+/// HasGrid false means the name carries no streaming-grid cell — the map-wide "_Global_" chunks and the whole
+/// DynamicStreaming family — so GridX/GridY are meaningless for it and only the world position of its decoded
+/// placements can locate it. Length is the highest-priority root's manifest length: a cost estimate.</summary>
+public sealed record SceneChunkDto(
+    string FileName, string Family, string Schema, bool HasGrid,
+    int GridX, int GridY, int SceneStateId, int AreaId, long Length);
 
 /// <summary>One mesh-bearing entity placement discovered by <see cref="RipperBlenderBridge.DiscoverScenePlacements"/>.
 /// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.

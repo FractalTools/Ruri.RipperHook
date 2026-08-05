@@ -1,4 +1,4 @@
-using System.CommandLine;
+﻿using System.CommandLine;
 using System.CommandLine.Binding;
 using System.IO;
 using System.Linq;
@@ -70,6 +70,14 @@ internal sealed class CliOptions
     /// </summary>
     public string? ExportSceneMap { get; init; }
 
+    /// <summary>
+    /// Which piece of <see cref="ExportSceneMap"/> to export:
+    /// <c>&lt;centerX&gt;,&lt;centerY&gt;,&lt;radius&gt;[,&lt;sceneStateId&gt;...]</c>, the streaming
+    /// window the running game would hold around that chunk cell. Absent means the whole map, which on a
+    /// real open-world map is thousands of chunks and a dependency closure no machine holds at once.
+    /// </summary>
+    public string? SceneWindow { get; init; }
+
     /// <summary>转储原始 VFS 文件的目标目录。非 bundle 的战斗表就住在这层,AssetRipper 看不到它们。</summary>
     public string? DumpVfsPath { get; init; }
 
@@ -94,6 +102,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string[]> LoadTypes { get; }
     public Option<string?> ExportGlb { get; }
     public Option<string?> ExportScene { get; }
+
+    public Option<string?> SceneWindowOption { get; }
 
     public Option<string?> DumpVfs { get; }
 
@@ -161,6 +171,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
         ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
+        SceneWindowOption = new Option<string?>("--scene-window", "With --export-scene, export only one streaming window of the map: <centerX>,<centerY>,<radius>[,<sceneStateId>...] in chunk cells, e.g. -11,-2,1 for the 3x3 cells around (-11,-2). Omit for the whole map.");
         DumpVfs = new Option<string?>("--dump-vfs", "Dump raw VFS files (including non-bundle payloads AssetRipper never sees) into this directory and exit. --names filters by file name; needs --load <gameRoot> and a VFS-game --hook.");
         VfsTypesOption = new Option<string[]>("--vfs-types", "With --dump-vfs, keep only these VFS block types (e.g. Table JsonData Lua). These are VFS categories, not AssetRipper ClassIDs.")
         {
@@ -189,6 +200,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes,
             ExportGlb,
             ExportScene,
+            SceneWindowOption,
             DumpVfs,
             VfsTypesOption,
             Passthrough,
@@ -216,6 +228,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             ExportGlbPath = pr.GetValueForOption(ExportGlb),
             ExportSceneMap = pr.GetValueForOption(ExportScene),
+            SceneWindow = pr.GetValueForOption(SceneWindowOption),
             DumpVfsPath = pr.GetValueForOption(DumpVfs),
             VfsTypes = pr.GetValueForOption(VfsTypesOption) ?? [],
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
