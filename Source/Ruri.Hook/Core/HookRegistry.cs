@@ -181,8 +181,20 @@ namespace Ruri.Hook.Core
             // int destParamCount = methodDest.GetParameters().Length; // Unused?
 
             if (methodSrc.IsStatic) srcParamCount--;
-            
-            ReflectionExtensions.RetargetCall(methodSrc, methodDest, srcParamCount, attr.IsBefore, attr.IsReturn);
+
+            try
+            {
+                ReflectionExtensions.RetargetCall(methodSrc, methodDest, srcParamCount, attr.IsBefore, attr.IsReturn);
+            }
+            catch (Exception ex)
+            {
+                // MonoMod reports an invalid IL rewrite from deep inside its own JIT path, naming
+                // neither side of the retarget. Without the pair, a hook that went stale against a
+                // moved upstream method is untraceable.
+                throw new InvalidOperationException(
+                    $"[HookRegistry] Retarget failed: {methodSrc.DeclaringType?.FullName}.{methodSrc.Name} -> " +
+                    $"{methodDest.DeclaringType?.FullName}.{methodDest.Name}", ex);
+            }
         }
 
         private void ApplyRetargetMethodFuncAttributes(IEnumerable<MethodInfo> methods)

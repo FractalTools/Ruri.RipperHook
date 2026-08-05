@@ -285,7 +285,11 @@ namespace Ruri.Hook
             catch (Exception ex)
             {
                 HookManager.DisposeScope(hookId);
-                Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: {ex.Message}");
+                // Full exception, not just the message: a half-applied hook leaves its
+                // InitAttributeHook wiring half-done, and the symptom surfaces much later as a
+                // null delegate somewhere else entirely. An IL-rewrite failure in particular
+                // (InvalidProgramException) says nothing at all without the stack.
+                Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: {ex}");
                 return false;
             }
         }
