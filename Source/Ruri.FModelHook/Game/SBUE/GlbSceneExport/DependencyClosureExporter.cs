@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -17,6 +17,7 @@ using CUE4Parse.UE4.Assets.Objects;
 using CUE4Parse.UE4.Assets.Objects.Properties;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse_Conversion;
+using CUE4Parse_Conversion.Options;
 using CUE4Parse_Conversion.Textures;
 using Newtonsoft.Json;
 
@@ -62,11 +63,9 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //     `JsonConvert.SerializeObject(result.GetDisplayData(saveProperties),
 //     Formatting.Indented)`). That is the byte-equivalent lossless dump.
 //   * Format-native binary sidecar where CUE4Parse-Conversion has an Exporter
-//     for the type — Mesh / Material / Anim / Landscape via `new Exporter(...)`
-//     (IExporter.cs:117-130), Texture via `texture.Decode().Encode(...)` since
-//     UTexture is not in the Exporter dispatch table but the decode+encode
-//     pipeline is the same one MaterialExporter2 runs for sidecar PNGs
-//     (MaterialExporter2.cs:58-69).
+//     for the type — Mesh / Material / Anim / Landscape via ExportSession,
+//     Texture via `texture.Decode().Encode(...)` so the slice-count and
+//     float sidecars stay paired with the image.
 //
 // Per-package failures are logged + recorded as manifest.RecordDroppedAsset
 // (the audit-trail rule). The BFS continues so a single bad import never
@@ -105,10 +104,10 @@ public sealed class DependencyClosureExporter
             return;
         }
 
-        // Use the same default exporter options the render layer uses so a
-        // mesh / material / texture exported here matches a render-layer
-        // sidecar byte-for-byte if both happen to write the same asset.
-        var exporterOptions = new ExporterOptions();
+        // Use the same exporter options the render layer uses so a mesh /
+        // material / texture exported here matches a render-layer sidecar
+        // byte-for-byte if both happen to write the same asset.
+        ExportOptions exporterOptions = SbueExportOptions.Create(EMeshFormat.ActorX);
 
         // Visited set is keyed by IPackage.Name. The form differs across
         // package implementations — IoPackage.Name is the mount-path form
@@ -268,7 +267,7 @@ public sealed class DependencyClosureExporter
     private void ExportPackage(
         IPackage package,
         string assetsOutputDirectory,
-        ExporterOptions exporterOptions,
+        ExportOptions exporterOptions,
         ClosureWriteCounters writeCounters)
     {
         string packageRelativePath = StripLeadingSlash(package.Name);
@@ -350,22 +349,20 @@ public sealed class DependencyClosureExporter
         return materialized;
     }
 
-    // Dispatch table that mirrors CUE4Parse-Conversion's own Exporter switch
-    // (IExporter.cs:117-130). Texture export is wired manually since UTexture
-    // is not in that switch — the Decode/Encode pipeline (which is what
-    // MaterialExporter2 already uses for sidecar PNGs) is the canonical
-    // CUE4Parse texture-out path.
+    // Dispatch table that mirrors CUE4Parse-Conversion's own ExportSession.Add
+    // switch. Texture export stays wired manually: ExportSession would write
+    // the image, but not the slice-count / float sidecars this closure layer
+    // pairs with it.
     private bool TryExportBinarySidecar(
         UObject export,
-        ExporterOptions exporterOptions,
+        ExportOptions exporterOptions,
         ref DirectoryInfo? binarySidecarRoot,
         string binarySidecarDirectoryPath)
     {
-        // Dispatch by run-time type. The first block routes everything the
-        // CUE4Parse-Conversion Exporter() factory natively supports (mesh /
-        // material / anim / landscape) through one call; the second handles
-        // textures via Decode/Encode because UTexture is NOT in the factory's
-        // switch but the decode pipeline is the canonical path.
+        // Dispatch by run-time type. The first block routes everything
+        // ExportSession natively supports (mesh / material / anim / landscape)
+        // through one session; the second handles textures via Decode/Encode so
+        // the slice-count and float sidecars stay paired with the image.
         if (export is UStaticMesh
             or USkeletalMesh
             or USkeleton
@@ -375,9 +372,14 @@ public sealed class DependencyClosureExporter
             or UMaterialInterface
             or ALandscapeProxy)
         {
-            var exporter = new Exporter(export, exporterOptions);
             binarySidecarRoot ??= EnsureBinarySidecarRoot(binarySidecarDirectoryPath);
-            return exporter.TryWriteToDir(binarySidecarRoot, out _, out _);
+            var session = new ExportSession();
+            session.Add(export);
+            IReadOnlyList<ExportResult> results = session
+                .RunAsync(binarySidecarRoot.FullName, exporterOptions)
+                .GetAwaiter()
+                .GetResult();
+            return results.Count > 0 && results[0].Success;
         }
 
         if (export is UTexture texture)
@@ -397,13 +399,12 @@ public sealed class DependencyClosureExporter
 
     // Texture-only sidecar path. UTexture (and subtypes UTexture2D /
     // UTextureCube / UVolumeTexture / ULightMapTexture2D / ...) all expose
-    // Decode + Encode through CUE4Parse_Conversion.Textures, the same pair
-    // MaterialExporter2 uses (MaterialExporter2.cs:60-67). Failure paths
+    // Decode + Encode through CUE4Parse_Conversion.Textures. Failure paths
     // (no mip table / unsupported pixel format / null decode result) return
     // false so the JSON-only fallback remains visible in the manifest.
-    private bool WriteTextureSidecar(UTexture texture, ExporterOptions exporterOptions, DirectoryInfo binarySidecarRoot)
+    private bool WriteTextureSidecar(UTexture texture, ExportOptions exporterOptions, DirectoryInfo binarySidecarRoot)
     {
-        var decoded = TextureStripExport.Decode(texture, exporterOptions.Platform, out int slices);
+        var decoded = TextureStripExport.Decode(texture, exporterOptions.TexturePlatform, out int slices);
         if (decoded is null) return false;
 
         byte[] imageBytes = decoded.Encode(exporterOptions.TextureFormat, exporterOptions.ExportHdrTexturesAsHdr, out string extension);

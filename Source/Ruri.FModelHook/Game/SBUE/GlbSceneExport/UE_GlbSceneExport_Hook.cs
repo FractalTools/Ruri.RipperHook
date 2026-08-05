@@ -8,8 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Objects.Engine;
-using CUE4Parse_Conversion;
-using CUE4Parse_Conversion.Meshes;
+using CUE4Parse_Conversion.Options;
 using FModel;
 using FModel.Services;
 using FModel.Settings;
@@ -127,8 +126,9 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
                 return;
             }
 
-            ExporterOptions options = UserSettings.Default.ExportOptions;
-            options.MeshFormat = EMeshFormat.Gltf2;
+            // ExportOptions is immutable, so the user's settings are read back
+            // and re-emitted with the two knobs this pass pins.
+            //
             // Export geometry + material NAMES (baked into the glTF primitives)
             // but NOT decoded texture sidecars. Bulk texture decode across a
             // whole open world is intermittently crash-prone — a thread-safety
@@ -137,7 +137,21 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
             // scene geometry is the deliverable; textures are re-linked by
             // material name via FModel's normal per-asset texture export, or via
             // the headless CLI: 'Ruri.FModelHook.CLI --export-map-direct --with-materials'.
-            options.ExportMaterials = false;
+            ExportOptions userOptions = UserSettings.GetExportOptions();
+            var options = new ExportOptions(
+                meshFormat: EMeshFormat.Gltf2,
+                naniteMeshFormat: userOptions.NaniteMeshFormat,
+                meshQuality: userOptions.MeshQuality,
+                texturePlatform: userOptions.TexturePlatform,
+                textureFormat: userOptions.TextureFormat,
+                textureQuality: userOptions.TextureQuality,
+                exportHdrTexturesAsHdr: userOptions.ExportHdrTexturesAsHdr,
+                materialDepth: userOptions.MaterialDepth,
+                exportMaterials: false,
+                exportMorphTargets: userOptions.ExportMorphTargets,
+                socketFormat: userOptions.SocketFormat,
+                compressionFormat: userOptions.CompressionFormat,
+                exportAllTextureMips: userOptions.ExportAllTextureMips);
             string outputDirectory = UserSettings.Default.ModelDirectory;
 
             foreach (string mapPath in mapPaths)

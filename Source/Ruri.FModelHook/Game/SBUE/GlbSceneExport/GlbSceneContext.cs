@@ -1,16 +1,15 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using CUE4Parse.FileProvider;
-using CUE4Parse.UE4.Assets;
+using CUE4Parse.UE4.Assets.Exports.Component.SplineMesh;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
-using CUE4Parse_Conversion;
-using CUE4Parse_Conversion.Materials;
-using CUE4Parse_Conversion.Meshes;
-using CUE4Parse_Conversion.Meshes.glTF;
-using CUE4Parse_Conversion.Meshes.PSK;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse_Conversion.Dto;
+using CUE4Parse_Conversion.Options;
+using CUE4Parse_Conversion.Writers.Gltf;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Scenes;
@@ -41,7 +40,7 @@ using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, Vert
 // fold the override material set into the cache key: identical mesh +
 // identical material override list = share; any difference = a fresh
 // MeshBuilder. That keeps the byte-for-byte equality with
-// `Gltf.ExportStaticMeshSections` and still instances heavily when
+// GlbMeshSectionBuilder and still instances heavily when
 // nothing overrides.
 //
 // Part flushing: SharpGLTF's `ToGltf2()` materialises one Schema2 node per
@@ -57,8 +56,13 @@ public sealed class GlbSceneContext
     // exhausts memory on a large open world, while keeping the part count low.
     public const int MaxInstancesPerGlb = 50_000;
 
+    // The scene always renders LODs[0], so the conversion must put the highest
+    // quality there. Deferring to the user's ExportOptions.MeshQuality would
+    // put the LOWEST LOD at index 0 whenever that setting is Lowest.
+    private const EMeshQuality SceneMeshQuality = EMeshQuality.Highest;
+
     public IFileProvider Provider { get; }
-    public ExporterOptions Options { get; }
+    public ExportOptions Options { get; }
     public Action<string> Log { get; }
     public Action<string> LogError { get; }
     public GlbMaterialFactory MaterialFactory { get; }
@@ -73,7 +77,7 @@ public sealed class GlbSceneContext
 
     // Persist across parts: materials are written once (deduped) and the
     // distinct mesh / part bookkeeping is for the summary log.
-    private readonly List<MaterialExporter2> _materialExporters = new();
+    private readonly List<UMaterialInterface> _materials = new();
     private readonly List<string> _materialKeys = new();
     private readonly HashSet<string> _writtenMaterialKeys = new(StringComparer.Ordinal);
     private readonly HashSet<MeshShareKey> _distinctMeshKeys = new();
@@ -100,7 +104,7 @@ public sealed class GlbSceneContext
 
     public GlbSceneContext(
         IFileProvider provider,
-        ExporterOptions options,
+        ExportOptions options,
         Action<string> log,
         Action<string> logError,
         GlbMaterialFactory materialFactory,
@@ -116,9 +120,9 @@ public sealed class GlbSceneContext
 
     public int PlacementCount => _placementCount;
     public int UniqueMeshCount => _distinctMeshKeys.Count;
-    public int MaterialCount => _materialExporters.Count;
+    public int MaterialCount => _materials.Count;
     public IReadOnlyList<string> WrittenParts => _writtenParts;
-    public IReadOnlyList<MaterialExporter2> MaterialExporters => _materialExporters;
+    public IReadOnlyList<UMaterialInterface> Materials => _materials;
     public IReadOnlyList<string> MaterialKeys => _materialKeys;
     public string OutputBasePath => _outputBasePath;
 
@@ -148,7 +152,7 @@ public sealed class GlbSceneContext
         MeshShareKey key = new(mesh.LightingGuid, overrideMaterialPathNames);
         if (!_meshCache.TryGetValue(key, out var meshBuilder))
         {
-            meshBuilder = BuildMesh(mesh, overrideMaterials);
+            meshBuilder = BuildMesh(mesh.Name, () => new StaticMeshDto(mesh, SceneMeshQuality, Options.NaniteMeshFormat), overrideMaterials);
             _meshCache[key] = meshBuilder;
         }
         if (meshBuilder == null)
@@ -165,6 +169,39 @@ public sealed class GlbSceneContext
             // if the geometry isn't.
             return false;
         }
+
+        _distinctMeshKeys.Add(key);
+        _sceneBuilder.AddRigidMesh(meshBuilder, nodeMatrix);
+        _placementCount++;
+        _batchInstanceCount++;
+
+        if (_batchInstanceCount >= MaxInstancesPerGlb)
+        {
+            FlushBatch();
+        }
+        return true;
+    }
+
+    // Append a spline-mesh placement. CUE4Parse bends positions/normals as it
+    // walks the LOD (MeshLodDto.FromStaticMesh applies CalcSliceTransform per
+    // vertex), so the bend is not a distinct UStaticMesh: `bendGuid` stands in
+    // for LightingGuid in the share key so identical bends instance and
+    // different bends build separately.
+    public bool AddSplineMesh(
+        USplineMeshComponent spline,
+        string meshName,
+        FGuid bendGuid,
+        IReadOnlyList<UMaterialInterface?> overrideMaterials,
+        IReadOnlyList<string> overrideMaterialPathNames,
+        Matrix4x4 nodeMatrix)
+    {
+        MeshShareKey key = new(bendGuid, overrideMaterialPathNames);
+        if (!_meshCache.TryGetValue(key, out var meshBuilder))
+        {
+            meshBuilder = BuildMesh(meshName, () => new StaticMeshDto(spline, SceneMeshQuality), overrideMaterials);
+            _meshCache[key] = meshBuilder;
+        }
+        if (meshBuilder == null) return false;
 
         _distinctMeshKeys.Add(key);
         _sceneBuilder.AddRigidMesh(meshBuilder, nodeMatrix);
@@ -314,7 +351,7 @@ public sealed class GlbSceneContext
     // Single-mesh build plus the override-material substitution at material-
     // name level so each distinct (mesh, overrides) tuple emits a distinct
     // MeshBuilder. Geometry bytes are still produced by
-    // Gltf.ExportStaticMeshSections, so vertex/index/UV bytes remain identical
+    // GlbMeshSectionBuilder, so vertex/index/UV bytes remain identical
     // to FModel's "Save Model" output.
     //
     // The override-material substitution follows the Renderer path
@@ -323,27 +360,40 @@ public sealed class GlbSceneContext
     // the cell is null or not a UMaterialInterface — in which case the
     // section keeps its base material so SharpGLTF still gets a sensible
     // material name.
-    private MESH? BuildMesh(UStaticMesh mesh, IReadOnlyList<UMaterialInterface?> overrideMaterials)
+    private MESH? BuildMesh(
+        string meshName,
+        Func<StaticMeshDto> convert,
+        IReadOnlyList<UMaterialInterface?> overrideMaterials)
     {
-        if (!mesh.TryConvert(out var convertedMesh, Options.NaniteMeshFormat) || convertedMesh.LODs.Count == 0)
+        StaticMeshDto convertedMesh;
+        try
         {
-            LogError($"[GlbScene] Mesh '{mesh.Name}' has no LODs; skipped.");
+            convertedMesh = convert();
+        }
+        catch (Exception ex)
+        {
+            LogError($"[GlbScene] Mesh '{meshName}' failed to convert: {ex.Message}");
             return null;
         }
 
-        var lod = convertedMesh.LODs[0];
-        if (lod.Sections.Value == null)
+        if (convertedMesh.LODs.Count == 0)
         {
-            LogError($"[GlbScene] Mesh '{mesh.Name}' LOD0 has no sections; skipped.");
+            LogError($"[GlbScene] Mesh '{meshName}' has no LODs; skipped.");
             return null;
         }
 
-        var meshBuilder = new MESH(mesh.Name);
-        var sections = lod.Sections.Value;
-        int meshMaterialSlotCount = mesh.Materials.Length;
-        for (int sectionIndex = 0; sectionIndex < sections.Length; sectionIndex++)
+        MeshLodDto<MeshVertex> lod = convertedMesh.LODs[0];
+        if (lod.Sections.Length == 0)
         {
-            CMeshSection baseSection = sections[sectionIndex];
+            LogError($"[GlbScene] Mesh '{meshName}' LOD0 has no sections; skipped.");
+            return null;
+        }
+
+        var meshBuilder = new MESH(meshName);
+        int meshMaterialSlotCount = convertedMesh.Materials.Length;
+        for (int sectionIndex = 0; sectionIndex < lod.Sections.Length; sectionIndex++)
+        {
+            MeshSectionDto section = lod.Sections[sectionIndex];
 
             // Matches Renderer.cs:646-650: matIndex must fit inside the mesh's
             // Materials array AND the override array. Keying the upper bound on
@@ -352,47 +402,35 @@ public sealed class GlbSceneContext
             // valid overrides. Use the mesh's Materials.Length as the renderer
             // does.
             UMaterialInterface? overrideMaterial = ResolveOverrideMaterial(
-                baseSection.MaterialIndex,
+                section.MaterialIndex,
                 meshMaterialSlotCount,
                 overrideMaterials);
 
-            // When the placement carries an override material at this section,
-            // we synthesize a CMeshSection with the override's ResolvedObject in
-            // the Material slot — same FirstIndex/NumFaces, same MaterialIndex,
-            // so Gltf.ExportStaticMeshSections walks identical triangles but
-            // emits the override material's name on the primitive. When there
-            // is no override we hand the original section in unchanged.
-            CMeshSection effectiveSection = overrideMaterial != null
-                ? new CMeshSection(
-                    baseSection.MaterialIndex,
-                    baseSection.FirstIndex,
-                    baseSection.NumFaces,
-                    overrideMaterial.Name,
-                    new ResolvedLoadedObject(overrideMaterial))
-                : baseSection;
+            // An override replaces the slot's material outright; the triangles
+            // are the section's either way, so only the primitive's material
+            // name changes.
+            MeshMaterialDto? materialSlot = convertedMesh.GetMaterial(section);
+            UMaterialInterface? sectionMaterial =
+                overrideMaterial ?? materialSlot?.Material?.Load<UMaterialInterface>();
 
-            string? materialKey = effectiveSection.Material?.Load<UMaterialInterface>()?.GetPathName();
+            // The embed pass looks bundles up by UMaterialInterface.Name
+            // (GlbMaterialFactory.TryGetEmbedBundleByMaterialName), so the
+            // primitive must carry that exact name. The slot name is only a
+            // fallback for sections whose material fails to load.
+            string materialName =
+                sectionMaterial?.Name ?? materialSlot?.SlotName ?? $"material_{sectionIndex}";
 
-            int before = Options.ExportMaterials ? _materialExporters.Count : 0;
-            Gltf.ExportStaticMeshSections(
-                sectionIndex,
-                lod,
-                effectiveSection,
-                Options.ExportMaterials ? _materialExporters : null,
-                meshBuilder,
-                Options);
+            GlbMeshSectionBuilder.AddSection(meshBuilder, lod, section, materialName);
 
-            // De-duplicate the material exporter just appended so a material
-            // shared across the scene is decoded and written only once (even
-            // though its geometry is re-emitted into each part that uses it).
-            if (Options.ExportMaterials && _materialExporters.Count > before)
+            // De-duplicate by PathName so a material shared across the scene is
+            // decoded and written only once (even though its geometry is
+            // re-emitted into each part that uses it).
+            if (Options.ExportMaterials && sectionMaterial != null)
             {
-                if (materialKey == null || !_writtenMaterialKeys.Add(materialKey))
+                string materialKey = sectionMaterial.GetPathName();
+                if (_writtenMaterialKeys.Add(materialKey))
                 {
-                    _materialExporters.RemoveRange(before, _materialExporters.Count - before);
-                }
-                else
-                {
+                    _materials.Add(sectionMaterial);
                     _materialKeys.Add(materialKey);
                 }
             }

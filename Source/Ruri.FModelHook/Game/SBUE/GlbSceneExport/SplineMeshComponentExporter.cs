@@ -1,80 +1,24 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Component.SplineMesh;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
-using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.Core.Misc;
-using CUE4Parse.UE4.Objects.Meshes;
-using CUE4Parse.UE4.Objects.RenderCore;
 using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Applies USplineMeshComponent CPU deformation, materialised as a
-// per-placement deformed UStaticMesh that flows through the SAME
-// GlbSceneContext.AddRigidMesh -> BuildMesh -> Gltf.ExportStaticMeshSections
-// pipeline the StaticMeshComponentExporter uses. Geometry bytes therefore stay
-// identical to the straight static-mesh export for the deformed slice
-// positions/normals/tangents, just like the straight-static path does for
-// undeformed meshes.
+// Routes USplineMeshComponent placements through GlbSceneContext.AddSplineMesh
+// so they land in the SAME .glb part files as the straight static meshes.
 //
-// Deformation model:
-//   * Spline position/tangent/direction come from the cubic-Hermite evaluators
-//     SplineParams.SplineEvalPos / SplineEvalTangent / SplineEvalDir; the
-//     Hermite coefficients are not re-derived here.
-//   * The per-slice transform is spline.CalcSliceTransform /
-//     CalcSliceTransformAtSplineOffset (SmoothStep, BaseXVec=SplineUpDir^SplineDir,
-//     BaseYVec=SplineDir^BaseXVec, sliceOffset/roll/scale lerp, 3-axis FTransform
-//     basis switch).
-//   * Per-vertex deformation: read distanceAlong = GetAxisValueRef(pos,
-//     ForwardAxis); compute sliceTransform; SetAxisValueRef(pos, ForwardAxis, 0);
-//     pos = sliceTransform.TransformPosition(pos), where the forward axis is
-//     masked to zero.
-//   * Normal AND tangent rotate by the slice's rotation matrix (no scale) via
-//     sliceTransform.TransformVectorNoScale (pure rotation). This matches the
-//     GPU spline-mesh deform path and satisfies the requirement that
-//     位置/法线/切线都按 slice 变换旋转.
-//
-// Why a cloned UStaticMesh instead of a separate SharpGLTF pipeline:
-//   GlbSceneContext.AddRigidMesh's public surface only accepts a UStaticMesh
-//   and is intentionally frozen per the cell contract. To land deformed
-//   geometry inside the SAME .glb part files (so the spline actor's render
-//   contribution is not banished to a sidecar file), the existing BuildMesh
-//   path is fed a UStaticMesh whose RenderData LOD0 PositionVertexBuffer /
-//   VertexBuffer.UV already carry the bent attributes.
-//   The bend is deterministic from (mesh.LightingGuid, SplineParams.GetSHAHash),
-//   so identical bends across multiple placements share one MeshBuilder via
-//   the context's mesh cache; different bends emit distinct MeshBuilders.
-//
-// Why the clone path does not corrupt CUE4Parse's asset cache:
-//   The CUE4Parse asset cache stores the source UStaticMesh keyed by its
-//   package path. We never mutate the source instance. Every clone is built
-//   bottom-up from `new UStaticMesh()` + a fresh `FStaticMeshRenderData` +
-//   freshly-allocated `FPositionVertexBuffer.Verts` / `FStaticMeshUVItem[]`,
-//   borrowing only the read-only `IndexBuffer` / `ColorVertexBuffer` /
-//   `Sections` references the existing TryConvert path consumes without
-//   writing back. Materials and StaticMaterials arrays are also shared by
-//   reference — read-only after deserialize. The cloned mesh's LightingGuid is
-//   stamped uniquely per bend so the mesh-share cache in GlbSceneContext keeps
-//   the bent clone separate from the base mesh and from other bends.
+// The bend itself belongs to CUE4Parse: MeshLodDto.FromStaticMesh applies
+// spline.CalcSliceTransform per vertex while it walks the LOD, so geometry
+// bytes match the stock spline-mesh export. What this exporter owns is the
+// bend's IDENTITY — the share key that decides whether two placements can
+// reuse one MeshBuilder (see BuildDeformedMeshKey).
 public sealed class SplineMeshComponentExporter : IComponentExporter
 {
-    // Mesh-cache key: identical (source mesh + spline bend) tuples MUST share
-    // one cloned UStaticMesh so the downstream mesh-share cache instances
-    // them. The bend signature is exactly FSplineMeshParams.GetSHAHash, which
-    // hashes every spline-affecting parameter byte-for-byte
-    // (FSplineMeshParams.cs:86-113) PLUS the spline-frame parameters that live
-    // on the component itself rather than the params struct (ForwardAxis,
-    // SplineUpDir, SplineBoundaryMin/Max, bSmoothInterpRollScale). Two splines
-    // whose params hash matches but whose ForwardAxis differs deform
-    // differently (the basis switch in CalcSliceTransformAtSplineOffset
-    // changes the rotation column → mesh bytes differ), so the cache key MUST
-    // include those bits as well.
-    private readonly Dictionary<DeformedMeshKey, UStaticMesh> _deformedMeshCache = new();
-
     public bool CanExport(UObject component) => component is USplineMeshComponent;
 
     public void Export(in PlacedComponent placed, GlbSceneContext context)
@@ -92,20 +36,6 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         }
 
         DeformedMeshKey key = BuildDeformedMeshKey(sourceMesh, spline);
-        if (!_deformedMeshCache.TryGetValue(key, out UStaticMesh? deformedMesh))
-        {
-            deformedMesh = BuildDeformedClone(sourceMesh, spline, key.UniqueLightingGuid, context);
-            _deformedMeshCache[key] = deformedMesh;
-        }
-        if (deformedMesh == null)
-        {
-            // The deformation builder logged the reason (no RenderData / no
-            // LODs / no PositionVertexBuffer). Skip without recording the
-            // placement to manifest.Dropped for the same reason the static
-            // exporter skips a meshless ISM entry: the lossless actor JSON
-            // still preserves the spline component data.
-            return;
-        }
 
         // OverrideMaterials handling mirrors the FModel Renderer path
         // through StaticMeshComponentExporter.BuildOverrideMaterialLists. Doing
@@ -127,8 +57,10 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         // through SceneTransform.NodeMatrix (N = W, FModel's placement matrix)
         // to put the bent mesh exactly where the preview puts the straight mesh
         // of a non-spline component.
-        context.AddRigidMesh(
-            deformedMesh,
+        context.AddSplineMesh(
+            spline,
+            sourceMesh.Name,
+            key.UniqueLightingGuid,
             overrideMaterials,
             overrideMaterialPathNames,
             SceneTransform.NodeMatrix(placed.WorldTransform));
@@ -239,269 +171,6 @@ public sealed class SplineMeshComponentExporter : IComponentExporter
         // bit-reinterpretation: the mixer only needs "different inputs ~always
         // map to different bits", and the wrap is exactly that.
         return unchecked((uint)HashCode.Combine(a, b, c));
-    }
-
-    // Build a fresh UStaticMesh whose LOD0 PositionVertexBuffer / VertexBuffer
-    // hold the spline-deformed positions / normals / tangents. The clone
-    // shares (by reference) every read-only structure the downstream
-    // TryConvert path consumes — IndexBuffer, ColorVertexBuffer, Sections,
-    // Materials, StaticMaterials — so the bent mesh emits the same triangle
-    // indices, the same per-section material slots, the same per-vertex
-    // colours, and the same UV channels as the unbent source. Only positions
-    // / normals / tangents are rewritten.
-    //
-    // Returns null only when the source has no usable RenderData LOD0
-    // (e.g. Nanite-only meshes whose normal LODs were stripped at cook). The
-    // caller silently skips that placement, mirroring the static-mesh
-    // exporter's `mesh.Materials.Length < 1` skip.
-    private static UStaticMesh? BuildDeformedClone(
-        UStaticMesh sourceMesh,
-        USplineMeshComponent spline,
-        FGuid uniqueLightingGuid,
-        GlbSceneContext context)
-    {
-        FStaticMeshRenderData? sourceRenderData = sourceMesh.RenderData;
-        if (sourceRenderData == null || sourceRenderData.LODs == null || sourceRenderData.LODs.Length == 0)
-        {
-            context.LogError($"[GlbScene] SplineMesh source '{sourceMesh.Name}' has no RenderData; spline placement skipped.");
-            return null;
-        }
-
-        // Build the deformed LOD array. Only LODs with a usable
-        // PositionVertexBuffer are reachable through the static path
-        // (FStaticMeshLODResources.SkipLod gates it at TryConvert), so we
-        // deform exactly those and copy the rest by reference.
-        var clonedLods = new FStaticMeshLODResources[sourceRenderData.LODs.Length];
-        bool deformedAnyLod = false;
-        for (int lodIndex = 0; lodIndex < sourceRenderData.LODs.Length; lodIndex++)
-        {
-            FStaticMeshLODResources sourceLod = sourceRenderData.LODs[lodIndex];
-            if (sourceLod.SkipLod)
-            {
-                clonedLods[lodIndex] = sourceLod;
-                continue;
-            }
-            clonedLods[lodIndex] = DeformLod(sourceLod, spline);
-            deformedAnyLod = true;
-        }
-        if (!deformedAnyLod)
-        {
-            context.LogError($"[GlbScene] SplineMesh source '{sourceMesh.Name}' has no usable LOD vertex buffers; spline placement skipped.");
-            return null;
-        }
-
-        // Clone the RenderData container (the LODs array we just built plus a
-        // shallow copy of the bounds / screen sizes / nanite resources). The
-        // bounds we hand back are the SOURCE bounds, NOT post-deformation
-        // bounds — TryConvert reads `Bounds.Origin/BoxExtent` for the
-        // CStaticMesh BoundingBox / BoundingSphere it sets on convertedMesh
-        // (MeshConverter.cs:80-83), and Gltf.ExportStaticMeshSections does not
-        // consume those bounds, so the value only affects downstream culling
-        // metadata and never the emitted glTF vertex bytes. The source bounds
-        // are the safest "I have not measured the bent envelope" answer.
-        var clonedRenderData = new FStaticMeshRenderData
-        {
-            LODs = clonedLods,
-            // NaniteResources is intentionally NOT carried over: TryConvert's
-            // nanite branch (MeshConverter.cs:182-201) would otherwise replace
-            // the deformed normal LODs with the source nanite cluster geometry,
-            // erasing the deformation. Splines on nanite-only meshes therefore
-            // fall through to the regular-LOD path; if the source has no
-            // normal LODs at all the deformedAnyLod gate above already
-            // returned null.
-            NaniteResources = null,
-            Bounds = sourceRenderData.Bounds,
-            bLODsShareStaticLighting = sourceRenderData.bLODsShareStaticLighting,
-            ScreenSize = sourceRenderData.ScreenSize,
-        };
-
-        // Build the fresh UStaticMesh. Property setters that are `private set`
-        // on the CUE4Parse base class (RenderData, LightingGuid, BodySetup,
-        // NavCollision, Sockets, StaticMaterials, LODForCollision) are written
-        // through the backing field via reflection so the clone is fully
-        // populated without touching the source.
-        var clonedMesh = new UStaticMesh
-        {
-            Name = sourceMesh.Name,
-            Class = sourceMesh.Class,
-            Outer = sourceMesh.Outer,
-            Super = sourceMesh.Super,
-            Template = sourceMesh.Template,
-            Flags = sourceMesh.Flags,
-        };
-        // The remaining state lives on properties with `private set`
-        // accessors (UStaticMesh.cs:14-22). Reflection writes through the
-        // compiler-generated backing field so we do not subclass / extend the
-        // CUE4Parse type, only stamp the values we want onto a fresh shell.
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.Materials), sourceMesh.Materials);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.RenderData), clonedRenderData);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.LightingGuid), uniqueLightingGuid);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.BodySetup), sourceMesh.BodySetup);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.NavCollision), sourceMesh.NavCollision);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.Sockets), sourceMesh.Sockets);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.StaticMaterials), sourceMesh.StaticMaterials);
-        SetPrivateProperty(clonedMesh, nameof(UStaticMesh.LODForCollision), sourceMesh.LODForCollision);
-        return clonedMesh;
-    }
-
-    // Reflection helper for CUE4Parse properties declared with `{ get; private set; }`.
-    // Setting via PropertyInfo.SetValue would honour the `private` accessor at
-    // method-resolution time and throw on read-only target types; routing the
-    // write through the auto-property's backing field is the canonical way to
-    // bypass the access modifier on a CUE4Parse exposed surface without
-    // touching the cached source instance.
-    private static void SetPrivateProperty(object target, string propertyName, object? value)
-    {
-        FieldInfo? backingField = target.GetType().GetField(
-            $"<{propertyName}>k__BackingField",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        if (backingField != null)
-        {
-            backingField.SetValue(target, value);
-            return;
-        }
-        // Fall back to PropertyInfo with non-public setter access — works when
-        // the property uses a custom backing field rather than the compiler-
-        // generated `<X>k__BackingField` pattern.
-        PropertyInfo? property = target.GetType().GetProperty(
-            propertyName,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        property?.GetSetMethod(true)?.Invoke(target, new[] { value });
-    }
-
-    // Per-LOD deformation. The cloned LOD shares (by reference) the IndexBuffer,
-    // ReversedIndexBuffer, DepthOnlyIndexBuffer, ReversedDepthOnlyIndexBuffer,
-    // WireframeIndexBuffer, AdjacencyIndexBuffer, ColorVertexBuffer,
-    // CardRepresentationData, and Sections — TryConvert only reads them
-    // (MeshConverter.cs:113-141, line 146 ColorVertexBuffer read, line 174
-    // VertexColors write to a fresh CStaticMeshLod-side buffer) so sharing is
-    // safe. PositionVertexBuffer (positions) and VertexBuffer (normals/
-    // tangents in UV[i].Normal[]) are rebuilt with the bent values.
-    private static FStaticMeshLODResources DeformLod(FStaticMeshLODResources sourceLod, USplineMeshComponent spline)
-    {
-        // MemberwiseClone copies every field — public, internal, private —
-        // including the read-only auto-property backing fields for
-        // Sections/MaxDeviation/IndexBuffer/etc. The shared references are
-        // exactly what we want; we only override the two attribute buffers.
-        var clonedLod = (FStaticMeshLODResources)CallMemberwiseClone(sourceLod);
-
-        // Position vertex buffer: fresh instance, deformed Verts array.
-        FPositionVertexBuffer sourcePvb = sourceLod.PositionVertexBuffer!;
-        var deformedPvb = new FPositionVertexBuffer
-        {
-            Stride = sourcePvb.Stride,
-            NumVertices = sourcePvb.NumVertices,
-            Verts = new FVector[sourcePvb.Verts.Length],
-        };
-
-        // Vertex (normal/tangent) buffer: fresh instance, fresh UV array with
-        // rotated normals; UV coordinates per channel are NOT touched (they're
-        // shared by reference through FMeshUVFloat[] inside each item).
-        FStaticMeshVertexBuffer sourceVb = sourceLod.VertexBuffer!;
-        var deformedVb = (FStaticMeshVertexBuffer)CallMemberwiseClone(sourceVb);
-        deformedVb.UV = new FStaticMeshUVItem[sourceVb.UV.Length];
-
-        // Per-vertex deformation. MUST match the position deformation CUE4Parse
-        // uses (MeshConverter.CalcSliceTransform path), and additionally rotates
-        // Normal (TangentZ) and Tangent (TangentX) by the slice's rotation
-        // matrix exactly like the GPU spline-mesh vertex shader does. That
-        // rotation omits the slice scale, so TransformVectorNoScale is the
-        // correct vehicle (pure quaternion rotation).
-        ESplineMeshAxis forwardAxis = spline.ForwardAxis;
-        FVector[] sourceVerts = sourcePvb.Verts;
-        FVector[] deformedVerts = deformedPvb.Verts;
-        FStaticMeshUVItem[] sourceUv = sourceVb.UV;
-        FStaticMeshUVItem[] deformedUv = deformedVb.UV;
-        int vertexCount = sourceVerts.Length;
-        for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
-        {
-            // ---- POSITION -------------------------------------------------
-            FVector localPosition = sourceVerts[vertexIndex];
-            float distanceAlong = USplineMeshComponent.GetAxisValueRef(ref localPosition, forwardAxis);
-            FTransform sliceTransform = spline.CalcSliceTransform(distanceAlong);
-            USplineMeshComponent.SetAxisValueRef(ref localPosition, forwardAxis, 0f);
-            deformedVerts[vertexIndex] = sliceTransform.TransformPosition(localPosition);
-
-            // ---- NORMAL + TANGENT -----------------------------------------
-            // FStaticMeshUVItem.Normal is [TangentX, TangentY (deprecated/0),
-            // TangentZ] per FStaticMeshUVItem.cs:30. We re-pack TangentX and
-            // TangentZ; TangentY is a derived bitangent and the engine
-            // rebuilds it at runtime from the cross product (UE convention),
-            // so we leave the middle slot at the source value (zero on
-            // post-UE3 cooks) — keeping the existing CUE4Parse round-trip
-            // semantics intact. The W bit of TangentX carries the basis sign
-            // and is preserved by copying the source packed byte through
-            // before re-packing the XYZ from the rotated vector.
-            FPackedNormal[] sourceItemNormals = sourceUv[vertexIndex].Normal;
-            FPackedNormal sourceTangentX = sourceItemNormals[0];
-            FPackedNormal sourceTangentY = sourceItemNormals[1];
-            FPackedNormal sourceTangentZ = sourceItemNormals[2];
-
-            FVector localTangentX = (FVector)sourceTangentX;
-            FVector localTangentZ = (FVector)sourceTangentZ;
-
-            FVector rotatedTangentX = sliceTransform.TransformVectorNoScale(localTangentX).GetSafeNormal();
-            FVector rotatedTangentZ = sliceTransform.TransformVectorNoScale(localTangentZ).GetSafeNormal();
-
-            FPackedNormal rotatedPackedTangentX = PackTangentWithSignByte(rotatedTangentX, sourceTangentX);
-            FPackedNormal rotatedPackedTangentZ = PackTangentWithSignByte(rotatedTangentZ, sourceTangentZ);
-
-            deformedUv[vertexIndex] = new FStaticMeshUVItem(
-                new[] { rotatedPackedTangentX, sourceTangentY, rotatedPackedTangentZ },
-                sourceUv[vertexIndex].UV);
-        }
-
-        // Plug the deformed buffers into the cloned LOD. PositionVertexBuffer
-        // has a public setter so it is a direct assignment; VertexBuffer has a
-        // private setter and goes through the backing field.
-        clonedLod.PositionVertexBuffer = deformedPvb;
-        SetPrivateProperty(clonedLod, nameof(FStaticMeshLODResources.VertexBuffer), deformedVb);
-        return clonedLod;
-    }
-
-    // Pack a rotated unit vector into FPackedNormal's 0-255 XYZ slots, lifting
-    // the W byte verbatim from the source so the basis-sign / parity bit is
-    // preserved. FPackedNormal's X/Y/Z accessors map byte -> [-1, 1] as
-    // `byte / 127.5 - 1` (FPackedNormal.cs:14-16). We invert that mapping
-    // here. The CUE4Parse-provided `FPackedNormal(FVector)` ctor has an
-    // operator-precedence bug noted at FPackedNormal.cs:33 (`vector.X + 1 *
-    // 127.5` parses as `vector.X + 127.5` and shifts compose wrongly), so we
-    // pack by hand rather than route through it.
-    private static FPackedNormal PackTangentWithSignByte(FVector unitVector, FPackedNormal sourcePackedForW)
-    {
-        // Clamp inputs to [-1, 1] to defend against floating-point drift on
-        // the rotated vector (a unit normal pushed through TransformVectorNoScale
-        // can drift by a few ulps, which after `* 127.5 + 127.5` could exceed
-        // 255 and wrap on byte truncation).
-        float clampedX = MathF.Min(1f, MathF.Max(-1f, unitVector.X));
-        float clampedY = MathF.Min(1f, MathF.Max(-1f, unitVector.Y));
-        float clampedZ = MathF.Min(1f, MathF.Max(-1f, unitVector.Z));
-
-        uint xByte = (uint)Math.Clamp((int)MathF.Round((clampedX + 1f) * 127.5f), 0, 255);
-        uint yByte = (uint)Math.Clamp((int)MathF.Round((clampedY + 1f) * 127.5f), 0, 255);
-        uint zByte = (uint)Math.Clamp((int)MathF.Round((clampedZ + 1f) * 127.5f), 0, 255);
-        // W byte: copy through the source's W slot verbatim — that bit is the
-        // tangent-basis handedness flag and the spline deformation must not
-        // perturb it.
-        uint wByte = (sourcePackedForW.Data >> 24) & 0xFFu;
-
-        uint packedData = xByte | (yByte << 8) | (zByte << 16) | (wByte << 24);
-        return new FPackedNormal(packedData);
-    }
-
-    // System.Object.MemberwiseClone is `protected`; this thin reflection wrapper
-    // is the canonical way to invoke it on instances of types we cannot
-    // subclass (the CUE4Parse types are sealed-by-discipline and constructed by
-    // deserialization). The reflected method is cached at first use so the
-    // per-vertex inner loop pays no MethodInfo lookup cost — but here the
-    // call is per-LOD (max 8 per source mesh) so caching is omitted for
-    // clarity; the MethodInfo lookup is a few microseconds at scene scale.
-    private static object CallMemberwiseClone(object target)
-    {
-        MethodInfo memberwiseClone = typeof(object).GetMethod(
-            "MemberwiseClone",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return memberwiseClone.Invoke(target, null)!;
     }
 
     // Composite cache key for the deformed-mesh cache. The UniqueLightingGuid

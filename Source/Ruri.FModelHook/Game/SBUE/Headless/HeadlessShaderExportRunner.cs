@@ -242,7 +242,7 @@ public static class HeadlessShaderExportRunner
     // automatically (`MeshExporter`/`MaterialExporter2` internals); packages
     // with no supported export (Blueprints, DataTables, UI assets that aren't
     // textures) are counted as skipped, not treated as an error.
-    public static ExportAssetResult ExportAssetPackages(HeadlessGameConfig cfg, IReadOnlyList<string> packagePaths, string outputDir, CUE4Parse_Conversion.ExporterOptions exportOptions, Action<string> log, Action<string> logError)
+    public static ExportAssetResult ExportAssetPackages(HeadlessGameConfig cfg, IReadOnlyList<string> packagePaths, string outputDir, CUE4Parse_Conversion.Options.ExportOptions exportOptions, Action<string> log, Action<string> logError)
     {
         AbstractVfsFileProvider provider = MountProvider(cfg, log, logError, out bool mappingsLoaded);
         var result = new ExportAssetResult { MappingsLoaded = mappingsLoaded };
@@ -278,7 +278,7 @@ public static class HeadlessShaderExportRunner
                     if (export is CUE4Parse.UE4.Assets.Exports.Texture.UTexture texture)
                     {
                         CUE4Parse_Conversion.Textures.CTexture? decoded =
-                            TextureStripExport.Decode(texture, exportOptions.Platform, out int slices);
+                            TextureStripExport.Decode(texture, exportOptions.TexturePlatform, out int slices);
                         if (decoded is null)
                         {
                             logError($"[Headless] --export-asset: '{export.Name}' decode returned null (unsupported pixel format?).");
@@ -323,11 +323,19 @@ public static class HeadlessShaderExportRunner
                         continue;
                     }
 
-                    var exporter = new CUE4Parse_Conversion.Exporter(export, exportOptions);
-                    if (exporter.TryWriteToDir(outDir, out string label, out string savedFilePath))
+                    var session = new CUE4Parse_Conversion.ExportSession();
+                    session.Add(export);
+                    var exportResults = session
+                        .RunAsync(outDir.FullName, exportOptions)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (exportResults.Count > 0 && exportResults[0] is { Success: true } exportResult)
                     {
                         result.ExportsWritten++;
-                        log($"[Headless] --export-asset: wrote {label} -> {savedFilePath}");
+                        string savedFilePath = exportResult.DiskFilePaths is { Count: > 0 } diskPaths
+                            ? string.Join(", ", diskPaths)
+                            : outDir.FullName;
+                        log($"[Headless] --export-asset: wrote {export.Name} -> {savedFilePath}");
                     }
                     else
                     {

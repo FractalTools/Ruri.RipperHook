@@ -7,7 +7,7 @@ using CUE4Parse.UE4.Assets;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse.UE4.Objects.Engine;
-using CUE4Parse_Conversion;
+using CUE4Parse_Conversion.Options;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
@@ -55,12 +55,12 @@ public sealed class WorldGlbExporter
     };
 
     private readonly IFileProvider _provider;
-    private readonly ExporterOptions _options;
+    private readonly ExportOptions _options;
     private readonly Action<string> _log;
     private readonly Action<string> _logError;
     private readonly IComponentExporter[] _exporterRegistry;
 
-    public WorldGlbExporter(IFileProvider provider, ExporterOptions options, Action<string> log, Action<string> logError)
+    public WorldGlbExporter(IFileProvider provider, ExportOptions options, Action<string> log, Action<string> logError)
     {
         _provider = provider;
         _options = options;
@@ -159,10 +159,11 @@ public sealed class WorldGlbExporter
 
         if (_options.ExportMaterials)
         {
-            _log($"[GlbScene] Exporting {context.MaterialExporters.Count} materials/textures...");
+            _log($"[GlbScene] Exporting {context.Materials.Count} materials/textures...");
             new MaterialTextureWriter(_log, _logError).Write(
-                context.MaterialExporters,
+                context.Materials,
                 context.MaterialKeys,
+                _options,
                 outputDirectory);
             _log("[GlbScene] Materials/textures exported.");
         }

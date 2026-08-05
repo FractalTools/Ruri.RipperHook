@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
@@ -8,11 +8,9 @@ using CUE4Parse.UE4.Assets.Exports.Component.Landscape;
 using CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Objects.UObject;
-using CUE4Parse_Conversion.Materials;
-using CUE4Parse_Conversion.Meshes;
-using CUE4Parse_Conversion.Meshes.PSK;
-using CUE4Parse_Conversion.Meshes.glTF;
-using CUE4Parse_Conversion.Landscape;
+using CUE4Parse_Conversion.Dto;
+using CUE4Parse_Conversion.Options;
+using CUE4Parse_Conversion.Writers.Gltf;
 using FModel.Views.Snooper;
 using Newtonsoft.Json;
 using SharpGLTF.Geometry;
@@ -23,36 +21,29 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
 using SkiaSharp;
 // Disambiguate: both SharpGLTF.Schema2 and SixLabors.ImageSharp export `Image`.
-// `TryConvert` (MeshConverter.cs:573) returns `Dictionary<string, SixLabors.ImageSharp.Image>`.
+// The landscape heightmap arrives as a SixLabors.ImageSharp.Image.
 using ImageSharpImage = SixLabors.ImageSharp.Image;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Full-fidelity landscape exporter. Routes the proxy through CUE4Parse's
-// ALandscapeProxy.TryConvert path (MeshConverter.cs:573-838) so the
+// Full-fidelity landscape exporter. Builds the proxy's LandscapeMeshDto so the
 // per-component vertex/normal/tangent/UV/vertex-color streams are produced
 // byte-for-byte identically to FModel's "Save Landscape" output, then folds the
-// resulting CStaticMesh into a SharpGLTF MeshBuilder via the exact same
-// Gltf.ExportStaticMeshSections path the static-mesh pipeline uses
-// (Gltf.cs:198-230 / GlbSceneContext.BuildMesh).
+// resulting LOD into a SharpGLTF MeshBuilder through GlbMeshSectionBuilder —
+// the same per-section path GlbSceneContext.BuildMesh uses.
 //
 // Why this exporter writes a SEPARATE .glb (not into GlbSceneContext's shared
-// SceneBuilder): the foundation's GlbSceneContext.AddRigidMesh takes a
-// UStaticMesh and keys mesh-sharing on UStaticMesh.LightingGuid. The landscape
-// path produces a CStaticMesh whose vertex buffer is synthesised by TryConvert
-// (the source assets are heightmap+weightmap textures plus per-component layer
-// allocations, NOT a UStaticMesh). There is no LightingGuid to key by and no
-// UStaticMesh handle to thread through. Adding a CStaticMesh-direct overload
-// to GlbSceneContext is the next-best fix, but the cell-boundary contract
-// freezes GlbSceneContext for this revision — so the landscape proxy emits
+// SceneBuilder): the landscape mesh is synthesised from heightmap+weightmap
+// textures plus per-component layer allocations, NOT from a UStaticMesh, so
+// there is no LightingGuid for the context's mesh-share key. The proxy emits
 // its own .glb under <outputBasePath>_Assets/Landscape/<proxyName>.glb and
 // the orchestrator's manifest carries the file in Render.PartFiles. The
 // rendered output stays whole (consumer loads main parts + landscape parts).
 //
 // Coordinate handling:
-//   * MeshConverter.TryConvert writes each landscape vertex as
-//     `vertCoord + comp.GetRelativeLocation()` (MeshConverter.cs:657) — that
-//     is, the resulting CStaticMesh is in PROXY-LOCAL space. The proxy's own
+//   * The converter writes each landscape vertex as
+//     `vertCoord + comp.GetRelativeLocation()` — that is, the resulting mesh
+//     is in PROXY-LOCAL space. The proxy's own
 //     RootComponent transform (RelativeLocation / RelativeRotation /
 //     RelativeScale3D — by default `(128,128,256)`, Landscape.cpp:1632) is
 //     not applied. We must therefore place the GLB's root node at the proxy's
@@ -61,7 +52,7 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 //     against `placed.WorldTransform` (the resolver's base) so attach-parent
 //     chains are honoured for any future composition with level instances.
 //   * Geometry conversion (cm -> m + Z-up -> Y-up) lives inside
-//     Gltf.ExportStaticMeshSections, which the static-mesh pipeline also
+//     GlbMeshSectionBuilder, which the static-mesh pipeline also
 //     relies on. The node matrix is built with SceneTransform.NodeMatrix so
 //     the placement convention (N = W, FModel's Transform.Matrix) is
 //     identical to the static-mesh path. No parallel coordinate convention
@@ -70,24 +61,21 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 // Heightmaps + weightmaps:
 //   * Written as PNG sidecars under
 //     <outputBasePath>_Assets/Landscape/<proxyName>/. Heightmap is L16-encoded
-//     by TryConvert (one channel, 16-bit unsigned height) and PngEncoder is
-//     the SixLabors writer used by CUE4Parse's LandscapeExporter (cs:101-104).
-//     Weightmaps are SKBitmap (Gray8) — also written exactly the way
-//     LandscapeExporter does it (cs:88-92).
+//     by the converter (one channel, 16-bit unsigned height) and PngEncoder is
+//     the SixLabors writer CUE4Parse's landscape export uses.
+//     Weightmaps are SKBitmap (Gray8) — written the same way.
 //   * The DirectX-normal sidecar ("NormalMap_DX.png") is always produced by
-//     TryConvert and always carried through (every byte preserved).
+//     the converter and always carried through (every byte preserved).
 //   * Landscape GUID file (`Guid_<guid>`) is emitted alongside so a downstream
-//     re-link still has the original FGuid available — same record shape as
-//     CUE4Parse LandscapeExporter.cs:108.
+//     re-link still has the original FGuid available — same record shape
+//     CUE4Parse's landscape export writes.
 //
 // Materials:
 //   * proxy.LandscapeMaterial is loaded and registered with
 //     GlbSceneContext.MaterialFactory so it appears in the unique-material
-//     audit. The per-section material list passed through
-//     Gltf.ExportStaticMeshSections is the same materialExports list that
-//     CUE4Parse uses to decode textures, written out via MaterialExporter2
-//     under the same Assets/Landscape/<proxyName>/ path. ExportMaterials=false
-//     suppresses the decode pass exactly as the foundation contract demands.
+//     audit. Each section's own material is collected and written through
+//     GlbMaterialFactory under the same Assets/Landscape/<proxyName>/ path.
+//     ExportMaterials=false suppresses the decode pass.
 //
 // Nanite landscape components (UE5.3+):
 //   * proxy.NaniteComponents[] is ULandscapeNaniteComponent which derives from
@@ -184,41 +172,48 @@ public sealed class LandscapeComponentExporter : IComponentExporter
         // like FModel Renderer.CalculateTransform.
         Transform proxyRootWorldTransform = ResolveProxyRootWorldTransform(proxy, placed.WorldTransform, context);
 
-        // Run the converter once. ELandscapeExportFlags.All produces the mesh,
-        // the L16 heightmap, AND the SKBitmap weightmap dictionary (+ the
-        // DirectX normal map) in a single parallel pass — every byte the cooked
+        // Build the DTO once. ELandscapeFlags.All produces the mesh, the L16
+        // heightmap, AND the SKBitmap weightmap dictionary (+ the DirectX
+        // normal map) in a single parallel pass — every byte the cooked
         // landscape carries is materialised here.
-        CStaticMesh? convertedMesh;
-        Dictionary<string, ImageSharpImage> heightMaps;
-        Dictionary<string, SKBitmap> weightMaps;
+        LandscapeMeshDto convertedMesh;
+        var heightMaps = new Dictionary<string, ImageSharpImage>();
+        var weightMaps = new Dictionary<string, SKBitmap>();
         try
         {
-            // ALandscapeProxy.TryConvert (MeshConverter.cs:573). Re-running it
-            // here keeps the geometry byte-identical to LandscapeExporter
-            // (which calls the same method internally).
-            if (!proxy.TryConvert(
-                    components,
-                    ELandscapeExportFlags.All,
-                    out convertedMesh,
-                    out heightMaps,
-                    out weightMaps) ||
-                convertedMesh is null ||
-                convertedMesh.LODs.Count == 0)
+            // Same constructor LandscapeMeshExporter drives internally, so the
+            // geometry stays byte-identical to the stock landscape export.
+            convertedMesh = new LandscapeMeshDto(proxy, ELandscapeFlags.All, components);
+
+            if (convertedMesh.HeightmapTexture is { } heightmap)
             {
-                context.LogError($"[GlbScene] Landscape '{proxyName}': TryConvert produced no mesh; geometry skipped.");
-                context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' TryConvert produced no mesh.");
+                heightMaps.Add("Heightmap", heightmap);
+            }
+            if (convertedMesh.BitmapTextures is { } bitmaps)
+            {
+                foreach (var pair in bitmaps)
+                {
+                    weightMaps.Add(pair.Key, pair.Value);
+                }
+            }
+
+            if (convertedMesh.LODs.Count == 0)
+            {
+                context.LogError($"[GlbScene] Landscape '{proxyName}': conversion produced no mesh; geometry skipped.");
+                context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' conversion produced no mesh.");
                 return;
             }
         }
         catch (Exception ex)
         {
-            context.LogError($"[GlbScene] Landscape '{proxyName}': TryConvert threw: {ex.Message}");
-            context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' TryConvert threw: {ex.Message}");
+            context.LogError($"[GlbScene] Landscape '{proxyName}': conversion threw: {ex.Message}");
+            context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' conversion threw: {ex.Message}");
             return;
         }
 
-        CStaticMeshLod lod0 = convertedMesh.LODs[0];
-        if (lod0.Sections is null || lod0.Sections.Value is not { Length: > 0 } sections)
+        MeshLodDto<MeshVertex> lod0 = convertedMesh.LODs[0];
+        MeshSectionDto[] sections = lod0.Sections;
+        if (sections.Length == 0)
         {
             context.LogError($"[GlbScene] Landscape '{proxyName}': LOD0 has no sections; geometry skipped.");
             context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' LOD0 has no sections.");
@@ -230,24 +225,32 @@ public sealed class LandscapeComponentExporter : IComponentExporter
         Directory.CreateDirectory(landscapeRoot);
         string glbFilePath = Path.Combine(landscapeRoot, proxyName + ".glb");
 
-        // Build the SharpGLTF MeshBuilder via Gltf.ExportStaticMeshSections — the
-        // SAME byte-for-byte mesh-export pipeline as the regular static-mesh
-        // path (GlbSceneContext.BuildMesh, Gltf.cs:198). ExportMaterials
-        // toggles the per-section MaterialExporter2 list exactly the same way.
+        // Build the SharpGLTF MeshBuilder through the SAME per-section path as
+        // the regular static-mesh pipeline (GlbSceneContext.BuildMesh), so the
+        // vertex/index triangles land in glTF-local space (SwapYZ + *0.01)
+        // byte-for-byte the same way.
         var landscapeMeshBuilder = new MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, VertexEmpty>(proxyName);
-        var landscapeMaterialExports = context.Options.ExportMaterials ? new List<MaterialExporter2>() : null;
+        var landscapeMaterials = context.Options.ExportMaterials ? new List<UMaterialInterface>() : null;
+        var landscapeMaterialKeys = new HashSet<string>(StringComparer.Ordinal);
 
         for (int sectionIndex = 0; sectionIndex < sections.Length; sectionIndex++)
         {
-            // Gltf.ExportStaticMeshSections (Gltf.cs:198) — produces vertex/index
-            // triangles in glTF-local space (SwapYZ + *0.01).
-            Gltf.ExportStaticMeshSections(
-                sectionIndex,
-                lod0,
-                sections[sectionIndex],
-                landscapeMaterialExports,
-                landscapeMeshBuilder,
-                context.Options);
+            MeshSectionDto section = sections[sectionIndex];
+            MeshMaterialDto? materialSlot = convertedMesh.GetMaterial(section);
+            UMaterialInterface? sectionMaterial = materialSlot?.Material?.Load<UMaterialInterface>();
+
+            // Same naming rule as GlbSceneContext.BuildMesh: the embed pass
+            // looks bundles up by UMaterialInterface.Name.
+            string materialName =
+                sectionMaterial?.Name ?? materialSlot?.SlotName ?? $"material_{sectionIndex}";
+
+            GlbMeshSectionBuilder.AddSection(landscapeMeshBuilder, lod0, section, materialName);
+
+            if (landscapeMaterials != null && sectionMaterial != null
+                && landscapeMaterialKeys.Add(sectionMaterial.GetPathName()))
+            {
+                landscapeMaterials.Add(sectionMaterial);
+            }
         }
 
         // Compose the node matrix (N = W, FModel's placement matrix) via
@@ -304,7 +307,7 @@ public sealed class LandscapeComponentExporter : IComponentExporter
         // Materials — register with the factory so the unique count is
         // truthful; write the per-material JSON/textures into the landscape
         // sidecar folder so downstream tools find them next to the GLB.
-        WriteLandscapeMaterials(proxy, landscapeMaterialExports, landscapeRoot, proxyName, proxyPathName, context);
+        WriteLandscapeMaterials(proxy, landscapeMaterials, landscapeRoot, proxyName, proxyPathName, context);
 
         // NB: per-component manifest tallying for the LOSSLESS layer
         // (LosslessLayer.ComponentCount, LosslessLayer.ComponentsByExportType)
@@ -531,7 +534,7 @@ public sealed class LandscapeComponentExporter : IComponentExporter
 
     private static void WriteLandscapeMaterials(
         ALandscapeProxy proxy,
-        List<MaterialExporter2>? landscapeMaterialExports,
+        List<UMaterialInterface>? landscapeMaterials,
         string landscapeRoot,
         string proxyName,
         string proxyPathName,
@@ -555,27 +558,33 @@ public sealed class LandscapeComponentExporter : IComponentExporter
             context.LogError($"[GlbScene] Landscape '{proxyName}': LandscapeMaterial register failed: {ex.Message}");
         }
 
-        if (landscapeMaterialExports == null) return;
+        if (landscapeMaterials == null || landscapeMaterials.Count == 0) return;
 
-        var materialOutputDirectory = new DirectoryInfo(landscapeRoot);
-        foreach (var materialExporter in landscapeMaterialExports)
+        // Same JSON + decoded-texture payload the static-mesh sidecar pass
+        // writes (MaterialTextureWriter), rooted at the proxy's own folder.
+        var materialFactory = new GlbMaterialFactory(context.Log, context.LogError);
+        foreach (UMaterialInterface landscapeSectionMaterial in landscapeMaterials)
         {
             try
             {
-                if (materialExporter.TryWriteToDir(materialOutputDirectory, out _, out string savedFilePath))
-                {
-                    context.Manifest.RecordAsset(savedFilePath);
-                }
-                else
-                {
-                    context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' material exporter wrote no file.");
-                }
+                materialFactory.RegisterMaterial(landscapeSectionMaterial, context.Options);
             }
             catch (Exception ex)
             {
-                context.LogError($"[GlbScene] Landscape '{proxyName}': material write threw: {ex.Message}");
-                context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' material write threw: {ex.Message}");
+                context.LogError($"[GlbScene] Landscape '{proxyName}': material register threw: {ex.Message}");
+                context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' material register threw: {ex.Message}");
             }
+        }
+
+        try
+        {
+            materialFactory.WriteSidecars(landscapeRoot);
+            context.Manifest.RecordAsset($"Landscape/{proxyName}/");
+        }
+        catch (Exception ex)
+        {
+            context.LogError($"[GlbScene] Landscape '{proxyName}': material write threw: {ex.Message}");
+            context.Manifest.RecordDroppedAsset($"Landscape proxy '{proxyPathName}' material write threw: {ex.Message}");
         }
     }
 

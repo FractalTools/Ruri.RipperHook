@@ -11,8 +11,8 @@ using CUE4Parse.MappingsProvider.Usmap;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Versions;
-using CUE4Parse_Conversion;
-using CUE4Parse_Conversion.Meshes;
+using CUE4Parse_Conversion.Options;
+using Ruri.FModelHook.Game.SBUE;
 using Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 using Ruri.FModelHook.Game.SBUE.Headless;
 using Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
@@ -370,7 +370,7 @@ public static class Program
             // has the io_import_ueformat Blender plugin for it and does NOT
             // want ActorX (.psk/.pskx). MaterialFormat left at the library
             // default (AllLayersNoRef, JSON) since that's format-independent.
-            var exportOptions = new ExporterOptions { MeshFormat = EMeshFormat.UEFormat };
+            var exportOptions = SbueExportOptions.Create(EMeshFormat.UEFormat);
             HeadlessShaderExportRunner.ExportAssetResult result = HeadlessShaderExportRunner.ExportAssetPackages(
                 cfg,
                 opts.ExportAssetPaths,
@@ -473,7 +473,7 @@ public static class Program
             // Geometry + material names by default; texture sidecar decode is
             // opt-in via --with-materials (it can intermittently hard-crash on
             // large worlds — a race in CUE4Parse's parallel native decode).
-            var options = new ExporterOptions { MeshFormat = EMeshFormat.Gltf2, ExportMaterials = opts.WithMaterials };
+            var options = SbueExportOptions.Create(EMeshFormat.Gltf2, opts.WithMaterials);
             string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
                 ? Path.Combine(AppContext.BaseDirectory, "GlbSceneExport")
                 : opts.ExportOut!;
