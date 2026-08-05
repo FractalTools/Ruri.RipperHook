@@ -720,7 +720,7 @@ public static class RuriGlbSceneBuilder
         {
             return new Vector3(xform.T3.X, xform.T3.Y, xform.T3.Z);
         }
-        Vector4Float_4? t4 = xform.T4;
+        Vector4Float? t4 = xform.T4;
         return t4 is null ? Vector3.Zero : new Vector3(t4.X, t4.Y, t4.Z);
     }
 
@@ -730,7 +730,7 @@ public static class RuriGlbSceneBuilder
         {
             return new Vector3(xform.S3.X, xform.S3.Y, xform.S3.Z);
         }
-        Vector4Float_4? s4 = xform.S4;
+        Vector4Float? s4 = xform.S4;
         return s4 is null ? Vector3.One : new Vector3(s4.X, s4.Y, s4.Z);
     }
 

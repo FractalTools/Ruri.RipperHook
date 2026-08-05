@@ -537,15 +537,11 @@ public sealed class AvatarMuscleReferential
 
     private static Vector3 GetSgn(IAxes axes)
     {
-        if (axes.Has_Sgn_Vector3Float_5_5())
+        if (axes.Has_Sgn_Vector3Float())
         {
-            return ToVector3(axes.Sgn_Vector3Float_5_5);
+            return ToVector3(axes.Sgn_Vector3Float);
         }
-        if (axes.Has_Sgn_Vector3Float_5_4())
-        {
-            return ToVector3(axes.Sgn_Vector3Float_5_4);
-        }
-        Vector4Float_4? sgn4 = axes.Sgn_Vector4Float_4;
+        Vector4Float? sgn4 = axes.Sgn_Vector4Float;
         return sgn4 is null ? Vector3.One : new Vector3(sgn4.X, sgn4.Y, sgn4.Z);
     }
 
@@ -553,26 +549,18 @@ public sealed class AvatarMuscleReferential
     {
         if (min)
         {
-            if (axes.Limit.Has_Min_Vector3Float_5_5())
+            if (axes.Limit.Has_Min_Vector3Float())
             {
-                return ToVector3(axes.Limit.Min_Vector3Float_5_5);
+                return ToVector3(axes.Limit.Min_Vector3Float);
             }
-            if (axes.Limit.Has_Min_Vector3Float_5_4())
-            {
-                return ToVector3(axes.Limit.Min_Vector3Float_5_4);
-            }
-            Vector4Float_4? min4 = axes.Limit.Min_Vector4Float_4;
+            Vector4Float? min4 = axes.Limit.Min_Vector4Float;
             return min4 is null ? Vector3.Zero : new Vector3(min4.X, min4.Y, min4.Z);
         }
-        if (axes.Limit.Has_Max_Vector3Float_5_5())
+        if (axes.Limit.Has_Max_Vector3Float())
         {
-            return ToVector3(axes.Limit.Max_Vector3Float_5_5);
+            return ToVector3(axes.Limit.Max_Vector3Float);
         }
-        if (axes.Limit.Has_Max_Vector3Float_5_4())
-        {
-            return ToVector3(axes.Limit.Max_Vector3Float_5_4);
-        }
-        Vector4Float_4? max4 = axes.Limit.Max_Vector4Float_4;
+        Vector4Float? max4 = axes.Limit.Max_Vector4Float;
         return max4 is null ? Vector3.Zero : new Vector3(max4.X, max4.Y, max4.Z);
     }
 
