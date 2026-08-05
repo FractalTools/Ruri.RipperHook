@@ -47,9 +47,8 @@ public class MyHook : RipperHookCommon
 | `Source/Ruri.FModelHook` | FModel / UE 侧增强,shader bytecode 导出与统一 metadata 整理 |
 | `Source/Ruri.FModelHook.GUI` | FModel 流程的图形界面入口 |
 | `Source/Ruri.ShaderDecompiler` | DX11 shader 反编译实现 |
-| `Source/Ruri.Tpk` | AssetRipper 结构定义与 Read 代码的生成链路 |
 | `Source/Ruri.Tpk` | 把 TypeTree JSON 打包成 `RuriTypeTree.tpk`(Ruri.RipperHook 的内嵌资源) |
-| `AssetRipper/`, `FModel/`, `Tpk/` | 上游 submodule,**只读冻结**,差异通过 Hook 注入而非直接修改 |
+| `AssetRipper/`, `FModel/` | 上游 submodule,**只读冻结**,差异通过 Hook 注入而非直接修改 |
 
 ## 主要能力
 
