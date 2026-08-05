@@ -37,10 +37,23 @@ jobs:
 
       - name: Update required submodules
         shell: pwsh
+        # git aborts the whole update when any path here is missing from .gitmodules, leaving
+        # every submodule uninitialized. Unchecked, that surfaces as thousands of CS0234s in
+        # the build step instead of here, so every call is checked and the checkout asserted.
         run: |
+          $submodules = @("FModel", "Source/Ruri.ShaderDecompiler")
           git submodule sync --recursive
-          git submodule update --init --recursive --jobs 4 -- "FModel" "Source/Ruri.ShaderDecompiler"
+          if ($LASTEXITCODE -ne 0) { throw "git submodule sync failed ($LASTEXITCODE)" }
+          git submodule update --init --recursive --jobs 4 -- @submodules
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed ($LASTEXITCODE)" }
           git submodule status --recursive
+          foreach ($path in $submodules) {
+            $status = @(git submodule status -- $path)
+            if ($LASTEXITCODE -ne 0 -or $status.Count -eq 0) { throw "submodule '$path' is not declared in .gitmodules" }
+            foreach ($line in $status) {
+              if ($line -match '^-') { throw "submodule '$path' was not checked out: $line" }
+            }
+          }
 
       - name: Show .NET info
         shell: pwsh
@@ -84,10 +97,25 @@ jobs:
 
       - name: Update required submodules
         shell: pwsh
+        # Only what Ruri.RipperHook.GUI / .CLI actually reference: FModel is not in their
+        # project graph, and AssetRipperGameHook is stripped by PureRelease.
+        # git aborts the whole update when any path here is missing from .gitmodules, leaving
+        # every submodule uninitialized. Unchecked, that surfaces as thousands of CS0234s in
+        # the build step instead of here, so every call is checked and the checkout asserted.
         run: |
+          $submodules = @("AssetRipper", "Source/Ruri.ShaderDecompiler")
           git submodule sync --recursive
-          git submodule update --init --recursive --jobs 4 -- "AssetRipper" "Tpk" "FModel" "Source/Ruri.ShaderDecompiler"
+          if ($LASTEXITCODE -ne 0) { throw "git submodule sync failed ($LASTEXITCODE)" }
+          git submodule update --init --recursive --jobs 4 -- @submodules
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed ($LASTEXITCODE)" }
           git submodule status --recursive
+          foreach ($path in $submodules) {
+            $status = @(git submodule status -- $path)
+            if ($LASTEXITCODE -ne 0 -or $status.Count -eq 0) { throw "submodule '$path' is not declared in .gitmodules" }
+            foreach ($line in $status) {
+              if ($line -match '^-') { throw "submodule '$path' was not checked out: $line" }
+            }
+          }
 
       - name: Show .NET info
         shell: pwsh
