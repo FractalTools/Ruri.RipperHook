@@ -1,4 +1,4 @@
-using AssetRipper.Assets;
+﻿using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Project;
@@ -1027,23 +1027,33 @@ public static class RipperBlenderBridge
             .ToArray();
 
     /// <summary>
+    /// Every named place the game's own map UI lists, with the world rect the game gives it -- the rect
+    /// <see cref="DiscoverScenePlacements"/> takes as its window, so asking for "供能高地" never involves
+    /// guessing a coordinate. <c>IsSingleLevel</c> separates a scene that is its own level (a dungeon, a
+    /// station interior) from a place inside a bigger streaming map. See EndfieldSceneLandmarks.
+    /// </summary>
+    public static SceneLandmarkDto[] SceneLandmarks(string[] vfsRoots) =>
+        VfsFuncOrThrow(GameBundleHook.SceneLandmarks)(vfsRoots)
+            .Select(l => new SceneLandmarkDto(l.LevelId, l.IsSingleLevel, l.MinX, l.MinZ, l.MaxX, l.MaxZ))
+            .ToArray();
+
+    /// <summary>
     /// Discover every mesh-bearing entity placement inside one streaming window of
-    /// <paramref name="mapName"/>: the disc of <paramref name="radius"/> chunk cells around
-    /// (<paramref name="centerX"/>, <paramref name="centerY"/>) that the running game itself streams,
-    /// gated by <paramref name="sceneStateIds"/> (empty = every state the map ships), across
-    /// <paramref name="vfsRoots"/> in priority order. A radius past the map's grid extent is the whole
-    /// map -- worth knowing what that costs first: <see cref="EnumerateSceneChunks"/> prices a window
-    /// without decoding anything. Cheap per chunk: only the hash LUT + the selected files are
-    /// extracted/decoded, no dependency closure is resolved and no CAB is loaded -- the caller resolves
-    /// AssetPath -> CAB separately (see <see cref="ResolveCabsForPaths"/>) only for whichever placements
-    /// it actually wants to import. See EndfieldSceneBridge.DiscoverScenePlacements for the full
-    /// implementation notes (how the non-grid chunks are bounded, transform-resolution priority, the
-    /// STREAMING-vs-DynamicStreaming scope boundary, and the ReverseNotes.md caveat on Mono/Proxy
-    /// entities).
+    /// <paramref name="mapName"/>: the world rect (<paramref name="minX"/>, <paramref name="minZ"/>)..
+    /// (<paramref name="maxX"/>, <paramref name="maxZ"/>) that the running game itself streams, gated by
+    /// <paramref name="sceneStateIds"/> (empty = every state the map ships), across
+    /// <paramref name="vfsRoots"/> in priority order. An infinite rect is the whole map -- worth knowing
+    /// what that costs first: <see cref="EnumerateSceneChunks"/> prices a map without decoding anything.
+    /// Cheap per chunk: only the hash LUT + the selected files are extracted/decoded, no dependency
+    /// closure is resolved and no CAB is loaded -- the caller resolves AssetPath -> CAB separately (see
+    /// <see cref="ResolveCabsForPaths"/>) only for whichever placements it actually wants to import.
+    /// See EndfieldSceneBridge.DiscoverScenePlacements for the full implementation notes (how the
+    /// non-grid chunks are bounded, transform-resolution priority, the STREAMING-vs-DynamicStreaming
+    /// scope boundary, and the ReverseNotes.md caveat on Mono/Proxy entities).
     /// </summary>
     public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName,
-        int centerX, int centerY, int radius, int[] sceneStateIds) =>
-        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName, centerX, centerY, radius, sceneStateIds)
+        double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds) =>
+        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName, minX, minZ, maxX, maxZ, sceneStateIds)
             .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
                 p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths))
             .ToArray();
@@ -1518,6 +1528,13 @@ public sealed record VfsFileDto(string FileName, long FileNameHash, string Block
 public sealed record SceneChunkDto(
     string FileName, string Family, string Schema, bool HasGrid,
     int GridX, int GridY, int SceneStateId, int AreaId, long Length);
+
+/// <summary>One named place listed by <see cref="RipperBlenderBridge.SceneLandmarks"/> — the level id the
+/// game keys it by, whether it is a self-contained scene of its own rather than a place inside a bigger
+/// streaming map (IsSingleLevel), and the world XZ rect the game itself gives it, which is the window
+/// <see cref="RipperBlenderBridge.DiscoverScenePlacements"/> takes.</summary>
+public sealed record SceneLandmarkDto(
+    string LevelId, bool IsSingleLevel, float MinX, float MinZ, float MaxX, float MaxZ);
 
 /// <summary>One mesh-bearing entity placement discovered by <see cref="RipperBlenderBridge.DiscoverScenePlacements"/>.
 /// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.

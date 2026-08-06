@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
@@ -152,14 +152,26 @@ public class GameBundleHook : CommonHook, IHookModule
     /// at the origin"), and the entity's own resolved material asset path(s) (empty array if it has none
     /// or none resolved -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1
     /// instead of ==2, so no separate lookup mechanism, no naming-convention guess).</summary>
-    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName, int centerX, int centerY, int radius, int[] sceneStateIds);
+    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName, double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds);
     /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement inside one streaming
-    /// window of a map -- a disc of <c>radius</c> chunk cells around (<c>centerX</c>, <c>centerY</c>),
-    /// gated by scene state, which is the shape the running game itself streams. A whole map is just a
-    /// radius past its grid extent, never the default: a real one runs to thousands of chunks whose
-    /// dependency closure no machine holds at once. <c>sceneStateIds</c> empty means every state the map
-    /// ships. <c>null</c> when no VFS hook is active.</summary>
+    /// window of a map -- the world rect (<c>minX</c>, <c>minZ</c>)..(<c>maxX</c>, <c>maxZ</c>), gated by
+    /// scene state, which is the shape the running game itself streams. An infinite rect is the whole
+    /// map, never the default: a real one runs to thousands of chunks whose dependency closure no machine
+    /// holds at once. World units rather than grid cells because that is what both ends of the game's own
+    /// data speak: it streams by world position, and it publishes each named place as a world rect (see
+    /// <see cref="SceneLandmarks"/>). <c>sceneStateIds</c> empty means every state the map ships.
+    /// <c>null</c> when no VFS hook is active.</summary>
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;
+
+    /// <summary>One named place the in-game map can show: its level id, whether it is a self-contained
+    /// scene of its own (rather than a place inside a bigger streaming map), and the world rect the game
+    /// gives it -- which is exactly the window <see cref="DiscoverScenePlacements"/> takes.</summary>
+    public delegate IEnumerable<(string LevelId, bool IsSingleLevel, float MinX, float MinZ, float MaxX, float MaxZ)> SceneLandmarksDelegate(string[] vfsRoots);
+    /// <summary>Set by a VFS game hook: every named place the game's own map UI lists, with its rect.
+    /// This is what lets a caller ask for a place by name instead of guessing a grid coordinate, and what
+    /// separates the maps that need windowing from the scenes that do not. <c>null</c> when no VFS hook
+    /// is active.</summary>
+    public static SceneLandmarksDelegate? SceneLandmarks;
 
     /// <summary>Set by a VFS game hook: binary/vtable-level schema-drift diagnostic -- one report line
     /// per FlatBuffers table type, flagging any type where the source data declares more fields

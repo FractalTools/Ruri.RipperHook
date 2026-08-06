@@ -116,7 +116,7 @@ internal static class HeadlessRunner
             {
                 CabTable table = CabMap.LoadTable(sceneCabMapPath);
                 (paths, loadFilterFileNames, scenePlacements) = SceneSeedResolver.Resolve(
-                    table, options.LoadPaths[0], sceneMapName, SceneSeedResolver.Parse(options.SceneWindow));
+                    table, options.LoadPaths[0], sceneMapName, options.SceneLandmark, options.SceneWindow);
             }
             catch (Exception ex)
             {

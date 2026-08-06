@@ -71,10 +71,17 @@ internal sealed class CliOptions
     public string? ExportSceneMap { get; init; }
 
     /// <summary>
-    /// Which piece of <see cref="ExportSceneMap"/> to export:
-    /// <c>&lt;centerX&gt;,&lt;centerY&gt;,&lt;radius&gt;[,&lt;sceneStateId&gt;...]</c>, the streaming
-    /// window the running game would hold around that chunk cell. Absent means the whole map, which on a
-    /// real open-world map is thousands of chunks and a dependency closure no machine holds at once.
+    /// Which piece of <see cref="ExportSceneMap"/> to export, named the way the game names it:
+    /// <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;sceneStateId&gt;...]]</c>, e.g. <c>map01_lv007</c> for
+    /// 供能高地 at the size the game itself gives that place. Absent means the whole map, which on a real
+    /// open-world map is thousands of chunks and a dependency closure no machine holds at once.
+    /// </summary>
+    public string? SceneLandmark { get; init; }
+
+    /// <summary>
+    /// The same window stated as a world rect instead of a place name:
+    /// <c>&lt;minX&gt;,&lt;minZ&gt;,&lt;maxX&gt;,&lt;maxZ&gt;[,&lt;sceneStateId&gt;...]</c>. Mutually
+    /// exclusive with <see cref="SceneLandmark"/>.
     /// </summary>
     public string? SceneWindow { get; init; }
 
@@ -102,6 +109,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string[]> LoadTypes { get; }
     public Option<string?> ExportGlb { get; }
     public Option<string?> ExportScene { get; }
+
+    public Option<string?> SceneLandmarkOption { get; }
 
     public Option<string?> SceneWindowOption { get; }
 
@@ -171,7 +180,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
         ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
-        SceneWindowOption = new Option<string?>("--scene-window", "With --export-scene, export only one streaming window of the map: <centerX>,<centerY>,<radius>[,<sceneStateId>...] in chunk cells, e.g. -11,-2,1 for the 3x3 cells around (-11,-2). Omit for the whole map.");
+        SceneLandmarkOption = new Option<string?>("--scene-landmark", "With --export-scene, export only one named place of the map, at the size the game gives it: <levelId>[,<scale>[,<sceneStateId>...]], e.g. map01_lv007 or map01_lv007,1.5,0. Omit for the whole map.");
+        SceneWindowOption = new Option<string?>("--scene-window", "The same window as a world rect instead of a place name: <minX>,<minZ>,<maxX>,<maxZ>[,<sceneStateId>...].");
         DumpVfs = new Option<string?>("--dump-vfs", "Dump raw VFS files (including non-bundle payloads AssetRipper never sees) into this directory and exit. --names filters by file name; needs --load <gameRoot> and a VFS-game --hook.");
         VfsTypesOption = new Option<string[]>("--vfs-types", "With --dump-vfs, keep only these VFS block types (e.g. Table JsonData Lua). These are VFS categories, not AssetRipper ClassIDs.")
         {
@@ -200,6 +210,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes,
             ExportGlb,
             ExportScene,
+            SceneLandmarkOption,
             SceneWindowOption,
             DumpVfs,
             VfsTypesOption,
@@ -228,6 +239,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             LoadTypes = pr.GetValueForOption(LoadTypes) ?? [],
             ExportGlbPath = pr.GetValueForOption(ExportGlb),
             ExportSceneMap = pr.GetValueForOption(ExportScene),
+            SceneLandmark = pr.GetValueForOption(SceneLandmarkOption),
             SceneWindow = pr.GetValueForOption(SceneWindowOption),
             DumpVfsPath = pr.GetValueForOption(DumpVfs),
             VfsTypes = pr.GetValueForOption(VfsTypesOption) ?? [],

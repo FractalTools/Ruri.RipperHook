@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
@@ -22,39 +22,100 @@ internal static class SceneSeedResolver
         float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz,
         string[] MaterialAssetPaths);
 
-    /// <summary>Which piece of a map to read: a disc of <see cref="Radius"/> chunk cells around
-    /// (<see cref="CenterX"/>, <see cref="CenterY"/>), restricted to <see cref="SceneStateIds"/> (empty =
-    /// every state the map ships). Parsed from --scene-window; see <see cref="Parse"/> for the default,
-    /// which is the whole map.</summary>
-    internal sealed record SceneWindow(int CenterX, int CenterY, int Radius, int[] SceneStateIds);
+    /// <summary>Which piece of a map to read: the world rect (<see cref="MinX"/>, <see cref="MinZ"/>)..
+    /// (<see cref="MaxX"/>, <see cref="MaxZ"/>), restricted to <see cref="SceneStateIds"/> (empty = every
+    /// state the map ships). An infinite rect is the whole map, which is the default.</summary>
+    internal sealed record SceneWindow(double MinX, double MinZ, double MaxX, double MaxZ, int[] SceneStateIds)
+    {
+        internal static SceneWindow WholeMap { get; } = new(
+            double.NegativeInfinity, double.NegativeInfinity, double.PositiveInfinity, double.PositiveInfinity, []);
+
+        internal SceneWindow Scaled(double scale)
+        {
+            double centreX = (MinX + MaxX) * 0.5;
+            double centreZ = (MinZ + MaxZ) * 0.5;
+            double halfX = (MaxX - MinX) * 0.5 * scale;
+            double halfZ = (MaxZ - MinZ) * 0.5 * scale;
+            return this with
+            {
+                MinX = centreX - halfX, MaxX = centreX + halfX,
+                MinZ = centreZ - halfZ, MaxZ = centreZ + halfZ,
+            };
+        }
+    }
 
     /// <summary>
-    /// Parses --scene-window. Empty/absent is the whole map. Otherwise
-    /// <c>&lt;centerX&gt;,&lt;centerY&gt;,&lt;radius&gt;[,&lt;sceneStateId&gt;...]</c>, e.g.
-    /// <c>-11,-2,1</c> for the 3x3 cells around (-11,-2) in every scene state, or <c>-11,-2,1,0</c> for
-    /// the same cells in scene state 0 only.
+    /// Resolves the window from the two options that can state one. <c>--scene-landmark</c> names a place
+    /// the game itself publishes a rect for ("map01_lv007"), optionally scaled and restricted to scene
+    /// states: <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;sceneStateId&gt;...]]</c>. <c>--scene-window</c>
+    /// states the rect outright: <c>&lt;minX&gt;,&lt;minZ&gt;,&lt;maxX&gt;,&lt;maxZ&gt;[,&lt;sceneStateId&gt;...]</c>.
+    /// Neither is the whole map.
     /// </summary>
-    internal static SceneWindow Parse(string? spec)
+    internal static SceneWindow ResolveWindow(string? landmarkSpec, string? rectSpec, string[] vfsRoots)
     {
-        if (spec is not { Length: > 0 })
+        if (landmarkSpec is { Length: > 0 } && rectSpec is { Length: > 0 })
         {
-            return new SceneWindow(0, 0, int.MaxValue, []);
+            throw new ArgumentException("--scene-landmark and --scene-window state the same thing; pass one.");
         }
-        string[] fields = spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length < 3)
+        if (landmarkSpec is { Length: > 0 })
+        {
+            return FromLandmark(landmarkSpec, vfsRoots);
+        }
+        if (rectSpec is not { Length: > 0 })
+        {
+            return SceneWindow.WholeMap;
+        }
+        string[] fields = Fields(rectSpec);
+        if (fields.Length < 4)
         {
             throw new ArgumentException(
-                $"--scene-window '{spec}' needs at least <centerX>,<centerY>,<radius>, optionally followed by scene state ids.");
+                $"--scene-window '{rectSpec}' needs at least <minX>,<minZ>,<maxX>,<maxZ>, optionally followed by scene state ids.");
         }
+        return new SceneWindow(Number(fields[0], rectSpec), Number(fields[1], rectSpec),
+            Number(fields[2], rectSpec), Number(fields[3], rectSpec), Integers(fields[4..], rectSpec));
+    }
+
+    private static SceneWindow FromLandmark(string spec, string[] vfsRoots)
+    {
+        if (GameBundleHook.SceneLandmarks is not { } read)
+        {
+            throw new InvalidOperationException(
+                "No VFS game hook active — pass --hook with a VFS-game hook id (e.g. EndField_1.4.4).");
+        }
+        string[] fields = Fields(spec);
+        string levelId = fields[0];
+        var landmark = read(vfsRoots).FirstOrDefault(l =>
+            l.LevelId.Equals(levelId, StringComparison.OrdinalIgnoreCase));
+        if (landmark.LevelId is null)
+        {
+            throw new ArgumentException(
+                $"--scene-landmark '{levelId}' is not a place the game's own map UI lists. " +
+                $"It lists: {string.Join(", ", read(vfsRoots).Select(l => l.LevelId))}");
+        }
+        double scale = fields.Length > 1 ? Number(fields[1], spec) : 1.0;
+        SceneWindow window = new(landmark.MinX, landmark.MinZ, landmark.MaxX, landmark.MaxZ,
+            Integers(fields[2..], spec));
+        return scale == 1.0 ? window : window.Scaled(scale);
+    }
+
+    private static string[] Fields(string spec)
+        => spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    private static double Number(string field, string spec)
+        => double.TryParse(field, out double value) ? value
+            : throw new ArgumentException($"'{spec}': '{field}' is not a number.");
+
+    private static int[] Integers(string[] fields, string spec)
+    {
         int[] values = new int[fields.Length];
         for (int i = 0; i < fields.Length; i++)
         {
             if (!int.TryParse(fields[i], out values[i]))
             {
-                throw new ArgumentException($"--scene-window '{spec}': '{fields[i]}' is not an integer.");
+                throw new ArgumentException($"'{spec}': '{fields[i]}' is not a scene state id.");
             }
         }
-        return new SceneWindow(values[0], values[1], values[2], values[3..]);
+        return values;
     }
 
     /// <summary>VFS root search order — hot-update overlay first, then base client.</summary>
@@ -68,11 +129,12 @@ internal static class SceneSeedResolver
     /// Discover the placements inside one streaming window of the map, keep the best available LOD
     /// sibling per instance, resolve the mesh+material container paths to their hosting CABs, and expand
     /// to the load-file closure -- the seed set the shared ImportCabs export flow consumes.
-    /// The window is the game's own (a disc of chunk cells around a centre, gated by scene state); see
-    /// EndfieldSceneBridge.DiscoverScenePlacements. A radius past the map's grid extent is the whole map.
+    /// The window is the game's own: the world rect a named place is published with, gated by scene
+    /// state -- see ResolveWindow and EndfieldSceneBridge.DiscoverScenePlacements. No window is the
+    /// whole map.
     /// </summary>
     internal static (string[] LoadFiles, HashSet<string> LoadFilterFileNames, List<Placement> Placements)
-        Resolve(CabTable table, string gameRoot, string mapName, SceneWindow window)
+        Resolve(CabTable table, string gameRoot, string mapName, string? landmarkSpec, string? rectSpec)
     {
         if (GameBundleHook.DiscoverScenePlacements is not { } discover)
         {
@@ -81,11 +143,13 @@ internal static class SceneSeedResolver
         }
 
         string[] vfsRoots = VfsRoots(gameRoot);
+        SceneWindow window = ResolveWindow(landmarkSpec, rectSpec, vfsRoots);
         int rawCount = 0;
         // A placement without a usable transform or a resolved asset path isn't geometry and
         // doesn't get placed (not "placed at the origin").
         var withTransform = new List<Placement>();
-        foreach (var p in discover(vfsRoots, mapName, window.CenterX, window.CenterY, window.Radius, window.SceneStateIds))
+        foreach (var p in discover(vfsRoots, mapName, window.MinX, window.MinZ, window.MaxX, window.MaxZ,
+                                   window.SceneStateIds))
         {
             rawCount++;
             if (p.HasTransform && p.AssetPath.Length > 0)
@@ -97,7 +161,7 @@ internal static class SceneSeedResolver
         List<Placement> rows = SelectBestLod(withTransform);
 
         Console.Error.WriteLine(
-            $"[Ruri.CLI] scene '{mapName}' window centre=({window.CenterX},{window.CenterY}) radius={window.Radius} " +
+            $"[Ruri.CLI] scene '{mapName}' window x[{window.MinX}..{window.MaxX}] z[{window.MinZ}..{window.MaxZ}] " +
             $"states=[{(window.SceneStateIds.Length == 0 ? "all" : string.Join(' ', window.SceneStateIds))}]: " +
             $"{rawCount} placements → {withTransform.Count} with transform+asset → {rows.Count} after best-LOD selection");
 
