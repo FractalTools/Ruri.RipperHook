@@ -29,24 +29,31 @@ internal static class SceneSeedResolver
         internal static SceneWindow WholeMap { get; } = new(
             double.NegativeInfinity, double.NegativeInfinity, double.PositiveInfinity, double.PositiveInfinity, []);
 
-        internal SceneWindow Scaled(double scale)
+        /// <summary>How many pieces a place is cut into per axis at this scale. Scale IS the tile
+        /// size as a fraction of the place, so 0.25 is a 4x4 grid.</summary>
+        internal static int TilesPerSide(double scale) => Math.Max(1, (int)Math.Round(1.0 / Math.Max(scale, 1e-6)));
+
+        /// <summary>One tile of this rect. At scale 1.0 there is a single tile and this is the rect
+        /// unchanged; below that the rect is cut into TilesPerSide(scale) pieces per axis and
+        /// (tileX, tileZ) picks one, clamped into range, with the last tile on an axis nudged to end
+        /// exactly on the edge. Mirrored by scene_state.windowed in the Blender add-on, so
+        /// --scene-landmark and its panel cut a place the same way.</summary>
+        internal SceneWindow Tile(double scale, int tileX, int tileZ)
         {
-            double centreX = (MinX + MaxX) * 0.5;
-            double centreZ = (MinZ + MaxZ) * 0.5;
-            double halfX = (MaxX - MinX) * 0.5 * scale;
-            double halfZ = (MaxZ - MinZ) * 0.5 * scale;
-            return this with
-            {
-                MinX = centreX - halfX, MaxX = centreX + halfX,
-                MinZ = centreZ - halfZ, MaxZ = centreZ + halfZ,
-            };
+            int perSide = TilesPerSide(scale);
+            double width = (MaxX - MinX) / perSide;
+            double height = (MaxZ - MinZ) / perSide;
+            double x = Math.Min(MinX + Math.Clamp(tileX, 0, perSide - 1) * width, MaxX - width);
+            double z = Math.Min(MinZ + Math.Clamp(tileZ, 0, perSide - 1) * height, MaxZ - height);
+            return this with { MinX = x, MaxX = x + width, MinZ = z, MaxZ = z + height };
         }
     }
 
     /// <summary>
     /// Resolves the window from the two options that can state one. <c>--scene-landmark</c> names a place
     /// the game itself publishes a rect for ("map01_lv007"), optionally scaled and restricted to scene
-    /// states: <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;sceneStateId&gt;...]]</c>. <c>--scene-window</c>
+    /// states, where scale cuts the place into 1/scale tiles per axis and (tileX, tileZ) picks one:
+    /// <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;tileX&gt;,&lt;tileZ&gt;[,&lt;sceneStateId&gt;...]]]</c>. <c>--scene-window</c>
     /// states the rect outright: <c>&lt;minX&gt;,&lt;minZ&gt;,&lt;maxX&gt;,&lt;maxZ&gt;[,&lt;sceneStateId&gt;...]</c>.
     /// Neither is the whole map.
     /// </summary>
@@ -92,9 +99,11 @@ internal static class SceneSeedResolver
                 $"It lists: {string.Join(", ", read(vfsRoots).Select(l => l.LevelId))}");
         }
         double scale = fields.Length > 1 ? Number(fields[1], spec) : 1.0;
+        int tileX = fields.Length > 2 ? (int)Number(fields[2], spec) : 0;
+        int tileZ = fields.Length > 3 ? (int)Number(fields[3], spec) : 0;
         SceneWindow window = new(landmark.MinX, landmark.MinZ, landmark.MaxX, landmark.MaxZ,
-            Integers(fields[2..], spec));
-        return scale == 1.0 ? window : window.Scaled(scale);
+            Integers(fields[4..], spec));
+        return scale >= 1.0 ? window : window.Tile(scale, tileX, tileZ);
     }
 
     private static string[] Fields(string spec)
