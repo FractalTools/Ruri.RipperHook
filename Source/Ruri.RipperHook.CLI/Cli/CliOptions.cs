@@ -72,8 +72,8 @@ internal sealed class CliOptions
 
     /// <summary>
     /// Which piece of <see cref="ExportSceneMap"/> to export, named the way the game names it:
-    /// <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;tileX&gt;,&lt;tileZ&gt;[,&lt;sceneStateId&gt;...]]]</c>, e.g.
-    /// <c>map01_lv007</c> for 供能高地 whole, or <c>map01_lv007,0.25,1,2</c> for one tile of a 4x4 cut. Absent means the whole map, which on a real
+    /// <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;sceneStateId&gt;...]]</c>, e.g. <c>map01_lv007</c> for
+    /// 供能高地 at the size the game itself gives that place. Absent means the whole map, which on a real
     /// open-world map is thousands of chunks and a dependency closure no machine holds at once.
     /// </summary>
     public string? SceneLandmark { get; init; }
@@ -180,7 +180,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         ExportGlb = new Option<string?>("--export-glb", "Write each loaded prefab hierarchy as a complete .glb into this directory (skeleton/materials/morphs/animations; humanoid muscles baked). --names filters prefabs. Directory is never deleted.");
         ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
-        SceneLandmarkOption = new Option<string?>("--scene-landmark", "With --export-scene, export only one named place of the map, at the size the game gives it: <levelId>[,<scale>[,<tileX>,<tileZ>[,<sceneStateId>...]]], e.g. map01_lv007 for the whole place or map01_lv007,0.25,1,2,0 for one tile of a 4x4 cut. Omit for the whole map.");
+        SceneLandmarkOption = new Option<string?>("--scene-landmark", "With --export-scene, export only one named place of the map, at the size the game gives it: <levelId>[,<scale>[,<sceneStateId>...]], e.g. map01_lv007 or map01_lv007,1.5,0. Omit for the whole map.");
         SceneWindowOption = new Option<string?>("--scene-window", "The same window as a world rect instead of a place name: <minX>,<minZ>,<maxX>,<maxZ>[,<sceneStateId>...].");
         DumpVfs = new Option<string?>("--dump-vfs", "Dump raw VFS files (including non-bundle payloads AssetRipper never sees) into this directory and exit. --names filters by file name; needs --load <gameRoot> and a VFS-game --hook.");
         VfsTypesOption = new Option<string[]>("--vfs-types", "With --dump-vfs, keep only these VFS block types (e.g. Table JsonData Lua). These are VFS categories, not AssetRipper ClassIDs.")
