@@ -135,30 +135,31 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate string[] EnumerateSceneMapsDelegate(string[] vfsRoots);
     public static EnumerateSceneMapsDelegate? EnumerateSceneMaps;
 
-    /// <summary>One of a map's placement-bearing chunk files, as a plain tuple (no concrete game-hook
-    /// type): its VFS file name, which scene-data family it belongs to, the root schema that decodes it,
-    /// and -- when its name carries them (HasGrid) -- the streaming-grid cell, scene state and area it
-    /// holds. Manifest-only, so this is what a caller windows a decode by before paying for one.</summary>
-    public delegate IEnumerable<(string FileName, string Family, string Schema, bool HasGrid, int GridX, int GridY, int SceneStateId, int AreaId, long Length)> EnumerateSceneChunksDelegate(string[] vfsRoots, string mapName);
-    /// <summary>Set by a VFS game hook: every placement-bearing chunk file of one map, without reading
-    /// a single chunk byte. <c>null</c> when no VFS hook is active.</summary>
-    public static EnumerateSceneChunksDelegate? EnumerateSceneChunks;
+    /// <summary>What one map ships, as the numbers a caller actually decides by: which scene states it
+    /// has, and how much of it is cell-anchored chunks versus the map-wide/dynamic ones a window can only
+    /// bound, not name. Manifest-only -- not one chunk byte is read. A summary rather than the file list
+    /// on purpose: the one consumer showed two numbers, and a real map's list is 15k rows of interop for
+    /// them.</summary>
+    public delegate (int[] SceneStateIds, int AnchoredFiles, long AnchoredBytes, int FloatingFiles, long FloatingBytes) SceneChunkSummaryDelegate(string[] vfsRoots, string mapName);
+    /// <summary>Set by a VFS game hook: one map's chunk inventory, summarized. <c>null</c> when no VFS
+    /// hook is active.</summary>
+    public static SceneChunkSummaryDelegate? SceneChunkSummary;
 
-    /// <summary>One mesh-bearing scene-entity placement, as a plain tuple (no concrete game-hook type):
-    /// resolved asset path (empty if the hash didn't resolve), asset hash, entity name, the VFS name of
-    /// the chunk it came from (the very name the caller asked for, so placements join straight back onto
-    /// <see cref="EnumerateSceneChunks"/>' inventory), whether a usable transform source was found, the
-    /// transform itself (identity/zero when HasTransform is false -- treat as "don't place", not "place
-    /// at the origin"), and the entity's own resolved material asset path(s) (empty array if it has none
-    /// or none resolved -- same FBPropertyAssetData property list AssetPath comes from, just AssetType==1
-    /// instead of ==2, so no separate lookup mechanism, no naming-convention guess).</summary>
-    public delegate IEnumerable<(string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)> DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName, double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds);
-    /// <summary>Set by a VFS game hook: discover every mesh-bearing entity placement inside one streaming
-    /// window of a map -- the world rect (<c>minX</c>, <c>minZ</c>)..(<c>maxX</c>, <c>maxZ</c>), gated by
-    /// scene state, which is the shape the running game itself streams. An infinite rect is the whole
-    /// map, never the default: a real one runs to thousands of chunks whose dependency closure no machine
-    /// holds at once. World units rather than grid cells because that is what both ends of the game's own
-    /// data speak: it streams by world position, and it publishes each named place as a world rect (see
+    /// <summary>One streaming window's IMPORTABLE content, reduced game-side: every kept placement (each
+    /// one geometry with a verified transform, already the best available detail level per instance when
+    /// lod0Only), the distinct container paths whose CABs an import needs (mesh + material, sorted), and
+    /// the counts explaining what was left out -- Total raw rows, NoTransform (not geometry), LodFiltered
+    /// (non-best detail siblings). A placement's SourceChunk is its chunk's full VFS name; its material
+    /// paths are the entity's own (same FBPropertyAssetData list its mesh came from, AssetType==1 -- no
+    /// naming-convention guess). Reduced here because a real window is 10^5 rows: filtering after the
+    /// interop crossing pays for the crossing twice and re-pays the filter on every UI redraw.</summary>
+    public delegate (int Total, int NoTransform, int LodFiltered, int DistinctAssets, string[] SeedPaths, (string AssetPath, long AssetHash, string EntityName, string SourceChunk, float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz, string[] MaterialAssetPaths)[] Placements) DiscoverScenePlacementsDelegate(string[] vfsRoots, string mapName, double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds, bool lod0Only);
+    /// <summary>Set by a VFS game hook: discover what one streaming window of a map places -- the world
+    /// rect (<c>minX</c>, <c>minZ</c>)..(<c>maxX</c>, <c>maxZ</c>), gated by scene state, which is the
+    /// shape the running game itself streams. An infinite rect is the whole map, never the default: a
+    /// real one runs to thousands of chunks whose dependency closure no machine holds at once. World
+    /// units rather than grid cells because that is what both ends of the game's own data speak: it
+    /// streams by world position, and it publishes each named place as a world rect (see
     /// <see cref="SceneLandmarks"/>). <c>sceneStateIds</c> empty means every state the map ships.
     /// <c>null</c> when no VFS hook is active.</summary>
     public static DiscoverScenePlacementsDelegate? DiscoverScenePlacements;

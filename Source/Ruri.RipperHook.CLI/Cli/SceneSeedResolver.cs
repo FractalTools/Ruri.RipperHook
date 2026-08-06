@@ -1,5 +1,4 @@
-﻿using System.Text.RegularExpressions;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
@@ -126,8 +125,8 @@ internal static class SceneSeedResolver
     ];
 
     /// <summary>
-    /// Discover the placements inside one streaming window of the map, keep the best available LOD
-    /// sibling per instance, resolve the mesh+material container paths to their hosting CABs, and expand
+    /// Discover one streaming window's importable placements (reduced game-side: transform-verified,
+    /// best available LOD per instance), resolve their seed container paths to hosting CABs, and expand
     /// to the load-file closure -- the seed set the shared ImportCabs export flow consumes.
     /// The window is the game's own: the world rect a named place is published with, gated by scene
     /// state -- see ResolveWindow and EndfieldSceneBridge.DiscoverScenePlacements. No window is the
@@ -144,32 +143,24 @@ internal static class SceneSeedResolver
 
         string[] vfsRoots = VfsRoots(gameRoot);
         SceneWindow window = ResolveWindow(landmarkSpec, rectSpec, vfsRoots);
-        int rawCount = 0;
-        // A placement without a usable transform or a resolved asset path isn't geometry and
-        // doesn't get placed (not "placed at the origin").
-        var withTransform = new List<Placement>();
-        foreach (var p in discover(vfsRoots, mapName, window.MinX, window.MinZ, window.MaxX, window.MaxZ,
-                                   window.SceneStateIds))
+        // Reduced game-side (EndfieldSceneBridge.Reduce): the rows ARE the importable placements, and
+        // SeedPaths is already the distinct mesh+material container path set an import needs.
+        (int total, int noTransform, int lodFiltered, int _distinct, string[] allPaths, var kept) =
+            discover(vfsRoots, mapName, window.MinX, window.MinZ, window.MaxX, window.MaxZ,
+                     window.SceneStateIds, lod0Only: true);
+        List<Placement> rows = new(kept.Length);
+        foreach (var p in kept)
         {
-            rawCount++;
-            if (p.HasTransform && p.AssetPath.Length > 0)
-            {
-                withTransform.Add(new Placement(p.AssetPath, p.EntityName, p.SourceChunk,
-                    p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths));
-            }
+            rows.Add(new Placement(p.AssetPath, p.EntityName, p.SourceChunk,
+                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths));
         }
-        List<Placement> rows = SelectBestLod(withTransform);
 
         Console.Error.WriteLine(
             $"[Ruri.CLI] scene '{mapName}' window x[{window.MinX}..{window.MaxX}] z[{window.MinZ}..{window.MaxZ}] " +
             $"states=[{(window.SceneStateIds.Length == 0 ? "all" : string.Join(' ', window.SceneStateIds))}]: " +
-            $"{rawCount} placements → {withTransform.Count} with transform+asset → {rows.Count} after best-LOD selection");
+            $"{total} placements → {total - noTransform} with transform+asset → {rows.Count} after best-LOD selection");
 
-        // Distinct mesh paths ∪ distinct material paths, sorted, resolved to hosting CABs;
-        // unmatched paths are silently dropped by the resolver.
-        var meshPaths = rows.Select(p => p.AssetPath).ToHashSet(StringComparer.Ordinal);
-        var materialPaths = rows.SelectMany(p => p.MaterialAssetPaths).ToHashSet(StringComparer.Ordinal);
-        string[] allPaths = meshPaths.Union(materialPaths).OrderBy(p => p, StringComparer.Ordinal).ToArray();
+        // Unmatched paths are silently dropped by the resolver.
         string[] seedCabs = CabMap.ResolveCabsForPaths(table, allPaths);
 
         CabClosure closure = new CabSelection { SeedCabNames = seedCabs }.Resolve(table);
@@ -204,83 +195,4 @@ internal static class SceneSeedResolver
         Console.Error.WriteLine($"[Ruri.CLI] scene manifest: {placements.Count} placements → {manifestPath}");
     }
 
-    // ── best-available-LOD selection ────────────────────────────────────────────────────────────────
-
-    private static readonly Regex LodSuffixRegex = new(@"_lod(\d+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex VariantSuffixRegex = new(@"_(?:lod\d+|col\d+_[a-z]+\d*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex ColSuffixRegex = new(@"_col\d+_", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    /// <summary>The identity of a mesh within a placement: the ##subname suffix of a multi-object
-    /// FBX path, or the bare file stem, lowercased.</summary>
-    private static string ExpectedMeshName(string assetPath)
-    {
-        int hashIndex = assetPath.IndexOf("##", StringComparison.Ordinal);
-        if (hashIndex >= 0)
-        {
-            return assetPath[(hashIndex + 2)..].ToLowerInvariant();
-        }
-        string leaf = assetPath[(assetPath.LastIndexOf('/') + 1)..];
-        int dotIndex = leaf.LastIndexOf('.');
-        return (dotIndex >= 0 ? leaf[..dotIndex] : leaf).ToLowerInvariant();
-    }
-
-    /// <summary>LOD priority of a mesh name: lod0=0, lodN=N, unsuffixed=-1 (as good as lod0),
-    /// collision meshes rank 1000 (picked only when nothing else exists in the group).</summary>
-    private static int LodRank(string assetPath)
-    {
-        string name = ExpectedMeshName(assetPath);
-        Match match = LodSuffixRegex.Match(name);
-        if (match.Success)
-        {
-            return int.Parse(match.Groups[1].Value);
-        }
-        return ColSuffixRegex.IsMatch(name) ? 1000 : -1;
-    }
-
-    /// <summary>Group key (rounded position, variant-stripped stem) that identifies the parallel
-    /// sibling entities placed for the SAME instance at different detail levels; position rounded to
-    /// collapse float noise between identically-placed siblings.</summary>
-    private static (double, double, double, string) LodGroupKey(Placement row)
-    {
-        string stem = VariantSuffixRegex.Replace(ExpectedMeshName(row.AssetPath), "");
-        return (Math.Round(row.Px, 2), Math.Round(row.Py, 2), Math.Round(row.Pz, 2), stem);
-    }
-
-    /// <summary>Group placements into per-instance LOD-sibling sets and keep only the best-ranked
-    /// member of each (first wins on rank ties); falls back to whatever detail level actually
-    /// shipped when no lod0 sibling exists at all.</summary>
-    private static List<Placement> SelectBestLod(List<Placement> rows)
-    {
-        var groupOrder = new List<(double, double, double, string)>();
-        var groups = new Dictionary<(double, double, double, string), List<Placement>>();
-        foreach (Placement row in rows)
-        {
-            var key = LodGroupKey(row);
-            if (!groups.TryGetValue(key, out List<Placement>? members))
-            {
-                groups[key] = members = [];
-                groupOrder.Add(key);
-            }
-            members.Add(row);
-        }
-
-        var result = new List<Placement>(groupOrder.Count);
-        foreach (var key in groupOrder)
-        {
-            List<Placement> members = groups[key];
-            Placement best = members[0];
-            int bestRank = LodRank(best.AssetPath);
-            for (int m = 1; m < members.Count; m++)
-            {
-                int rank = LodRank(members[m].AssetPath);
-                if (rank < bestRank)
-                {
-                    best = members[m];
-                    bestRank = rank;
-                }
-            }
-            result.Add(best);
-        }
-        return result;
-    }
 }

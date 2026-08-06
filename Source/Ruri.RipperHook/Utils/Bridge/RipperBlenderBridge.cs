@@ -1014,17 +1014,17 @@ public static class RipperBlenderBridge
         VfsFuncOrThrow(GameBundleHook.EnumerateSceneMaps)(vfsRoots);
 
     /// <summary>
-    /// Every placement-bearing chunk file of <paramref name="mapName"/>, read out of the VFS manifests
-    /// alone -- no chunk byte is touched, so this stays instant on a map with thousands of them. The
-    /// grid cell / scene state / area on each entry is the map's own streaming addressing, which is what
-    /// makes a windowed <see cref="DiscoverScenePlacements"/> possible at all. See
-    /// EndfieldSceneBridge.EnumerateSceneChunks.
+    /// What one map ships, summarized to the numbers a caller decides by: its scene states, and the
+    /// split between cell-anchored chunks and the map-wide/dynamic ones a window can only bound. Read
+    /// out of the VFS manifests alone -- no chunk byte is touched. See
+    /// EndfieldSceneBridge.SceneChunkSummary.
     /// </summary>
-    public static SceneChunkDto[] EnumerateSceneChunks(string[] vfsRoots, string mapName) =>
-        VfsFuncOrThrow(GameBundleHook.EnumerateSceneChunks)(vfsRoots, mapName)
-            .Select(c => new SceneChunkDto(c.FileName, c.Family, c.Schema, c.HasGrid,
-                c.GridX, c.GridY, c.SceneStateId, c.AreaId, c.Length))
-            .ToArray();
+    public static SceneChunkSummaryDto SceneChunkSummary(string[] vfsRoots, string mapName)
+    {
+        (int[] states, int anchoredFiles, long anchoredBytes, int floatingFiles, long floatingBytes) =
+            VfsFuncOrThrow(GameBundleHook.SceneChunkSummary)(vfsRoots, mapName);
+        return new SceneChunkSummaryDto(states, anchoredFiles, anchoredBytes, floatingFiles, floatingBytes);
+    }
 
     /// <summary>
     /// Every named place the game's own map UI lists, with the world rect the game gives it -- the rect
@@ -1038,25 +1038,35 @@ public static class RipperBlenderBridge
             .ToArray();
 
     /// <summary>
-    /// Discover every mesh-bearing entity placement inside one streaming window of
-    /// <paramref name="mapName"/>: the world rect (<paramref name="minX"/>, <paramref name="minZ"/>)..
-    /// (<paramref name="maxX"/>, <paramref name="maxZ"/>) that the running game itself streams, gated by
+    /// What one streaming window of <paramref name="mapName"/> places: the world rect
+    /// (<paramref name="minX"/>, <paramref name="minZ"/>)..(<paramref name="maxX"/>,
+    /// <paramref name="maxZ"/>) that the running game itself streams, gated by
     /// <paramref name="sceneStateIds"/> (empty = every state the map ships), across
-    /// <paramref name="vfsRoots"/> in priority order. An infinite rect is the whole map -- worth knowing
-    /// what that costs first: <see cref="EnumerateSceneChunks"/> prices a map without decoding anything.
-    /// Cheap per chunk: only the hash LUT + the selected files are extracted/decoded, no dependency
-    /// closure is resolved and no CAB is loaded -- the caller resolves AssetPath -> CAB separately (see
-    /// <see cref="ResolveCabsForPaths"/>) only for whichever placements it actually wants to import.
-    /// See EndfieldSceneBridge.DiscoverScenePlacements for the full implementation notes (how the
-    /// non-grid chunks are bounded, transform-resolution priority, the STREAMING-vs-DynamicStreaming
-    /// scope boundary, and the ReverseNotes.md caveat on Mono/Proxy entities).
+    /// <paramref name="vfsRoots"/> in priority order. Reduced game-side (see EndfieldSceneBridge.Reduce):
+    /// the placements are the importable rows only -- geometry with a verified transform, one detail
+    /// level per instance when <paramref name="lod0Only"/> -- and SeedPaths is the distinct container
+    /// path set (mesh + material) whose CABs an import needs, ready for
+    /// <see cref="ResolveCabsForPaths"/>. An infinite rect is the whole map. Cheap per chunk: only the
+    /// hash LUT + the selected files are extracted/decoded, no dependency closure is resolved and no
+    /// CAB is loaded. See EndfieldSceneBridge.DiscoverScenePlacements for the full implementation notes
+    /// (how the non-grid chunks are bounded, transform-resolution priority, and the
+    /// STREAMING-vs-DynamicStreaming scope boundary).
     /// </summary>
-    public static ScenePlacementDto[] DiscoverScenePlacements(string[] vfsRoots, string mapName,
-        double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds) =>
-        VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(vfsRoots, mapName, minX, minZ, maxX, maxZ, sceneStateIds)
-            .Select(p => new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk, p.HasTransform,
-                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths))
-            .ToArray();
+    public static SceneDiscoveryDto DiscoverScenePlacements(string[] vfsRoots, string mapName,
+        double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds, bool lod0Only)
+    {
+        (int total, int noTransform, int lodFiltered, int distinctAssets, string[] seedPaths, var rows) =
+            VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(
+                vfsRoots, mapName, minX, minZ, maxX, maxZ, sceneStateIds, lod0Only);
+        ScenePlacementDto[] placements = new ScenePlacementDto[rows.Length];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var p = rows[i];
+            placements[i] = new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk,
+                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths);
+        }
+        return new SceneDiscoveryDto(total, noTransform, lodFiltered, distinctAssets, seedPaths, placements);
+    }
 
     /// <summary>Binary/vtable-level schema-drift diagnostic for <paramref name="mapName"/>'s streaming
     /// chunks -- one report line per FlatBuffers table type, flagging any type where the source data
@@ -1518,16 +1528,23 @@ public sealed record ColumnTableDto(
 /// (informational only; callers extract by name, not by chunk path).</summary>
 public sealed record VfsFileDto(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath);
 
-/// <summary>One placement-bearing chunk file listed by <see cref="RipperBlenderBridge.EnumerateSceneChunks"/> —
-/// its VFS name (the key <see cref="RipperBlenderBridge.DiscoverScenePlacements"/> takes, and the name that
-/// comes back as a placement's SourceChunk), which scene-data family it belongs to ("Streaming" /
-/// "DynamicStreaming"), the root schema that decodes it, and its place in the map's own streaming addressing.
-/// HasGrid false means the name carries no streaming-grid cell — the map-wide "_Global_" chunks and the whole
-/// DynamicStreaming family — so GridX/GridY are meaningless for it and only the world position of its decoded
-/// placements can locate it. Length is the highest-priority root's manifest length: a cost estimate.</summary>
-public sealed record SceneChunkDto(
-    string FileName, string Family, string Schema, bool HasGrid,
-    int GridX, int GridY, int SceneStateId, int AreaId, long Length);
+/// <summary>One map's chunk inventory, summarized by <see cref="RipperBlenderBridge.SceneChunkSummary"/> —
+/// which scene states it ships, and its split between cell-anchored chunk files (a window selects these by
+/// rect) and the map-wide/dynamic ones (a window can only bound their decoded content). Byte counts are the
+/// highest-priority root's manifest lengths: a cost estimate.</summary>
+public sealed record SceneChunkSummaryDto(
+    int[] SceneStateIds, int AnchoredFiles, long AnchoredBytes, int FloatingFiles, long FloatingBytes);
+
+/// <summary>One streaming window's importable content, as
+/// <see cref="RipperBlenderBridge.DiscoverScenePlacements"/> returns it: the kept placements (each one
+/// geometry with a verified transform, already one detail level per instance when lod0Only was set), the
+/// distinct container paths whose CABs an import needs (SeedPaths, sorted — feed straight to
+/// <see cref="RipperBlenderBridge.ResolveCabsForPaths"/>), and the counts explaining what the reduction
+/// dropped: Total raw rows, NoTransform (not geometry — no verified transform source or unresolved asset
+/// path), LodFiltered (non-best detail siblings of an instance already covered).</summary>
+public sealed record SceneDiscoveryDto(
+    int Total, int NoTransform, int LodFiltered, int DistinctAssets, string[] SeedPaths,
+    ScenePlacementDto[] Placements);
 
 /// <summary>One named place listed by <see cref="RipperBlenderBridge.SceneLandmarks"/> — the level id the
 /// game keys it by, whether it is a self-contained scene of its own rather than a place inside a bigger
@@ -1536,15 +1553,15 @@ public sealed record SceneChunkDto(
 public sealed record SceneLandmarkDto(
     string LevelId, bool IsSingleLevel, float MinX, float MinZ, float MaxX, float MaxZ);
 
-/// <summary>One mesh-bearing entity placement discovered by <see cref="RipperBlenderBridge.DiscoverScenePlacements"/>.
-/// AssetPath is the resolved (hash-LUT) original addressable path -- empty when the hash didn't resolve.
-/// HasTransform false means no usable transform source was found for this entity (see the method's doc
-/// comment); Px..Sz are all zero/identity in that case and callers should treat this as "don't place,"
-/// not "place at the origin." MaterialAssetPaths is this entity's own resolved material(s) -- same
-/// hash-LUT source as AssetPath, just the sibling AssetType==1 property entries instead of ==2; empty when
-/// the entity carries none or none resolved.</summary>
+/// <summary>One importable placement inside a <see cref="SceneDiscoveryDto"/>. Every row that reaches
+/// this type IS geometry: its transform came from one of the verified sources (ECS blob LocalToWorld,
+/// validated FBPropertyBytesData pose, or FBPropertyBoundsData centre) and its AssetPath resolved through
+/// the hash LUT -- rows without both are counted in the discovery's NoTransform, never emitted.
+/// MaterialAssetPaths is this entity's own resolved material(s) -- same hash-LUT source as AssetPath,
+/// just the sibling AssetType==1 property entries instead of ==2; empty when the entity carries none or
+/// none resolved.</summary>
 public sealed record ScenePlacementDto(
-    string AssetPath, long AssetHash, string EntityName, string SourceChunk, bool HasTransform,
+    string AssetPath, long AssetHash, string EntityName, string SourceChunk,
     float Px, float Py, float Pz, float Qx, float Qy, float Qz, float Qw, float Sx, float Sy, float Sz,
     string[] MaterialAssetPaths);
 
