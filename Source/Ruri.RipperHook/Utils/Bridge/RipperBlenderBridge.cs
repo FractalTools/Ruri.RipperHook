@@ -1138,19 +1138,52 @@ public static class RipperBlenderBridge
     public static string[] NpcPrefabManifest(string[] vfsRoots)
         => VfsFuncOrThrow(GameBundleHook.NpcPrefabManifest)(vfsRoots);
 
+    /// <summary>
+    /// Which material every submesh of one assembled npc wears, as
+    /// <see cref="SceneMaterialAssignmentDto"/> rows. <paramref name="cabNames"/> is where the
+    /// family's assembly table lives; its closure is loaded here (generic, MonoBehaviours only) and
+    /// only the field names live with the game (see <see cref="GameBundleHook.NpcMaterials"/>).
+    ///
+    /// An npc's colours are stated by its TEMPLATE, not by its parts, so nothing about a part's name
+    /// can derive them -- see EndfieldNpcMaterials for the measured counter-examples.
+    /// </summary>
+    public static NpcMaterialAssignmentDto[] ReadNpcMaterials(CabMapHandle map, string[] cabNames,
+        string[] vfsRoots, string templateId)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour], []);
+        UTF8Encoding utf8 = new(false);
+        string[] texts = closure.Assets.Values.Select(bytes => utf8.GetString(bytes)).ToArray();
+
+        (string[] partNames, string[] meshNames, int[] counts, string[] paths, string _avatarMeshName) =
+            VfsFuncOrThrow(GameBundleHook.NpcMaterials)(vfsRoots, templateId, texts);
+
+        NpcMaterialAssignmentDto[] rows = new NpcMaterialAssignmentDto[meshNames.Length];
+        int at = 0;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            string[] materials = new string[counts[i]];
+            Array.Copy(paths, at, materials, 0, counts[i]);
+            at += counts[i];
+            rows[i] = new NpcMaterialAssignmentDto(partNames[i], meshNames[i], materials);
+        }
+        return rows;
+    }
+
     /// <summary>What an npc template is assembled from -- see
     /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
-    /// reflection boundary: [characterId, lodCount, facialMorph, avatarTemplet, part, part, ...].</summary>
+    /// reflection boundary: [characterId, lodCount, facialMorph, avatarTemplet, avatarMesh, part, ...].</summary>
     public static string[] NpcPrefabParts(string[] vfsRoots, string templateId)
     {
-        (string[] parts, string characterId, int lodCount, string facialMorph, string avatarTemplet) =
+        (string[] parts, string characterId, int lodCount, string facialMorph, string avatarTemplet, string avatarMesh) =
             VfsFuncOrThrow(GameBundleHook.NpcPrefabParts)(vfsRoots, templateId);
-        string[] flat = new string[4 + parts.Length];
+        string[] flat = new string[5 + parts.Length];
         flat[0] = characterId;
         flat[1] = lodCount.ToString();
         flat[2] = facialMorph;
         flat[3] = avatarTemplet;
-        parts.CopyTo(flat, 4);
+        flat[4] = avatarMesh;
+        parts.CopyTo(flat, 5);
         return flat;
     }
 
@@ -1545,6 +1578,12 @@ public sealed record SceneChunkSummaryDto(
 public sealed record SceneDiscoveryDto(
     int Total, int NoTransform, int LodFiltered, int DistinctAssets, string[] SeedPaths,
     ScenePlacementDto[] Placements);
+
+/// <summary>One assembled-npc submesh and the materials it wears, from
+/// <see cref="RipperBlenderBridge.ReadNpcMaterials"/>. MeshName is the Mesh asset's own m_Name, which is
+/// what an imported mesh joins on; Materials are container paths in slot order, ready for
+/// <see cref="RipperBlenderBridge.ResolveCabsForPaths"/>.</summary>
+public sealed record NpcMaterialAssignmentDto(string PartName, string MeshName, string[] Materials);
 
 /// <summary>One named place listed by <see cref="RipperBlenderBridge.SceneLandmarks"/> — the level id the
 /// game keys it by, whether it is a self-contained scene of its own rather than a place inside a bigger

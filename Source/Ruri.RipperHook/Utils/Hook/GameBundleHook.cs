@@ -212,7 +212,7 @@ public class GameBundleHook : CommonHook, IHookModule
     /// and its facial-morph avatar name. A generic npc ships no model prefab of its own -- the
     /// bundle index cannot answer this, only the game's own per-template manifest can.
     /// <c>null</c> when no VFS hook is active.</summary>
-    public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph, string AvatarTemplet)
+    public delegate (string[] Parts, string CharacterId, int LodCount, string FacialMorph, string AvatarTemplet, string AvatarMesh)
         NpcPrefabPartsDelegate(string[] vfsRoots, string templateId);
     public static NpcPrefabPartsDelegate? NpcPrefabParts;
 
@@ -220,6 +220,18 @@ public class GameBundleHook : CommonHook, IHookModule
     /// <c>null</c> when no VFS hook is active.</summary>
     public delegate string[] NpcPrefabManifestDelegate(string[] vfsRoots);
     public static NpcPrefabManifestDelegate? NpcPrefabManifest;
+
+    /// <summary>One row per npc submesh that resolved a material: its part, the mesh name to join an
+    /// imported mesh on, and that submesh's materials in slot order -- flattened with per-row counts
+    /// so the answer crosses as plain arrays. An assembled npc's colours are stated by its TEMPLATE
+    /// (a material code per renderer), not by its parts, so no name convention can derive them; takes
+    /// the family's already-exported assembly table, keeping the loading generic and only the field
+    /// names with the game.</summary>
+    public delegate (string[] PartNames, string[] MeshNames, int[] MaterialCounts, string[] MaterialPaths, string AvatarMeshName)
+        NpcMaterialsDelegate(string[] vfsRoots, string templateId, string[] assetTexts);
+    /// <summary>Set by a VFS game hook: resolve an assembled npc's per-submesh materials.
+    /// <c>null</c> when no VFS hook is active.</summary>
+    public static NpcMaterialsDelegate? NpcMaterials;
 
     /// <summary>Set by a VFS game hook: pull each character's model prefab name and its
     /// expression-table tag out of the exported character data assets. Four strings per
