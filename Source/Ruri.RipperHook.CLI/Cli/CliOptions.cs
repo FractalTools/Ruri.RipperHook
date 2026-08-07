@@ -85,6 +85,13 @@ internal sealed class CliOptions
     /// </summary>
     public string? SceneWindow { get; init; }
 
+    /// <summary>
+    /// Skip loading scripts entirely (AssetRipper's ScriptContentLevel.Level0). An IL2Cpp game's
+    /// assemblies recover into tens of thousands of MonoScripts nothing downstream reads, and
+    /// loading them is most of a small export's wall time.
+    /// </summary>
+    public bool NoScripts { get; init; }
+
     /// <summary>转储原始 VFS 文件的目标目录。非 bundle 的战斗表就住在这层,AssetRipper 看不到它们。</summary>
     public string? DumpVfsPath { get; init; }
 
@@ -113,6 +120,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string?> SceneLandmarkOption { get; }
 
     public Option<string?> SceneWindowOption { get; }
+
+    public Option<bool> NoScriptsOption { get; }
 
     public Option<string?> DumpVfs { get; }
 
@@ -182,6 +191,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         ExportScene = new Option<string?>("--export-scene", "Export one VFS streaming map (e.g. base01_lv002): placements → best-LOD → CAB closure → Unity-project export + ruri_scene_placements.json manifest. Needs --load <gameRoot> --cab-map --export and a VFS-game --hook.");
         SceneLandmarkOption = new Option<string?>("--scene-landmark", "With --export-scene, export only one named place of the map, at the size the game gives it: <levelId>[,<scale>[,<sceneStateId>...]], e.g. map01_lv007 or map01_lv007,1.5,0. Omit for the whole map.");
         SceneWindowOption = new Option<string?>("--scene-window", "The same window as a world rect instead of a place name: <minX>,<minZ>,<maxX>,<maxZ>[,<sceneStateId>...].");
+        NoScriptsOption = new Option<bool>("--no-scripts", "Do not load scripts at all (AssetRipper ScriptContentLevel.Level0). An IL2Cpp game recovers tens of thousands of MonoScripts nothing downstream reads.");
         DumpVfs = new Option<string?>("--dump-vfs", "Dump raw VFS files (including non-bundle payloads AssetRipper never sees) into this directory and exit. --names filters by file name; needs --load <gameRoot> and a VFS-game --hook.");
         VfsTypesOption = new Option<string[]>("--vfs-types", "With --dump-vfs, keep only these VFS block types (e.g. Table JsonData Lua). These are VFS categories, not AssetRipper ClassIDs.")
         {
@@ -212,6 +222,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             ExportScene,
             SceneLandmarkOption,
             SceneWindowOption,
+            NoScriptsOption,
             DumpVfs,
             VfsTypesOption,
             Passthrough,
@@ -241,6 +252,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             ExportSceneMap = pr.GetValueForOption(ExportScene),
             SceneLandmark = pr.GetValueForOption(SceneLandmarkOption),
             SceneWindow = pr.GetValueForOption(SceneWindowOption),
+            NoScripts = pr.GetValueForOption(NoScriptsOption),
             DumpVfsPath = pr.GetValueForOption(DumpVfs),
             VfsTypes = pr.GetValueForOption(VfsTypesOption) ?? [],
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],

@@ -1,9 +1,10 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
+using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
@@ -205,6 +206,10 @@ internal static class HeadlessRunner
         {
             var settings = new FullConfiguration();
             settings.ExportSettings.ShaderExportMode = ShaderExportMode.Decompile;
+            if (options.NoScripts)
+            {
+                settings.ImportSettings.ScriptContentLevel = ScriptContentLevel.Level0;
+            }
             settings.LogConfigurationValues();
 
             var handler = new ExportHandler(settings);
