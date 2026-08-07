@@ -869,8 +869,8 @@ public static class RipperBlenderBridge
         /// <summary>(lowercased CAB name, exported file path, curve blob) per exported AnimationClip.
         /// MetaJson/Curves are the clip's <see cref="ClipCurveBlob"/> payload -- the editor-format
         /// curves handed straight across the bridge so the Blender side never re-parses them out of
-        /// the (potentially 80+MB) YAML text; empty for a clip whose blob build failed (the YAML
-        /// document still exists, so the consumer just falls back to parsing it).</summary>
+        /// the (potentially 80+MB) YAML text. Empty for a clip whose blob build failed -- the
+        /// Blender side imports no curves for that clip and reports it; there is no YAML fallback.</summary>
         public List<(string Cab, string Path, string MetaJson, byte[] Curves)> Captured { get; } = new();
 
         public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
@@ -891,7 +891,7 @@ public static class RipperBlenderBridge
                 }
                 catch (Exception exception)
                 {
-                    Logger.Warning(LogCategory.Export, $"Clip curve blob failed for '{asset.GetBestName()}': {exception.Message} -- Blender side falls back to YAML parsing.");
+                    Logger.Warning(LogCategory.Export, $"Clip curve blob failed for '{asset.GetBestName()}': {exception.Message} -- the Blender side cannot import this clip's curves (no YAML fallback).");
                 }
             }
             Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, metaJson, curves));
