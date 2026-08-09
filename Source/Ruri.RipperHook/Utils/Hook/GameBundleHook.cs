@@ -201,12 +201,6 @@ public class GameBundleHook : CommonHook, IHookModule
             string distinctBy, string preferNonEmpty, CancellationToken cancellation);
     public static QueryDataTableDelegate? QueryDataTable;
 
-    /// <summary>Set by a VFS game hook: row ids of an already-projected table whose text matches the
-    /// query, on the same vectorized engine the cabmap browser searches with -- one folded blob per
-    /// column, swept in parallel, no per-row strings. <c>null</c> when no VFS hook is active.</summary>
-    public delegate int[] SearchDataTableDelegate(string handle, string query);
-    public static SearchDataTableDelegate? SearchDataTable;
-
     /// <summary>Set by a VFS game hook: the part prefab names one npc template is assembled from,
     /// plus the character it corresponds to (empty when generic), how many detail levels it has,
     /// and its facial-morph avatar name. A generic npc ships no model prefab of its own -- the

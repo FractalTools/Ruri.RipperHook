@@ -1,17 +1,12 @@
 using AssetRipper.SourceGenerated;
+using Ruri.RipperHook.Tables;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.CabMapping;
-
-/// <summary>One Include/Exclude constraint over a row's derived columns -- the Process-Monitor
-/// rule shape both hosts' UIs edit. Every ENABLED rule is required: Include(X) means the row must
-/// match X, Exclude(X) means it must not.</summary>
-public sealed record CabFilterRule(string Field, string Relation, string Value, bool Include, bool Enabled);
 
 /// <summary>
 /// The one quick-search / rule-filter / sort engine over a <see cref="CabTable"/> -- the single
@@ -65,12 +60,12 @@ public sealed class CabTableSearch
 
     /// <summary>Quick search + rules + sort in one pass: the visible row ids, sorted.
     /// <paramref name="sortDirection"/>: 0 = load order (ascending id), 1 = ascending, 2 = descending.</summary>
-    public int[] Search(string query, IReadOnlyList<CabFilterRule>? rules, string sortColumn, int sortDirection)
+    public int[] Search(string query, IReadOnlyList<FilterRule>? rules, string sortColumn, int sortDirection)
     {
         int[] candidates = QuickSearch(query);
-        if (rules is not null && rules.Any(static rule => rule.Enabled))
+        if (RuleFilter.AnyEnabled(rules))
         {
-            candidates = ApplyRules(candidates, rules);
+            candidates = RuleFilter.Apply(candidates, rules!, Field);
         }
         return SortIds(candidates, sortColumn, sortDirection);
     }
@@ -302,107 +297,6 @@ public sealed class CabTableSearch
             .Select(classId => (classId, Utf8Search.FoldString(Enum.IsDefined(typeof(ClassIDType), classId)
                 ? ((ClassIDType)classId).ToString() : classId.ToString())))
             .ToArray();
-    }
-
-    // ── rules ────────────────────────────────────────────────────────────────────────────────────
-
-    private int[] ApplyRules(int[] candidates, IReadOnlyList<CabFilterRule> rules)
-    {
-        CabFilterRule[] enabled = rules.Where(static rule => rule.Enabled).ToArray();
-        if (enabled.Length == 0 || candidates.Length == 0)
-        {
-            return candidates;
-        }
-        // Regex instances are cloned per partition: Regex caches a single matcher state
-        // internally, so concurrent IsMatch on a shared instance is an allocation storm.
-        bool[] keep = new bool[candidates.Length];
-        int partitions = Math.Clamp(Environment.ProcessorCount, 1, candidates.Length);
-        int perPartition = (candidates.Length + partitions - 1) / partitions;
-        Parallel.For(0, partitions, partition =>
-        {
-            int first = partition * perPartition;
-            if (first >= candidates.Length)
-            {
-                return;
-            }
-            int last = Math.Min(first + perPartition, candidates.Length);
-            Regex?[] regexes = new Regex?[enabled.Length];
-            for (int r = 0; r < enabled.Length; r++)
-            {
-                if (enabled[r].Relation is "matches_regex" or "not_matches_regex")
-                {
-                    try
-                    {
-                        regexes[r] = new Regex(enabled[r].Value, RegexOptions.IgnoreCase);
-                    }
-                    catch (ArgumentException)
-                    {
-                        regexes[r] = null; // invalid pattern: relation reports no-match, like both UIs
-                    }
-                }
-            }
-            for (int i = first; i < last; i++)
-            {
-                keep[i] = RowPassesRules(candidates[i], enabled, regexes);
-            }
-        });
-        List<int> result = new(candidates.Length);
-        for (int i = 0; i < candidates.Length; i++)
-        {
-            if (keep[i])
-            {
-                result.Add(candidates[i]);
-            }
-        }
-        return result.ToArray();
-    }
-
-    private bool RowPassesRules(int id, CabFilterRule[] rules, Regex?[] regexes)
-    {
-        for (int r = 0; r < rules.Length; r++)
-        {
-            CabFilterRule rule = rules[r];
-            string value = Field(id, rule.Field);
-            bool matched = RelationMatches(value, rule.Relation, rule.Value, regexes[r]);
-            if (rule.Include)
-            {
-                if (!matched)
-                {
-                    return false;
-                }
-            }
-            else if (matched)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static bool RelationMatches(string value, string relation, string filter, Regex? regex)
-    {
-        const StringComparison ic = StringComparison.OrdinalIgnoreCase;
-        switch (relation)
-        {
-            case "is": return value.Equals(filter, ic);
-            case "is_not": return !value.Equals(filter, ic);
-            case "contains": return value.Contains(filter, ic);
-            case "excludes": return !value.Contains(filter, ic);
-            case "begins_with": return value.StartsWith(filter, ic);
-            case "ends_with": return value.EndsWith(filter, ic);
-            case "less_than":
-            case "more_than":
-            {
-                if (!double.TryParse(value, out double left) || !double.TryParse(filter, out double right))
-                {
-                    return false;
-                }
-                return relation == "less_than" ? left < right : left > right;
-            }
-            case "matches_regex": return regex is not null && regex.IsMatch(value);
-            case "not_matches_regex": return regex is not null && !regex.IsMatch(value);
-            default: return false;
-        }
     }
 
     // ── derived row values (rule evaluation + sorting), cached per column ────────────────────────

@@ -1,4 +1,5 @@
 ﻿using AssetRipper.Assets;
+using Ruri.RipperHook.Tables;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Project;
@@ -214,7 +215,7 @@ public static class RipperBlenderBridge
         return IntsToBytes(ids, ids.Length);
     }
 
-    private static List<CabFilterRule>? ParseFlatRules(string[]? flatRules)
+    private static List<FilterRule>? ParseFlatRules(string[]? flatRules)
     {
         if (flatRules is null || flatRules.Length == 0)
         {
@@ -224,10 +225,10 @@ public static class RipperBlenderBridge
         {
             throw new ArgumentException($"flatRules length {flatRules.Length} is not a multiple of 5 (field, relation, value, action, enabled)");
         }
-        List<CabFilterRule> rules = new(flatRules.Length / 5);
+        List<FilterRule> rules = new(flatRules.Length / 5);
         for (int i = 0; i < flatRules.Length; i += 5)
         {
-            rules.Add(new CabFilterRule(
+            rules.Add(new FilterRule(
                 Field: flatRules[i],
                 Relation: flatRules[i + 1],
                 Value: flatRules[i + 2],
@@ -1103,16 +1104,31 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>Row ids of a table returned by <see cref="QueryDataTable"/> whose text matches
-    /// <paramref name="query"/> -- the SAME vectorized engine the cabmap browser searches with
+    /// <paramref name="query"/> and which pass every enabled rule in <paramref name="flatRules"/>
+    /// -- the SAME vectorized engine the cabmap browser searches with
     /// (<see cref="CabMapping.Utf8Search"/>: one ASCII fold per column, then a parallel IndexOf
-    /// sweep), so a game's own config tables search exactly as fast as the row table does and
-    /// there is only one implementation of "does this row match". Returns little-endian int32
-    /// bytes, numpy-viewable as-is.</summary>
-    public static byte[] SearchDataTable(string handle, string query)
+    /// sweep) and the SAME <see cref="CabMapping.RuleFilter"/> it filters with, so a game's own
+    /// config tables search exactly as fast as the row table does and there is only one
+    /// implementation of "does this row match". <paramref name="flatRules"/> takes the same five
+    /// strings per rule as <see cref="SearchTable"/>, with Field naming a column of the projected
+    /// table. Returns little-endian int32 bytes, numpy-viewable as-is.</summary>
+    public static byte[] SearchDataTable(string handle, string query, string[]? flatRules)
     {
-        int[] rows = VfsFuncOrThrow(GameBundleHook.SearchDataTable)(handle, query);
+        int[] rows = TableRegistry.Search(handle, query, ParseFlatRules(flatRules));
         return IntsToBytes(rows, rows.Length);
     }
+
+    /// <summary>Publish a list the HOST assembled as a searchable table and return its handle --
+    /// the scene and landmark lists, which are built from several reads rather than projected from
+    /// one container. <paramref name="flatValues"/> is row-major, <paramref name="columns"/>.Length
+    /// values per row.
+    ///
+    /// Needs no game hook: searching is a core capability, and only PROJECTING a VFS container is
+    /// game-specific. This is what lets every list a host shows run the same vectorized search and
+    /// the same Include/Exclude rules as the cabmap browser, instead of each list growing its own
+    /// matching code.</summary>
+    public static string OpenHostTable(string handle, string[] columns, string[] flatValues)
+        => TableRegistry.OpenHostTable(handle, columns, flatValues);
 
     /// <summary>
     /// Each character's authoritative model prefab name and expression-table tag, read out of the

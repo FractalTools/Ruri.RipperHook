@@ -1,5 +1,6 @@
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using Ruri.RipperHook.CabMapping;
+using Ruri.RipperHook.Tables;
 using Ruri.RipperHook.GUI.Services;
 
 namespace Ruri.RipperHook.GUI;
@@ -184,9 +185,11 @@ public partial class MainForm
 	/// <summary>The shared rule list in the engine's shape. GUI column labels map to engine field
 	/// names; PathID has no cabmap column and resolves to the empty string, exactly what the old
 	/// per-row getter returned for it.</summary>
-	private List<CabFilterRule> CabRulesForEngine()
+	private List<Tables.FilterRule> CabRulesForEngine()
 	{
-		List<CabFilterRule> rules = new(_filterRules.Count);
+		// Qualified: this form has its own FilterRule (the UI row, with a display column name and
+		// a relation enum); the engine's is the flattened shape it converts to.
+		List<Tables.FilterRule> rules = new(_filterRules.Count);
 		foreach (FilterRule rule in _filterRules)
 		{
 			string field = rule.Column switch
@@ -212,7 +215,7 @@ public partial class MainForm
 				FilterRelation.NotMatches => "not_matches_regex",
 				_ => "contains",
 			};
-			rules.Add(new CabFilterRule(field, relation, rule.Value, rule.Include, rule.Enabled));
+			rules.Add(new Tables.FilterRule(field, relation, rule.Value, rule.Include, rule.Enabled));
 		}
 		return rules;
 	}

@@ -1,0 +1,163 @@
+using System.Text;
+
+namespace Ruri.RipperHook.Tables;
+
+/// <summary>
+/// The one shape every consumer sees. Three column types, not more: variable-length text as a
+/// blob plus offsets, and the two scalar families. A cabmap row table, a game config table, a
+/// scene placement list and a VFS file index are all this, so they share one browser, one search
+/// engine and one interop crossing.
+/// </summary>
+public abstract class Column
+{
+    public required string Name { get; init; }
+    public abstract int RowCount { get; }
+}
+
+/// <summary>UTF-8 blob + <c>RowCount + 1</c> offsets. No System.String is created while building.</summary>
+public sealed class Utf8Column : Column
+{
+    public required byte[] Blob { get; init; }
+    public required int[] Offsets { get; init; }
+
+    public override int RowCount => Offsets.Length - 1;
+
+    public ReadOnlySpan<byte> Utf8(int row) => Blob.AsSpan(Offsets[row], Offsets[row + 1] - Offsets[row]);
+
+    public string Text(int row) => Encoding.UTF8.GetString(Blob, Offsets[row], Offsets[row + 1] - Offsets[row]);
+}
+
+public sealed class IntegerColumn : Column
+{
+    public required long[] Values { get; init; }
+    public override int RowCount => Values.Length;
+}
+
+public sealed class RealColumn : Column
+{
+    public required double[] Values { get; init; }
+    public override int RowCount => Values.Length;
+}
+
+public sealed class ColumnTable
+{
+    public required string Name { get; init; }
+    public required int RowCount { get; init; }
+    public required Column[] Columns { get; init; }
+
+    /// <summary>The same columns restricted to <paramref name="rows"/>, in that order.</summary>
+    public ColumnTable SelectRows(int[] rows)
+    {
+        Column[] columns = new Column[Columns.Length];
+        for (int i = 0; i < Columns.Length; i++)
+        {
+            columns[i] = Columns[i] switch
+            {
+                Utf8Column text => Take(text, rows),
+                IntegerColumn integers => new IntegerColumn
+                {
+                    Name = integers.Name,
+                    Values = rows.Select(row => integers.Values[row]).ToArray(),
+                },
+                RealColumn reals => new RealColumn
+                {
+                    Name = reals.Name,
+                    Values = rows.Select(row => reals.Values[row]).ToArray(),
+                },
+                Column other => throw new InvalidOperationException($"cannot subset {other.GetType().Name}"),
+            };
+        }
+        return new ColumnTable { Name = Name, RowCount = rows.Length, Columns = columns };
+    }
+
+    private static Utf8Column Take(Utf8Column column, int[] rows)
+    {
+        Utf8ColumnBuilder builder = new(rows.Length);
+        foreach (int row in rows)
+        {
+            builder.Add(column.Utf8(row));
+        }
+        return builder.Build(column.Name);
+    }
+
+    /// <summary>One row per distinct value of <paramref name="distinctColumn"/>. When several rows
+    /// share a value the one with a non-empty <paramref name="preferColumn"/> wins, so collapsing
+    /// "same model, listed once per place it stands" keeps the entry that actually has a name;
+    /// ties keep the earlier row, which is stable because the projection's order is.</summary>
+    public ColumnTable DistinctBy(string distinctColumn, string preferColumn)
+    {
+        Utf8Column key = (Utf8Column)this[distinctColumn];
+        Utf8Column? prefer = preferColumn.Length == 0 ? null : (Utf8Column)this[preferColumn];
+        Dictionary<string, int> chosen = new(RowCount, StringComparer.Ordinal);
+        List<int> order = new(RowCount);
+        for (int row = 0; row < RowCount; row++)
+        {
+            string value = key.Text(row);
+            if (value.Length == 0)
+            {
+                continue;
+            }
+            if (!chosen.TryGetValue(value, out int existing))
+            {
+                chosen[value] = order.Count;
+                order.Add(row);
+                continue;
+            }
+            if (prefer is not null && prefer.Utf8(order[existing]).IsEmpty && !prefer.Utf8(row).IsEmpty)
+            {
+                order[existing] = row;
+            }
+        }
+        return SelectRows(order.ToArray());
+    }
+
+    public Column this[string name]
+    {
+        get
+        {
+            foreach (Column column in Columns)
+            {
+                if (string.Equals(column.Name, name, StringComparison.Ordinal))
+                {
+                    return column;
+                }
+            }
+            throw new KeyNotFoundException($"table '{Name}' has no column '{name}'");
+        }
+    }
+}
+
+/// <summary>Accumulates one UTF-8 column without materializing per-row strings.</summary>
+public sealed class Utf8ColumnBuilder
+{
+    private byte[] _blob;
+    private int _length;
+    private readonly int[] _offsets;
+    private int _rows;
+
+    public Utf8ColumnBuilder(int rowCount, int expectedBytesPerRow = 24)
+    {
+        _blob = new byte[Math.Max(16, rowCount * expectedBytesPerRow)];
+        _offsets = new int[rowCount + 1];
+    }
+
+    public void Add(ReadOnlySpan<byte> utf8)
+    {
+        if (_length + utf8.Length > _blob.Length)
+        {
+            Array.Resize(ref _blob, Math.Max(_blob.Length * 2, _length + utf8.Length));
+        }
+        utf8.CopyTo(_blob.AsSpan(_length));
+        _length += utf8.Length;
+        _offsets[++_rows] = _length;
+    }
+
+    public void Add(string text) => Add(Encoding.UTF8.GetBytes(text));
+
+    public Utf8Column Build(string name)
+    {
+        byte[] blob = new byte[_length];
+        Array.Copy(_blob, blob, _length);
+        return new Utf8Column { Name = name, Blob = blob, Offsets = _offsets };
+    }
+}
