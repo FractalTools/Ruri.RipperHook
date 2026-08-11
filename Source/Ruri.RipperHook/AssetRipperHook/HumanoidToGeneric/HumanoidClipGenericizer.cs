@@ -20,7 +20,7 @@ public static class HumanoidClipGenericizer
     public static int Convert(IAnimationClip clip, AvatarMuscleReferential referential)
     {
         List<(string Attribute, HermiteCurve Curve)> channels = CollectMuscleChannels(clip);
-        if (channels.Count == 0)
+        if (channels.Count == 0 || !HasMuscleChannel(channels))
         {
             return 0;
         }
@@ -134,6 +134,26 @@ public static class HumanoidClipGenericizer
         return written;
     }
 
+    /// <summary>
+    /// Whether the clip is actually MUSCLE-encoded, rather than just carrying root motion.
+    ///
+    /// RootT/RootQ alone do not make a humanoid clip: a generic clip -- an ACL-compressed one
+    /// especially -- ships complete per-bone transform tracks AND Unity's root-motion channels.
+    /// Solving that would bind no muscle at all, derive a body pose from the REST skeleton's own
+    /// FK, and write it over the hips' real transform track, which is the whole body's placement.
+    /// </summary>
+    private static bool HasMuscleChannel(List<(string Attribute, HermiteCurve Curve)> channels)
+    {
+        foreach ((string attribute, _) in channels)
+        {
+            if (AvatarMuscleReferential.IsMuscleAttribute(attribute))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool AnyMuscleBound(MuscleBone bone)
     {
         for (int dof = 0; dof < 3; dof++)
@@ -149,7 +169,18 @@ public static class HumanoidClipGenericizer
     private static void WriteRotationCurve(IAnimationClip clip, string path, Quaternion[] rotations,
         int frameCount, float sampleRate)
     {
-        IQuaternionCurve curve = clip.RotationCurves_C74.AddNew();
+        // One binding per path per kind: a second curve on a path that already has one leaves
+        // which of them drives the bone up to whoever reads the clip, and a reader that keys by
+        // path silently keeps only one of them.
+        var curves = clip.RotationCurves_C74;
+        for (int i = curves.Count - 1; i >= 0; i--)
+        {
+            if (curves[i].Path == path)
+            {
+                curves.RemoveAt(i);
+            }
+        }
+        IQuaternionCurve curve = curves.AddNew();
         curve.SetValues(path);
         for (int f = 1; f < frameCount; f++)
         {
@@ -176,7 +207,16 @@ public static class HumanoidClipGenericizer
     private static void WritePositionCurve(IAnimationClip clip, string path, Vector3[] positions,
         int frameCount, float sampleRate)
     {
-        IVector3Curve curve = clip.PositionCurves_C74.AddNew();
+        // See WriteRotationCurve: one binding per path per kind.
+        var curves = clip.PositionCurves_C74;
+        for (int i = curves.Count - 1; i >= 0; i--)
+        {
+            if (curves[i].Path == path)
+            {
+                curves.RemoveAt(i);
+            }
+        }
+        IVector3Curve curve = curves.AddNew();
         curve.SetValues(path);
         for (int f = 0; f < frameCount; f++)
         {
