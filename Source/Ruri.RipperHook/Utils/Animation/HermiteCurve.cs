@@ -20,6 +20,14 @@ public sealed class HermiteCurve
         _outSlopes = outSlopes;
     }
 
+    /// <summary>From already-materialized key arrays (a curve blob crossing the bridge); the
+    /// arrays are taken over, sorted by time in place when needed.</summary>
+    public static HermiteCurve FromArrays(float[] times, float[] values, float[] inSlopes, float[] outSlopes)
+    {
+        SortByTime(times, values, inSlopes, outSlopes);
+        return new HermiteCurve(times, values, inSlopes, outSlopes);
+    }
+
     public static HermiteCurve FromKeyframes(IReadOnlyList<IKeyframe_Single> keys)
     {
         int count = keys.Count;

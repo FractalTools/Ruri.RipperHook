@@ -6,7 +6,6 @@ using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
-using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using SharpGLTF.Scenes;
 // 恢复版旧 AR 与现行 AR 各有一个 PrefabHierarchyObject(FRAMEWORK.md §8);GlbModelExporter 消费的是 Prefabs 版。
 using PrefabHierarchyObject = AssetRipper.Processing.Prefabs.PrefabHierarchyObject;
@@ -88,7 +87,7 @@ public static class GlbBatchExporter
         List<(IAnimationClip, string)> result = new();
         foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
         {
-            if (asset is not IAnimationClip clip || !HasMuscleCurves(clip))
+            if (asset is not IAnimationClip clip || !HumanoidClipGenericizer.HasMuscleCurves(clip))
             {
                 continue;
             }
@@ -96,19 +95,6 @@ public static class GlbBatchExporter
             result.Add((clip, token));
         }
         return result;
-    }
-
-    private static bool HasMuscleCurves(IAnimationClip clip)
-    {
-        foreach (IFloatCurve floatCurve in clip.FloatCurves_C74)
-        {
-            string attribute = floatCurve.Attribute.String;
-            if (AvatarMuscleReferential.IsMuscleAttribute(attribute) || AvatarMuscleReferential.IsRootAttribute(attribute))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>

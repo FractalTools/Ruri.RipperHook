@@ -2,6 +2,9 @@ using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using Ruri.RipperHook.Animation;
+using Ruri.RipperHook.Humanoid;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace Ruri.RipperHook.Bridge;
@@ -31,6 +34,138 @@ internal static class ClipCurveBlob
         string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
         List<CurveIndexEntry> curves);
+
+    /// <summary>A solved humanoid pose's blob index: the same shape a host's from_blob reader
+    /// already consumes, plus the float attributes the solve consumed (which the host drops from
+    /// its own copy of the clip, mirroring the in-place converter's DropConsumedFloatCurves).</summary>
+    private sealed record SolvedClipIndex(
+        string name, float sampleRate, float startTime, float stopTime,
+        bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
+        List<CurveIndexEntry> curves, string[] consumedAttributes);
+
+    /// <summary>
+    /// The reverse of <see cref="Build"/> for the float channels only: what a host sends ACROSS
+    /// the bridge for a humanoid solve (same payload layout, kind "float" entries). Non-float
+    /// entries are ignored, so a caller may hand a whole clip blob or a pre-filtered one.
+    /// </summary>
+    public static (List<(string Attribute, HermiteCurve Curve)> Channels, float SampleRate,
+        bool KeepPositionXZ, bool KeepPositionY, bool KeepOrientation)
+        ReadFloatChannels(string metaJson, byte[] payload)
+    {
+        ClipIndex meta = JsonSerializer.Deserialize<ClipIndex>(metaJson)
+            ?? throw new InvalidOperationException("clip blob meta deserialized to null");
+        ReadOnlySpan<float> floats = MemoryMarshal.Cast<byte, float>(payload);
+        List<(string, HermiteCurve)> channels = new();
+        foreach (CurveIndexEntry entry in meta.curves)
+        {
+            if (entry.kind != "float" || string.IsNullOrEmpty(entry.attr) || entry.keys <= 0)
+            {
+                continue;
+            }
+            int keys = entry.keys;
+            int cursor = checked((int)entry.off);
+            float[] times = floats.Slice(cursor, keys).ToArray();
+            float[] values = floats.Slice(cursor + keys, keys).ToArray();
+            float[] inSlopes = floats.Slice(cursor + 2 * keys, keys).ToArray();
+            float[] outSlopes = floats.Slice(cursor + 3 * keys, keys).ToArray();
+            channels.Add((entry.attr, HermiteCurve.FromArrays(times, values, inSlopes, outSlopes)));
+        }
+        return (channels, meta.sampleRate, meta.keepPositionXZ, meta.keepPositionY, meta.keepOrientation);
+    }
+
+    /// <summary>
+    /// A solved pose as the standard curve blob (dense per-frame keys, zero slopes -- the same
+    /// keys the in-place converter writes), read back by the host's existing from_blob path.
+    /// </summary>
+    public static (string MetaJson, byte[] Curves) BuildSolved(SolvedHumanoidPose pose,
+        string[] consumedAttributes, bool keepPositionXZ, bool keepPositionY, bool keepOrientation)
+    {
+        int frameCount = pose.FrameCount;
+        List<CurveIndexEntry> index = new();
+        long totalFloats = 0;
+
+        void Count(string kind, int dimensions, string path)
+        {
+            index.Add(new CurveIndexEntry(kind, path, null, 0, frameCount, totalFloats));
+            totalFloats += frameCount + 3L * frameCount * dimensions;
+        }
+
+        foreach ((string path, _) in pose.BoneRotations)
+        {
+            Count("rot", 4, path);
+        }
+        if (pose.HipsPositions is { } hips)
+        {
+            Count("pos", 3, hips.Path);
+        }
+        if (pose.Motion is not null)
+        {
+            Count("pos", 3, string.Empty);
+            Count("rot", 4, string.Empty);
+        }
+
+        float[] payload = new float[totalFloats];
+        int cursor = 0;
+
+        void WriteTimes()
+        {
+            for (int f = 0; f < frameCount; f++)
+            {
+                payload[cursor + f] = f / pose.SampleRate;
+            }
+            cursor += frameCount;
+        }
+
+        void WriteRotations(System.Numerics.Quaternion[] rotations)
+        {
+            WriteTimes();
+            for (int f = 0; f < frameCount; f++)
+            {
+                payload[cursor + f * 4 + 0] = rotations[f].X;
+                payload[cursor + f * 4 + 1] = rotations[f].Y;
+                payload[cursor + f * 4 + 2] = rotations[f].Z;
+                payload[cursor + f * 4 + 3] = rotations[f].W;
+            }
+            cursor += frameCount * 12; // values + zeroed in/out slope spans
+        }
+
+        void WritePositions(System.Numerics.Vector3[] positions)
+        {
+            WriteTimes();
+            for (int f = 0; f < frameCount; f++)
+            {
+                payload[cursor + f * 3 + 0] = positions[f].X;
+                payload[cursor + f * 3 + 1] = positions[f].Y;
+                payload[cursor + f * 3 + 2] = positions[f].Z;
+            }
+            cursor += frameCount * 9;
+        }
+
+        foreach ((_, System.Numerics.Quaternion[] rotations) in pose.BoneRotations)
+        {
+            WriteRotations(rotations);
+        }
+        if (pose.HipsPositions is { } hipsOut)
+        {
+            WritePositions(hipsOut.Positions);
+        }
+        if (pose.Motion is { } motion)
+        {
+            WritePositions(motion.Positions);
+            WriteRotations(motion.Rotations);
+        }
+
+        if (cursor != totalFloats)
+        {
+            throw new InvalidOperationException($"solved blob desync: wrote {cursor}, indexed {totalFloats}");
+        }
+
+        SolvedClipIndex meta = new("solved", pose.SampleRate, 0f, 0f,
+            keepPositionXZ, keepPositionY, keepOrientation, index, consumedAttributes);
+        byte[] bytes = new byte[totalFloats * sizeof(float)];
+        Buffer.BlockCopy(payload, 0, bytes, 0, bytes.Length);
+        return (JsonSerializer.Serialize(meta), bytes);
+    }
 
     public static (string MetaJson, byte[] Curves) Build(IAnimationClip clip)
     {

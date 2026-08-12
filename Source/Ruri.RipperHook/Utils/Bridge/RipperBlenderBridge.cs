@@ -319,83 +319,79 @@ public static class RipperBlenderBridge
         return names;
     }
 
-    /// <summary>
-    /// For a CAB that hosts AnimationClips (and typically nothing else), find EVERY CAB carrying an Avatar
-    /// (ClassID 90) in the clip's dependency neighborhood, nearest first -- the assets a standalone clip
-    /// import co-loads so (a) AssetRipper's own AnimationClipConverter can restore the clips' hashed curve
-    /// paths to real transform-path strings (a clip CAB alone has NO dependencies, so its exported curve
-    /// paths come out as "path_0x&lt;CRC32&gt;_&lt;suffix&gt;" placeholders; co-seeding the rig-FBX CAB
-    /// resolves every one of them to a full "Root/Bip001/..." transform-path string, matching what a
-    /// whole-character export produces), and (b) the caller can build a humanoid muscle retargeter from
-    /// the rig's REAL Avatar.
-    /// Returns ALL candidates (BFS order, capped) rather than the first hit, because the neighborhood
-    /// routinely contains multiple Avatar assets of very different quality -- for example a small stub
-    /// Avatar (empty m_TOS, all-zero m_ID, no usable skeleton) may surface before the real full Avatar
-    /// (full m_TOS + muscle setup) a few hops later. WHICH one is usable is a content question the caller
-    /// answers by trying to build a retargeter from each in order -- name/size heuristics here would be
-    /// exactly the kind of guessing this bridge exists to avoid.
-    /// Search shape mirrors the data's dependency topology: the Avatar is never among the clip's reverse
-    /// dependents themselves (those are the AnimatorController, then the character prefabs) -- it lives in
-    /// the FORWARD closure of those dependents. So: breadth-first over reverse dependents (nearest first,
-    /// pure in-memory cabmap graph), scanning each one's forward closure for Avatar-classed CABs. Empty
-    /// when the clip has no Avatar anywhere in its neighborhood. Cheap: every loaded map already
-    /// carries the dependency transpose (<see cref="CabTable.Dependents"/>).
-    /// </summary>
-    public static string[] FindAssociatedAvatarCabs(CabMapHandle map, string clipCabName, int maxCandidates = 4)
+    /// <summary>What a humanoid solve returns to the host: solved transform curves in the standard
+    /// curve-blob wire form (read by the same from_blob path every clip already crosses through),
+    /// plus the float attributes the solve consumed (the host drops those from its own copy of the
+    /// clip, mirroring the in-place converter's DropConsumedFloatCurves).</summary>
+    public sealed class SolvedHumanoidClipDto
     {
-        ArgumentNullException.ThrowIfNull(map);
-        CabTable table = map.Table;
-        if (!table.TryGetId(clipCabName, out int clipId))
+        public required string MetaJson { get; init; }
+        public required byte[] Curves { get; init; }
+        public required string[] ConsumedAttributes { get; init; }
+        public required int SolvedCurveCount { get; init; }
+    }
+
+    /// <summary>
+    /// The Animator itself, as a call: a humanoid clip's muscle/root float channels plus the target
+    /// skeleton's own Avatar document (the <c>ruri_unity_avatar</c> stamp a host baked onto its
+    /// armature at import time, Unity's own serialized field shape in JSON), solved into per-bone
+    /// transform curves on the avatar's transform paths. Needs no loaded cabmap, no game hook and
+    /// no export scope -- which is the point: any .anim from any project solves against any stamped
+    /// skeleton.
+    ///
+    /// <para>Null when the channels carry no muscle attribute (a generic clip -- root motion alone
+    /// is not a humanoid encoding, and an ACL clip's real transform tracks must never be second-
+    /// guessed). A muscle-encoded clip against an avatar with no human rig throws: that is a wrong
+    /// skeleton selection, not a case to paper over.</para>
+    /// </summary>
+    public static SolvedHumanoidClipDto? SolveHumanoidClip(string avatarDocumentJson,
+        string clipMetaJson, byte[] clipFloatCurves)
+    {
+        (List<(string Attribute, Animation.HermiteCurve Curve)> channels, float sampleRate,
+            bool keepXZ, bool keepY, bool keepOrientation) =
+            ClipCurveBlob.ReadFloatChannels(clipMetaJson, clipFloatCurves);
+        if (!Humanoid.HumanoidClipGenericizer.HasMuscleChannel(channels))
         {
-            return Array.Empty<string>();
+            return null;
+        }
+        if (string.IsNullOrWhiteSpace(avatarDocumentJson))
+        {
+            throw new InvalidOperationException(
+                "this clip is muscle-encoded but the target armature carries no avatar stamp "
+                + "(ruri_unity_avatar) -- re-import the character once; the stamp then travels "
+                + "with the skeleton and any clip retargets onto it.");
         }
 
-        List<string> found = new();
-        HashSet<int> foundSet = new();
-        bool[] visited = new bool[table.Count + table.PhantomCount];
-        visited[clipId] = true;
-        Queue<int> queue = new();
-        queue.Enqueue(clipId);
-        int avatarClassId = (int)ClassIDType.Avatar;
-        while (queue.Count > 0 && found.Count < maxCandidates)
+        Humanoid.AvatarMuscleReferential referential =
+            Humanoid.AvatarMuscleReferential.TryCreateFromDocument(avatarDocumentJson)
+            ?? throw new InvalidOperationException(
+                "the stamped avatar carries no human rig (a generic avatar, or a stub with an "
+                + "empty m_TOS) -- a muscle-encoded clip cannot be solved against this skeleton.");
+
+        Humanoid.SolvedHumanoidPose? pose = Humanoid.HumanoidClipGenericizer.Solve(
+            referential, channels, sampleRate, keepXZ, keepY, keepOrientation);
+        if (pose is null)
         {
-            int current = queue.Dequeue();
-            foreach (int dependent in table.Dependents(current))
-            {
-                if (visited[dependent])
-                {
-                    continue;
-                }
-                visited[dependent] = true;
-                // Per-dependent forward closure, Avatar hits reported in case-insensitive
-                // name order so results are deterministic across runs.
-                List<string> hits = new();
-                foreach (int id in table.ClosureIds(new[] { dependent }))
-                {
-                    if (id < table.Count && !foundSet.Contains(id)
-                        && table.ClassIds(id).Contains(avatarClassId))
-                    {
-                        foundSet.Add(id);
-                        hits.Add(table.CabName(id));
-                    }
-                }
-                hits.Sort(StringComparer.OrdinalIgnoreCase);
-                foreach (string hit in hits)
-                {
-                    found.Add(hit);
-                    if (found.Count >= maxCandidates)
-                    {
-                        break;
-                    }
-                }
-                if (found.Count >= maxCandidates)
-                {
-                    break;
-                }
-                queue.Enqueue(dependent);
-            }
+            return null;
         }
-        return found.ToArray();
+
+        string[] consumed = channels
+            .Select(channel => channel.Attribute)
+            .Where(attribute => Humanoid.AvatarMuscleReferential.IsMuscleAttribute(attribute)
+                || Humanoid.AvatarMuscleReferential.IsRootAttribute(attribute))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        (string metaJson, byte[] curves) = ClipCurveBlob.BuildSolved(
+            pose, consumed, keepXZ, keepY, keepOrientation);
+        return new SolvedHumanoidClipDto
+        {
+            MetaJson = metaJson,
+            Curves = curves,
+            ConsumedAttributes = consumed,
+            SolvedCurveCount = pose.BoneRotations.Count
+                + (pose.HipsPositions is null ? 0 : 1)
+                + (pose.Motion is null ? 0 : 2),
+        };
     }
 
     /// <summary>

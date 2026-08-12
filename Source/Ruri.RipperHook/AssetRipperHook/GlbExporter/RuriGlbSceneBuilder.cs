@@ -44,8 +44,8 @@ namespace Ruri.RipperHook.GlbExporter;
 /// Builds a complete glTF scene from a prefab/scene hierarchy: node tree, skinned + static meshes
 /// (full vertex data via AR's GlbSubMeshBuilder), materials with textures, morph targets, and
 /// animations. Generic transform curves bind by the paths AR's PathChecksumCache already recovered
-/// (Avatar TOS + hierarchy CRC32); humanoid muscle curves are baked to bone rotations by
-/// <see cref="HumanoidClipBaker"/>. Bones the prefab stripped but the Avatar still knows are
+/// (Avatar TOS + hierarchy CRC32); humanoid muscle curves are solved to bone rotations against the
+/// owning animator's own referential (HumanoidClipGenericizer). Bones the prefab stripped but the Avatar still knows are
 /// synthesized from the avatar skeleton's default pose so every animation-dependent bone exists.
 /// </summary>
 public static class RuriGlbSceneBuilder
@@ -453,6 +453,31 @@ public static class RuriGlbSceneBuilder
                 {
                     continue;
                 }
+                // The muscle solve, right where the correct avatar is known: a muscle-encoded
+                // clip resolves into per-bone transform curves against THIS animator's own
+                // referential before baking (per-bone -- a clip that muscle-encodes only part
+                // of the body keeps its real transform tracks for the rest). A muscle clip on
+                // a rig with no human referential can only bake its generic curves; say so.
+                if (HumanoidClipGenericizer.HasMuscleCurves(clip))
+                {
+                    if (referential is null)
+                    {
+                        Logger.Warning(LogCategory.Export, $"[GLB] '{clip.GetBestName()}' is muscle-encoded "
+                            + "but this rig has no human referential -- its body motion cannot bake.");
+                    }
+                    else
+                    {
+                        try
+                        {
+                            HumanoidClipGenericizer.Convert(clip, referential);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warning(LogCategory.Export,
+                                $"[GLB] muscle solve failed for '{clip.GetBestName()}': {ex.Message}");
+                        }
+                    }
+                }
                 string trackName = UniqueTrackName(usedTrackNames, clip.GetBestName());
                 try
                 {
@@ -467,9 +492,9 @@ public static class RuriGlbSceneBuilder
     }
 
     /// <summary>
-    /// Every clip reaching here is already generic: <c>HumanoidToGenericProcessor</c> resolved any
-    /// muscle encoding into ordinary per-bone transform curves back at asset-processing time, so
-    /// this exporter has no humanoid case to handle and no muscle referential to consult.
+    /// Every clip reaching here is already generic: any muscle encoding was resolved into ordinary
+    /// per-bone transform curves against the owning animator's referential just above, so this
+    /// bake has one kind of curve to handle.
     /// </summary>
     private static void AddClip(BuildContext context, AnimatorEntry animatorEntry, IAnimationClip clip,
         string trackName)

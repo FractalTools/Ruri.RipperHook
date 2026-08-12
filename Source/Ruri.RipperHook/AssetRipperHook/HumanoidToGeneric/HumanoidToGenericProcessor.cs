@@ -9,8 +9,17 @@ using Ruri.RipperHook.Humanoid;
 
 namespace Ruri.RipperHook.AR;
 
+/// <summary>
+/// The AR_HumanoidToGeneric hook's processor: pairs each clip with an Avatar (its Animator's,
+/// when one references it) and resolves the muscle encoding in place via the shared solver
+/// (<see cref="HumanoidClipGenericizer.Convert"/>). Export-time and avatar-pairing-by-scope by
+/// nature -- exactly right for a Unity-bound project export, which has the whole rig loaded.
+/// </summary>
 public sealed class HumanoidToGenericProcessor : IAssetProcessor
 {
+    /// <summary>A game whose clips legitimately arrive with no Animator pairing (controllers
+    /// attached by game code, not bundle dependencies) registers this: muscle names are
+    /// avatar-relative plaintext, so any humanoid referential in scope decodes them alike.</summary>
     public static bool SolveUnreferencedClipsWithAnyAvatarInScope { get; set; }
 
     public void Process(GameData gameData)

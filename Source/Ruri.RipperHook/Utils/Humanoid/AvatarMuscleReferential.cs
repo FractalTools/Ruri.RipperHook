@@ -1,15 +1,6 @@
 using System.Numerics;
-using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
 using AssetRipper.SourceGenerated.Extensions.Enums.AnimationClip.Bones;
-using AssetRipper.SourceGenerated.Subclasses.Axes;
-using AssetRipper.SourceGenerated.Subclasses.Hand;
-using AssetRipper.SourceGenerated.Subclasses.Human;
-using AssetRipper.SourceGenerated.Subclasses.Skeleton;
-using AssetRipper.SourceGenerated.Subclasses.SkeletonPose;
-using AssetRipper.SourceGenerated.Subclasses.Vector3Float;
-using AssetRipper.SourceGenerated.Subclasses.Vector4Float;
-using AssetRipper.SourceGenerated.Subclasses.Xform;
 
 namespace Ruri.RipperHook.Humanoid;
 
@@ -91,11 +82,22 @@ public sealed class AvatarMuscleReferential
         return head is "RootT" or "RootQ" or "MotionT" or "MotionQ";
     }
 
-    public static AvatarMuscleReferential? TryCreate(IAvatar avatar)
+    public static AvatarMuscleReferential? TryCreate(IAvatar avatar) =>
+        TryCreate(AvatarRigInput.FromAvatar(avatar));
+
+    /// <summary>The referential out of an avatar's serialized document tree (the
+    /// <c>ruri_unity_avatar</c> stamp a host hands back at solve time). Null when the document
+    /// carries no human rig.</summary>
+    public static AvatarMuscleReferential? TryCreateFromDocument(string avatarDocumentJson)
     {
-        IHuman human = avatar.Avatar.Human.Data;
-        ISkeleton skeleton = human.Skeleton.Data;
-        if (skeleton.Node.Count == 0 || human.HumanBoneIndex.Count == 0)
+        AvatarRigInput? input = AvatarRigInput.FromDocumentJson(avatarDocumentJson);
+        return input is null ? null : TryCreate(input);
+    }
+
+    public static AvatarMuscleReferential? TryCreate(AvatarRigInput input)
+    {
+        int nodeCount = input.NodeParent.Length;
+        if (nodeCount == 0 || input.HumanBoneIndex.Length == 0)
         {
             return null;
         }
@@ -103,12 +105,12 @@ public sealed class AvatarMuscleReferential
         MuscleBone?[] bones = new MuscleBone?[TotalSlots];
         List<MuscleBone> driven = new();
 
-        for (int slot = 0; slot < BodySlots && slot < human.HumanBoneIndex.Count; slot++)
+        for (int slot = 0; slot < BodySlots && slot < input.HumanBoneIndex.Length; slot++)
         {
-            AddBone(bones, driven, avatar, skeleton, slot, human.HumanBoneIndex[slot]);
+            AddBone(bones, driven, input, slot, input.HumanBoneIndex[slot]);
         }
-        AddHandBones(bones, driven, avatar, skeleton, human.LeftHand.Data, LeftFingerBase);
-        AddHandBones(bones, driven, avatar, skeleton, human.RightHand.Data, RightFingerBase);
+        AddHandBones(bones, driven, input, input.LeftHandBoneIndex, LeftFingerBase);
+        AddHandBones(bones, driven, input, input.RightHandBoneIndex, RightFingerBase);
 
         if (driven.Count == 0)
         {
@@ -130,19 +132,14 @@ public sealed class AvatarMuscleReferential
         bones.CopyTo(referential._bones, 0);
         referential._drivenBones.AddRange(driven);
 
-        referential._humanBoneMass = new float[human.HumanBoneMass.Count];
-        for (int i = 0; i < human.HumanBoneMass.Count; i++)
-        {
-            referential._humanBoneMass[i] = human.HumanBoneMass[i];
-        }
-        referential._qRest = ToQuaternion(human.RootX.Q);
-        referential._armTwist = human.ArmTwist;
-        referential._foreArmTwist = human.ForeArmTwist;
-        referential._upperLegTwist = human.UpperLegTwist;
-        referential._legTwist = human.LegTwist;
+        referential._humanBoneMass = input.HumanBoneMass;
+        referential._qRest = input.RootRestQ;
+        referential._armTwist = input.ArmTwist;
+        referential._foreArmTwist = input.ForeArmTwist;
+        referential._upperLegTwist = input.UpperLegTwist;
+        referential._legTwist = input.LegTwist;
 
-        int nodeCount = skeleton.Node.Count;
-        referential._nodeParent = new int[nodeCount];
+        referential._nodeParent = input.NodeParent;
         referential._nodeRestT = new Vector3[nodeCount];
         referential._nodeRestQ = new Quaternion[nodeCount];
         referential._nodeToSlot = new int[nodeCount];
@@ -157,15 +154,12 @@ public sealed class AvatarMuscleReferential
         referential._fkPos = new Vector3[nodeCount];
         referential._fkRot = new Quaternion[nodeCount];
         referential._fkDone = new bool[nodeCount];
-        ISkeletonPose skeletonPose = human.SkeletonPose.Data;
         for (int i = 0; i < nodeCount; i++)
         {
-            referential._nodeParent[i] = skeleton.Node[i].ParentId;
-            if (i < skeletonPose.X.Count)
+            if (i < input.SkeletonPose.Length)
             {
-                IXform xform = skeletonPose.X[i];
-                referential._nodeRestT[i] = ToXformTranslation(xform);
-                referential._nodeRestQ[i] = ToQuaternion(xform.Q);
+                referential._nodeRestT[i] = input.SkeletonPose[i].T;
+                referential._nodeRestQ[i] = input.SkeletonPose[i].Q;
             }
             else
             {
@@ -176,45 +170,37 @@ public sealed class AvatarMuscleReferential
         return referential;
     }
 
-    private static void AddHandBones(MuscleBone?[] bones, List<MuscleBone> driven, IAvatar avatar,
-        ISkeleton skeleton, IHand hand, int slotBase)
+    private static void AddHandBones(MuscleBone?[] bones, List<MuscleBone> driven, AvatarRigInput input,
+        int[] handBoneIndex, int slotBase)
     {
-        for (int i = 0; i < FingerSlotsPerHand && i < hand.HandBoneIndex.Count; i++)
+        for (int i = 0; i < FingerSlotsPerHand && i < handBoneIndex.Length; i++)
         {
-            AddBone(bones, driven, avatar, skeleton, slotBase + i, hand.HandBoneIndex[i]);
+            AddBone(bones, driven, input, slotBase + i, handBoneIndex[i]);
         }
     }
 
-    private static void AddBone(MuscleBone?[] bones, List<MuscleBone> driven, IAvatar avatar,
-        ISkeleton skeleton, int slot, int nodeIndex)
+    private static void AddBone(MuscleBone?[] bones, List<MuscleBone> driven, AvatarRigInput input,
+        int slot, int nodeIndex)
     {
-        if (nodeIndex < 0 || nodeIndex >= skeleton.Node.Count || nodeIndex >= skeleton.ID.Count)
+        if (nodeIndex < 0 || nodeIndex >= input.NodeParent.Length || nodeIndex >= input.NodeId.Length)
         {
             return;
         }
-        if (!avatar.TOS.TryGetValue(skeleton.ID[nodeIndex], out Utf8String? path) || path.IsEmpty)
+        if (!input.Tos.TryGetValue(input.NodeId[nodeIndex], out string? path) || path.Length == 0)
         {
             return;
         }
 
-        int axesId = skeleton.Node[nodeIndex].AxesId;
-        IAxes? axes = axesId >= 0 && axesId < skeleton.AxesArray.Count ? skeleton.AxesArray[axesId] : null;
+        int axesId = input.NodeAxesId[nodeIndex];
+        AvatarRigInput.AxesRow? axes = axesId >= 0 && axesId < input.Axes.Length ? input.Axes[axesId] : null;
         if (axes is null && slot != (int)BoneType.Hips)
         {
             return;
         }
 
-        MuscleBone bone = axes is null
-            ? new MuscleBone(path.String, nodeIndex, slot, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
-            : new MuscleBone(
-                path.String,
-                nodeIndex,
-                slot,
-                ToQuaternion(axes.PreQ),
-                ToQuaternion(axes.PostQ),
-                GetSgn(axes),
-                GetLimit(axes, min: true),
-                GetLimit(axes, min: false));
+        MuscleBone bone = axes is not { } row
+            ? new MuscleBone(path, nodeIndex, slot, Quaternion.Identity, Quaternion.Identity, Vector3.One, Vector3.Zero, Vector3.Zero)
+            : new MuscleBone(path, nodeIndex, slot, row.PreQ, row.PostQ, row.Sgn, row.LimitMin, row.LimitMax);
         bones[slot] = bone;
         driven.Add(bone);
     }
@@ -532,44 +518,6 @@ public sealed class AvatarMuscleReferential
     }
 
     private static float GetComponent(Vector3 v, int index) => index switch { 0 => v.X, 1 => v.Y, _ => v.Z };
-
-    private static Quaternion ToQuaternion(IVector4Float v) => new(v.X, v.Y, v.Z, v.W);
-
-    private static Vector3 GetSgn(IAxes axes)
-    {
-        if (axes.Has_Sgn_Vector3Float())
-        {
-            return ToVector3(axes.Sgn_Vector3Float);
-        }
-        Vector4Float? sgn4 = axes.Sgn_Vector4Float;
-        return sgn4 is null ? Vector3.One : new Vector3(sgn4.X, sgn4.Y, sgn4.Z);
-    }
-
-    private static Vector3 GetLimit(IAxes axes, bool min)
-    {
-        if (min)
-        {
-            if (axes.Limit.Has_Min_Vector3Float())
-            {
-                return ToVector3(axes.Limit.Min_Vector3Float);
-            }
-            Vector4Float? min4 = axes.Limit.Min_Vector4Float;
-            return min4 is null ? Vector3.Zero : new Vector3(min4.X, min4.Y, min4.Z);
-        }
-        if (axes.Limit.Has_Max_Vector3Float())
-        {
-            return ToVector3(axes.Limit.Max_Vector3Float);
-        }
-        Vector4Float? max4 = axes.Limit.Max_Vector4Float;
-        return max4 is null ? Vector3.Zero : new Vector3(max4.X, max4.Y, max4.Z);
-    }
-
-    private static Vector3 ToVector3(IVector3Float? v) => v is null ? Vector3.Zero : new Vector3(v.X, v.Y, v.Z);
-
-    private static Vector3 ToXformTranslation(IXform xform)
-    {
-        return xform.Has_T3() ? ToVector3(xform.T3) : new Vector3(xform.T4!.X, xform.T4.Y, xform.T4.Z);
-    }
 
     private static Dictionary<string, (int Slot, int Axis)> BuildMuscleDofTable()
     {
