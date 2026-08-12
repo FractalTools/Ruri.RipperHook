@@ -19,7 +19,11 @@ namespace Ruri.RipperHook.Bridge;
 ///
 /// Payload layout (all little-endian), section offsets carried by the JSON index:
 ///   vertexData · indexBuffer · bindPose (16 f32 row-major per matrix, e00..e33) ·
-///   boneNameHashes (u32) · shapeVertices (u32 index + 3 f32 vertex delta + 3 f32 normal delta).
+///   boneNameHashes (u32) · shapeVertices (u32 index + 3 f32 vertex delta + 3 f32 normal delta) ·
+///   skin (4 f32 weights + 4 i32 bone indices per vertex).
+/// The skin section is what a pre-2018 mesh carries instead of BlendWeight/BlendIndices vertex
+/// channels: those channel ids did not exist yet, and the weights live in the separate m_Skin
+/// array. Without it a Unity 5 character imports with no vertex groups at all.
 /// Returns null for a mesh whose geometry is NOT plainly in hand (compressed vertex data, a
 /// channel-less legacy layout, or unresolvable stream data) -- the caller keeps the YAML document
 /// as the only representation and the host-side diagnosis wording stays exactly as it was.
@@ -91,10 +95,14 @@ internal static class MeshRawBlob
         }
 
         const int ShapeVertexStride = sizeof(uint) + 6 * sizeof(float);
+        const int SkinStride = 4 * sizeof(float) + 4 * sizeof(int);
         long bindPoseBytes = bindPoseCount * 16L * sizeof(float);
         long boneHashBytes = boneHashCount * (long)sizeof(uint);
         long shapeVertexBytes = shapeVertexCount * ShapeVertexStride;
-        byte[] payload = new byte[vertexBytes.Length + indexBytes.Length + bindPoseBytes + boneHashBytes + shapeVertexBytes];
+        long skinCount = mesh.Skin.Count;
+        long skinBytes = skinCount * SkinStride;
+        byte[] payload = new byte[vertexBytes.Length + indexBytes.Length + bindPoseBytes
+            + boneHashBytes + shapeVertexBytes + skinBytes];
 
         long cursor = 0;
         Dictionary<string, SectionEntry> sections = new();
@@ -138,6 +146,17 @@ internal static class MeshRawBlob
             WriteVector3(vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z, shapeSpan, ref shapeCursor);
         }
 
+        Section("skin", skinBytes);
+        Span<byte> skinSpan = payload.AsSpan((int)sections["skin"].off, (int)skinBytes);
+        int skinCursor = 0;
+        foreach (var weights in mesh.Skin)
+        {
+            WriteFloats(skinSpan, ref skinCursor,
+                weights.Weight_0_, weights.Weight_1_, weights.Weight_2_, weights.Weight_3_);
+            WriteInts(skinSpan, ref skinCursor,
+                weights.BoneIndex_0_, weights.BoneIndex_1_, weights.BoneIndex_2_, weights.BoneIndex_3_);
+        }
+
         MeshIndex meta = new(
             mesh.Name.String,
             mesh.VertexData.VertexCount,
@@ -165,6 +184,24 @@ internal static class MeshRawBlob
         foreach (float value in values)
         {
             System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(span.Slice(cursor, 4), value);
+            cursor += 4;
+        }
+    }
+
+    private static void WriteFloats(Span<byte> span, ref int cursor, params ReadOnlySpan<float> values)
+    {
+        foreach (float value in values)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(span.Slice(cursor, 4), value);
+            cursor += 4;
+        }
+    }
+
+    private static void WriteInts(Span<byte> span, ref int cursor, params ReadOnlySpan<int> values)
+    {
+        foreach (int value in values)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(span.Slice(cursor, 4), value);
             cursor += 4;
         }
     }

@@ -10,6 +10,9 @@ public sealed class RipperHookAttribute : GameHookAttribute
     public override string Version { get; }
     public override string BaseEngineVersion { get; }
 
+    /// <summary>Read off the member itself -- see <see cref="GameTypes.IsGame"/>.</summary>
+    public override bool IsGameSpecific => GameType.IsGame();
+
     /// <summary>
     /// Extra version strings this same class also answers to -- for a version whose resolved
     /// capability set (see <see cref="Ruri.RipperHook.Core.Capabilities.CapabilityResolver"/>) is

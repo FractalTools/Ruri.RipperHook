@@ -127,18 +127,22 @@ public sealed class ColumnTable
     }
 }
 
-/// <summary>Accumulates one UTF-8 column without materializing per-row strings.</summary>
+/// <summary>Accumulates one UTF-8 column without materializing per-row strings.
+/// <para><paramref name="rowCount"/> is a HINT, not a limit: both buffers grow. A producer that
+/// knows its row count still gets a single allocation, and one that is streaming rows out of a
+/// container it is still reading does not have to count them first just to use the fast shape.</para>
+/// </summary>
 public sealed class Utf8ColumnBuilder
 {
     private byte[] _blob;
     private int _length;
-    private readonly int[] _offsets;
+    private int[] _offsets;
     private int _rows;
 
     public Utf8ColumnBuilder(int rowCount, int expectedBytesPerRow = 24)
     {
         _blob = new byte[Math.Max(16, rowCount * expectedBytesPerRow)];
-        _offsets = new int[rowCount + 1];
+        _offsets = new int[Math.Max(1, rowCount) + 1];
     }
 
     public void Add(ReadOnlySpan<byte> utf8)
@@ -146,6 +150,10 @@ public sealed class Utf8ColumnBuilder
         if (_length + utf8.Length > _blob.Length)
         {
             Array.Resize(ref _blob, Math.Max(_blob.Length * 2, _length + utf8.Length));
+        }
+        if (_rows + 1 >= _offsets.Length)
+        {
+            Array.Resize(ref _offsets, _offsets.Length * 2);
         }
         utf8.CopyTo(_blob.AsSpan(_length));
         _length += utf8.Length;
@@ -158,6 +166,14 @@ public sealed class Utf8ColumnBuilder
     {
         byte[] blob = new byte[_length];
         Array.Copy(_blob, blob, _length);
-        return new Utf8Column { Name = name, Blob = blob, Offsets = _offsets };
+        // Trimmed to the rows actually written: RowCount is Offsets.Length - 1, so a grown-past
+        // buffer would otherwise report phantom empty rows at the end.
+        int[] offsets = _offsets;
+        if (offsets.Length != _rows + 1)
+        {
+            offsets = new int[_rows + 1];
+            Array.Copy(_offsets, offsets, _rows + 1);
+        }
+        return new Utf8Column { Name = name, Blob = blob, Offsets = offsets };
     }
 }

@@ -54,6 +54,22 @@ public static class RipperBlenderBridge
             .ToArray();
 
     /// <summary>
+    /// The subset of <see cref="ListAvailableHooks"/> that is about ONE GAME
+    /// (<see cref="Ruri.Hook.Attributes.GameHookAttribute.IsGameSpecific"/>), as opposed to an
+    /// AssetRipper-wide feature. Those are mutually exclusive -- <see cref="Ruri.Hook.RuriHook.ApplyHooks"/>
+    /// keeps only one -- so a host's picker needs to know which ids that rule covers to stop
+    /// offering a selection the host will not honour. Asked here rather than derived from the
+    /// shape of an id, so the two sides cannot disagree about what counts as a game.
+    /// </summary>
+    public static string[] ListGameHooks() =>
+        Ruri.Hook.RuriHook.GetAvailableHooks()
+            .Where(h => h.Attribute.IsGameSpecific)
+            .SelectMany(h => Ruri.Hook.RuriHook.BuildHookIds(h.Attribute))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    /// <summary>
     /// Canonicalize a caller-supplied hook id to the exact id <see cref="Ruri.Hook.RuriHook"/> answers to,
     /// accepting '.'/'_' punctuation variants and <c>AlsoCoversVersions</c> aliases -- the same resolution
     /// the CLI's --hook option performs. Unknown ids pass through unchanged (ApplyHooks then simply
@@ -986,122 +1002,50 @@ public static class RipperBlenderBridge
     // stripped ($(PureRelease)==true in Ruri.RipperHook.csproj) -- a concrete reference here would break
     // that build the same way GameBundleHook.ActiveVfs (a typed field, since removed) did.
 
-    /// <summary>
-    /// Enumerate every file recorded in every .blc manifest across <paramref name="vfsRoots"/> (priority
-    /// order, e.g. [Persistent/VFS, StreamingAssets/VFS] -- a hot-update overlay's listing wins over the
-    /// base client's when both list the same file), of ANY block type -- not just the Unity-CAB-shaped
-    /// entries <see cref="ImportCabs"/> resolves through. This does not extract/decrypt any payload, only
-    /// reads the (small, CRC-verified) file tables, so scanning the whole VFS tree is cheap.
-    /// <paramref name="blockTypeFilter" /> is an optional set of block-type names (e.g. "Streaming",
-    /// "ExtendData") to pre-filter by, to avoid materializing every non-relevant entry.
-    /// </summary>
-    public static VfsFileDto[] EnumerateVfsFiles(string[] vfsRoots, string[]? blockTypeFilter = null) =>
-        VfsFuncOrThrow(GameBundleHook.EnumerateVfsFiles)(vfsRoots, blockTypeFilter)
-            .Select(f => new VfsFileDto(f.FileName, f.FileNameHash, f.BlockType, f.Length, f.ChkPath))
-            .ToArray();
+    // ── the game-data surface ────────────────────────────────────────────────
+    // Three entry points, for every game there will ever be. What a game publishes is DATA it
+    // registers (Ruri.RipperHook.Data.GameData), not a method someone adds here -- which is why
+    // this section does not grow when a game is added, and why every dataset of every game arrives
+    // already searchable, sortable and cached with no code of its own.
 
     /// <summary>
-    /// Extract + decrypt one VFS-packed file's raw bytes by its exact original name (as returned by
-    /// <see cref="EnumerateVfsFiles"/>'s <see cref="VfsFileDto.FileName"/>), trying <paramref name="vfsRoots"/>
-    /// in priority order with fallback (a hot-update overlay can list a chunk it never duplicated because
-    /// that patch didn't change it -- see EndfieldSceneBridge.cs).
+    /// What the active game publishes: id, the positional arguments it takes, whether it is a table
+    /// or a blob, and a one-line description. Four strings per dataset, flat.
+    ///
+    /// A host lists this instead of hardcoding ids, so a panel can be told what it can ask for
+    /// rather than shipping a copy of the answer that goes stale.
     /// </summary>
-    public static byte[] ExtractVfsFile(string[] vfsRoots, string fileName) =>
-        VfsFuncOrThrow(GameBundleHook.ExtractVfsFile)(vfsRoots, fileName);
-
-    /// <summary>Every distinct map name with streaming-chunk data across <paramref name="vfsRoots"/>
-    /// (i.e. every "&lt;map&gt;" in "Data/Streaming/PC/&lt;map&gt;/Streaming/*.bytes").</summary>
-    public static string[] EnumerateSceneMaps(string[] vfsRoots) =>
-        VfsFuncOrThrow(GameBundleHook.EnumerateSceneMaps)(vfsRoots);
-
-    /// <summary>
-    /// What one map ships, summarized to the numbers a caller decides by: its scene states, and the
-    /// split between cell-anchored chunks and the map-wide/dynamic ones a window can only bound. Read
-    /// out of the VFS manifests alone -- no chunk byte is touched. See
-    /// EndfieldSceneBridge.SceneChunkSummary.
-    /// </summary>
-    public static SceneChunkSummaryDto SceneChunkSummary(string[] vfsRoots, string mapName)
+    public static string[] ListGameData()
     {
-        (int[] states, int anchoredFiles, long anchoredBytes, int floatingFiles, long floatingBytes) =
-            VfsFuncOrThrow(GameBundleHook.SceneChunkSummary)(vfsRoots, mapName);
-        return new SceneChunkSummaryDto(states, anchoredFiles, anchoredBytes, floatingFiles, floatingBytes);
-    }
-
-    /// <summary>
-    /// Every named place the game's own map UI lists, with the world rect the game gives it -- the rect
-    /// <see cref="DiscoverScenePlacements"/> takes as its window, so asking for "供能高地" never involves
-    /// guessing a coordinate. <c>IsSingleLevel</c> separates a scene that is its own level (a dungeon, a
-    /// station interior) from a place inside a bigger streaming map. See EndfieldSceneLandmarks.
-    /// </summary>
-    public static SceneLandmarkDto[] SceneLandmarks(string[] vfsRoots) =>
-        VfsFuncOrThrow(GameBundleHook.SceneLandmarks)(vfsRoots)
-            .Select(l => new SceneLandmarkDto(l.LevelId, l.IsSingleLevel, l.MinX, l.MinZ, l.MaxX, l.MaxZ))
-            .ToArray();
-
-    /// <summary>
-    /// What one streaming window of <paramref name="mapName"/> places: the world rect
-    /// (<paramref name="minX"/>, <paramref name="minZ"/>)..(<paramref name="maxX"/>,
-    /// <paramref name="maxZ"/>) that the running game itself streams, gated by
-    /// <paramref name="sceneStateIds"/> (empty = every state the map ships), across
-    /// <paramref name="vfsRoots"/> in priority order. Reduced game-side (see EndfieldSceneBridge.Reduce):
-    /// the placements are the importable rows only -- geometry with a verified transform, one detail
-    /// level per instance when <paramref name="lod0Only"/> -- and SeedPaths is the distinct container
-    /// path set (mesh + material) whose CABs an import needs, ready for
-    /// <see cref="ResolveCabsForPaths"/>. An infinite rect is the whole map. Cheap per chunk: only the
-    /// hash LUT + the selected files are extracted/decoded, no dependency closure is resolved and no
-    /// CAB is loaded. See EndfieldSceneBridge.DiscoverScenePlacements for the full implementation notes
-    /// (how the non-grid chunks are bounded, transform-resolution priority, and the
-    /// STREAMING-vs-DynamicStreaming scope boundary).
-    /// </summary>
-    public static SceneDiscoveryDto DiscoverScenePlacements(string[] vfsRoots, string mapName,
-        double minX, double minZ, double maxX, double maxZ, int[] sceneStateIds, bool lod0Only)
-    {
-        (int total, int noTransform, int lodFiltered, int distinctAssets, string[] seedPaths, var rows) =
-            VfsFuncOrThrow(GameBundleHook.DiscoverScenePlacements)(
-                vfsRoots, mapName, minX, minZ, maxX, maxZ, sceneStateIds, lod0Only);
-        ScenePlacementDto[] placements = new ScenePlacementDto[rows.Length];
-        for (int i = 0; i < rows.Length; i++)
+        List<string> flat = [];
+        foreach (Data.Datasets.Dataset dataset in Data.Datasets.Available())
         {
-            var p = rows[i];
-            placements[i] = new ScenePlacementDto(p.AssetPath, p.AssetHash, p.EntityName, p.SourceChunk,
-                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths);
+            flat.Add(dataset.Id);
+            flat.Add(string.Join(",", dataset.Parameters));
+            flat.Add(dataset.Table is not null ? "table" : "blob");
+            flat.Add(dataset.Description);
         }
-        return new SceneDiscoveryDto(total, noTransform, lodFiltered, distinctAssets, seedPaths, placements);
+        return flat.ToArray();
     }
 
-    /// <summary>Binary/vtable-level schema-drift diagnostic for <paramref name="mapName"/>'s streaming
-    /// chunks -- one report line per FlatBuffers table type, flagging any type where the source data
-    /// declares more fields than the currently-compiled bindings know how to read, plus sample raw
-    /// dumps of the extra field bytes. See EndfieldSceneBridge.DiagnoseSchemaDrift's doc comment.</summary>
-    public static string[] DiagnoseSchemaDrift(string[] vfsRoots, string mapName) =>
-        VfsFuncOrThrow(GameBundleHook.DiagnoseSchemaDrift)(vfsRoots, mapName);
-
     /// <summary>
-    /// Project one of the game's own self-describing data containers into columns. The container
-    /// names itself (<paramref name="containerFile"/> is a VFS file name such as
-    /// "Data/TableCfg/CharacterTable.bytes") and carries its own schema, so nothing here -- and
-    /// nothing generated -- knows what a character or a localization is.
-    ///
-    /// <paramref name="flatColumnSpecs"/> is four strings per column: display name, dotted path into
-    /// the row, the container to resolve that value through (empty = no join), and the path taken
-    /// inside the joined row. "name.id" through "Data/TableCfg/I18nTextTable_CN.bytes" with an empty
-    /// joined path is how a roster gets its localized names. Column 0 of the result is always the
-    /// row's own key.
-    ///
-    /// The returned buffers are the columns as-is: a python caller maps them with numpy and never
-    /// parses a byte.
+    /// One published dataset, as columns. The returned Handle is also its search handle -- pass it
+    /// straight to <see cref="SearchDataTable"/> -- so reading and searching are not two
+    /// registrations that can disagree.
     /// </summary>
-    /// <remarks><paramref name="cancellation"/> is required, not defaulted: the in-process caller
-    /// reaches this through <c>MethodInfo.Invoke</c>, which binds by exact parameter count and would
-    /// never supply an omitted optional argument.</remarks>
-    public static ColumnTableDto QueryDataTable(string[] vfsRoots, string containerFile, string[] flatColumnSpecs,
-        string distinctBy, string preferNonEmpty, CancellationToken cancellation)
+    /// <remarks><paramref name="cancellation"/> is required, not defaulted -- see
+    /// <see cref="QueryDataTable"/>.</remarks>
+    public static ColumnTableDto GameDataTable(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation)
     {
-        (string handle, string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
-            VfsFuncOrThrow(GameBundleHook.QueryDataTable)(vfsRoots, containerFile, flatColumnSpecs,
-                distinctBy, preferNonEmpty, cancellation);
+        (string handle, Tables.ColumnTable table) = Data.Datasets.Table(datasetId, args ?? [], cancellation, map?.Table);
+        (string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
+            Data.ColumnTablePacking.Pack(table);
         return new ColumnTableDto(handle, name, rowCount, columns, kinds, blobs, offsets);
     }
+
+    /// <summary>One published dataset whose payload is bytes rather than rows.</summary>
+    public static byte[] GameDataBlob(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation) =>
+        Data.Datasets.Blob(datasetId, args ?? [], cancellation, map?.Table);
 
     /// <summary>Row ids of a table returned by <see cref="QueryDataTable"/> whose text matches
     /// <paramref name="query"/> and which pass every enabled rule in <paramref name="flatRules"/>
@@ -1129,79 +1073,6 @@ public static class RipperBlenderBridge
     /// matching code.</summary>
     public static string OpenHostTable(string handle, string[] columns, string[] flatValues)
         => TableRegistry.OpenHostTable(handle, columns, flatValues);
-
-    /// <summary>
-    /// Each character's authoritative model prefab name and expression-table tag, read out of the
-    /// character data assets in <paramref name="cabNames"/>. Four strings per character: id, model
-    /// prefab name, morph tag id, source asset name.
-    ///
-    /// The closure is loaded here (generic) and only MonoBehaviours are serialized, so pulling
-    /// three fields does not cost a full character export; the field names live with the game (see
-    /// <see cref="GameBundleHook.CharacterModels"/>). A character's model is NOT derivable from its
-    /// id -- no config table carries one -- which is why this asset has to be read at all.
-    /// </summary>
-    public static string[] ReadCharacterModels(CabMapHandle map, string[] cabNames)
-    {
-        ArgumentNullException.ThrowIfNull(map);
-        // Textures are excluded by the class filter, so there is no container to negotiate.
-        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour], []);
-        UTF8Encoding utf8 = new(false);
-        string[] texts = closure.Assets.Values.Select(bytes => utf8.GetString(bytes)).ToArray();
-        return VfsFuncOrThrow(GameBundleHook.CharacterModels)(texts);
-    }
-
-    /// <summary>Every npc template the game ships an assembled model for.</summary>
-    public static string[] NpcPrefabManifest(string[] vfsRoots)
-        => VfsFuncOrThrow(GameBundleHook.NpcPrefabManifest)(vfsRoots);
-
-    /// <summary>
-    /// Which material every submesh of one assembled npc wears, as
-    /// <see cref="SceneMaterialAssignmentDto"/> rows. <paramref name="cabNames"/> is where the
-    /// family's assembly table lives; its closure is loaded here (generic, MonoBehaviours only) and
-    /// only the field names live with the game (see <see cref="GameBundleHook.NpcMaterials"/>).
-    ///
-    /// An npc's colours are stated by its TEMPLATE, not by its parts, so nothing about a part's name
-    /// can derive them -- see EndfieldNpcMaterials for the measured counter-examples.
-    /// </summary>
-    public static NpcMaterialAssignmentDto[] ReadNpcMaterials(CabMapHandle map, string[] cabNames,
-        string[] vfsRoots, string templateId)
-    {
-        ArgumentNullException.ThrowIfNull(map);
-        ClosureResult closure = ImportCabsFiltered(map, cabNames, [(int)ClassIDType.MonoBehaviour], []);
-        UTF8Encoding utf8 = new(false);
-        string[] texts = closure.Assets.Values.Select(bytes => utf8.GetString(bytes)).ToArray();
-
-        (string[] partNames, string[] meshNames, int[] counts, string[] paths, string _avatarMeshName) =
-            VfsFuncOrThrow(GameBundleHook.NpcMaterials)(vfsRoots, templateId, texts);
-
-        NpcMaterialAssignmentDto[] rows = new NpcMaterialAssignmentDto[meshNames.Length];
-        int at = 0;
-        for (int i = 0; i < rows.Length; i++)
-        {
-            string[] materials = new string[counts[i]];
-            Array.Copy(paths, at, materials, 0, counts[i]);
-            at += counts[i];
-            rows[i] = new NpcMaterialAssignmentDto(partNames[i], meshNames[i], materials);
-        }
-        return rows;
-    }
-
-    /// <summary>What an npc template is assembled from -- see
-    /// <see cref="GameBundleHook.NpcPrefabParts"/>. Flattened to strings so no DTO crosses the
-    /// reflection boundary: [characterId, lodCount, facialMorph, avatarTemplet, avatarMesh, part, ...].</summary>
-    public static string[] NpcPrefabParts(string[] vfsRoots, string templateId)
-    {
-        (string[] parts, string characterId, int lodCount, string facialMorph, string avatarTemplet, string avatarMesh) =
-            VfsFuncOrThrow(GameBundleHook.NpcPrefabParts)(vfsRoots, templateId);
-        string[] flat = new string[5 + parts.Length];
-        flat[0] = characterId;
-        flat[1] = lodCount.ToString();
-        flat[2] = facialMorph;
-        flat[3] = avatarTemplet;
-        flat[4] = avatarMesh;
-        parts.CopyTo(flat, 5);
-        return flat;
-    }
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(

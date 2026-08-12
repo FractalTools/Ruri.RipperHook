@@ -196,6 +196,7 @@ namespace Ruri.Hook
                 }
 
                 HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
+                DropExtraGames(config, availableHooks, desiredHookIds);
 
                 foreach (string hookId in ActiveHookIds.Except(desiredHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
@@ -215,6 +216,49 @@ namespace Ruri.Hook
             }
         }
 
+        /// <summary>
+        /// Keep at most ONE game's hook in the desired set, and say which ones were dropped.
+        /// <para>Game hooks are mutually exclusive by construction: each rewrites the same
+        /// AssetRipper methods for its own title's layout, so a config naming two of them describes
+        /// a host that reads neither correctly. That used to go unsaid, and the symptom surfaced far
+        /// away -- a panel offering two games' tabs at once, over one loaded cabmap that can only
+        /// ever be one game.</para>
+        /// <para>The LAST one in the config wins, because a config is edited by adding: the id the
+        /// operator just ticked is the game they mean. Dropped ids are removed from the config
+        /// itself, so the persisted set stops claiming something the host never did. Feature hooks
+        /// (<see cref="GameHookAttribute.IsGameSpecific"/> false) are untouched.</para>
+        /// </summary>
+        private static void DropExtraGames(HookConfig config,
+            List<(Type Type, GameHookAttribute Attribute)> availableHooks,
+            HashSet<string> desiredHookIds)
+        {
+            Dictionary<string, string> gameOfId = new(StringComparer.OrdinalIgnoreCase);
+            foreach (var (_, attribute) in availableHooks)
+            {
+                if (!attribute.IsGameSpecific) continue;
+                foreach (string id in BuildHookIds(attribute))
+                {
+                    gameOfId[id] = attribute.GameName;
+                }
+            }
+
+            List<string> games = config.EnabledHooks
+                .Where(id => desiredHookIds.Contains(id) && gameOfId.ContainsKey(id))
+                .ToList();
+            if (games.Count <= 1)
+            {
+                return;
+            }
+
+            string keptGame = gameOfId[games[^1]];
+            foreach (string hookId in games.Where(id => !string.Equals(gameOfId[id], keptGame, StringComparison.OrdinalIgnoreCase)).ToArray())
+            {
+                desiredHookIds.Remove(hookId);
+                config.EnabledHooks.Remove(hookId);
+                Console.WriteLine($"[RuriHook] Dropping game hook '{hookId}': only one game can be active at a time, and '{keptGame}' is the one selected.");
+            }
+        }
+
         public static bool ApplyHook(string hookId)
         {
             if (string.IsNullOrWhiteSpace(hookId))
@@ -224,16 +268,40 @@ namespace Ruri.Hook
 
             lock (LifecycleSyncRoot)
             {
-                foreach (var (type, attr) in GetAvailableHooks())
+                List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
+                foreach (var (type, attr) in availableHooks)
                 {
                     if (BuildHookIds(attr).Any(id => string.Equals(id, hookId, StringComparison.OrdinalIgnoreCase)))
                     {
+                        // Enabling a game replaces whichever game was active: they are mutually
+                        // exclusive (see DropExtraGames), so this is a switch, not an addition.
+                        if (attr.IsGameSpecific)
+                        {
+                            RemoveOtherGames(availableHooks, attr.GameName);
+                        }
                         return ApplyHookCore(hookId, type);
                     }
                 }
 
                 Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: no matching hook implementation was found.");
                 return false;
+            }
+        }
+
+        private static void RemoveOtherGames(List<(Type Type, GameHookAttribute Attribute)> availableHooks, string keptGame)
+        {
+            foreach (var (_, attribute) in availableHooks)
+            {
+                if (!attribute.IsGameSpecific ||
+                    string.Equals(attribute.GameName, keptGame, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                foreach (string hookId in BuildHookIds(attribute).Where(ActiveHookIds.Contains).ToArray())
+                {
+                    Console.WriteLine($"[RuriHook] Switching game: '{hookId}' makes way for '{keptGame}'.");
+                    RemoveHookCore(hookId);
+                }
             }
         }
 
