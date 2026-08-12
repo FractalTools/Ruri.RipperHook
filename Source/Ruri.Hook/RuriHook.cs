@@ -145,6 +145,16 @@ namespace Ruri.Hook
             }
         }
 
+        /// <summary>
+        /// Raised when a game-specific hook leaves the active set, before the newly
+        /// desired hooks are applied. A game hook installs more than MonoMod detours --
+        /// it also assigns plain statics (decoders, VFS readers) that tearing the
+        /// detours down cannot unset. Subscribers clear those, so switching games in a
+        /// live process is equivalent to starting fresh. The kernel deliberately does
+        /// not know what any of that state is; whoever owns it registers here.
+        /// </summary>
+        public static event Action? GameHookRemoved;
+
         public static void ApplyHooks(HookConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);
@@ -163,9 +173,19 @@ namespace Ruri.Hook
                 HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
                 DropExtraGames(config, availableHooks, desiredHookIds);
 
+                HashSet<string> gameHookIds = new(
+                    availableHooks.Where(static hook => hook.Attribute.IsGameSpecific)
+                        .SelectMany(static hook => BuildHookIds(hook.Attribute)),
+                    StringComparer.OrdinalIgnoreCase);
+                bool droppedGameHook = false;
                 foreach (string hookId in ActiveHookIds.Except(desiredHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
+                    droppedGameHook |= gameHookIds.Contains(hookId);
                     RemoveHookCore(hookId);
+                }
+                if (droppedGameHook)
+                {
+                    GameHookRemoved?.Invoke();
                 }
 
                 foreach (var (type, attr) in availableHooks)

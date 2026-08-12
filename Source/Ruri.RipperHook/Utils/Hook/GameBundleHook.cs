@@ -26,6 +26,12 @@ public class GameBundleHook : CommonHook, IHookModule
     private static readonly MethodInfo FromSerializedFile = typeof(SerializedAssetCollection)
         .GetMethod("FromSerializedFile", ReflectionExtensions.PrivateStaticBindFlag());
 
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void SubscribeToGameHookTeardown()
+    {
+        Ruri.Hook.RuriHook.GameHookRemoved += ResetGameState;
+    }
+
     public delegate void FilePreInitializeDelegate(GameBundle _this, IEnumerable<string> paths,
         List<FileBase> fileStack, FileSystem fileSystem, IDependencyProvider? dependencyProvider);
 
@@ -274,6 +280,26 @@ public class GameBundleHook : CommonHook, IHookModule
     }
 
     public static FilePreInitializeDelegate CustomFilePreInitialize;
+
+    /// <summary>
+    /// Drop every decoder a game hook installs here. These are plain statics, so
+    /// tearing down a game hook's MonoMod detours does NOT unset them: without this
+    /// the first game's VFS readers stay wired up and silently reject the next game's
+    /// bundles (symptom: a rebuilt cabmap has 0 CABs until the process restarts).
+    /// Called by the hook kernel whenever a game hook leaves the active set.
+    /// </summary>
+    public static void ResetGameState()
+    {
+        ScanIncludeFile = null;
+        LoadIncludeFile = null;
+        EnumerateVfsFiles = null;
+        ExtractVfsFile = null;
+        ScanChunk = null;
+        ScanChunkNames = null;
+        ScanChunkFull = null;
+        NameScanVersion = default;
+        CustomFilePreInitialize = null;
+    }
 
     private readonly FilePreInitializeDelegate _moduleCallback;
 
