@@ -13,11 +13,6 @@ using SharpGLTF.Memory;
 
 namespace Ruri.RipperHook.GlbExporter;
 
-/// <summary>
-/// Material/texture -> SharpGLTF MaterialBuilder cache. Mirrors the material half of AR's
-/// GlbLevelBuilder.BuildParameters (frozen tree, private) with a data-driven texture-property
-/// name table extended beyond AR's four "_MainTex" aliases to the URP/game names EndField uses.
-/// </summary>
 public sealed class RuriGlbMaterialCache
 {
     private static readonly HashSet<string> MainTextureNames = new(StringComparer.Ordinal)
@@ -51,7 +46,6 @@ public sealed class RuriGlbMaterialCache
         return materialBuilder;
     }
 
-    /// <summary>SkinnedMeshRenderer/MeshRenderer 的材质列表按 submesh 序号对齐。</summary>
     public MaterialBuilder GetOrMakeMaterial(IRenderer renderer, int subMeshIndex)
     {
         AccessListBase<IPPtr_Material> materials = renderer.Materials_C25;
@@ -91,7 +85,6 @@ public sealed class RuriGlbMaterialCache
             _imageCache.Add(texture, image);
             return true;
         }
-        // 转换失败也缓存,免得同一张失败贴图反复重试解码。
         _imageCache.Add(texture, null);
         image = default;
         return false;

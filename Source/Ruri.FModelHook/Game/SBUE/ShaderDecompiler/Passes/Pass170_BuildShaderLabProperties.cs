@@ -7,50 +7,12 @@ using System.Text.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 040 — Build the shaderlab `Properties { ... }` block for every
-// shader-map and stash the result in `map.PropertiesBlock`.
-//
-// Source of truth: each material's FUniformExpressionSet — the same
-// `UnifiedShaderMetadata.json[MaterialInterfaces.<x>].LoadedShaderMaps[*]
-// .MaterialShaderMapContent.UniformExpressionSet` tree the symbol path
-// already reads. Pass030 (LoadSymbolSources) wires the reader; this
-// pass calls it once per shader-map and renders into a string.
-//
-// UE -> shaderlab mapping (UE 5.2 source):
-//
-//   UniformNumericParameters[i].ParameterType
-//     Engine/Source/Runtime/Engine/Public/MaterialTypes.h:188-206
-//     `enum class EMaterialParameterType`
-//       - Scalar       -> `Float`
-//       - Vector       -> `Color`  (FLinearColor on the wire)
-//       - DoubleVector -> `Vector` (no 0..1 inspector clamp)
-//       - StaticSwitch -> `[Toggle] _X ("name", Float) = 0|1`
-//
-//   UniformTextureParameters[Type][i] outer-array index aligns with
-//     Engine/Source/Runtime/Engine/Public/MaterialShared.h:464-475
-//     `enum class EMaterialTextureParameterType`
-//       - 0 Standard2D -> `2D`        default `"white" {}`
-//       - 1 Cube       -> `Cube`      default `"" {}`
-//       - 2 Array2D    -> `2DArray`   default `"" {}`
-//       - 3 ArrayCube  -> `CubeArray` default `"" {}`
-//       - 4 Volume     -> `3D`        default `"" {}`
-//       - 5 Virtual    -> `2D`        default `"white" {}` (no first-class
-//                                                          shaderlab VT)
-//
-// The cooked Material UB packs these slots in the same order
-// `MaterialUniformBufferLayout` already replays
-//   Engine/Source/Runtime/Engine/Private/Materials/MaterialUniformExpressions.cpp:341-503
-// so the Properties block is positionally aligned with the cbuffer
-// member layout downstream HLSL emission produces.
 internal static class Pass170_BuildShaderLabProperties
 {
     public static void DoPass(PipelineState state)
     {
         if (state.UnifiedMaterialReader == null)
         {
-            // Sidecar-only run (no UnifiedShaderMetadata.json) — leaves
-            // every map.PropertiesBlock at its default empty string.
-            // Downstream emit just skips the block.
             state.Log("    Properties: skipped (no UnifiedMaterialReader).");
             return;
         }
@@ -65,23 +27,13 @@ internal static class Pass170_BuildShaderLabProperties
                 populated++;
             }
 
-            // 同一份 UES 再取一次**全桶展平的贴图声明序**。Properties 只导出 Standard2D,
-            // 数组/立方体桶的参数没有对应项 —— 消费端按声明序对匿名槽时会因此产生歧义。
             foreach (string asset in map.Assets)
             {
-                // **必须带上本容器的 shader-map 哈希**:同一个材质编了多份 shader map,
-                // 每份 UES 的 PreshaderBuffer 布局不同,不指名就会拿到别人的布局。
                 System.Text.Json.JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset, shaderMapHash: map.ShaderMapHash);
                 if (ues == null) continue;
                 map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(ues.Value, out List<int> textureBuckets));
                 map.MaterialTextureBuckets = textureBuckets;
 
-                // cbuffer 成员的**实算值**必须在**这里**产出:与 Properties / 贴图声明序用的是
-                // **同一个 asset 的同一份 UES**。之前是让 cbuffer 读取器写进一张全局字典、
-                // Pass200 再按 `map.PrimaryName` 去匹配 —— 两边的材质身份根本对不上
-                // (实测某容器 PrimaryName 是 `MI_NY0039AHC_01`,而 cbuffer 是按
-                // `MI_MagicalMirror_Template…` 读的),结果整块值表静默缺失,
-                // 消费侧 194 个数值字段只能全靠名字查、51 个查不到 → 材质渲成花的。
                 MaterialConstantBufferReader.Read(ues.Value, asset);
                 if (MaterialConstantBufferReader.EvaluatedCbufferValues.TryGetValue(asset, out var vals))
                 {
@@ -118,10 +70,6 @@ internal static class Pass170_BuildShaderLabProperties
 
     private static string BuildBlockForMap(PipelineState state, ShaderMapInfo map)
     {
-        // Walk every asset attached to the shader-map. First non-empty
-        // Properties block wins — material instances sharing a parent
-        // produce the same cooked UES member layout, so picking any of
-        // them yields the same Property surface.
         foreach (string asset in map.Assets)
         {
             JsonElement? ues = state.UnifiedMaterialReader!.TryGetUniformExpressionSet(asset, shaderMapHash: map.ShaderMapHash);
@@ -177,9 +125,6 @@ internal static class Pass170_BuildShaderLabProperties
             ? nameElem.GetString() ?? string.Empty
             : string.Empty;
         if (string.IsNullOrWhiteSpace(rawName) || string.Equals(rawName, "None", StringComparison.OrdinalIgnoreCase)) return null;
-        // UE engine selection-highlight uniform; runtime-overridden so it
-        // would never appear in any material editor UI. Skip from the
-        // shaderlab Properties surface.
         if (string.Equals(rawName, "SelectionColor", StringComparison.OrdinalIgnoreCase)) return null;
 
         string identifier = ToIdentifier(rawName);
@@ -228,8 +173,7 @@ internal static class Pass170_BuildShaderLabProperties
             2 => "2DArray",
             3 => "CubeArray",
             4 => "3D",
-            5 => "2D", // EMaterialTextureParameterType::Virtual binds a 2D sampler.
-            _ => "2D",
+            5 => "2D",            _ => "2D",
         };
         string defaultLiteral = typeIndex switch
         {
@@ -246,7 +190,6 @@ internal static class Pass170_BuildShaderLabProperties
         return value.ValueKind switch
         {
             JsonValueKind.Number => value.GetDouble(),
-            // Older UE serialisations packed scalar into FLinearColor.R.
             JsonValueKind.Object => value.TryGetProperty("R", out JsonElement r) ? r.GetDouble() : 0.0,
             _ => 0.0,
         };
@@ -278,9 +221,6 @@ internal static class Pass170_BuildShaderLabProperties
         return (0, 0, 0, 0);
     }
 
-    // shaderlab Property identifier rules: [A-Za-z0-9_], starts with `_`.
-    // UE parameter names can contain spaces, hyphens, dots, etc.; replace
-    // anything illegal with `_` and ensure a leading underscore.
     private static string ToIdentifier(string raw)
     {
         StringBuilder sb = new(raw.Length + 1);
@@ -289,7 +229,6 @@ internal static class Pass170_BuildShaderLabProperties
         {
             sb.Append((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ? c : '_');
         }
-        // Collapse runs of underscores for readability.
         StringBuilder collapsed = new(sb.Length);
         bool prevUnderscore = false;
         foreach (char c in sb.ToString())
@@ -314,8 +253,6 @@ internal static class Pass170_BuildShaderLabProperties
 
     private static string FormatFloat(double value)
     {
-        // Round-trip format so 0.7 doesn't emit as 0.69999..., trim
-        // trailing zeroes / decimal point for whole numbers.
         string s = value.ToString("R", CultureInfo.InvariantCulture);
         if (s.Contains('.') && !s.Contains('e') && !s.Contains('E'))
         {

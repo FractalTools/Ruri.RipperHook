@@ -11,16 +11,6 @@ using MonoModHook = MonoMod.RuntimeDetour.Hook;
 
 namespace Ruri.RipperHook.CLI;
 
-/// <summary>
-/// Re-implementation of <see cref="ProjectExporter.Export"/> installed via MonoMod hook so the CLI
-/// can:
-///   - filter collections by ClassID (--types) and asset-name regex (--names),
-///   - cap exports per ClassID (--smoke-test-limit),
-///   - capture per-collection exceptions into a structured failure list (--fail-fast=false),
-///   - rethrow on first failure when --fail-fast is on.
-///
-/// This keeps the AOP rule: AssetRipper itself is not modified.
-/// </summary>
 internal static class ExportFilter
 {
     public sealed record Failure(string Name, int? ClassId, string Error, string Stack);
@@ -79,9 +69,6 @@ internal static class ExportFilter
 
     private static void FilteredExport(ProjectExporter exporter, GameBundle bundle, CoreConfiguration options, FileSystem fileSystem)
     {
-        // Mirror ProjectExporter.Export's structure but interpose filter+catch around each
-        // collection. We have to use reflection because CreateCollections/CreateCollection are
-        // private. (We never edit AssetRipper itself.)
         var type = typeof(ProjectExporter);
         var createCollections = type.GetMethod("CreateCollections", BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new InvalidOperationException("ProjectExporter.CreateCollections not found");
@@ -185,7 +172,6 @@ internal static class ExportFilter
     {
         primaryClassId = null;
 
-        // Inspect first asset for ClassID (collection.Name is already shader name for shader collections).
         IUnityObjectBase? first = collection.Assets.FirstOrDefault();
         if (first != null)
         {

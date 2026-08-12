@@ -16,16 +16,6 @@ using AdonisMessageBoxResult = AdonisUI.Controls.MessageBoxResult;
 
 namespace Ruri.FModelHook.GUI;
 
-// Always-on infrastructure: detours FModel's MainWindow.OnLoaded to
-// inject a "Hooks" top-level menu. Not toggleable — the menu is the
-// only user-facing entry point into the hook + module-settings layer,
-// so running FModelHook means this is on.
-//
-// The host (Ruri.FModelHook.GUI.Program.Main) instantiates and
-// Initialize()s this class directly, bypassing the HookConfig/EnabledHooks
-// gating that applies to real game-specific hooks. We extend RuriHook
-// only to reuse its method-detour plumbing (`[RetargetMethod]` ->
-// Registry.ApplyTypeHooks), not the hook-discovery flow.
 public sealed class HookMenuBootstrap : RuriHook
 {
     private static int _runOnceGuard;
@@ -46,11 +36,6 @@ public sealed class HookMenuBootstrap : RuriHook
         }
     }
 
-    // Walks the visual tree from MainWindow looking for the first Menu
-    // descendant; FModel's MainWindow.xaml puts the top menu strip near
-    // the root so depth-first finds it almost immediately. Appending
-    // there places our entry next to "Directory / Packages / Views /
-    // ..." consistent with the rest of the app.
     private static void InjectMenu(MainWindow window)
     {
         Menu? menu = FindFirstDescendant<Menu>(window);
@@ -68,10 +53,6 @@ public sealed class HookMenuBootstrap : RuriHook
         menu.Items.Add(hooksRoot);
     }
 
-    // "Enabled Hooks..." opens a click-to-toggle dialog. Each checkbox
-    // saves on flip — FModel SettingsView idiom — so there's no Save/
-    // Cancel button. Hook activation only takes effect on the next
-    // launch (MonoMod detours can't be unhooked safely mid-session).
     private static MenuItem BuildEnabledHooksMenuItem(MainWindow window)
     {
         MenuItem item = new() { Header = "Enabled Hooks..." };
@@ -85,9 +66,6 @@ public sealed class HookMenuBootstrap : RuriHook
         return item;
     }
 
-    // "Shader Decompiler Settings..." opens a click-to-toggle dialog
-    // wired through ShaderDecompilerSettingsAccess (re-saves into the
-    // unified host config on every flip).
     private static MenuItem BuildShaderDecompilerSettingsMenuItem(MainWindow window)
     {
         MenuItem item = new() { Header = "Shader Decompiler Settings..." };
@@ -99,9 +77,6 @@ public sealed class HookMenuBootstrap : RuriHook
         return item;
     }
 
-    // "Reset Config..." wipes the unified host config (every enabled
-    // hook + every module's settings). Confirms first; reminds about
-    // the restart afterwards.
     private static MenuItem BuildResetConfigMenuItem(MainWindow window)
     {
         MenuItem item = new() { Header = "Reset Config..." };

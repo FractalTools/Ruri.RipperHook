@@ -2,16 +2,6 @@ using System.IO;
 
 namespace Ruri.Tpk.Pipeline;
 
-/// <summary>
-/// Where the repository is, resolved from markers that actually exist at its root.
-///
-/// This used to be duplicated per call site and keyed on a <c>Directory.Build.props</c> beside
-/// <c>AssetRipper/</c> and <c>Source/</c> -- a combination that is never true here, because the props
-/// files live one level down in each sub-tree. Every caller therefore fell through to a hard-coded
-/// "five parents up", which happened to land correctly for the packer and silently did not for
-/// anything with a different output depth. Marker-based resolution belongs in one place, and the
-/// markers have to be things the root really has.
-/// </summary>
 internal static class RepoLayout
 {
     public static string Root { get; } = Locate();

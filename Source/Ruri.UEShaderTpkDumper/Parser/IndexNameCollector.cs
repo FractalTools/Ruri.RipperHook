@@ -2,33 +2,14 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.UEShaderTpkDumper.Parser;
 
-// Collects class / pipeline / vertex-factory NAMES that will get hashed
-// into the runtime hash-to-name indexes. Mirrors the Python generator's
-// `emit_hash_to_name_index` + sister indexes.
-//
-// Three name sets:
-//   * ShaderType:        FShader-derived class names declared via IMPLEMENT_*_SHADER_TYPE
-//                        (incl. ##-expanded specializations) PLUS plain
-//                        `class FFoo : public FShader|F*Shader|TGlobalShader<>`.
-//   * VertexFactoryType: classes passed as arg[0] to IMPLEMENT_VERTEX_FACTORY_TYPE.
-//                        Captures namespace-qualified entries like
-//                        `Nanite::FVertexFactory`.
-//   * PipelineType:      first arg of IMPLEMENT_SHADERPIPELINE_TYPE_<freq>,
-//                        which is a PIPELINE NAME (an identifier), not a class.
 public static class IndexNameCollector
 {
-    // IMPLEMENT_<prefix>SHADER_TYPE(template<>|template<X>, ClassName, ...)
-    // Permissive on the prefix so plugin-side wrappers (IMPLEMENT_OCIO_SHADER_TYPE,
-    // IMPLEMENT_NIAGARA_SHADER_TYPE, …) all match.
     private static readonly Regex s_shaderTypePattern = new(
         @"\bIMPLEMENT_(?:[A-Z][A-Z0-9_]*_)?SHADER_TYPE\s*\("
         + @"[^,]*,\s*"
         + @"([A-Za-z_][A-Za-z_0-9<>:,\s##]*?)\s*,",
         RegexOptions.Compiled);
 
-    // First-arg variants — IMPLEMENT_GLOBAL_SHADER / IMPLEMENT_RESOLVE_SHADER /
-    // *_PIXEL_SHADER / *_VERTEX_SHADER / *_COMPUTE_SHADER / *_RAYTRACING_SHADER /
-    // VIRTUALTEXTURE_SHADER_TYPE.
     private static readonly Regex s_firstArgPattern = new(
         @"\bIMPLEMENT_(?:GLOBAL_SHADER|RESOLVE_SHADER|"
         + @"[A-Z_]+_PIXEL_SHADER|[A-Z_]+_VERTEX_SHADER|[A-Z_]+_COMPUTE_SHADER|"
@@ -36,8 +17,6 @@ public static class IndexNameCollector
         + @"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,\)]",
         RegexOptions.Compiled);
 
-    // Numbered/suffixed SHADER_TYPE variants (Shader.h:1543-1593) — class slot
-    // varies per macro, so we extract via a tiny parser instead of one regex.
     public static readonly IReadOnlyDictionary<string, int> ShaderTypeVariantSlot = new Dictionary<string, int>(StringComparer.Ordinal)
     {
         ["IMPLEMENT_SHADER_TYPE2"] = 0,
@@ -51,7 +30,6 @@ public static class IndexNameCollector
         @"\b(IMPLEMENT_SHADER_TYPE(?:2|3|_WITH_DEBUG_NAME|2_WITH_TEMPLATE_PREFIX|4_WITH_TEMPLATE_PREFIX))\s*\(",
         RegexOptions.Compiled);
 
-    // Direct `class FFoo : public FShader|F*Shader|TGlobalShader<>` declarations.
     private static readonly Regex s_classDeclPattern = new(
         @"\bclass\s+(?:[A-Z][A-Z0-9_]+_API\s+)?(?<name>[A-Z][A-Za-z0-9_]+)\b"
         + @"\s*(?::|<[^>{}]+>\s*:)\s*public\s+"
@@ -61,22 +39,16 @@ public static class IndexNameCollector
         + @"|TGlobalShaderPermutation<[^>]+>)\b",
         RegexOptions.Compiled);
 
-    // IMPLEMENT_VERTEX_FACTORY_TYPE[_EX](FactoryClass, ...). Captures
-    // namespace-qualified entries verbatim (`Nanite::FVertexFactory`).
     private static readonly Regex s_vfPattern = new(
         @"\bIMPLEMENT_VERTEX_FACTORY_TYPE(?:_EX)?\s*\(\s*"
         + @"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,\)]",
         RegexOptions.Compiled);
 
-    // IMPLEMENT_SHADERPIPELINE_TYPE_<freq>(PipelineName, ...).
     private static readonly Regex s_pipelinePattern = new(
         @"\bIMPLEMENT_SHADERPIPELINE_TYPE_[A-Z]+\s*\(\s*"
         + @"([A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*[,\)]",
         RegexOptions.Compiled);
 
-    // Param-name SUBSTRINGS that betray a pseudo-invocation: macros wrapping
-    // IMPLEMENT_*_SHADER_TYPE whose args are themselves param names of an
-    // outer macro. Real FShader names never have these tails.
     private static readonly string[] s_pseudoInvocationTails =
     {
         "PolicyName", "LightName", "LayoutName", "ShaderName", "TypeName",
@@ -90,9 +62,6 @@ public static class IndexNameCollector
         "FactoryClass", "VertexFactoryType", "PipelineName", "PipelineType",
     };
 
-    // Match `#define <NAME>[(args)] <body>` blocks so we can SKIP IMPLEMENT_*
-    // hits that fall inside another macro's definition (those args are
-    // param-name placeholders, not real classes).
     private static readonly Regex s_defineBlockPattern = new(
         @"^[ \t]*#define[ \t]+[A-Za-z_][A-Za-z_0-9]*(?:\([^)]*\))?"
         + @"(?:[ \t]+[^\n]*\\\r?\n(?:[^\n]*\\\r?\n)*[^\n]*"
@@ -102,18 +71,11 @@ public static class IndexNameCollector
 
     public static (HashSet<string> ShaderType, HashSet<string> VertexFactory, HashSet<string> Pipeline) CollectAll(IEnumerable<string> sourceFiles)
     {
-        // Cache the file list so the macro-expander second pass doesn't re-
-        // enumerate the file system.
         List<string> files = sourceFiles.ToList();
         HashSet<string> shaderTypes = new(StringComparer.Ordinal);
         HashSet<string> vfs = new(StringComparer.Ordinal);
         HashSet<string> pipelines = new(StringComparer.Ordinal);
 
-        // Pre-pass: collect wrapper-macro definitions that `##`-concatenate
-        // into IMPLEMENT_*_SHADER_TYPE. Then expand every invocation across
-        // the source tree to recover specialised class names like
-        // `TLightMapDensityPSFDummyLightMapPolicy` that don't appear in any
-        // direct IMPLEMENT_*_SHADER_TYPE call site.
         var macroDefs = ImplementMacroExpander.CollectMacroDefs(files);
         if (macroDefs.Count > 0)
         {
@@ -140,8 +102,6 @@ public static class IndexNameCollector
             if (!hasShader && !hasVf && !hasPipeline) continue;
 
             string stripped = UeSourceScanner.StripComments(text);
-            // Precompute define-block ranges so IMPLEMENT_* hits inside macro
-            // bodies (with placeholder args) get filtered.
             List<(int Start, int End)> defineRanges = new();
             foreach (Match m in s_defineBlockPattern.Matches(stripped))
             {

@@ -21,8 +21,6 @@ public sealed class AssetReader : EndianReader
 
 		string ret = ReadString(length);
 		AlignStream();
-		//Strings have supposedly been aligned since 2.1.0,
-		//which is earlier than the beginning of AssetRipper version support.
 		return ret;
 	}
 

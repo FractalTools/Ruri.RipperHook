@@ -10,58 +10,22 @@ using icedreal::Iced.Intel;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// Per-application, cached layout model that turns raw memory offsets back into managed field symbols.
-/// IL2CPP metadata already carries every field's byte offset (<see cref="FieldAnalysisContext.Offset"/>,
-/// resolved via the binary field-offset table) and every runtime <c>Il2CppClass*</c> global
-/// (<see cref="MetadataUsageType.TypeInfo"/>), so a register whose pointed-to type is known makes
-/// <c>[reg+disp]</c> a resolvable field access — instance (<see cref="TryGetInstanceField"/>) or, via the
-/// class's static-fields block (<see cref="StaticFieldsOffset"/>), static (<see cref="TryGetStaticField"/>).
-/// The static-fields offset within <c>Il2CppClass</c> is version-specific, so it is discovered empirically
-/// from the binary (see <see cref="DiscoverStaticFieldsOffset"/>) rather than hard-coded.
-/// Built once per <see cref="ApplicationAnalysisContext"/>; the caller (<see cref="Il2CppAsmLookup"/>) holds a lock.
-/// </summary>
 internal sealed class Il2CppTypeModel
 {
     private static Il2CppTypeModel _cached;
     private static ApplicationAnalysisContext _cachedApp;
 
-    // Cpp2IL 1.0.8 moved ResolveIl2CppType off AssemblyAnalysisContext onto the application context,
-    // so the model keeps the app it was built for rather than reaching through a declaring assembly.
     private readonly ApplicationAnalysisContext _app;
 
     private readonly Dictionary<Il2CppTypeDefinition, TypeAnalysisContext> _byDefinition = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _instanceFields = new();
     private readonly Dictionary<TypeAnalysisContext, Dictionary<int, FieldAnalysisContext>> _staticFields = new();
 
-    /// <summary>
-    /// (type name, 0x10-aligned vtable slot byte-offset) pairs proven mis-mapped by <c>Il2CppRegisterFlow</c> — a named
-    /// arrow whose result contradicted its declared return kind. Cpp2IL's metadata <c>VTable</c> ordering can disagree
-    /// with the runtime memory vtable at a given offset; once ANY call site proves a slot wrong, every other site of the
-    /// same (type, slot) is wrong too, so this app-wide set lets later methods skip the fabricated name up front (the
-    /// root cut, not per-site whittling). Populated + consulted by the flow; shared because <see cref="Get"/> is cached.
-    /// </summary>
     public readonly HashSet<(string, int)> CondemnedVtableSlots = new();
 
-    /// <summary>
-    /// (resolved method GlobalKey, 0x10-aligned slot) pairs proven mis-mapped. An INHERITED method sits at the same slot
-    /// in every derived type's vtable, so a divergence proven for one receiver holds for all of them — keying by the
-    /// method (not just the receiver type) propagates the retraction to sites on OTHER receiver types, including ones
-    /// only ever reached by unobservable tail-<c>jmp</c> dispatch (e.g. BaseInput.get_mousePosition across input modules).
-    /// </summary>
     public readonly HashSet<(string, int)> CondemnedVtableMethods = new();
 
-    private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new(); // type → per-slot virtual method name
-    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new(); // type → per-slot virtual method return type (reference returns only)
-    private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new(); // type → per-slot return kind (see ReturnKind*)
-    private readonly Dictionary<TypeAnalysisContext, sbyte[]> _vtableParamCounts = new(); // type → per-slot declared parameter count (-1 = unknown)
-    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[][]> _vtableParamTypes = new(); // type → per-slot resolved parameter types (leading params only; null slot/entry = unknown)
-
-    // Return-value kind of a named vtable slot — lets a caller pick a contradiction test that can never fire on a
-    // correctly-named method, keyed to WHERE the result lives per the x64 ABI. Void: nothing. ScalarInt (bool/int/
-    // enum/char): integer in rax — not a pointer, not in xmm0. ScalarFloat (float/double): in xmm0 — rax is garbage.
-    // Ref: object pointer in rax (its slot 0 is the Il2CppClass*; never a float, never in xmm0). Struct: hidden buffer
-    // pointer in rax (deref legitimate). Pointer (IntPtr): itself a pointer (deref legitimate).
+    private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new();    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new();    private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new();    private readonly Dictionary<TypeAnalysisContext, sbyte[]> _vtableParamCounts = new();    private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[][]> _vtableParamTypes = new();
     public const byte ReturnKindUnresolved = 0;
     public const byte ReturnKindVoid = 1;
     public const byte ReturnKindScalarInt = 2;
@@ -69,18 +33,15 @@ internal sealed class Il2CppTypeModel
     public const byte ReturnKindRef = 4;
     public const byte ReturnKindPointer = 5;
     public const byte ReturnKindScalarFloat = 6;
-    public const byte ReturnKindBool = 7; // split from ScalarInt: a bool result is idiomatically `test al,al`-ed, so that test must not incriminate a genuine bool method
-
+    public const byte ReturnKindBool = 7;
     private static readonly HashSet<string> _scalarIntPrimitives = new()
     {
         "System.Byte", "System.SByte", "System.Int16", "System.UInt16",
         "System.Int32", "System.UInt32", "System.Int64", "System.UInt64", "System.Char",
     };
 
-    /// <summary>offsetof(Il2CppClass, static_fields) for this binary, or -1 if it could not be discovered.</summary>
     public int StaticFieldsOffset { get; private set; } = -1;
 
-    /// <summary>offsetof(Il2CppClass, vtable) for this binary, or -1 if it could not be discovered.</summary>
     public int VtableOffset { get; private set; } = -1;
 
     public static Il2CppTypeModel Get(ApplicationAnalysisContext app)
@@ -108,7 +69,6 @@ internal sealed class Il2CppTypeModel
         VtableOffset = DiscoverVtableOffset(app);
     }
 
-    /// <summary>Maps a runtime <c>Il2CppClass*</c> / <c>Il2CppType*</c> metadata-usage global (VA) to its managed type.</summary>
     public bool TryGetTypeForTypeInfoGlobal(ulong globalAddress, out TypeAnalysisContext type)
     {
         type = null;
@@ -130,11 +90,6 @@ internal sealed class Il2CppTypeModel
         }
     }
 
-    /// <summary>
-    /// True if a method returning <paramref name="returnType"/> uses the hidden return-buffer-pointer ABI (first
-    /// integer arg = pointer to caller-allocated result), which shifts <c>this</c> and every argument by one register.
-    /// x64 rule: a value type is returned in a register only when its size is 1/2/4/8 bytes; otherwise via hidden pointer.
-    /// </summary>
     public bool IsReturnedViaHiddenPointer(TypeAnalysisContext returnType)
     {
         if (returnType == null || !returnType.IsValueType || returnType.IsEnumType)
@@ -147,10 +102,6 @@ internal sealed class Il2CppTypeModel
     {
         if (type == null || !type.IsValueType || depth > 6)
             return 8;
-        // A generic value-type instance (ValueTuple<…>, Nullable<…>, KeyValuePair<…>) has NO Definition and no own
-        // fields — the open GenericType's fields carry generic-parameter types (T1/T2) all reported at offset 0. Laying
-        // them out from the substituted argument sizes is the only way to size it; skipping this made every such struct
-        // look 8-byte, so a hidden-return buffer register was mis-seeded as `this` (retval.<field> shown as this.<field>).
         if (type.Definition == null)
             return type is GenericInstanceTypeAnalysisContext generic ? EstimateGenericValueTypeSize(generic, depth) : 8;
         int max = 0;
@@ -169,13 +120,6 @@ internal sealed class Il2CppTypeModel
         return max == 0 ? 1 : max;
     }
 
-    /// <summary>
-    /// Size of a generic value-type instance, laid out from its concrete type arguments. The open definition's fields
-    /// all sit at offset 0 with parameter types (VAR), so we substitute each parameter with the matching argument and
-    /// pack the fields sequentially with natural alignment (min(size,8)). The result need not be byte-exact — only the
-    /// MSVC return classification (size ∈ {1,2,4,8} ⇒ register, else hidden pointer) must be right, and over-aligning a
-    /// nested struct only enlarges it, never flipping a genuine ≤8 case (Nullable&lt;int&gt; still packs to 8 ⇒ register).
-    /// </summary>
     private int EstimateGenericValueTypeSize(GenericInstanceTypeAnalysisContext generic, int depth)
     {
         TypeAnalysisContext open = generic.GenericType;
@@ -198,8 +142,7 @@ internal sealed class Il2CppTypeModel
                 fieldType = concrete;
             int size = PrimitiveSize(fieldType, depth + 1);
             int align = size < 1 ? 1 : System.Math.Min(size, 8);
-            offset = (offset + align - 1) & ~(align - 1); // pad to this field's alignment
-            offset += size;
+            offset = (offset + align - 1) & ~(align - 1);            offset += size;
             if (align > maxAlign) maxAlign = align;
         }
         return offset == 0 ? 1 : (offset + maxAlign - 1) & ~(maxAlign - 1);
@@ -228,25 +171,16 @@ internal sealed class Il2CppTypeModel
             case Il2CppTypeEnum.IL2CPP_TYPE_R8:
                 return 8;
             case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
-                return EstimateValueTypeSize(type, depth); // nested struct
-            default:
-                return 8; // pointer-sized (ref types, IntPtr, enums fall back here)
-        }
+                return EstimateValueTypeSize(type, depth);            default:
+                return 8;        }
     }
 
-    /// <summary>Instance field whose byte offset from the object pointer equals <paramref name="offset"/> (walks base types).</summary>
     public bool TryGetInstanceField(TypeAnalysisContext type, int offset, out FieldAnalysisContext field)
         => GetOffsetMap(_instanceFields, type, statics: false).TryGetValue(offset, out field);
 
-    /// <summary>Static field whose byte offset within the type's static-fields block equals <paramref name="offset"/>.</summary>
     public bool TryGetStaticField(TypeAnalysisContext type, int offset, out FieldAnalysisContext field)
         => GetOffsetMap(_staticFields, type, statics: true).TryGetValue(offset, out field);
 
-    // A generic REFERENCE instance (List<Foo>) has no Definition/fields of its own; its field layout equals the generic
-    // definition's (List<T>) — every field is a pointer or fixed primitive, T only appears behind a reference (T[]), so
-    // offsets are type-argument-independent. Only unwrap reference generics: a value-type generic (KeyValuePair<K,V>,
-    // Nullable<T>) inlines its type-arg fields, shifting offsets, so the definition's offsets would be WRONG for a boxed
-    // instance — leave those unresolved rather than mislabel.
     private static TypeAnalysisContext Unwrap(TypeAnalysisContext type)
         => type is GenericInstanceTypeAnalysisContext generic && generic.GenericType?.IsValueType == false
             ? generic.GenericType
@@ -262,12 +196,10 @@ internal sealed class Il2CppTypeModel
         map = new Dictionary<int, FieldAnalysisContext>();
         if (statics)
         {
-            // Static storage is per-type (not inherited into the derived type's static-fields block).
             AddFields(map, type, statics: true);
         }
         else
         {
-            // Instance layout is contiguous across the inheritance chain; walk derived -> base (unwrapping generics).
             TypeAnalysisContext current = type;
             int guard = 0;
             while (current != null && guard++ < 64)
@@ -284,14 +216,10 @@ internal sealed class Il2CppTypeModel
     {
         if (type.Definition == null)
             return;
-        bool allowZeroOffset = statics || type.IsValueType; // 0 is a valid field only in a struct / static block; on a ref type it is the Il2CppClass* header slot.
-        foreach (FieldAnalysisContext field in type.Fields)
+        bool allowZeroOffset = statics || type.IsValueType;        foreach (FieldAnalysisContext field in type.Fields)
         {
             if (field.IsStatic != statics)
                 continue;
-            // A const (Literal) field is a compile-time constant with NO runtime storage; il2cpp reports it at a bogus
-            // offset 0, where it would shadow the type's real static field at 0 (e.g. String's const TrimHead/alignConst
-            // both at 0, hiding the actual String.Empty — so `str ?? string.Empty` mislabeled `String.TrimHead`).
             if ((field.Attributes & System.Reflection.FieldAttributes.Literal) != 0)
                 continue;
             int offset;
@@ -299,16 +227,9 @@ internal sealed class Il2CppTypeModel
             catch { continue; }
             if (offset < 0 || (offset == 0 && !allowZeroOffset))
                 continue;
-            map.TryAdd(offset, field); // derived is visited before base, so a derived field wins any (offset-impossible) collision
-        }
+            map.TryAdd(offset, field);        }
     }
 
-    /// <summary>
-    /// Discovers offsetof(Il2CppClass, static_fields) by disassembling a bounded sample of methods and looking for the
-    /// canonical static-field access idiom: <c>mov reg,[TypeInfo(T)] ; mov reg2,[reg + C] ; ... mov _,[reg2 + k]</c> where
-    /// k matches a known static-field offset of T. The C that most often leads to a confirmed static read is the offset.
-    /// Version-independent; returns -1 if nothing conclusive is found (static resolution then stays disabled).
-    /// </summary>
     private int DiscoverStaticFieldsOffset(ApplicationAnalysisContext app)
     {
         if (app.Binary is not PE || app.Binary.is32Bit)
@@ -345,8 +266,7 @@ internal sealed class Il2CppTypeModel
                 best = candidate.Key;
             }
         }
-        return bestCount >= 3 ? best : -1; // require a few independent confirmations to avoid noise
-    }
+        return bestCount >= 3 ? best : -1;    }
 
     private void ScanMethodForStaticIdiom(MethodAnalysisContext method, Dictionary<int, int> confirmed, ref int confirmations)
     {
@@ -363,8 +283,6 @@ internal sealed class Il2CppTypeModel
         Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(bytes), method.UnderlyingPointer);
         ulong end = method.UnderlyingPointer + (ulong)bytes.Length;
 
-        // Lightweight per-register facts, cleared on overwrite: which type a reg's Il2CppClass* points at,
-        // and (for a reg loaded as [classReg + C]) the type + candidate C it may be a static-fields base of.
         TypeAnalysisContext[] typeInfoOf = new TypeAnalysisContext[16];
         TypeAnalysisContext[] staticBaseType = new TypeAnalysisContext[16];
         int[] staticBaseCandidateC = new int[16];
@@ -383,7 +301,6 @@ internal sealed class Il2CppTypeModel
             if (dst < 0)
                 continue;
 
-            // reg2 = [reg2Base + k] : confirm a prior candidate if k is a real static-field offset of its type.
             int baseIndex = RegisterFlowUtil.GpIndex(insn.MemoryBase);
             if (baseIndex >= 0 && insn.MemoryIndex == Register.None)
             {
@@ -397,32 +314,23 @@ internal sealed class Il2CppTypeModel
                 }
             }
 
-            // Clear facts about the overwritten destination before recording new ones.
             typeInfoOf[dst] = null;
             staticBaseType[dst] = null;
             staticBaseCandidateC[dst] = -1;
 
             if (insn.IsIPRelativeMemoryOperand || (insn.MemoryBase == Register.None && insn.MemoryIndex == Register.None))
             {
-                // reg = [global] : is it a TypeInfo/Type usage?
                 if (TryGetTypeForTypeInfoGlobal(insn.MemoryDisplacement64, out TypeAnalysisContext infoType))
                     typeInfoOf[dst] = infoType;
             }
             else if (baseIndex >= 0 && insn.MemoryIndex == Register.None && typeInfoOf[baseIndex] != null)
             {
-                // reg2 = [classReg + C] : C is a candidate static-fields offset for that class.
                 staticBaseType[dst] = typeInfoOf[baseIndex];
                 staticBaseCandidateC[dst] = (int)insn.MemoryDisplacement64;
             }
         }
     }
 
-    /// <summary>
-    /// Resolves a virtual/interface dispatch <c>[klass + byteOffset]</c> to the concrete method for <paramref name="type"/>.
-    /// Uses the type's own metadata vtable (<see cref="Il2CppTypeDefinition.VTable"/>) — more accurate than Cpp2IL legacy's
-    /// global slot map — with the empirically discovered <see cref="VtableOffset"/> and the 0x10-byte VirtualInvokeData stride
-    /// ({ methodPtr, MethodInfo* }; a read of the second pointer is normalized by -8).
-    /// </summary>
     public bool TryGetVirtualMethodName(TypeAnalysisContext type, int byteOffset, out string name)
     {
         name = null;
@@ -444,13 +352,11 @@ internal sealed class Il2CppTypeModel
         if (offsetInVtable < 0)
             return -1;
         if (offsetInVtable % 0x10 != 0 && offsetInVtable % 8 == 0)
-            offsetInVtable -= 8; // read of the MethodInfo* (second pointer of VirtualInvokeData)
-        if (offsetInVtable < 0 || offsetInVtable % 0x10 != 0)
+            offsetInVtable -= 8;        if (offsetInVtable < 0 || offsetInVtable % 0x10 != 0)
             return -1;
         return offsetInVtable / 0x10;
     }
 
-    /// <summary>Return type of the virtual method dispatched by <c>[klass + byteOffset]</c> (for propagating <c>rax</c> after an indirect call), if a reference type.</summary>
     public bool TryGetVirtualReturnType(TypeAnalysisContext type, int byteOffset, out TypeAnalysisContext returnType)
     {
         returnType = null;
@@ -467,7 +373,6 @@ internal sealed class Il2CppTypeModel
         return returnType != null;
     }
 
-    /// <summary>Return-value <c>ReturnKind*</c> of the virtual method dispatched by <c>[klass + byteOffset]</c>; <see cref="ReturnKindUnresolved"/> if unknown.</summary>
     public byte GetVirtualReturnKind(TypeAnalysisContext type, int byteOffset)
     {
         if (VtableOffset < 0 || type?.Definition == null)
@@ -480,7 +385,6 @@ internal sealed class Il2CppTypeModel
         return slot < kinds.Length ? kinds[slot] : ReturnKindUnresolved;
     }
 
-    /// <summary>Public <c>ReturnKind*</c> of an arbitrary type (e.g. an enclosing method's own return type), for comparing a forwarder against the slot it dispatches.</summary>
     public byte ClassifyReturnKind(TypeAnalysisContext t) => ClassifyReturn(t);
 
     private static byte ClassifyReturn(TypeAnalysisContext t)
@@ -497,11 +401,9 @@ internal sealed class Il2CppTypeModel
         if (fullName == "System.Boolean")
             return ReturnKindBool;
         if (fullName == "System.Single" || fullName == "System.Double")
-            return ReturnKindScalarFloat; // returned in xmm0
-        if (_scalarIntPrimitives.Contains(fullName))
+            return ReturnKindScalarFloat;        if (_scalarIntPrimitives.Contains(fullName))
             return ReturnKindScalarInt;
-        try { if (t.BaseType?.FullName == "System.Enum") return ReturnKindScalarInt; } catch { } // enums are integer-returned like their underlying primitive
-        return ReturnKindStruct;
+        try { if (t.BaseType?.FullName == "System.Enum") return ReturnKindScalarInt; } catch { }        return ReturnKindStruct;
     }
 
     private string[] GetVtableNames(TypeAnalysisContext type)
@@ -538,18 +440,10 @@ internal sealed class Il2CppTypeModel
                     if (usage.Type == MetadataUsageType.MethodDef)
                     {
                         Il2CppMethodDefinition method = usage.AsMethod();
-                        // VALIDITY FILTER: only trust the entry when the method's own canonical slot equals this vtable
-                        // index. A class virtual (own or inherited) always sits at its own slot; an INTERFACE-implementation
-                        // slot places a method at an index != its slot, and the `call [klass+off]` there dispatches an
-                        // interface method whose concrete impl depends on the runtime (derived) type — naming it after this
-                        // decode mislabels it (proven: UI `Graphic` slot 21 aliases `IsDestroyed`, whose real slot is 16,
-                        // for what is actually a `Color`-taking call). Suppress -> a miss, never a WRONG symbol.
                         if (method != null && method.slot == i)
                         {
                             names[i] = method.GlobalKey;
                             paramCounts[i] = method.parameterCount <= sbyte.MaxValue ? (sbyte)method.parameterCount : (sbyte)-1;
-                            // Resolve the leading (up to 4) declared parameter types so a call site can prove a wrong
-                            // vtable name by an argument whose type contradicts the named method's signature.
                             try
                             {
                                 Il2CppType[] rawParams = method.InternalParameterTypes;
@@ -568,14 +462,12 @@ internal sealed class Il2CppTypeModel
                                 TypeAnalysisContext resolved = _app.ResolveIl2CppType(method.RawReturnType);
                                 kinds[i] = ClassifyReturn(resolved);
                                 if (resolved != null && !resolved.IsValueType)
-                                    returns[i] = resolved; // only reference returns are useful for chaining
-                            }
+                                    returns[i] = resolved;                            }
                         }
                     }
                     else if (usage.Type == MetadataUsageType.MethodRef)
                     {
-                        names[i] = usage.AsGenericMethodRef()?.ToString(); // generic instance impls are already index-specific
-                    }
+                        names[i] = usage.AsGenericMethodRef()?.ToString();                    }
                 }
                 catch { }
             }
@@ -588,11 +480,6 @@ internal sealed class Il2CppTypeModel
         _vtableParamTypes[type] = paramTypes;
     }
 
-    /// <summary>
-    /// Resolved type of the <paramref name="paramIndex"/>-th declared parameter of the virtual method named at
-    /// <c>[klass + byteOffset]</c>, or null if unknown. Lets a call site prove a wrong vtable name from an argument whose
-    /// type contradicts the named method's signature (a NetworkConnection where the named method takes a string).
-    /// </summary>
     public TypeAnalysisContext GetVirtualParamType(TypeAnalysisContext type, int byteOffset, int paramIndex)
     {
         if (VtableOffset < 0 || type?.Definition == null || paramIndex < 0)
@@ -607,7 +494,6 @@ internal sealed class Il2CppTypeModel
         return all[slot][paramIndex];
     }
 
-    /// <summary>Declared parameter count of the virtual method named at <c>[klass + byteOffset]</c>, or -1 if unknown.</summary>
     public int GetVirtualParamCount(TypeAnalysisContext type, int byteOffset)
     {
         if (VtableOffset < 0 || type?.Definition == null)
@@ -620,11 +506,6 @@ internal sealed class Il2CppTypeModel
         return slot < counts.Length ? counts[slot] : -1;
     }
 
-    /// <summary>
-    /// Discovers offsetof(Il2CppClass, vtable) by disassembling a bounded sample of instance methods and looking for the
-    /// virtual-dispatch idiom: <c>mov klass,[this] ; ... (call|mov) [klass + N]</c>. The vtable offset is the candidate C
-    /// for which <c>(N - C)/0x10</c> most often lands on a real vtable slot of the calling type. Version-independent; -1 if inconclusive.
-    /// </summary>
     private int DiscoverVtableOffset(ApplicationAnalysisContext app)
     {
         if (app.Binary is not PE || app.Binary.is32Bit)
@@ -649,8 +530,7 @@ internal sealed class Il2CppTypeModel
                     if (scanned >= 5000 || candidates >= 1200)
                         goto done;
                     scanned++;
-                    int thisReg = IsReturnedViaHiddenPointer(method.ReturnType) ? 2 : 1; // rdx if hidden-return buffer takes rcx, else rcx
-                    ScanMethodForVtable(method, thisReg, vtableCount, votes, ref candidates);
+                    int thisReg = IsReturnedViaHiddenPointer(method.ReturnType) ? 2 : 1;                    ScanMethodForVtable(method, thisReg, vtableCount, votes, ref candidates);
                 }
             }
         }
@@ -679,15 +559,13 @@ internal sealed class Il2CppTypeModel
 
         Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(bytes), method.UnderlyingPointer);
         ulong end = method.UnderlyingPointer + (ulong)bytes.Length;
-        int klassReg = -1; // GP index currently holding Klass(this)
-        int guard = 0;
+        int klassReg = -1;        int guard = 0;
         while (decoder.IP < end && guard++ < 8000)
         {
             decoder.Decode(out Instruction insn);
             if (insn.IsInvalid)
                 break;
 
-            // (call|mov) through [klassReg + N] -> a dispatch through the class; vote every plausible vtable offset.
             if (klassReg >= 0 && insn.MemoryIndex == Register.None && RegisterFlowUtil.GpIndex(insn.MemoryBase) == klassReg
                 && ((insn.Mnemonic == Mnemonic.Call && insn.Op0Kind == OpKind.Memory)
                     || (insn.Mnemonic == Mnemonic.Mov && insn.Op1Kind == OpKind.Memory)))
@@ -700,12 +578,10 @@ internal sealed class Il2CppTypeModel
                 && insn.MemoryIndex == Register.None && RegisterFlowUtil.GpIndex(insn.MemoryBase) == thisReg
                 && insn.MemoryDisplacement64 == 0)
             {
-                klassReg = RegisterFlowUtil.GpIndex(insn.Op0Register); // klass = [this]
-            }
+                klassReg = RegisterFlowUtil.GpIndex(insn.Op0Register);            }
             else if (klassReg >= 0 && insn.Op0Kind == OpKind.Register && RegisterFlowUtil.GpIndex(insn.Op0Register) == klassReg)
             {
-                klassReg = -1; // klass register overwritten
-            }
+                klassReg = -1;            }
         }
     }
 

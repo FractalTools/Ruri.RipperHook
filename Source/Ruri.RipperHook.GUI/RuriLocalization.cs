@@ -2,17 +2,10 @@ using AssetRipper.GUI.Localizations;
 
 namespace Ruri.RipperHook.GUI;
 
-/// <summary>
-/// Ruri GUI 自有界面字符串的本地化表。手写版，刻意对齐 AssetRipper 的
-/// <see cref="Localization"/>（源生成）的用法——每个属性按
-/// <see cref="Localization.CurrentLanguageCode"/> 选择语言，跟随用户在设置里选的语言。
-/// 这样菜单/对话框里就不会出现写死的中文明文。新增语言只要在 switch 里加分支即可。
-/// </summary>
 internal static class RuriLocalization
 {
     private static string Lang => Localization.CurrentLanguageCode;
 
-    // ── 快速导出（原 Direct Export）────────────────────────────────
     public static string MenuQuickExport => Lang switch
     {
         "zh-Hans" => "快速导出",
@@ -34,7 +27,6 @@ internal static class RuriLocalization
         _ => "From folder...",
     };
 
-    // ── 各“仅导出 X”功能共用的对话框文案 ───────────────────────────
     public static string ExportSelectGameFolder => Lang switch
     {
         "zh-Hans" => "选择游戏根目录（需含 <名称>.exe / GameAssembly.dll / <名称>_Data）",
@@ -49,7 +41,6 @@ internal static class RuriLocalization
         _ => "Select the output folder (existing contents will be cleared)",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ExportOutputNonEmpty => Lang switch
     {
         "zh-Hans" => "输出目录已存在且非空：\n{0}\n\n清空其内容并继续？",
@@ -57,7 +48,6 @@ internal static class RuriLocalization
         _ => "Output folder already exists and is non-empty:\n{0}\n\nDelete its contents and continue?",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ExportOutputInsideInput => Lang switch
     {
         "zh-Hans" => "输出目录不能是输入目录或其父目录：{0}",
@@ -72,7 +62,6 @@ internal static class RuriLocalization
         _ => "Export aborted.",
     };
 
-    // ── 导出反汇编（原 Export Code Only / CodeOnlyExport）───────────
     public static string MenuDisassemblyExport => Lang switch
     {
         "zh-Hans" => "导出反汇编",
@@ -101,7 +90,6 @@ internal static class RuriLocalization
         _ => "Export disassembly: preparing (IL2CPP disassembly + code-only filter)...",
     };
 
-    /// <summary>{0} = load label.</summary>
     public static string DisassemblyExportLoading => Lang switch
     {
         "zh-Hans" => "导出反汇编：加载 {0} …",
@@ -109,7 +97,6 @@ internal static class RuriLocalization
         _ => "Export disassembly: loading {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string DisassemblyExportExporting => Lang switch
     {
         "zh-Hans" => "导出反汇编：导出到 {0} …",
@@ -117,7 +104,6 @@ internal static class RuriLocalization
         _ => "Export disassembly: exporting to {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string DisassemblyExportDone => Lang switch
     {
         "zh-Hans" => "导出反汇编完成：{0}",
@@ -139,7 +125,6 @@ internal static class RuriLocalization
         _ => "Disassembly export failed.",
     };
 
-    // ── 导出全部着色器 ──────────────────────────────────────────────
     public static string MenuShaderExport => Lang switch
     {
         "zh-Hans" => "导出全部着色器",
@@ -168,7 +153,6 @@ internal static class RuriLocalization
         _ => "Export shaders: preparing (shader decompiler + shaders-only filter)...",
     };
 
-    /// <summary>{0} = load label.</summary>
     public static string ShaderExportLoading => Lang switch
     {
         "zh-Hans" => "导出着色器：加载 {0} …",
@@ -176,7 +160,6 @@ internal static class RuriLocalization
         _ => "Export shaders: loading {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ShaderExportExporting => Lang switch
     {
         "zh-Hans" => "导出着色器：导出到 {0} …",
@@ -184,7 +167,6 @@ internal static class RuriLocalization
         _ => "Export shaders: exporting to {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ShaderExportDone => Lang switch
     {
         "zh-Hans" => "导出着色器完成：{0}",
@@ -206,7 +188,6 @@ internal static class RuriLocalization
         _ => "Shader export failed.",
     };
 
-    // ── CABMap (File menu) + title bar ──────────────────────────────
     public static string MenuLoadCabMap => Lang switch
     {
         "zh-Hans" => "加载依赖图(CABMap)…",
@@ -221,7 +202,6 @@ internal static class RuriLocalization
         _ => "Build CABMap...",
     };
 
-    /// <summary>{0} = CAB count.</summary>
     public static string TitleMapLoaded => Lang switch
     {
         "zh-Hans" => "已加载 map（{0} 个 CAB）",
@@ -236,7 +216,6 @@ internal static class RuriLocalization
         _ => "no map loaded",
     };
 
-    /// <summary>{0} = CAB count, {1} = path.</summary>
     public static string CabMapLoaded => Lang switch
     {
         "zh-Hans" => "已加载依赖图：{0} 个 CAB（{1}）",
@@ -265,7 +244,6 @@ internal static class RuriLocalization
         _ => "Select the game data folder to index (e.g. <name>_Data)",
     };
 
-    /// <summary>{0} = folder.</summary>
     public static string CabMapBuilding => Lang switch
     {
         "zh-Hans" => "正在构建依赖图：{0}（逐文件扫描，请稍候）…",
@@ -273,7 +251,6 @@ internal static class RuriLocalization
         _ => "Building CABMap over {0} (scanning one file at a time)...",
     };
 
-    /// <summary>{0} = CAB count, {1} = path.</summary>
     public static string CabMapBuilt => Lang switch
     {
         "zh-Hans" => "依赖图构建完成：{0} 个 CAB（{1}）",
@@ -288,7 +265,6 @@ internal static class RuriLocalization
         _ => "Building CABMap failed.",
     };
 
-    // ── 按类型导出 ──────────────────────────────────────────────────
     public static string MenuByTypeExport => Lang switch
     {
         "zh-Hans" => "按类型导出…（需先加载 map）",
@@ -317,7 +293,6 @@ internal static class RuriLocalization
         _ => "Export by type: preparing (loading only matching bundles via the map)...",
     };
 
-    /// <summary>{0} = load label.</summary>
     public static string ByTypeExportLoading => Lang switch
     {
         "zh-Hans" => "按类型导出：加载 {0} 个 bundle…",
@@ -325,7 +300,6 @@ internal static class RuriLocalization
         _ => "Export by type: loading {0} bundle(s)...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ByTypeExportExporting => Lang switch
     {
         "zh-Hans" => "按类型导出：导出到 {0} …",
@@ -333,7 +307,6 @@ internal static class RuriLocalization
         _ => "Export by type: exporting to {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string ByTypeExportDone => Lang switch
     {
         "zh-Hans" => "按类型导出完成：{0}",
@@ -362,7 +335,6 @@ internal static class RuriLocalization
         _ => "The CABMap has no bundles containing the selected type(s).",
     };
 
-    // ── 右键：连同依赖一起导出 ──────────────────────────────────────
     public static string ContextExportWithDeps => Lang switch
     {
         "zh-Hans" => "导出（含全部依赖）…",
@@ -398,7 +370,6 @@ internal static class RuriLocalization
         _ => "Export with dependencies: preparing...",
     };
 
-    /// <summary>{0} = load label.</summary>
     public static string WithDepsLoading => Lang switch
     {
         "zh-Hans" => "连同依赖导出：加载 {0} 个 bundle…",
@@ -406,7 +377,6 @@ internal static class RuriLocalization
         _ => "Export with dependencies: loading {0} bundle(s)...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string WithDepsExporting => Lang switch
     {
         "zh-Hans" => "连同依赖导出：导出到 {0} …",
@@ -414,7 +384,6 @@ internal static class RuriLocalization
         _ => "Export with dependencies: exporting to {0}...",
     };
 
-    /// <summary>{0} = output path.</summary>
     public static string WithDepsDone => Lang switch
     {
         "zh-Hans" => "连同依赖导出完成：{0}",

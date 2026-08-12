@@ -85,9 +85,6 @@ public sealed class AvatarMuscleReferential
     public static AvatarMuscleReferential? TryCreate(IAvatar avatar) =>
         TryCreate(AvatarRigInput.FromAvatar(avatar));
 
-    /// <summary>The referential out of an avatar's serialized document tree (the
-    /// <c>ruri_unity_avatar</c> stamp a host hands back at solve time). Null when the document
-    /// carries no human rig.</summary>
     public static AvatarMuscleReferential? TryCreateFromDocument(string avatarDocumentJson)
     {
         AvatarRigInput? input = AvatarRigInput.FromDocumentJson(avatarDocumentJson);

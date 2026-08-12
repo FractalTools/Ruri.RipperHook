@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using AssetRipper.Assets;
@@ -17,19 +17,12 @@ namespace Ruri.RipperHook.CLI;
 
 internal static class HeadlessRunner
 {
-    /// <summary>
-    /// Reference to the *original* stdout captured at startup. Set by Program.Main before
-    /// Console.Out is redirected to stderr (to silence third-party Console.WriteLine in
-    /// HookLogger and friends). EmitJson writes here directly so stdout is a single clean
-    /// JSON line that another process can pipe into a parser.
-    /// </summary>
     public static TextWriter JsonStdout { get; set; } = Console.Out;
 
     public static int Run(CliOptions options)
     {
         ConfigureLogging(options);
 
-        // --load-types also drives the export-side type filter (AR_TypeFilterExport, auto-enabled in Program).
         if (options.LoadTypes.Length > 0)
         {
             HashSet<int> exportTypeIds = ResolveTypes(options.LoadTypes);
@@ -40,8 +33,6 @@ internal static class HeadlessRunner
             }
         }
 
-        // A cabmap selection (--names / --load-types) computes its own file set, so --load stops being
-        // a seed list and becomes a scope: it narrows which CABs may seed, never what they may pull in.
         bool mapSelects = options.CabMapPath is { Length: > 0 }
             && (options.LoadTypes.Length > 0 || options.Names.Length > 0);
 
@@ -58,12 +49,8 @@ internal static class HeadlessRunner
             return 1;
         }
 
-        // When --names drives a scoped cab-map load, this is the set of chunk-entry file names (the .ab
-        // bundle archives) of the dependency closure — the bundle-granular load filter that extracts ONLY
-        // these bundles out of the (possibly 161k-bundle) chunks.
         HashSet<string>? loadFilterFileNames = null;
 
-        // 原始 VFS 转储:只碰 VFS 层,不进 AssetRipper 的装载流程,做完即退。
         if (options.DumpVfsPath is { Length: > 0 } dumpVfsPath)
         {
             if (options.LoadPaths.Length == 0 || !Directory.Exists(Path.Combine(options.LoadPaths[0], "Endfield_Data")))
@@ -92,9 +79,6 @@ internal static class HeadlessRunner
             }
         }
 
-        // Scene-map export: --load[0] is the game install root (VFS-root derivation only, never a load
-        // seed); the load set is the placement closure the resolver computes. Exclusive with the generic
-        // cab-map seed expansion below — the manifest is written after a successful export.
         List<SceneSeedResolver.Placement>? scenePlacements = null;
         if (options.ExportSceneMap is { Length: > 0 } sceneMapName)
         {
@@ -151,8 +135,6 @@ internal static class HeadlessRunner
                 {
                     NamePatterns = options.Names,
                     ClassIds = classIds,
-                    // --load narrows which CABs may seed; a seed's dependencies are never dropped for
-                    // living outside it, or the export would ship broken references.
                     FileScopes = mapSelects
                         ? options.LoadPaths.Where(static s => !string.IsNullOrWhiteSpace(s))
                             .Select(static s => Path.GetFullPath(s)).ToArray()
@@ -161,9 +143,6 @@ internal static class HeadlessRunner
                 };
                 CabClosure closure = selection.Resolve(table);
                 loadFilterFileNames = closure.LoadFilterFileNames;
-                // 闭包只含 CAB 分块;IL2CPP 的 GameAssembly.dll 与 global-metadata.dat 不是 CAB,
-                // 直接替换 paths 会把它们丢掉 —— 没有它们 AR 拿不到脚本字段布局,
-                // MonoBehaviour 会全部导成空壳(m_EditorClassIdentifier 之后什么都没有)。
                 List<string> il2cpp = CollectIl2CppPaths(options.LoadPaths);
                 paths = [.. closure.Files, .. il2cpp];
                 Console.Error.WriteLine($"[Ruri.CLI] il2cpp inputs appended: {il2cpp.Count}"
@@ -194,10 +173,6 @@ internal static class HeadlessRunner
             return 1;
         }
 
-        // When --names drove cab-map seeding, the export must write the whole dependency closure
-        // (pelica + everything it needs), so the name regex is NOT also applied as a per-asset export
-        // filter — otherwise the unnamed dependencies (textures/materials/meshes) would be dropped.
-        // Same for a scene closure: every asset in it is a real dependency of the placed geometry.
         Regex[] exportNameFilter = mapSelects || scenePlacements is not null ? [] : options.Names;
         ExportFilter.Configure(allowedClassIds, exportNameFilter, options.SmokeTestLimit, options.FailFast);
         ExportFilter.Install();
@@ -214,10 +189,6 @@ internal static class HeadlessRunner
 
             var handler = new ExportHandler(settings);
 
-            // Scoped, bundle-granular load: when --names resolved a dependency closure, extract ONLY those
-            // bundles from each chunk (a closure of a few thousand bundles can span the 161k-bundle chunk;
-            // loading it whole would exhaust memory). The closure's chunk-entry file names were captured in
-            // the name index, so the filter is an exact membership test on the raw entry name.
             if (loadFilterFileNames is { Count: > 0 })
             {
                 GameBundleHook.LoadIncludeFile = name => loadFilterFileNames.Contains(name);
@@ -242,7 +213,6 @@ internal static class HeadlessRunner
                 return 4;
             }
 
-            // GLB 直出模式:每个 prefab 层级一个完整 .glb,不跑 Unity 工程导出、不删目标目录。
             if (options.ExportGlbPath is { Length: > 0 } glbPath)
             {
                 (int glbExported, int glbFailed) = Ruri.RipperHook.GlbExporter.GlbBatchExporter.ExportPrefabs(
@@ -316,9 +286,6 @@ internal static class HeadlessRunner
         var list = new List<string>(hooks.Count);
         foreach (var (_, attr) in hooks)
         {
-            // BuildHookIds, not just the primary id -- a class whose attribute carries
-            // AlsoCoversVersions (e.g. EndField 1.2.4 also covering the byte-identical 1.3.3)
-            // must list every alias id it answers to, not just its own declared version.
             list.AddRange(Ruri.Hook.RuriHook.BuildHookIds(attr));
         }
 
@@ -345,10 +312,6 @@ internal static class HeadlessRunner
 
     private static string[] ResolveLoadPaths(string[] loadPaths)
     {
-        // Each --load token can be a single file (we hand it to AssetRipper as-is) or a
-        // directory (we recursively expand to its top-level entries — AssetRipper handles the
-        // sub-tree itself once a directory is in the input set). Multiple tokens get
-        // concatenated so callers can list a few specific .ab bundles without staging.
         var result = new List<string>();
         foreach (string raw in loadPaths)
         {
@@ -366,12 +329,6 @@ internal static class HeadlessRunner
         return result.ToArray();
     }
 
-    /// <summary>
-    /// From each --load root, pick out the IL2CPP script-metadata inputs: <c>GameAssembly.dll</c> and
-    /// <c>*_Data/il2cpp_data/Metadata/global-metadata.dat</c>. These are not CABs, so a CABMap closure
-    /// never contains them — yet without them AssetRipper has no field layouts and every MonoBehaviour
-    /// exports as an empty stub. Appending them keeps scoped loads cheap while restoring script data.
-    /// </summary>
     private static List<string> CollectIl2CppPaths(string[] loadPaths)
     {
         var result = new List<string>();
@@ -381,9 +338,6 @@ internal static class HeadlessRunner
             string root = Directory.Exists(raw) ? raw : Path.GetDirectoryName(Path.GetFullPath(raw)) ?? string.Empty;
             if (root.Length == 0) continue;
 
-            // 必须交**游戏根目录**,不能只交 GameAssembly.dll + global-metadata.dat 两个散文件:
-            // AssetRipper 靠 "<name>_Data 目录 + 同级 GameAssembly.dll" 做平台探测才会启用 IL2CPP 解析;
-            // 散文件只会被认成普通输入(日志里 dll "has been found" 但程序集一个都不落盘)。
             string assembly = Path.Combine(root, "GameAssembly.dll");
             bool hasDataDir = Directory.Exists(root) && Directory.GetDirectories(root, "*_Data").Length > 0;
             if (File.Exists(assembly) && hasDataDir && !result.Contains(root))

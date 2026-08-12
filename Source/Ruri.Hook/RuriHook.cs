@@ -57,11 +57,6 @@ namespace Ruri.Hook
 
             foreach (var assembly in assemblies)
             {
-                // Skip framework / system assemblies up front. They never
-                // carry our hooks and walking them is the bulk of the cost
-                // (and the most likely source of GetTypes / GetAttributes
-                // failures). Match on AssemblyName so framework facades and
-                // dynamically-loaded ones are covered.
                 string? name = assembly.GetName().Name;
                 if (name is null) continue;
                 if (name.StartsWith("System.", StringComparison.Ordinal) ||
@@ -82,9 +77,6 @@ namespace Ruri.Hook
                 }
                 catch (ReflectionTypeLoadException tle)
                 {
-                    // GetTypes() on assemblies with unresolved transitive
-                    // deps throws but exposes the partial list. Use what
-                    // we got — the old behaviour discarded the whole DLL.
                     types = tle.Types.Where(t => t != null).ToArray()!;
                 }
                 catch
@@ -96,12 +88,6 @@ namespace Ruri.Hook
                 {
                     if (type == null) continue;
 
-                    // Use the non-generic GetCustomAttributes(inherit:false)
-                    // and a runtime `is` cast instead of GetCustomAttribute<T>.
-                    // The generic form has been known to miss derived
-                    // attribute classes when the requested base lives in a
-                    // different assembly under certain trim / load-context
-                    // configurations; the runtime cast is bulletproof.
                     object[] attrs;
                     try
                     {
@@ -128,11 +114,6 @@ namespace Ruri.Hook
             return ordered;
         }
 
-        // A hook id must resolve to exactly one implementation. Without this, two classes (or one
-        // class's declared version colliding with another's alias) could silently register the same
-        // selectable id, and whichever happened to be enumerated last would win with no diagnostic --
-        // the same class of "nobody would notice" mistake the duplicate-hook guard in
-        // ReflectionExtensions exists to catch, one layer up.
         private static void ValidateNoIdCollisions(List<(Type Type, GameHookAttribute Attribute)> hooks)
         {
             var collisions = hooks
@@ -153,12 +134,6 @@ namespace Ruri.Hook
             return $"{attribute.GameName}_{attribute.Version}";
         }
 
-        /// <summary>
-        /// Every id <paramref name="attribute"/> answers to: its primary <see cref="BuildHookId"/>
-        /// plus one more per entry in <see cref="GameHookAttribute.AlsoCoversVersions"/> -- so a
-        /// version whose resolved behavior is identical to another's shows up as its own listed,
-        /// selectable hook without needing its own class.
-        /// </summary>
         public static IEnumerable<string> BuildHookIds(GameHookAttribute attribute)
         {
             ArgumentNullException.ThrowIfNull(attribute);
@@ -179,16 +154,6 @@ namespace Ruri.Hook
                 List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
                 HashSet<string> availableHookIds = new(availableHooks.SelectMany(static hook => BuildHookIds(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
 
-                // Self-heal the persisted config: drop any enabled-hook id that has no
-                // implementation in this build (a hook that was renamed or deleted, e.g. an
-                // export-mode hook folded into native/GUI code). Without this a ghost id
-                // survives every config round-trip, spams "no matching implementation" on
-                // every launch, and — worse — poisons the GUI's temporary-hook restore path:
-                // a filtered export captures the pre-export config, layers feature hooks on
-                // top, then restores the captured config afterwards; a ghost id in that
-                // captured set can never re-enable, so the restore looks like it silently
-                // tore every hook down. Pruning here (the single choke point every host and
-                // every reconfiguration flows through) keeps the id set honest everywhere.
                 foreach (string ghostHookId in config.EnabledHooks.Where(id => !availableHookIds.Contains(id)).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
                     config.EnabledHooks.Remove(ghostHookId);
@@ -216,18 +181,6 @@ namespace Ruri.Hook
             }
         }
 
-        /// <summary>
-        /// Keep at most ONE game's hook in the desired set, and say which ones were dropped.
-        /// <para>Game hooks are mutually exclusive by construction: each rewrites the same
-        /// AssetRipper methods for its own title's layout, so a config naming two of them describes
-        /// a host that reads neither correctly. That used to go unsaid, and the symptom surfaced far
-        /// away -- a panel offering two games' tabs at once, over one loaded cabmap that can only
-        /// ever be one game.</para>
-        /// <para>The LAST one in the config wins, because a config is edited by adding: the id the
-        /// operator just ticked is the game they mean. Dropped ids are removed from the config
-        /// itself, so the persisted set stops claiming something the host never did. Feature hooks
-        /// (<see cref="GameHookAttribute.IsGameSpecific"/> false) are untouched.</para>
-        /// </summary>
         private static void DropExtraGames(HookConfig config,
             List<(Type Type, GameHookAttribute Attribute)> availableHooks,
             HashSet<string> desiredHookIds)
@@ -273,8 +226,6 @@ namespace Ruri.Hook
                 {
                     if (BuildHookIds(attr).Any(id => string.Equals(id, hookId, StringComparison.OrdinalIgnoreCase)))
                     {
-                        // Enabling a game replaces whichever game was active: they are mutually
-                        // exclusive (see DropExtraGames), so this is a switch, not an addition.
                         if (attr.IsGameSpecific)
                         {
                             RemoveOtherGames(availableHooks, attr.GameName);
@@ -353,10 +304,6 @@ namespace Ruri.Hook
             catch (Exception ex)
             {
                 HookManager.DisposeScope(hookId);
-                // Full exception, not just the message: a half-applied hook leaves its
-                // InitAttributeHook wiring half-done, and the symptom surfaces much later as a
-                // null delegate somewhere else entirely. An IL-rewrite failure in particular
-                // (InvalidProgramException) says nothing at all without the stack.
                 Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: {ex}");
                 return false;
             }

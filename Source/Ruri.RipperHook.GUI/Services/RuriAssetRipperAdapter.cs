@@ -94,7 +94,6 @@ internal sealed class RuriAssetRipperAdapter
 
 	public PreviewData GetPreview(RipperAssetEntry entry)
 	{
-		// 只对有专属可视化的类型走自定义预览; 其他类型只显示基础信息, 不再退化到 JSON/YAML 文本.
 		IUnityObjectBase asset = entry.Asset;
 
 		if (TryGetImage(asset, out byte[]? pngBytes))
@@ -123,11 +122,6 @@ internal sealed class RuriAssetRipperAdapter
 
 	public string GetYaml(RipperAssetEntry entry) => NormalizeForTextBox(SerializeYaml(entry.Asset));
 
-	/// <summary>
-	/// Preview for one just-loaded asset, with its real size computed on demand (the list builds entries with
-	/// Size 0 to stay fast; a single previewed asset can afford the serialize). Used by the CAB-map on-demand
-	/// preview so a selected virtual file shows its texture/mesh + real data as soon as it is read.
-	/// </summary>
 	public PreviewData GetPreviewWithSize(RipperAssetEntry entry) => GetPreview(entry with { Size = EstimateSize(entry.Asset) });
 
 	public IReadOnlyList<TreeNode> BuildSceneTree(Dictionary<string, GameObjectTreeNode> nodes)
@@ -194,8 +188,7 @@ internal sealed class RuriAssetRipperAdapter
 					container,
 					asset.ClassName,
 					asset.PathID,
-					0, // Size column was removed; skip the per-asset YAML serialize that estimated it.
-					collection.Name));
+					0,					collection.Name));
 			}
 		}
 
@@ -204,8 +197,6 @@ internal sealed class RuriAssetRipperAdapter
 
 	private static long EstimateSize(IUnityObjectBase asset)
 	{
-		// raw ObjectData 在 SerializedFile 释放后就拿不到了, 这里用 YAML 序列化结果的 UTF-8 字节长度作为 size,
-		// 对所有 source-generated 类都稳定 >0 (任何 asset 至少有 name + pptr).
 		return Encoding.UTF8.GetByteCount(SerializeYaml(asset));
 	}
 

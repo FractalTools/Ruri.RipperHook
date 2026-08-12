@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
@@ -13,67 +13,19 @@ using SharpGLTF.Schema2;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Material-to-glTF translation surface.
-//
-// "Zero compromise" contract:
-//   (1) Lossless sidecar : every unique material gets a `<material-package-
-//       path>.json` matching JsonMaterialFormat's payload (Textures dict +
-//       CMaterialParams2 parameter tree), plus every referenced
-//       UTexture2D decoded for EVERY mip level (not just mip 0 as FModel does)
-//       and written under the texture's package-path-mirrored location.
-//   (2) Embedded PBR : every `.glb` part written by GlbSceneContext gets a
-//       post-write rebind that walks `ModelRoot.LogicalMaterials` and feeds
-//       each material's `BaseColor` / `Normal` / `MetallicRoughness` /
-//       `Emissive` / `Occlusion` channels from the in-memory PNG byte cache
-//       built during (1). Geometry bytes stay untouched — only the materials
-//       table at the end of the GLB binary header is mutated then re-saved.
-//
-// Interop with CUE4Parse-Conversion:
-//   * GetParams + PathName extraction happens at register time.
-//   * The sidecar JSON uses the same payload shape and the same
-//     package-path-mirroring helper as the per-texture decode/encode loop.
-//   * CMaterialParams2 role-name tables Diffuse[0] / Normals[0] /
-//     SpecularMasks[0] / Emissive[0] pick the right texture for each PBR channel.
-//   * Gltf binds `material.Name` (= `UMaterialInterface.Name`); the embed pass
-//     keys on the same name so the rebind hits the right material.
-//
-// Threading contract:
-//   The native texture decoder (BC/ASTC/...) is process-global, with hot paths
-//   that allocate native buffers; on this scene scale (~thousands of textures)
-//   the safest thing is a single global lock around every `texture.Decode` +
-//   `bitmap.Encode` call. Registration runs single-threaded (driven by the
-//   serial MaterialTextureWriter outer loop), but the lock is kept as a defence
-//   in depth so any future caller can register concurrently without crashing
-//   into the native side.
 public sealed class GlbMaterialFactory
 {
     private readonly Action<string> _log;
     private readonly Action<string> _logError;
 
-    // Set of material PathNames seen so far. The legacy `RegisterUnique` API
-    // surface — kept verbatim because GlbSceneContext.BuildMesh's de-dup uses
-    // the same identity (material.GetPathName()).
     private readonly HashSet<string> _registeredMaterialPathNames = new(StringComparer.Ordinal);
 
-    // Bundles keyed by material PathName. One bundle per unique material.
     private readonly Dictionary<string, MaterialEmbedBundle> _bundlesByPathName = new(StringComparer.Ordinal);
 
-    // Bundles keyed by `UMaterialInterface.Name` for the embed-time rebind.
-    // The Gltf exporter writes `material.Name` (NOT PathName) onto the
-    // SharpGLTF MaterialBuilder, so the rebind has to look up by Name. Name
-    // collisions across packages are possible — first registration wins and
-    // a warning is logged so the audit trail captures the lossy edge.
     private readonly Dictionary<string, string> _firstPathNameByMaterialName = new(StringComparer.Ordinal);
 
-    // Decoded mip-0 bytes per UTexture2D PathName, so a texture shared across
-    // many materials is decoded ONCE no matter how many bundles cite it. The
-    // value carries both the encoded byte payload and the chosen extension
-    // (PNG/JPEG/TGA/HDR depending on ExportOptions.TextureFormat +
-    // ExportHdrTexturesAsHdr).
     private readonly Dictionary<string, DecodedTextureMip0> _decodedMip0ByTexturePathName = new(StringComparer.Ordinal);
 
-    // Tracks which textures have already had their extra mips (1..N) decoded
-    // so a texture cited by N materials decodes its mip chain exactly once.
     private readonly HashSet<string> _extraMipsAlreadyDecodedTexturePathNames = new(StringComparer.Ordinal);
 
     private readonly struct DecodedTextureMip0
@@ -88,9 +40,6 @@ public sealed class GlbMaterialFactory
         }
     }
 
-    // Single global lock around the native decode/encode pipeline. Kept on
-    // the factory rather than on individual bundles so concurrent registrants
-    // see the same lock.
     private readonly object _decodeLock = new();
 
     public GlbMaterialFactory(Action<string> log, Action<string> logError)
@@ -99,13 +48,6 @@ public sealed class GlbMaterialFactory
         _logError = logError;
     }
 
-    // First-time-seen check for a material PathName. GlbSceneContext.BuildMesh
-    // already calls this kind of de-dup internally (it tracks
-    // `_writtenMaterialKeys`), but the public API stays for orchestrator code
-    // that wants to know whether a registration is fresh.
-    //
-    // Material identity is the package PathName, the same key the
-    // geometry-build de-dup uses.
     public bool RegisterUnique(UMaterialInterface? material)
     {
         if (material is null) return false;
@@ -117,14 +59,6 @@ public sealed class GlbMaterialFactory
 
     public IReadOnlyCollection<string> RegisteredMaterialPathNames => _registeredMaterialPathNames;
 
-    // Full registration: decode the material's parameters, decode each
-    // referenced texture for every mip, cache the PNG bytes, build the embed
-    // bundle. Returns the freshly built bundle (or the previously cached one
-    // if this material was already registered).
-    //
-    // GetParams runs onto a private CMaterialParams2 so the JSON sidecar
-    // shape matches FModel byte-for-byte while still letting us reach the real
-    // UTexture2D references for decode.
     public MaterialEmbedBundle? RegisterMaterial(UMaterialInterface? material, ExportOptions options)
     {
         if (material is null) return null;
@@ -136,8 +70,6 @@ public sealed class GlbMaterialFactory
             return existing;
         }
 
-        // Mountpoint-relative path, so the JSON sidecar lands at the
-        // FModel-compatible location.
         string ownerName = material.Owner?.Name ?? material.Name;
         string materialInternalPath = (material.Owner?.Provider?.FixPath(ownerName) ?? material.Name).SubstringBeforeLast('.');
 
@@ -151,8 +83,6 @@ public sealed class GlbMaterialFactory
             _logError($"[GlbScene]   GetParams failed for material '{pathName}': {ex.Message}");
         }
 
-        // Snapshot the textures dict role-key -> PathName so the JSON sidecar
-        // bytes are byte-for-byte equivalent on the Textures field.
         var textureNamesByKey = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in parameters.Textures)
         {
@@ -166,9 +96,6 @@ public sealed class GlbMaterialFactory
             parameters: parameters,
             textureNamesByKey: textureNamesByKey);
 
-        // Decode every referenced texture for every mip level. The native
-        // decode is serialized under the global lock and each texture is
-        // PathName-deduped globally so a shared texture is decoded once.
         foreach (var pair in parameters.Textures)
         {
             string textureRoleKey = pair.Key;
@@ -179,11 +106,6 @@ public sealed class GlbMaterialFactory
         _bundlesByPathName[pathName] = bundle;
         _registeredMaterialPathNames.Add(pathName);
 
-        // Track first PathName per short Name so embed-time lookups by name
-        // are deterministic. A second registration that collides on Name
-        // (different package, same simple Name) keeps the first registration
-        // and logs a warning — neither is "wrong" for embed and dropping the
-        // second silently would hide a possible upstream issue.
         if (!_firstPathNameByMaterialName.ContainsKey(material.Name))
         {
             _firstPathNameByMaterialName[material.Name] = pathName;
@@ -196,13 +118,6 @@ public sealed class GlbMaterialFactory
         return bundle;
     }
 
-    // Try to grab the cached embed bundle whose source `UMaterialInterface.Name`
-    // matches the SharpGLTF primitive's `material.Name`. This is the look-up
-    // the post-write embed pass uses.
-    //
-    // Source: Gltf.cs:203-210 writes `tex.Name` (the UMaterialInterface short
-    // name) onto MaterialBuilder.Name, which round-trips through ToGltf2()
-    // into Schema2.Material.Name.
     public bool TryGetEmbedBundleByMaterialName(string materialName, out MaterialEmbedBundle bundle)
     {
         if (_firstPathNameByMaterialName.TryGetValue(materialName, out var pathName)
@@ -217,14 +132,6 @@ public sealed class GlbMaterialFactory
 
     public IReadOnlyCollection<MaterialEmbedBundle> Bundles => _bundlesByPathName.Values;
 
-    // Walk every .glb file in a directory tree and, for each one, rebind its
-    // Schema2 materials' channel textures from the cached PNG bytes. Returns
-    // the number of files visited.
-    //
-    // The walk respects the user's "scan output dir" contract: WorldGlbExporter
-    // writes parts as `<outputDir>/<map-package-path>.partNNN.glb` (or just
-    // `<map-package-path>.glb` for single-part maps); the run is clean (the
-    // user clears the output dir per run), so a recursive scan is safe.
     public int EmbedIntoAllParts(string searchRootDirectory)
     {
         if (!Directory.Exists(searchRootDirectory))
@@ -249,29 +156,12 @@ public sealed class GlbMaterialFactory
         return embeddedFileCount;
     }
 
-    // Decode every mip of a single UTexture2D under the global lock, encode
-    // each into the configured format (PNG by default — matches FModel), and
-    // cache mip-0 bytes for the embed pass plus all mips for the sidecar.
-    //
-    // De-dup: `_decodedPngByTexturePathName` keys on texture PathName so a
-    // texture shared by ten materials is decoded once.
-    //
-    // FModel's own export decodes mip 0 only. This extends
-    // it to "all mips" per the "zero compromise / every byte" requirement; mip-0
-    // byte-equivalence is preserved because `texture.GetFirstMipIndex()` is fed
-    // as the mip-0 index (the same call used internally by `t.Decode(platform)`).
     private void DecodeAndCacheAllMips(UTexture2D texture, ExportOptions options, MaterialEmbedBundle bundle, string roleKey)
     {
         string texturePathName = texture.GetPathName();
 
-        // Log BEFORE the native decode so a hard crash inside the codec
-        // pinpoints the offending texture in the run log.
         _log($"[GlbScene]   decode texture: {texturePathName} (role={roleKey})");
 
-        // mip-0 byte cache is the source of truth for both embed AND sidecar
-        // mip-0 file. Build it once under the lock and reuse for both.
-        // Check + insert happen under the SAME lock so concurrent registrants
-        // cannot both miss the cache and both decode the same texture twice.
         DecodedTextureMip0 mip0;
         try
         {
@@ -297,23 +187,9 @@ public sealed class GlbMaterialFactory
             return;
         }
 
-        // Always record the (roleKey -> mip-0 file) entry on this bundle so
-        // the sidecar pass writes the file under THIS material's neighbourhood
-        // AND the embed pass can pick the right PBR channel by role.
         string textureInternalPath = (texture.Owner?.Provider?.FixPath(texture.Owner.Name) ?? texture.Name).SubstringBeforeLast('.');
         bundle.RecordTextureFile(roleKey, textureInternalPath, mip0.Extension, mip0.Bytes);
 
-        // Mips 1..N — for the lossless sidecar only. Embed always uses mip-0.
-        // The texture's internal path is the parent of both mip-0 file and the
-        // extra mips: a downstream tool walking `<textureInternalPath>.mipN.<ext>`
-        // can reconstruct the full mip chain.
-        //
-        // Per-texture de-dup: the FIRST material to register a given texture
-        // owns its extra mips (so the bundle's sidecar pass writes them); a
-        // later material that shares the texture skips the decode AND the
-        // record because the disk file is already there from the first owner.
-        // The de-dup decision happens under the same global lock so concurrent
-        // registrants do not both reserve the texture for their own bundle.
         bool extraMipsAreOursToDecode;
         lock (_decodeLock)
         {
@@ -348,20 +224,6 @@ public sealed class GlbMaterialFactory
         }
     }
 
-    // Embed cached PBR images into a single written .glb file. The geometry
-    // bytes are untouched; only the materials table is rebound and the file is
-    // re-serialized.
-    //
-    // Implementation choice: Schema2 materials are mutated directly via
-    // `MaterialChannel.SetTexture(int, Image)`, where `Image` is built by
-    // `Toolkit.UseImageWithContent(root, new MemoryImage(pngBytes))`. This
-    // targets the SharpGLTF 1.0.0-alpha0023 surface area used in this repo.
-    // The MaterialBuilder.WithChannelImage path documented in the foundation
-    // header is the build-time analogue — it is unreachable here because the
-    // MaterialBuilder is constructed inside GlbMeshSectionBuilder.AddSection.
-    //
-    // Falls back gracefully: a material with no bundle keeps its base-color-
-    // only MaterialBuilder output unchanged.
     public bool EmbedIntoPart(string glbFilePath)
     {
         ModelRoot model;
@@ -392,9 +254,6 @@ public sealed class GlbMaterialFactory
         try
         {
             using var output = File.Create(glbFilePath);
-            // Stream overload streams the GLB chunks directly into the file
-            // without the intermediate ArraySegment buffer the no-arg overload
-            // returns. Same call shape GlbSceneContext.WriteSceneTo uses.
             model.WriteGLB(output);
             _log($"[GlbScene]   embed: rebound {rebindCount} materials in '{Path.GetFileName(glbFilePath)}'.");
             return true;
@@ -406,23 +265,8 @@ public sealed class GlbMaterialFactory
         }
     }
 
-    // Map UE PBR roles -> glTF KnownChannel, then call `MaterialChannel.SetTexture`
-    // with a fresh Image built from the cached PNG bytes. Roles use the
-    // CMaterialParams2 well-known role-key tables so a UE material whose
-    // texture parameter is literally named "BaseColor" / "Diffuse" / "Albedo" /
-    // ... all bind to the BaseColor glTF channel.
-    //
-    // Source: CMaterialParams2.cs:46-134 — Diffuse[0]/Normals[0]/SpecularMasks[0]/
-    // Emissive[0] arrays drive the role detection.
     private static void ApplyBundleToMaterial(ModelRoot model, Material schemaMaterial, MaterialEmbedBundle bundle)
     {
-        // BaseColor : Diffuse[0] role tables, falling back to PM_Diffuse — the
-        // sentinel CMaterialParams2.VerifyTexture (CMaterialParams2.cs:326-343)
-        // writes when a texture's param name regex-matches but is not in the
-        // Diffuse[0] explicit candidate list. Without the fallback try, a
-        // cooked material whose only diffuse-role entry lives under "PM_Diffuse"
-        // would silently lose its embed binding even though the bytes are
-        // already decoded into the bundle's cache.
         if (bundle.TryGetPngForRoleSet(CMaterialParams2.Diffuse[0], out var baseColorPng)
             || bundle.TryGetPngForFallback(CMaterialParams2.FallbackDiffuse, out baseColorPng))
         {
@@ -430,10 +274,6 @@ public sealed class GlbMaterialFactory
         }
         else if (bundle.Parameters.TryGetLinearColor(out var baseColor, "BaseColor", "DiffuseColor", "Color"))
         {
-            // MaterialChannel is a `readonly struct` whose Parameter setter writes
-            // through to the parented Material; assignment to `nullable.Value.Parameter`
-            // (CS1612) requires a named local — the struct's payload still refers to
-            // the shared Material so the write propagates correctly.
             var channelNullable = schemaMaterial.FindChannel("BaseColor");
             if (channelNullable.HasValue)
             {
@@ -442,21 +282,18 @@ public sealed class GlbMaterialFactory
             }
         }
 
-        // Normal : Normals[0] + PM_Normals fallback (same rationale).
         if (bundle.TryGetPngForRoleSet(CMaterialParams2.Normals[0], out var normalPng)
             || bundle.TryGetPngForFallback(CMaterialParams2.FallbackNormals, out normalPng))
         {
             BindChannel(model, schemaMaterial, "Normal", normalPng);
         }
 
-        // MetallicRoughness : SpecularMasks[0] + PM_SpecularMasks fallback.
         if (bundle.TryGetPngForRoleSet(CMaterialParams2.SpecularMasks[0], out var metallicRoughnessPng)
             || bundle.TryGetPngForFallback(CMaterialParams2.FallbackSpecularMasks, out metallicRoughnessPng))
         {
             BindChannel(model, schemaMaterial, "MetallicRoughness", metallicRoughnessPng);
         }
 
-        // Emissive : Emissive[0] + PM_Emissive fallback.
         if (bundle.TryGetPngForRoleSet(CMaterialParams2.Emissive[0], out var emissivePng)
             || bundle.TryGetPngForFallback(CMaterialParams2.FallbackEmissive, out emissivePng))
         {
@@ -464,7 +301,6 @@ public sealed class GlbMaterialFactory
         }
         else if (bundle.Parameters.TryGetLinearColor(out var emissiveColor, "Emissive", "EmissiveColor"))
         {
-            // Same CS1612 pattern as the BaseColor branch above.
             var emissiveChannelNullable = schemaMaterial.FindChannel("Emissive");
             if (emissiveChannelNullable.HasValue)
             {
@@ -473,11 +309,6 @@ public sealed class GlbMaterialFactory
             }
         }
 
-        // Alpha mode rebind: CMaterialParams2.cs:35 `BlendMode` defaults to
-        // BLEND_Opaque but cooked translucent / masked materials carry the
-        // BLEND_Translucent / BLEND_Masked value. Map to glTF AlphaMode so
-        // the embedded material faithfully reflects the engine's intent.
-        // EBlendMode enum values from EBlendMode.cs:8-21.
         switch (bundle.Parameters.BlendMode)
         {
             case EBlendMode.BLEND_Translucent:
@@ -500,14 +331,6 @@ public sealed class GlbMaterialFactory
         if (!channel.HasValue) return;
         if (pngBytes.Length == 0) return;
 
-        // glTF supports PNG / JPG / WebP / DDS / KTX2. The MemoryImage ctor
-        // throws ArgumentException for anything else — that includes
-        // HDR (RGBE radiance, written when the upstream chose
-        // ExportHdrTexturesAsHdr) and TGA. For unsupported formats we
-        // SKIP the embed silently and let the channel default Parameter
-        // (white tint) drive the visual; the HDR/TGA bytes still land
-        // in the lossless sidecar so a consumer can pick them up out of
-        // band.
         MemoryImage memoryImage;
         try
         {
@@ -519,30 +342,10 @@ public sealed class GlbMaterialFactory
         }
         if (!memoryImage.IsValid) return;
 
-        // SharpGLTF dedups identical MemoryImage content (`UseImageWithContent`
-        // returns the same Image when called repeatedly with the same byte
-        // sequence), so this is O(1) extra GLB Image entries per unique texture
-        // across all materials in the part — exactly what we want for a scene
-        // with many materials reusing the same base/normal/etc texture.
         Image image = model.UseImageWithContent(memoryImage);
-        // TEXCOORD index 0 = the primary UV set; matches Gltf.cs:262-267
-        // which puts the section's primary UV in slot 0.
         channel.Value.SetTexture(0, image);
     }
 
-    // Write every material's sidecar JSON + every texture mip to disk under
-    // `outputDirectory`, mirroring the package-path layout
-    // the stock material export produces.
-    //
-    // The JSON content matches the public `MaterialData` struct shape exactly —
-    // the Textures dict (role-key -> texture PathName) plus the full
-    // CMaterialParams2 instance — so consumers expecting the FModel-shape JSON
-    // round-trip without change.
-    //
-    // Per-file write errors inside `WriteSidecarTo` are surfaced through the
-    // bundle's error sink so "every byte" completeness can be audited from the
-    // run log — a swallowed write means a texture mip never landed on disk and
-    // the user must see the audit signal, not silently lose bytes.
     public void WriteSidecars(string outputDirectory)
     {
         var baseDirectory = new DirectoryInfo(outputDirectory);
@@ -560,19 +363,6 @@ public sealed class GlbMaterialFactory
     }
 }
 
-// Per-material cached payload: parameter tree, texture role -> PathName map,
-// and decoded PNG bytes per role plus extra-mip byte payloads.
-//
-// Layout choices:
-//   * `_pngByRoleKey` maps UE role-key ("BaseColor"/"Diffuse"/"Normal"/...) to
-//     the mip-0 PNG bytes. The embed pass picks the right entry by matching
-//     against `CMaterialParams2.Diffuse[0]` / `Normals[0]` / ... arrays so a
-//     material whose author named the param "Diffuse" still binds to glTF's
-//     BaseColor channel.
-//   * `_textureFilesByRoleKey` records the disk-target path + extension for
-//     each role's mip-0 file so `WriteSidecarTo` can lay it out at the same
-//     package-path-mirrored location the stock material export uses.
-//   * `_extraMipFiles` collects mips 1..N — sidecar-only, never embedded.
 public sealed class MaterialEmbedBundle
 {
     public string MaterialPathName { get; }
@@ -611,9 +401,6 @@ public sealed class MaterialEmbedBundle
         _extraMipFiles.Add(new MipFileSpec(textureInternalPath, mipIndex, pngBytes, extension));
     }
 
-    // Walk role-key candidates (e.g. CMaterialParams2.Diffuse[0]) and return
-    // the first matching PNG. Mirrors the look-up shape `CMaterialParams2.
-    // TryGetTexture2d(out texture, params string[] names)` uses (cited above).
     public bool TryGetPngForRoleSet(string[] roleNameCandidates, out byte[] pngBytes)
     {
         foreach (string roleName in roleNameCandidates)
@@ -628,12 +415,6 @@ public sealed class MaterialEmbedBundle
         return false;
     }
 
-    // Try a single fallback sentinel key (e.g. CMaterialParams2.FallbackDiffuse
-    // = "PM_Diffuse"). VerifyTexture (CMaterialParams2.cs:326-343) writes the
-    // texture under BOTH its original param name AND the matching PM_* fallback
-    // when the param-name regex matches; if the original name was not in the
-    // explicit Diffuse[0]/Normals[0]/... role list, the PM_* key is the only
-    // way to reach the role binding for the embed pass.
     public bool TryGetPngForFallback(string fallbackKey, out byte[] pngBytes)
     {
         if (_pngByRoleKey.TryGetValue(fallbackKey, out var bytes))
@@ -645,15 +426,8 @@ public sealed class MaterialEmbedBundle
         return false;
     }
 
-    // Write the JSON sidecar + every cached texture mip to disk under
-    // `baseDirectory`. JSON path & texture paths:
-    //  * JSON   : `<baseDirectory>/<materialInternalPath>.json`
-    //  * mip 0  : `<baseDirectory>/<textureInternalPath>.<ext>`
-    //  * mip N  : `<baseDirectory>/<textureInternalPath>.mip<N>.<ext>`
     public void WriteSidecarTo(DirectoryInfo baseDirectory, Action<string>? perFileErrorSink = null)
     {
-        // Same payload shape JsonMaterialFormat writes (Textures dict +
-        // CMaterialParams2), so the bytes match FModel's own material JSON.
         var materialData = new MaterialJsonPayload
         {
             Textures = new Dictionary<string, string>(_textureNamesByKey),
@@ -672,18 +446,12 @@ public sealed class MaterialEmbedBundle
             }
             catch (Exception ex)
             {
-                // Surface per-file write errors so the audit trail captures
-                // any "byte that did not land on disk" — required to honour
-                // the "every byte, zero compromise" delivery contract.
                 perFileErrorSink?.Invoke($"[GlbScene]   sidecar texture write '{texturePath}' failed: {ex.Message}");
             }
         }
 
         foreach (var mip in _extraMipFiles)
         {
-            // Extra mips land beside the texture's mip-0 file: stem is the
-            // texture's internal path with a `.mipN` suffix so a downstream
-            // tool can re-stitch the chain by walking the mip-suffix series.
             string mipBasePath = mip.TextureInternalPath + ".mip" + mip.MipIndex.ToString();
             string mipPath = FixAndCreatePath(baseDirectory, mipBasePath, mip.Extension);
             try
@@ -697,8 +465,6 @@ public sealed class MaterialEmbedBundle
         }
     }
 
-    // Re-implementation of ExporterBase.FixAndCreatePath (IExporter.cs:103-109)
-    // so this bundle is independent of CUE4Parse's protected member surface.
     private static string FixAndCreatePath(DirectoryInfo baseDirectory, string fullPath, string extension)
     {
         if (fullPath.StartsWith('/')) fullPath = fullPath[1..];
@@ -738,7 +504,6 @@ public sealed class MaterialEmbedBundle
         }
     }
 
-    // Mirrors JsonMaterialFormat's own payload type, which is private to it.
     private sealed class MaterialJsonPayload
     {
         public Dictionary<string, string>? Textures { get; init; }

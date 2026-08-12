@@ -9,23 +9,6 @@ using System.Text.Json;
 
 namespace Ruri.RipperHook.Bridge;
 
-/// <summary>
-/// Serializes an exported AnimationClip's editor-format curves into one float32 payload plus a
-/// small JSON index, consumed Blender-side as zero-parse numpy views (RuriRipperImporter's
-/// clip_curves.ClipCurves.from_blob). The curves already exist as typed arrays right here at
-/// export time; round-tripping them through 80+MB of YAML text that CPython then re-parses was
-/// the entire animation-import bottleneck (measured: 15.5s YAML parse for one battle clip whose
-/// numeric payload is ~20MB). This hands the same numbers across the pythonnet boundary in two
-/// objects: one string, one byte[].
-///
-/// Payload layout, float32 little-endian, per curve in index order:
-///   times[K] · values[K*D] · inSlopes[K*D] · outSlopes[K*D]
-/// with D = 4 (rotation) / 3 (position/scale/euler) / 1 (float). The JSON index carries clip
-/// scalars (name/sampleRate/start/stop/root-motion keep flags) and per-curve
-/// {kind, path, attr, classId, keys, off} with off in FLOATS from the payload start.
-/// Weights and tangent modes are deliberately absent -- the Blender-side Hermite evaluator
-/// consumes exactly time/value/inSlope/outSlope and nothing else.
-/// </summary>
 internal static class ClipCurveBlob
 {
     private sealed record CurveIndexEntry(string kind, string path, string? attr, int classId, int keys, long off);
@@ -35,19 +18,11 @@ internal static class ClipCurveBlob
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
         List<CurveIndexEntry> curves);
 
-    /// <summary>A solved humanoid pose's blob index: the same shape a host's from_blob reader
-    /// already consumes, plus the float attributes the solve consumed (which the host drops from
-    /// its own copy of the clip, mirroring the in-place converter's DropConsumedFloatCurves).</summary>
     private sealed record SolvedClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
         List<CurveIndexEntry> curves, string[] consumedAttributes);
 
-    /// <summary>
-    /// The reverse of <see cref="Build"/> for the float channels only: what a host sends ACROSS
-    /// the bridge for a humanoid solve (same payload layout, kind "float" entries). Non-float
-    /// entries are ignored, so a caller may hand a whole clip blob or a pre-filtered one.
-    /// </summary>
     public static (List<(string Attribute, HermiteCurve Curve)> Channels, float SampleRate,
         bool KeepPositionXZ, bool KeepPositionY, bool KeepOrientation)
         ReadFloatChannels(string metaJson, byte[] payload)
@@ -73,10 +48,6 @@ internal static class ClipCurveBlob
         return (channels, meta.sampleRate, meta.keepPositionXZ, meta.keepPositionY, meta.keepOrientation);
     }
 
-    /// <summary>
-    /// A solved pose as the standard curve blob (dense per-frame keys, zero slopes -- the same
-    /// keys the in-place converter writes), read back by the host's existing from_blob path.
-    /// </summary>
     public static (string MetaJson, byte[] Curves) BuildSolved(SolvedHumanoidPose pose,
         string[] consumedAttributes, bool keepPositionXZ, bool keepPositionY, bool keepOrientation)
     {
@@ -126,8 +97,7 @@ internal static class ClipCurveBlob
                 payload[cursor + f * 4 + 2] = rotations[f].Z;
                 payload[cursor + f * 4 + 3] = rotations[f].W;
             }
-            cursor += frameCount * 12; // values + zeroed in/out slope spans
-        }
+            cursor += frameCount * 12;        }
 
         void WritePositions(System.Numerics.Vector3[] positions)
         {
@@ -223,8 +193,6 @@ internal static class ClipCurveBlob
             cursor = WriteFloatKeys(curve, payload, cursor);
         }
 
-        // The index above appended per curve-list in pos/rot/scale/euler/float order and the
-        // writers ran in the same order, so cursor must land exactly on totalFloats.
         if (cursor != totalFloats)
         {
             throw new InvalidOperationException($"clip curve payload desync: wrote {cursor}, indexed {totalFloats}");

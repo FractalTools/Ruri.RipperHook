@@ -6,15 +6,8 @@ using AssetRipper.Primitives;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>Open-instance reader over <see cref="EndianSpanReader"/>, e.g. <c>ReadSingle</c>.</summary>
 public delegate T TypeTreePrimitiveReader<T>(ref EndianSpanReader reader);
 
-/// <summary>
-/// Maps a <see cref="TypeTreeNodeType"/> onto the CLR type and <see cref="EndianSpanReader"/> method
-/// the assembly dumper would have emitted for it (<c>Pass100_FillReadMethods.GetPrimitiveMethod</c> +
-/// <c>NodeTypeExtensions.ToPrimitiveTypeName</c>). Delegates are open-instance, so calling one costs
-/// a delegate invoke and no boxing.
-/// </summary>
 public static class TypeTreePrimitives
 {
     private static readonly Dictionary<TypeTreeNodeType, Type> ClrTypes = new()
@@ -57,10 +50,6 @@ public static class TypeTreePrimitives
         ? type
         : throw new NotSupportedException($"[TypeTree] {nodeType} is not a primitive node type.");
 
-    /// <summary>
-    /// Creates the open-instance reader for <paramref name="nodeType"/>. <typeparamref name="T"/> must
-    /// be <see cref="GetClrType"/> for that node type.
-    /// </summary>
     public static TypeTreePrimitiveReader<T> GetReader<T>(TypeTreeNodeType nodeType)
     {
         if (GetClrType(nodeType) != typeof(T))
@@ -71,15 +60,9 @@ public static class TypeTreePrimitives
         MethodInfo method = typeof(EndianSpanReader).GetMethod(ReaderMethods[nodeType], BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes)
             ?? throw new MissingMethodException(nameof(EndianSpanReader), ReaderMethods[nodeType]);
 
-        // An open-instance delegate over a struct method takes the receiver by reference, which is
-        // exactly the `ref EndianSpanReader` first parameter of TypeTreePrimitiveReader<T>.
         return method.CreateDelegate<TypeTreePrimitiveReader<T>>();
     }
 
-    /// <summary>
-    /// Same as <see cref="GetReader{T}"/> when the CLR type is only known at plan-build time. Returns a
-    /// <c>TypeTreePrimitiveReader&lt;clrType&gt;</c>.
-    /// </summary>
     public static Delegate GetReader(TypeTreeNodeType nodeType)
     {
         Type clrType = GetClrType(nodeType);
@@ -88,17 +71,11 @@ public static class TypeTreePrimitives
         return method.CreateDelegate(typeof(TypeTreePrimitiveReader<>).MakeGenericType(clrType));
     }
 
-    /// <summary>The <see cref="ReadByteArray"/> reader, typed as <c>TypeTreePrimitiveReader&lt;byte[]&gt;</c>.</summary>
     public static TypeTreePrimitiveReader<byte[]> GetByteArrayReader() =>
         (TypeTreePrimitiveReader<byte[]>)typeof(TypeTreePrimitives)
             .GetMethod(nameof(ReadByteArray), BindingFlags.Public | BindingFlags.Static)!
             .CreateDelegate(typeof(TypeTreePrimitiveReader<byte[]>));
 
-    /// <summary>
-    /// The TypelessData / byte-array read: an int32 count followed by that many raw bytes. 1:1 port of
-    /// <c>Pass100_FillReadMethods.MakeTypelessDataMethod</c> + <c>TypelessDataHelper.ReadByteArray</c>
-    /// (the align, when the node asks for it, is applied by the calling step).
-    /// </summary>
     public static byte[] ReadByteArray(ref EndianSpanReader reader)
     {
         int count = reader.ReadInt32();

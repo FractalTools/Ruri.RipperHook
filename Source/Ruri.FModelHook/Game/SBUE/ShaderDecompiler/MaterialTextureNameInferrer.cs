@@ -14,9 +14,6 @@ internal static class MaterialTextureNameInferrer
             return 0;
         }
 
-        // Which texture goes with which sampler is a SPIR-V structural fact, so
-        // it comes from the SPIR-V layer. What the resulting names MEAN — the
-        // Material_* conventions below — is UE knowledge and stays here.
         IReadOnlyList<SampledImageBinding> pairings = SpirvReflection.ScanSampledImageBindings(spirv);
         if (pairings.Count == 0)
         {
@@ -46,8 +43,6 @@ internal static class MaterialTextureNameInferrer
             }
         }
 
-        // Set 0 only: the material parameters this inferrer names live there, and
-        // the same binding number in another set is a different resource.
         Dictionary<int, HashSet<int>> texturesPerSamplerBinding = new();
         List<(int SamplerBinding, int TextureBinding)> materialPairs = new();
         foreach (SampledImageBinding pairing in pairings)
@@ -102,22 +97,10 @@ internal static class MaterialTextureNameInferrer
             appended++;
         }
 
-        // After the sampler-name inference fills in the Material_Texture2D_N
-        // texture entries, gap-fill any missing N values between consecutive
-        // SRT-resolved/inferred Material_Texture2D_N slots. UE's Material UB
-        // resource list interleaves (texture, sampler, texture, sampler, …),
-        // so consecutive USED textures take consecutive t-slots and their
-        // resource indices differ by 2 — but the materialLayout names them
-        // with 1-stride suffixes. When (slotDelta == suffixDelta > 1), the
-        // gap slots get Material_Texture2D_<a_N + step>.
         appended += FillMaterialTextureGaps(symbols);
         return appended;
     }
 
-    // Find consecutive Material_Texture2D_N entries in symbols.TextureParameters
-    // where (slotDelta == suffixDelta > 1) and synthesise the missing
-    // N values for the intermediate slots. Returns the number of entries
-    // added. Pure metadata mutation — no SPIR-V awareness needed.
     private static int FillMaterialTextureGaps(SerializedProgramData symbols)
     {
         List<(int Slot, int N)> materials = new();

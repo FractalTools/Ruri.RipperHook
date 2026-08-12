@@ -14,41 +14,26 @@ namespace Ruri.ACL
         public Vector3 Scale;
     }
 
-    /// <summary>
-    /// Pure C# port of the ACL 2.x uniformly-sampled decompressor (nfrechette/acl develop branch).
-    /// Supports transform (qvvf) and scalar (float1f) tracks, versions v02_00_00..v02_01_00,
-    /// including stripped-keyframe clips (tier-0 samples only, no external database).
-    /// Decompression only; no compression.
-    /// </summary>
     internal sealed class AclCompressedTracks
     {
-        // buffer_tag32::compressed_tracks
         private const uint TagCompressedTracks = 0xac11ac11;
 
-        // compressed_tracks_version16
         private const ushort Version_02_00_00 = 7;
         private const ushort Version_02_01_99_1 = 9;
         private const ushort VersionFirst = 7;
         private const ushort VersionLatest = 10;
 
-        // track_type8
         private const byte TrackTypeFloat1F = 0;
         private const byte TrackTypeQvvf = 12;
 
-        // rotation_format8
         private const int RotFormatQuatFull = 0;
         private const int RotFormatQuatDropWVariable = 3;
 
-        private const int TracksHeaderOffset = 8;   // after raw_buffer_header
-        private const int BodyOffset = 32;          // raw_buffer_header(8) + tracks_header(24)
-
-        // ACL 2.0 scalar bit rate table (k_bit_rate_num_bits_v0)
+        private const int TracksHeaderOffset = 8;        private const int BodyOffset = 32;
         private static readonly byte[] ScalarBitRatesV0 = { 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32 };
-        // ACL 2.1 scalar bit rate table (k_bit_rate_num_bits)
         private static readonly byte[] ScalarBitRatesV1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 32 };
 
-        private readonly byte[] _d; // padded copy of the compressed buffer
-
+        private readonly byte[] _d;
         public bool IsValid { get; }
         public ushort Version { get; }
         public byte TrackType { get; }
@@ -58,7 +43,6 @@ namespace Ruri.ACL
 
         private readonly uint _misc;
 
-        // transform_tracks_header
         private readonly uint _numSegments;
         private readonly uint _numAnimVar;
         private readonly uint _numAnimRot;
@@ -72,7 +56,6 @@ namespace Ruri.ACL
         private readonly int _clipRangeOff;
         private readonly int _segStartIndicesOff;
 
-        // scalar_tracks_header
         private readonly uint _numBitsPerFrame;
         private readonly int _scalarMetaOff;
         private readonly int _scalarConstOff;
@@ -87,7 +70,6 @@ namespace Ruri.ACL
                 return;
             }
 
-            // Padded copy: the bit readers over-read up to 8 bytes like the C++ unsafe unpackers over-read 16
             _d = new byte[compressedData.Length + 32];
             Buffer.BlockCopy(compressedData, 0, _d, 0, compressedData.Length);
 
@@ -115,14 +97,11 @@ namespace Ruri.ACL
                 _numAnimScale = U32(BodyOffset + 16);
                 _numConstRot = U32(BodyOffset + 20);
                 _numConstTrans = U32(BodyOffset + 24);
-                // BodyOffset + 28: num_constant_scale_samples (not needed)
-                // BodyOffset + 32: database_header_offset (no external database support)
                 _segHeadersOff = BodyOffset + (int)U32(BodyOffset + 36);
                 _subTrackTypesOff = BodyOffset + (int)U32(BodyOffset + 40);
                 _constDataOff = BodyOffset + (int)U32(BodyOffset + 44);
                 _clipRangeOff = BodyOffset + (int)U32(BodyOffset + 48);
-                _segStartIndicesOff = BodyOffset + 52; // only meaningful when num_segments > 1
-            }
+                _segStartIndicesOff = BodyOffset + 52;            }
             else
             {
                 if (compressedData.Length < BodyOffset + 20)
@@ -148,7 +127,6 @@ namespace Ruri.ACL
         private bool HasStrippedKeyframes => ((_misc >> 10) & 1) != 0;
         private bool HasSegments => _numSegments > 1;
 
-        /// <summary>Finite clip duration honoring the compressed looping policy (wrap adds a repeating first sample).</summary>
         public float FiniteDuration
         {
             get
@@ -162,8 +140,6 @@ namespace Ruri.ACL
             }
         }
 
-        //////////////////////////////////////////////////////////////////////////
-        // Little-endian data reads
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private uint U32(int offset) => BinaryPrimitives.ReadUInt32LittleEndian(_d.AsSpan(offset, 4));
@@ -174,8 +150,6 @@ namespace Ruri.ACL
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float F32(int offset) => BitConverter.Int32BitsToSingle((int)U32(offset));
 
-        //////////////////////////////////////////////////////////////////////////
-        // Big-endian packed animated bit stream reads
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private uint BitsBE32(int bitOffset)
@@ -188,7 +162,6 @@ namespace Ruri.ACL
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private uint BitsBE(int bitOffset, int numBits)
         {
-            // numBits <= 23, mirrors unpack_vector3_uXX_unsafe
             int byteOff = bitOffset >> 3;
             uint v = BinaryPrimitives.ReadUInt32BigEndian(_d.AsSpan(byteOff, 4));
             return (v >> (32 - numBits - (bitOffset & 7))) & ((1u << numBits) - 1);
@@ -201,8 +174,6 @@ namespace Ruri.ACL
         private Vector3 Vector3BE96(int bitOffset)
             => new Vector3(FloatBE(bitOffset), FloatBE(bitOffset + 32), FloatBE(bitOffset + 64));
 
-        //////////////////////////////////////////////////////////////////////////
-        // Seek (find_linear_interpolation_samples_with_sample_rate, rounding policy: none)
 
         private void FindSamples(float sampleTime, bool wrap, out uint key0, out uint key1, out float alpha)
         {
@@ -224,7 +195,6 @@ namespace Ruri.ACL
             {
                 if (index0 > lastIndex)
                 {
-                    // Sampling the artificially repeating first sample with full weight
                     sampleIndex = 0.0f;
                     index0 = 0;
                     index1 = 0;
@@ -240,7 +210,6 @@ namespace Ruri.ACL
             alpha = Math.Clamp(sampleIndex - index0, 0.0f, 1.0f);
         }
 
-        // find_linear_interpolation_alpha with sample_rounding_policy::none
         private static float FindAlpha(float sampleIndex, uint key0, uint key1)
         {
             if (key0 == key1)
@@ -265,15 +234,10 @@ namespace Ruri.ACL
             return (int)(_numSegments - 1);
         }
 
-        //////////////////////////////////////////////////////////////////////////
-        // Transform decompression
 
         private struct Cursor
         {
-            public int Meta;      // absolute byte offset into format_per_track_data
-            public int SegRange;  // absolute byte offset into segment range data
-            public int Bit;       // absolute bit offset into animated data
-        }
+            public int Meta;            public int SegRange;            public int Bit;        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int SubTrackType(int entriesBase, int trackIndex)
@@ -290,14 +254,12 @@ namespace Ruri.ACL
             if (NumSamples == 0)
                 return false;
 
-            // ---- seek_v0 ----
             bool wrap = WrapOptimized;
             float clampedTime = Math.Clamp(sampleTime, 0.0f, FiniteDuration);
             FindSamples(clampedTime, wrap, out uint clipKey0, out uint clipKey1, out float alpha);
 
             bool hasStripped = HasDatabase || HasStrippedKeyframes;
-            int segStride = hasStripped ? 20 : 16; // stripped_segment_header_t vs segment_header
-
+            int segStride = hasStripped ? 20 : 16;
             int seg0 = 0;
             int seg1 = 0;
             uint segKey0, segKey1;
@@ -320,17 +282,14 @@ namespace Ruri.ACL
 
             if (hasStripped)
             {
-                // Clip relative fractional sample index before remapping
                 float sampleIndex = alpha + clipKey0;
 
                 uint sampleIndices0 = U32(_segHeadersOff + seg0 * segStride + 16);
                 uint sampleIndices1 = U32(_segHeadersOff + seg1 * segStride + 16);
 
-                // Nearest stored sample at or before key0 (bit 0 = MSB = sample 0)
                 uint candidates0 = sampleIndices0 & (0xFFFFFFFFu << (int)(31 - segKey0));
                 segKey0 = 31 - (uint)System.Numerics.BitOperations.TrailingZeroCount(candidates0);
 
-                // Nearest stored sample at or after key1
                 uint candidates1 = sampleIndices1 & (0xFFFFFFFFu >> (int)segKey1);
                 segKey1 = (uint)System.Numerics.BitOperations.LeadingZeroCount(candidates1);
 
@@ -339,12 +298,10 @@ namespace Ruri.ACL
 
                 alpha = FindAlpha(sampleIndex, clipKey0, clipKey1);
 
-                // Remap to the index within the stored samples
                 segKey0 = (uint)System.Numerics.BitOperations.PopCount(~(0xFFFFFFFFu >> (int)segKey0) & sampleIndices0);
                 segKey1 = (uint)System.Numerics.BitOperations.PopCount(~(0xFFFFFFFFu >> (int)segKey1) & sampleIndices1);
             }
 
-            // ---- per keyframe segment data pointers ----
             Span<Cursor> rotCtx = stackalloc Cursor[2];
             Span<Cursor> transCtx = stackalloc Cursor[2];
             Span<Cursor> scaleCtx = stackalloc Cursor[2];
@@ -400,7 +357,6 @@ namespace Ruri.ACL
             int transTypesBase = rotTypesBase + numEntries * 4;
             int scaleTypesBase = transTypesBase + numEntries * 4;
 
-            // Constant data cursors
             int constRotSize = rotFormat == RotFormatQuatFull ? 16 : 12;
             int constRotBase = _constDataOff;
             int constTransBase = constRotBase + constRotSize * (int)_numConstRot;
@@ -418,7 +374,6 @@ namespace Ruri.ACL
             Span<bool> clipIgn1 = stackalloc bool[4];
             Span<int> pending = stackalloc int[4];
 
-            // ---- rotations ----
             {
                 int constIdx = 0;
                 int pendingCount = 0;
@@ -450,7 +405,6 @@ namespace Ruri.ACL
                     FlushRotationGroup(output, pending, pendingCount, rotCtx, ref clipRot, rotFormat, rawBits, alpha, q0, q1, segIgn0, segIgn1, clipIgn0, clipIgn1);
             }
 
-            // ---- translations ----
             {
                 int constOff = constTransBase;
                 int pendingCount = 0;
@@ -488,7 +442,6 @@ namespace Ruri.ACL
                 }
             }
 
-            // ---- scales ----
             if (!hasScale)
             {
                 var defaultScale = new Vector3(DefaultScale);
@@ -545,7 +498,6 @@ namespace Ruri.ACL
                 return new Quaternion(F32(o), F32(o + 4), F32(o + 8), F32(o + 12));
             }
 
-            // Drop-w formats are stored in SOA groups of 4 (xxxx yyyy zzzz), last group unpadded
             int group = index >> 2;
             int lane = index & 3;
             int groupSize = Math.Min((int)_numConstRot - group * 4, 4);
@@ -593,7 +545,6 @@ namespace Ruri.ACL
                     Vector4 v;
                     if (bits == 0)
                     {
-                        // Constant bit rate: 16-bit sample packed across the SOA segment range bytes
                         int s = c.SegRange + i;
                         uint x = ((uint)_d[s] << 8) | _d[s + 4];
                         uint y = ((uint)_d[s + 8] << 8) | _d[s + 12];
@@ -634,7 +585,6 @@ namespace Ruri.ACL
                     outValues[i] = v;
                 }
 
-                // Metadata and segment range groups are padded to 4 samples
                 c.Meta += 4;
                 c.SegRange += 24;
             }
@@ -648,8 +598,7 @@ namespace Ruri.ACL
                     clipIgnore[i] = true;
                 }
             }
-            else // quatf_drop_w_full
-            {
+            else            {
                 for (int i = 0; i < groupSize; i++)
                 {
                     outValues[i] = new Vector4(Vector3BE96(c.Bit), 0.0f);
@@ -664,7 +613,6 @@ namespace Ruri.ACL
 
         private void RemapClipRangeRotations(int clipOff, int groupSize, Span<Vector4> values, Span<bool> clipIgnore)
         {
-            // Rotation clip range data is SOA within the group: min.x* min.y* min.z* extent.x* extent.y* extent.z*, stride = groupSize floats
             for (int i = 0; i < groupSize; i++)
             {
                 if (clipIgnore[i])
@@ -715,7 +663,6 @@ namespace Ruri.ACL
                 bool skipClip;
                 if (bits == 0)
                 {
-                    // Constant bit rate: u48 sample stored in the segment range slot
                     int s = c.SegRange;
                     v = new Vector3(U16(s), U16(s + 2), U16(s + 4)) * (1.0f / 65535.0f);
                     c.SegRange += 6;
@@ -725,8 +672,7 @@ namespace Ruri.ACL
                 {
                     v = Vector3BE96(c.Bit);
                     c.Bit += 96;
-                    c.SegRange += 6; // raw bit rates have unused range data
-                    skipClip = true;
+                    c.SegRange += 6;                    skipClip = true;
                 }
                 else
                 {
@@ -765,7 +711,6 @@ namespace Ruri.ACL
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector4 ReconstructW(Vector4 v)
         {
-            // quat_from_positive_w + normalize
             float w2 = 1.0f - v.X * v.X - v.Y * v.Y - v.Z * v.Z;
             v.W = MathF.Sqrt(MathF.Abs(w2));
             float lenSq = v.X * v.X + v.Y * v.Y + v.Z * v.Z + v.W * v.W;
@@ -777,7 +722,6 @@ namespace Ruri.ACL
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Quaternion LerpQuat(Vector4 start, Vector4 end, float alpha)
         {
-            // Shortest path lerp + normalize
             if (Vector4.Dot(start, end) < 0.0f)
                 end = -end;
 
@@ -788,8 +732,6 @@ namespace Ruri.ACL
             return new Quaternion(r.X, r.Y, r.Z, r.W);
         }
 
-        //////////////////////////////////////////////////////////////////////////
-        // Scalar (float1f) decompression
 
         public bool DecompressFloats(float sampleTime, float[] output)
         {

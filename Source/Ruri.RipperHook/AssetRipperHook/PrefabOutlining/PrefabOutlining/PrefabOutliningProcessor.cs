@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
@@ -10,9 +10,6 @@ namespace AssetRipper.Processing.PrefabOutlining;
 
 public sealed class PrefabOutliningProcessor : IAssetProcessor
 {
-	//Documentation note: prefab variants were introduced in 2018.3.
-	//That does not affect this processor currently, but it may have an impact on future improvements.
-	//https://blog.unity.com/technology/introducing-unity-2018-3
 
 	public void Process(GameData gameData)
 	{
@@ -31,15 +28,13 @@ public sealed class PrefabOutliningProcessor : IAssetProcessor
 		{
 			if (variants.Count != 1)
 			{
-				continue;//We want the simplest implementation to start out
-			}
+				continue;			}
 
 			(_, List<IGameObject> box) = variants.First();
 
 			if (box.Any(g => prefabRoots.Contains(g)))
 			{
-				continue;//Prefab already exists
-			}
+				continue;			}
 
 			Logger.Info(LogCategory.Processing, $"Recreating prefab for {name}");
 
@@ -49,7 +44,6 @@ public sealed class PrefabOutliningProcessor : IAssetProcessor
 
 	private static void AddCopyToCollection(string name, IGameObject source, ProcessedAssetCollection collection)
 	{
-		//AddPrefabPlaceHolder(name, collection);
 		AddNewPrefab(name, source, collection);
 	}
 
@@ -70,7 +64,6 @@ public sealed class PrefabOutliningProcessor : IAssetProcessor
 
 	private static void AddPrefabPlaceHolder(string name, ProcessedAssetCollection collection)
 	{
-		//Place holder code until source gen improves
 
 		IGameObject root = CreateNewGameObject(collection);
 		root.Name = name;
@@ -80,7 +73,6 @@ public sealed class PrefabOutliningProcessor : IAssetProcessor
 		ITransform rootTransform = CreateNewTransform(collection);
 		rootTransform.GameObject_C4P = root;
 		rootTransform.RootOrder_C4 = 0;
-		//Since this Transform has no Father, its RootOrder is zero.
 
 		root.AddComponent(ClassIDType.Transform, rootTransform);
 
@@ -92,7 +84,6 @@ public sealed class PrefabOutliningProcessor : IAssetProcessor
 		ITransform childTransform = CreateNewTransform(collection);
 		childTransform.GameObject_C4P = child;
 		childTransform.RootOrder_C4 = 0;
-		//Since this Transform is the only child, its RootOrder is zero.
 
 		childTransform.Father_C4P = rootTransform;
 		rootTransform.Children_C4P.Add(childTransform);

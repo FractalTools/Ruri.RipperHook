@@ -9,48 +9,18 @@ namespace AssetRipper.Export.Modules.Shaders.ShaderBlob;
 
 public sealed class ShaderSubProgram
 {
-	/// <summary>
-	/// 2019.1 and greater
-	/// </summary>
 	public static bool HasLocalKeywords(UnityVersion version) => version.GreaterThanOrEquals(2019);
-	/// <summary>
-	/// 5.5.0 and greater
-	/// </summary>
 	public static bool HasUAVParameters(UnityVersion version) => version.GreaterThanOrEquals(5, 5);
-	/// <summary>
-	/// 2017.2 and greater
-	/// </summary>
 	public static bool HasSamplerParameters(UnityVersion version) => version.GreaterThanOrEquals(2017, 1);
-	/// <summary>
-	/// 2017.3 and greater
-	/// </summary>
 	public static bool HasMultiSampled(UnityVersion version) => version.GreaterThanOrEquals(2017, 3);
-	/// <summary>
-	/// 5.5.0 and greater
-	/// </summary>
 	private static bool HasStatsTempRegister(UnityVersion version) => version.GreaterThanOrEquals(5, 5);
-	/// <summary>
-	/// 5.5.0 and greater
-	/// </summary>
 	private static bool IsAllParamArgs(UnityVersion version) => version.GreaterThanOrEquals(5, 5);
-	/// <summary>
-	/// 2017.3 and greater
-	/// </summary>
 	private static bool HasStructParameters(UnityVersion version) => version.GreaterThanOrEquals(2017, 3);
-	/// <summary>
-	/// 2018.2 and greater
-	/// </summary>
 	private static bool HasNewTextureParams(UnityVersion version) => version.GreaterThanOrEquals(2018, 2);
-	/// <summary>
-	/// 2021.2 and greater
-	/// </summary>
 	public static bool HasMergedKeywords(UnityVersion version) => version.GreaterThanOrEquals(2021, 2);
 
 	public void Read(AssetReader reader, bool readProgramData, bool readParams)
 	{
-		// Consume + discard the blob version word. USCSandbox does the same (no validation), and
-		// proprietary engines (AzurPromilia, EndField) emit values that don't match the vanilla
-		// table — but the binary layout of the rest of the entry remains compatible.
 		_ = reader.ReadInt32();
 
 		if (readProgramData)

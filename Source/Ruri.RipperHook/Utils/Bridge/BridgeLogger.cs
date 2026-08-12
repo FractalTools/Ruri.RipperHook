@@ -2,10 +2,6 @@ using AssetRipper.Import.Logging;
 
 namespace Ruri.RipperHook.Bridge;
 
-/// <summary>
-/// AssetRipper log sink for an in-process pythonnet host: writes to stderr, which lands in Blender's own
-/// console/terminal output. Without a sink attached, AssetRipper's Logger is a silent black hole.
-/// </summary>
 internal sealed class BridgeLogger : ILogger
 {
     public LogType MinLevel { get; init; } = LogType.Info;
@@ -27,7 +23,6 @@ internal sealed class BridgeLogger : ILogger
         }
     }
 
-    // LogType is not declared in severity order in AssetRipper, so rank manually.
     private static int Rank(LogType type) => type switch
     {
         LogType.Debug => 0,

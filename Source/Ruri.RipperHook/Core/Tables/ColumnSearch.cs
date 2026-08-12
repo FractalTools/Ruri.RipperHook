@@ -2,16 +2,6 @@ using Ruri.RipperHook.CabMapping;
 
 namespace Ruri.RipperHook.Tables;
 
-/// <summary>
-/// Quick search + Include/Exclude rules over a <see cref="ColumnTable"/>, on the same engine the
-/// cabmap browser runs: each text column is ASCII-folded ONCE and then swept with a vectorized
-/// IndexOf partitioned across cores (<see cref="Utf8Search"/>). A row matches when any of its text
-/// columns contains the needle; the surviving rows then go through the shared
-/// <see cref="RuleFilter"/>, so a rule means exactly what it means in the cabmap browser.
-///
-/// The folded blobs are built on first search and kept, so typing is one scan per keystroke over
-/// buffers that are already in the right shape -- no per-row strings are ever materialized.
-/// </summary>
 public sealed class ColumnSearch
 {
     private readonly ColumnTable _table;
@@ -24,9 +14,6 @@ public sealed class ColumnSearch
         _textColumns = table.Columns.OfType<Utf8Column>().ToArray();
     }
 
-    /// <summary>One row's value for a column, as the rules see it. Unknown column names read as
-    /// empty rather than throwing: a rule set outlives the table it was typed against (switching
-    /// tabs, reloading a cabmap), and an empty value simply fails to match.</summary>
     public string Field(int row, string column)
     {
         foreach (Column candidate in _table.Columns)
@@ -46,9 +33,6 @@ public sealed class ColumnSearch
         return string.Empty;
     }
 
-    /// <summary>Row ids matching <paramref name="query"/> and every enabled rule, ascending. An
-    /// empty query with no rules is every row -- the browser's own "no filter" state, not a
-    /// special case.</summary>
     public int[] Search(string query, IReadOnlyList<FilterRule>? rules = null)
     {
         int[] matched = QuickSearch(query);

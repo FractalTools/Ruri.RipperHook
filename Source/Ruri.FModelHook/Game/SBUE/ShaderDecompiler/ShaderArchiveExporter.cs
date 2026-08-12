@@ -4,30 +4,8 @@ using CUE4Parse.FileProvider.Objects;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Per-archive orchestration shared by BOTH drivers:
-//   * the interactive FModel `CUE4ParseViewModel.ExportData` hook
-//     (UE_ShaderDecompiler_Hook), and
-//   * the headless CLI mount (HeadlessShaderExportRunner) which builds a
-//     CUE4Parse `DefaultFileProvider` directly — no FModel WPF host.
-//
-// One call processes one `.ushaderbytecode` entry end-to-end:
-//   Pass 010  save the flat `.ushaderlib`
-//   Pass 020-080  run the export pipeline (sidecars + cumulative
-//                 UnifiedShaderMetadata.json on the shared ExportPipelineState)
-//   Pass 110-200  decompile the just-written library in-process
-//
-// The cumulative cross-library state (IoStore hash index, material cache,
-// Niagara bridge) lives on the caller-owned `ExportPipelineState`, so the
-// driver is responsible for creating ONE state per session and serialising
-// calls (the state is not thread-safe). Extracting this here keeps the two
-// drivers byte-identical instead of drifting copy-paste.
 internal static class ShaderArchiveExporter
 {
-    // Process a single shader-bytecode archive. `exportBasePath` is the
-    // output path WITHOUT extension (the `.ushaderlib` + `.assetinfo.json` +
-    // `.stableinfo.json` sidecars are derived from it). Returns true when the
-    // library was exported (decompile failures are logged but don't flip the
-    // result — the library + sidecars are still useful on their own).
     public static bool ProcessArchive(ExportPipelineState state, GameFile entry, string exportBasePath, bool splitVariants, bool skipDecompile = false, string? materialFilter = null)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
@@ -35,9 +13,6 @@ internal static class ShaderArchiveExporter
 
         string libraryPath = exportBasePath + ".ushaderlib";
 
-        // 1. Pass 010 — save the flat FSerializedShaderArchive. Also stashes
-        //    this archive's shader-map hash set on the state for Pass 030's
-        //    scoped material scan.
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(libraryPath)!);
@@ -55,8 +30,6 @@ internal static class ShaderArchiveExporter
             return false;
         }
 
-        // 2. Pass 020-080 — export pipeline. Cumulative state on `state`
-        //    persists across archives so the expensive passes run once.
         state.Entry = entry;
         state.ExportBasePath = exportBasePath;
         try
@@ -68,12 +41,6 @@ internal static class ShaderArchiveExporter
             state.LogError($"[ShaderArchiveExporter] Export pipeline failed for {entry.Path}: {ex.Message}");
         }
 
-        // 3. Pass 110-200 — decompile the library we just wrote, using the
-        //    cumulative UnifiedShaderMetadata.json for material-ball symbols.
-        //    Skippable: --export-only builds the cache + sidecars + .ushaderlib
-        //    without the (potentially multi-hour, 261k-shader on the master)
-        //    decompile, so a later `--decompile-only` can iterate against the
-        //    fully-populated unified file.
         if (skipDecompile)
         {
             state.Log($"[ShaderArchiveExporter] Export-only: skipped decompile for {Path.GetFileName(exportBasePath)}.");
@@ -105,11 +72,6 @@ internal static class ShaderArchiveExporter
             OutputDirectory = outputDir,
             UnifiedMetadataPath = File.Exists(unifiedMetadataPath) ? unifiedMetadataPath : null,
             MaterialFilter = materialFilter,
-            // Pass180 itself only wipes the output dir when unfiltered — a
-            // material-filtered run is additive (keeps whatever a prior
-            // full/other-filter run already emitted into the SAME shared
-            // Decompiled/<library> folder) rather than nuking it for a
-            // narrow incremental re-run.
             RecreateOutputDirectory = string.IsNullOrWhiteSpace(materialFilter),
             SplitVariantsToHlslFiles = splitVariants,
             Log = state.Log,

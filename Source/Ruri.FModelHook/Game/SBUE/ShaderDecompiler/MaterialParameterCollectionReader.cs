@@ -6,42 +6,12 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Resolves the project's `UMaterialParameterCollection` (MPC) assets that a
-// material references, and produces a `MaterialCollection<i>` cbuffer layout
-// per UE's `UMaterialParameterCollection::CreateBufferStruct`
-// (`Engine/Source/Runtime/Engine/Private/Materials/ParameterCollection.cpp:531-556`).
-//
-// UE layout:
-//   const uint32 NumVectors = DivideAndRoundUp(ScalarParameters.Num(), 4)
-//                             + VectorParameters.Num();
-//   ParameterData = { float4 Vectors[NumVectors] };
-//
-// Slot order within the array, matching `UMaterialParameterCollection::GetDefaultParameterData`:
-//   slot[0..ceil(N_scalars/4)-1] = packed scalars, .xyzw in declaration order
-//   slot[ceil(N_scalars/4)..]    = vector parameters, one per slot
-//
-// The cooked shader sometimes binds a TRUNCATED suffix of this array (DXC drops
-// unused tail registers during HLSL→SPIR-V), but the named-member offsets are
-// still authoritative — Pass050's tail-fill will synthesize a `_TODO_missing_seed_field`
-// if needed, never breaking a recovery.
 internal static class MaterialParameterCollectionReader
 {
     private static readonly Dictionary<string, ConstantBufferParameter?> s_cache = new(StringComparer.OrdinalIgnoreCase);
 
-    // Resolves all `MaterialCollection<i>` cbuffers that `asset` references via
-    // its `CachedExpressionData.ParameterCollectionInfos[]`. Appends them to
-    // `inputs.ExtraConstantBuffers`. `exportRoot` is the project export folder
-    // (e.g. `<Output>/Exports/Oni_Valley_VFX`); `exportRootName` is its leaf
-    // name (`Oni_Valley_VFX`), used to strip the `/Game/` prefix from UE
-    // object paths.
     public static void ResolveAndInject(JsonElement asset, SymbolInputs inputs, string exportRoot, string exportRootName)
     {
-        // ParameterCollectionInfos live on the ROOT material in the parent
-        // chain — material instances (incl. LandscapeMaterialInstanceConstant)
-        // inherit them but don't carry their own copy. Walk Properties.Parent
-        // upward until we either find PCI or exhaust the chain. Default of
-        // 8 hops covers any realistic instance hierarchy without risk of
-        // infinite loop on a misformed asset.
         JsonElement pcis = FindParameterCollectionInfos(asset, exportRoot, exportRootName, maxHops: 8);
         if (pcis.ValueKind != JsonValueKind.Array)
         {
@@ -70,9 +40,6 @@ internal static class MaterialParameterCollectionReader
         }
     }
 
-    // Walk the MaterialInstance.Parent chain looking for CachedExpressionData.ParameterCollectionInfos.
-    // The chain is `LandscapeMaterialInstanceConstant → MI_X → MI_Y → ... → M_Root`,
-    // and only the root material's CachedExpressionData actually carries PCI.
     private static JsonElement FindParameterCollectionInfos(JsonElement asset, string exportRoot, string exportRootName, int maxHops)
     {
         JsonElement current = asset;
@@ -95,9 +62,6 @@ internal static class MaterialParameterCollectionReader
         return default;
     }
 
-    // Read `Properties.Parent.ObjectPath` and resolve it through the export
-    // root to a JSON file. Returns root[0] from the parent file (which is
-    // always the parent material's main asset entry).
     private static bool TryResolveParentAsset(JsonElement asset, string exportRoot, string exportRootName, out JsonElement parent)
     {
         parent = default;
@@ -121,7 +85,6 @@ internal static class MaterialParameterCollectionReader
             {
                 return false;
             }
-            // Clone so the returned element survives the using-document dispose.
             parent = doc.RootElement[0].Clone();
             return true;
         }
@@ -180,9 +143,6 @@ internal static class MaterialParameterCollectionReader
         List<JsonElement> scalars = ReadArray(props, "ScalarParameters");
         List<JsonElement> vectors = ReadArray(props, "VectorParameters");
 
-        // Match UE's GetDefaultParameterData ordering exactly:
-        //   for each scalar i: pack into vec4 floor(i/4), component i%4
-        //   for each vector j: emit vec4 at slot (ceil(NScalars/4) + j)
         List<VectorParameter> vectorParams = new();
         for (int i = 0; i < scalars.Count; i++)
         {
@@ -255,13 +215,8 @@ internal static class MaterialParameterCollectionReader
         return null;
     }
 
-    // Maps a UE object path like `/Game/Oni_Project/.../Level_material_parameters.0`
-    // to the on-disk JSON path. `/Game/` corresponds to `<exportRoot>/Content/`
-    // (FModel's standard export convention; the export root's leaf name is the
-    // project name, and Content sits directly under it).
     private static string? ResolveAssetPath(string objectPath, string exportRoot, string exportRootName)
     {
-        // Trim trailing `.<n>` UObject sub-object suffix and leading `/`
         string trimmed = objectPath.TrimStart('/');
         int dotIdx = trimmed.LastIndexOf('.');
         if (dotIdx > 0)
@@ -269,15 +224,12 @@ internal static class MaterialParameterCollectionReader
             trimmed = trimmed[..dotIdx];
         }
 
-        // `/Game/Foo/Bar` → `<exportRoot>/Content/Foo/Bar.json`
         if (trimmed.StartsWith("Game/", StringComparison.OrdinalIgnoreCase))
         {
             string rel = "Content/" + trimmed["Game/".Length..];
             string p = Path.Combine(exportRoot, rel.Replace('/', Path.DirectorySeparatorChar) + ".json");
             if (File.Exists(p)) return p;
         }
-        // Engine assets: `/Engine/...` → `<sibling-of-exportRoot>/Engine/...`
-        // Most projects don't ship MPCs under /Engine, so this is rare.
         if (trimmed.StartsWith("Engine/", StringComparison.OrdinalIgnoreCase))
         {
             string? parent = Path.GetDirectoryName(exportRoot);
@@ -302,7 +254,6 @@ internal static class MaterialParameterCollectionReader
             sb.Append(valid ? c : '_');
         }
         if (sb.Length > 0 && sb[0] >= '0' && sb[0] <= '9') sb.Insert(0, '_');
-        // Collapse multiple underscores
         string result = sb.ToString();
         while (result.Contains("__")) result = result.Replace("__", "_");
         return result.Trim('_').Length == 0 ? "_" : result;

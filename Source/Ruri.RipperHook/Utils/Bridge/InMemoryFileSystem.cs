@@ -3,15 +3,6 @@ using System.Text;
 
 namespace Ruri.RipperHook.Bridge;
 
-/// <summary>
-/// Captures AssetRipper's export output in memory instead of writing to disk. Pass an instance of this
-/// in place of <see cref="LocalFileSystem.Instance"/> to
-/// <see cref="AssetRipper.Export.UnityProjects.ExportHandler.Export"/> and every file the real exporter
-/// would have written lands in <see cref="Files"/> instead — byte-for-byte identical to what
-/// <c>ripper.exe --export</c> writes to disk today, just never touching a physical file. One instance is
-/// good for exactly one export call; create a fresh one each time (its unique-name dedup state, inherited
-/// from <see cref="FileSystem.GetUniqueName"/>, must not bleed across unrelated exports).
-/// </summary>
 public sealed class InMemoryFileSystem : FileSystem
 {
     private readonly Dictionary<string, byte[]> _files = new(StringComparer.OrdinalIgnoreCase);
@@ -19,12 +10,8 @@ public sealed class InMemoryFileSystem : FileSystem
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private long _lastCommitTicks;
 
-    /// <summary>Every path the exporter wrote, virtual-path keyed, in the order first committed.</summary>
     public IReadOnlyDictionary<string, byte[]> Files => _files;
 
-    /// <summary>Per-commit (path, bytes, ms since the previous commit). The export loop is
-    /// sequential, so the inter-commit gap attributes wall time to the file just written --
-    /// the whole cost-attribution story for "what is Export spending its seconds on".</summary>
     public List<(string Path, long Bytes, double Ms)> CommitTimeline { get; } = new();
 
     public override InMemoryFileImplementation File { get; }
@@ -88,21 +75,15 @@ public sealed class InMemoryFileSystem : FileSystem
 
         public override bool Exists(string path) => fileSystem._dirs.Contains(path);
 
-        // Enumerate/Get-files (EnumerateFiles/GetFiles/EnumerateDirectories/GetDirectories) are an
-        // export-output-listing operation real exporters don't need — they only ever Create/Exists-check
-        // the directory they're about to write into. Left as the base's NotSupportedException default;
-        // if a future exporter needs one, add it here once observed rather than guessing now.
     }
 
     public sealed class InMemoryPathImplementation(InMemoryFileSystem fileSystem) : PathImplementation(fileSystem)
     {
-        // Virtual paths are opaque dictionary keys, already "full" by construction.
         public override string GetFullPath(string path) => path;
 
         public override bool IsPathRooted(ReadOnlySpan<char> path) => true;
     }
 
-    /// <summary>A Create/OpenWrite target that commits its buffer into the owning filesystem on Dispose.</summary>
     private sealed class CommitStream(InMemoryFileSystem owner, string path) : MemoryStream
     {
         private bool _committed;

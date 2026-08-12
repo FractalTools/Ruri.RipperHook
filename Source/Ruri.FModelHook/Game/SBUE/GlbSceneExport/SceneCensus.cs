@@ -6,27 +6,11 @@ using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Permanent scene-coverage diagnostic. Walks every collected placement and
-// tallies (a) actor ExportType and (b) which renderable component family each
-// actor carries, so a run plainly reports WHAT lives in the umap versus WHAT
-// the geometry path actually consumes. This is the verification backbone for a
-// "complete, no-compromise" export: any actor that appears here but yields no
-// geometry is a coverage gap to close, not a silent omission to ignore.
 internal static class SceneCensus
 {
-    // Renderable families the exporter must eventually account for. Classification
-    // mirrors WorldGlbExporter.ProcessActor's probe order so "handled" is honest.
     internal enum Family
     {
-        InstanceComponents,   // InstanceComponents[] -> (Instanced)StaticMeshComponent
-        ComponentTemplate,    // ComponentTemplate -> StaticMesh / GeometryCollection
-        StaticMeshComponent,  // StaticMeshComponent / Mesh / SplineMesh / ...
-        SkeletalMesh,         // USkeletalMeshComponent / SkeletalMesh (NOT yet exported)
-        Landscape,            // ALandscapeProxy / ULandscapeComponent (NOT yet exported)
-        Light,                // Point/Spot/Rect/Directional/Sky light (NOT yet exported)
-        Decal,                // ADecalActor / UDecalComponent (NOT yet exported)
-        Unclassified,         // carries none of the probed markers
-    }
+        InstanceComponents,        ComponentTemplate,        StaticMeshComponent,        SkeletalMesh,        Landscape,        Light,        Decal,        Unclassified,    }
 
     public static void Log(IReadOnlyList<WorldActor> actors, Action<string> log)
     {
@@ -69,11 +53,6 @@ internal static class SceneCensus
         }
     }
 
-    // Deep structural dump of the FIRST instance of each target ExportType:
-    // prints every property name and, for component-like references, the loaded
-    // child's ExportType + whether it carries a StaticMesh. This is how we learn
-    // where a cooked Blueprint actor actually stores its geometry (top-level
-    // component property vs. BlueprintCreatedComponents vs. SCS template).
     public static void DumpSamples(IReadOnlyList<WorldActor> actors, Action<string> log, params string[] targetExportTypes)
     {
         var remaining = new HashSet<string>(targetExportTypes, StringComparer.Ordinal);

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using AssetRipper.IO.Endian;
 using Mono.Cecil;
@@ -9,13 +9,11 @@ namespace Ruri.RipperHook;
 
 public static class ILCursorExtensions
 {
-    // 直接插入代码 但是否出错完全看编译器心情 所以不用了
     public static bool TypeTreeInject(this ILCursor ilCursor, MethodInfo destMethod, string injectAfterField, bool isRemoveAlign = false)
     {
         if (ilCursor.TryGotoNext(MoveType.After, instr => IsFieldReference(instr) && ((FieldReference)instr.Operand).Name == injectAfterField))
         {
-            if (isRemoveAlign && ilCursor.TryGotoPrev(instr => instr.OpCode == OpCodes.Call || instr.OpCode == OpCodes.Callvirt)) // 少部分情况需要移除原有的对齐
-            {
+            if (isRemoveAlign && ilCursor.TryGotoPrev(instr => instr.OpCode == OpCodes.Call || instr.OpCode == OpCodes.Callvirt))            {
                 var calledMethod = ilCursor.Instrs[ilCursor.Index].Operand as MethodReference;
                 var newMethodName = calledMethod.Name.Replace("Align", "");
                 var newMethod = typeof(ReadReleaseMethods).GetMethod(newMethodName, ReflectionExtensions.PublicStaticBindFlag());

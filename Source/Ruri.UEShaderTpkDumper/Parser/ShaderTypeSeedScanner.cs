@@ -2,28 +2,12 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.UEShaderTpkDumper.Parser;
 
-// Scan UE source for `class FFoo : public FShader|FGlobalShader|...` declarations,
-// then within each class body collect `LAYOUT_FIELD(FShaderParameter, Name)` and
-// `LAYOUT_FIELD(FShaderResourceParameter, Name)` declarations. Mirrors the
-// Python generator's `emit_shader_type_seeds` pass — produces one JSON per
-// LAYOUT_FIELD-using class with the parameter NAMES (source-declaration order)
-// + placeholder offsets. Decompile-side `Pass180.TryReconcileGlobalsCB`
-// pairs the seed names with cook-side `LooseParameterBuffers[0].Parameters[]`
-// real offsets.
-//
-// Class-base must end at `Shader\b` (Stage 26 fix) — `FRHIShaderResourceView` /
-// `FD3D11BoundShaderState` and friends contain `Shader` mid-token but aren't
-// FShader subclasses; their LAYOUT_FIELDs are unrelated.
 public sealed record ShaderTypeClass(string CppName, IReadOnlyList<LayoutField> Fields, string SourceFile);
 
 public sealed record LayoutField(string Kind, string CppType, string Name);
 
 public static class ShaderTypeSeedScanner
 {
-    // `class <ClassName>[ : public <Base>]` opener. Matches both
-    // `class FFoo : public FGlobalShader` and templated
-    // `class TBar<X> : public TGlobalShader<TBar<X>>` styles. Stage 26
-    // anchored the base on `Shader\b` so RHI types don't slip in.
     private static readonly Regex s_classDeclPattern = new(
         @"\bclass\s+(?:[A-Z][A-Z0-9_]+_API\s+)?(?<name>[A-Z][A-Za-z0-9_]+)"
         + @"\s*(?::|<[^>{}]+>\s*:)\s*public\s+"
@@ -33,7 +17,6 @@ public static class ShaderTypeSeedScanner
         + @"|TGlobalShaderPermutation<[^>]+>)\b",
         RegexOptions.Compiled);
 
-    // LAYOUT_FIELD(Type, Name) within a class body.
     private static readonly Regex s_layoutFieldPattern = new(
         @"\bLAYOUT_FIELD\s*\(\s*(?<type>[A-Za-z_][A-Za-z_0-9<>:,\s]*?)\s*,\s*(?<name>[A-Za-z_][A-Za-z_0-9]*)\s*[,\)]",
         RegexOptions.Compiled);

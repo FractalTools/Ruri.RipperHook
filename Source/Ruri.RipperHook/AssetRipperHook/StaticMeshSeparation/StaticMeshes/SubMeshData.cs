@@ -1,20 +1,9 @@
-﻿using AssetRipper.SourceGenerated.Enums;
+using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.SubMesh;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// 
-/// </summary>
-/// <param name="BaseVertex"></param>
-/// <param name="FirstIndex">Offset in the index buffer.</param>
-/// <param name="FirstVertex">Offset in the vertex list.</param>
-/// <param name="IndexCount"></param>
-/// <param name="TriangleCount"></param>
-/// <param name="VertexCount"></param>
-/// <param name="Topology"></param>
-/// <param name="LocalBounds"></param>
 public record struct SubMeshData(
 	uint BaseVertex,
 	int FirstIndex,

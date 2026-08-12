@@ -11,102 +11,33 @@ using Ruri.Hook.Core;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Defensive reader for material parameter names that survive **shipping
-// IoStore cooks where `LoadedMaterialResources` is empty**.
-//
-// Every modern UE5 cook with `r.ShaderCodeLibrary.Enabled=1` (the default)
-// externalises material shader-maps to `.ushaderbytecode` archives. The
-// material UAsset keeps the *names* of its parameters (drives editor UI +
-// runtime parameter overrides) but loses the inline shader-map blob that
-// pairs names with byte offsets in the `Material` cbuffer. In CUE4Parse
-// terms: `LoadedMaterialResources` is empty even with `ReadShaderMaps=true`.
-//
-// This class is deliberately:
-//   1. **Schema-agnostic** — every read goes through `IPropertyHolder`
-//      (`TryGetValue` / `TryGetAllValues`) which is name-keyed, NOT layout-
-//      offset-keyed. Custom UE forks renaming `Parameters` to `Params` (or
-//      adding a new sub-struct) doesn't break us — we just miss that bucket
-//      and move to the next.
-//   2. **Multi-source** — it tries (in order):
-//        a. `material.CachedExpressionData` (the persistent-cooked
-//           FMaterialCachedExpressionData).
-//        b. The material's property bag at top level (`ScalarParameterValues`,
-//           `VectorParameterValues`, ... — present on UMaterialInstance even
-//           in shipping cook because they're override values, not editor
-//           data).
-//        c. `material.Expressions` for UMaterial (UMaterialExpressionScalar/
-//           VectorParameter etc.) — typed walk for the rare case the asset
-//           was cooked WITH editor data (e.g. uncooked dev builds).
-//      Every step is best-effort, never throws on missing fields.
-//   3. **Recursive-walk fallback** — when the named-key path comes up
-//      empty for a given bucket, we recursively walk the entire property
-//      bag and collect any `FName` / `FMaterialParameterInfo` value we
-//      see, classifying it heuristically by the property name that owns
-//      it. This catches custom-engine renames at the price of being
-//      slightly noisier — we report unknown-bucket finds in
-//      `CachedParameterNames.UnknownKindNames`.
 internal static class MaterialCachedExpressionReader
 {
-    // Material-specific entry point. Layered on top of the generic
-    // UObject reader (`ReadGeneric`) — adds the material-only sources
-    // (CachedExpressionData property bag, instance-override array
-    // properties, UMaterialExpression typed walk) and lets the generic
-    // path handle everything else (top-level property bag walk +
-    // recursive sweep). Calling code should use whichever entry point
-    // matches what they have in hand:
-    //   * UMaterialInterface in scope -> Read(material) for the full
-    //     material-aware fallback chain.
-    //   * Any other UObject (Niagara script/system/emitter, particle
-    //     system, etc.) -> ReadGeneric(asset) so the same defensive
-    //     property-bag walk drives parameter-name extraction without
-    //     baking in the material-specific layouts.
     public static CachedParameterNames? Read(UMaterialInterface material)
     {
         var result = new CachedParameterNames();
 
         try
         {
-            // Source A — CachedExpressionData (FStructFallback property bag).
-            // This is THE survival path for shipping IoStore cooks of
-            // Material/MaterialInstance assets.
             FStructFallback? cached = material.CachedExpressionData;
             if (cached != null)
             {
                 ReadCachedExpressionData(cached, result);
             }
 
-            // Source B — top-level property bag on the material itself.
-            // UMaterialInstance keeps explicit override values here even
-            // without CachedExpressionData (the editor wrote them as real
-            // UProperties so they cook unconditionally).
             ReadInstanceOverrides(material, result);
 
-            // Source C — UMaterial.Expressions (rare; only present when an
-            // asset was cooked with editor data, e.g. -nostripeditor builds).
             ReadMaterialExpressions(material, result);
 
-            // Source D — recursive sweep of the CachedExpressionData
-            // property bag for anything the named-bucket path missed
-            // (custom-engine renames, future UE versions). Best-effort
-            // only; finds go into UnknownKindNames if they don't pattern-
-            // match a typed bucket.
             if (cached != null)
             {
                 RecursiveSweep(cached, result, depth: 0, propertyTrail: string.Empty);
             }
 
-            // Source E — same generic UObject sweep used by the Niagara
-            // / other-asset path. Adds nothing for a typical material
-            // (CachedExpressionData is exhaustive there) but covers
-            // instance-override exotic shapes and custom-engine forks
-            // that store parameter names directly on the UObject.
             SweepUObjectProperties(material, result);
         }
         catch (Exception ex)
         {
-            // The reader is purely additive; any failure here just means we
-            // didn't enrich the material. Logged at info level so a future
-            // schema break is visible without spamming.
             HookLogger.LogWarning($"[MaterialCachedExpressionReader] {material?.GetPathName() ?? "<null>"}: {ex.GetType().Name}: {ex.Message}");
         }
 
@@ -114,17 +45,6 @@ internal static class MaterialCachedExpressionReader
         return Empty(result) ? null : result;
     }
 
-    // Generic entry point — works on any UObject. Used for Niagara
-    // packages (UNiagaraScript / UNiagaraSystem / UNiagaraEmitter) where
-    // there's no `LoadedMaterialResources` / `CachedExpressionData`
-    // analogue, but the cooked UAsset still carries parameter names in
-    // the typed property bag (`ExposedParameters`, `EmitterSpawnAttributes`,
-    // `SystemCompiledData.DataSetCompiledData[i].Variables[]`, etc.).
-    //
-    // Mirrors the material reader's defensive philosophy — every read
-    // is name-keyed via IPropertyHolder, no engine-specific class
-    // layout is mirrored, and the recursive sweep catches anything
-    // the named-bucket pass missed.
     public static CachedParameterNames? ReadGeneric(UObject asset)
     {
         if (asset == null) return null;
@@ -155,25 +75,6 @@ internal static class MaterialCachedExpressionReader
         Dedupe(p.UnknownKindNames);
     }
 
-    // Walk every UProperty on the asset. For each top-level property:
-    //   * If the value is FName -> classify by property name (BucketByTrail
-    //     handles the trail-based heuristic; works for both material and
-    //     niagara naming conventions because the bucket selection is
-    //     content-driven, not class-driven).
-    //   * If the value is FStructFallback -> recurse via the same sweep.
-    //   * If the value is an array of FStructFallback -> recurse into
-    //     each element.
-    //   * If the value is a string array of names directly (Niagara
-    //     `Variables.Name` style) -> treat as parameter names.
-    //
-    // Property names that are well-known parameter buckets on Niagara
-    // assets get explicit bias so they land in the right bucket
-    // (e.g. `ExposedParameters` -> Vector/Scalar mix; `Variables` ->
-    // unknown-kind; `EmitterSpawnAttributes` -> scalar). These probes
-    // don't replace the recursive sweep — they augment it so the
-    // typed buckets get populated even on Niagara, which means the
-    // downstream patcher can pick up author-facing names instead of
-    // anonymous Material_Tn placeholders.
     private static void SweepUObjectProperties(UObject asset, CachedParameterNames result)
     {
         if (asset?.Properties == null) return;
@@ -182,9 +83,6 @@ internal static class MaterialCachedExpressionReader
             string propName = tag.Name.Text;
             object? raw = tag.Tag?.GenericValue;
 
-            // Direct named-bucket probes — recognise common Niagara
-            // / Material parameter property names so they land in the
-            // typed buckets rather than the unknown bucket.
             if (raw is FStructFallback nested)
             {
                 RecursiveSweep(nested, result, depth: 0, propertyTrail: propName);
@@ -200,7 +98,6 @@ internal static class MaterialCachedExpressionReader
                     }
                     else if (element is FName fname && !fname.IsNone)
                     {
-                        // Bare FName arrays — `ExposedParameters` etc.
                         BucketByTrail(propName, fname.Text, result);
                     }
                     idx++;
@@ -213,26 +110,8 @@ internal static class MaterialCachedExpressionReader
         }
     }
 
-    // --- Source A: FMaterialCachedExpressionData property bag ----------
-    //
-    // The shipping-cook layout we observe most often (UE 5.0 - 5.4) is:
-    //   FMaterialCachedExpressionData
-    //     Parameters : FMaterialCachedParameters
-    //       RuntimeEntries : FMaterialCachedParameterEntry[NumRuntimeTypes]
-    //         ParameterInfoSet : FMaterialParameterInfo[]   <-- names live here
-    //         ParameterInfos   : FMaterialParameterInfo[]   <-- alias on older versions
-    //       ScalarValues / VectorValues / StaticSwitchValues / ...
-    //     ScalarParameters / VectorParameters / ... (legacy 4.x layout)
-    //
-    // We probe each well-known sub-key but never assume a particular index
-    // ordering — that's why each `RuntimeEntries[i]` gets its own
-    // type-bucket guess based on its OWN property names rather than the
-    // engine's enum order, which has been silently re-ordered between
-    // 4.27 / 5.0 / 5.3 / 5.4.
     private static void ReadCachedExpressionData(FStructFallback cached, CachedParameterNames dest)
     {
-        // Top-level direct buckets — present on some 4.x layouts where
-        // FMaterialCachedExpressionData fields are flattened.
         AppendParameterInfos(cached, "ScalarParameterValues", dest.ScalarNames);
         AppendParameterInfos(cached, "VectorParameterValues", dest.VectorNames);
         AppendParameterInfos(cached, "DoubleVectorParameterValues", dest.VectorNames);
@@ -242,10 +121,8 @@ internal static class MaterialCachedExpressionReader
         AppendParameterInfos(cached, "SparseVolumeTextureParameterValues", dest.SparseVolumeTextureNames);
         AppendParameterInfos(cached, "FontParameterValues", dest.FontNames);
 
-        // Modern shape (5.0+): { Parameters: { RuntimeEntries: [...] } }
         if (cached.TryGetValue(out FStructFallback parameters, "Parameters") && parameters != null)
         {
-            // Some versions also flatten these:
             AppendParameterInfos(parameters, "ScalarValues", dest.ScalarNames);
             AppendParameterInfos(parameters, "VectorValues", dest.VectorNames);
 
@@ -253,16 +130,12 @@ internal static class MaterialCachedExpressionReader
             {
                 ReadParameterEntryArray(runtimeEntries, dest);
             }
-            // EditorOnlyEntries cooked into the asset on -nostripeditor
-            // builds carry the same shape; reuse the reader.
             if (parameters.TryGetAllValues(out FStructFallback[] editorEntries, "EditorOnlyEntries") && editorEntries != null)
             {
                 ReadParameterEntryArray(editorEntries, dest);
             }
         }
 
-        // Some FMaterialInstanceCachedData shapes (5.x) carry a flat
-        // ParameterOverrides array.
         if (cached.TryGetAllValues(out FStructFallback[] overrides, "ParameterOverrides") && overrides != null)
         {
             foreach (FStructFallback o in overrides)
@@ -272,10 +145,6 @@ internal static class MaterialCachedExpressionReader
         }
     }
 
-    // Walks an array of FMaterialCachedParameterEntry-shaped structs.
-    // Each entry typically has a `ParameterInfoSet : TSet<FMaterialParameterInfo>`
-    // (or `ParameterInfos` on 4.x) plus value arrays. We use
-    // ClassifyByOwnProperty to guess which bucket the entry belongs to.
     private static void ReadParameterEntryArray(FStructFallback[] entries, CachedParameterNames dest)
     {
         foreach (FStructFallback entry in entries)
@@ -285,25 +154,14 @@ internal static class MaterialCachedExpressionReader
         }
     }
 
-    // Pulls out a `ParameterInfoSet` / `ParameterInfos` array of
-    // FMaterialParameterInfo and routes the names into a bucket guessed
-    // from the OTHER properties on the same entry struct.
-    //
-    // The classifier is deliberately content-driven: if the entry has a
-    // `ScalarValues` sibling property, the names are scalars; a `VectorValues`
-    // sibling implies vectors; a `Texture` / `Textures` value array implies
-    // textures; etc. This works regardless of the parameter-type-enum
-    // ordering UE uses internally, which has changed across versions.
     private static void ClassifyByOwnProperty(FStructFallback entry, CachedParameterNames dest)
     {
         List<string> names = ExtractParameterNames(entry);
         if (names.Count == 0) return;
 
-        // Probe sibling property names to pick a bucket.
         bool hasScalars = HasAnyPropertyNamed(entry, "ScalarValues", "ScalarValue", "ScalarOverrides");
         bool hasVectors = HasAnyPropertyNamed(entry, "VectorValues", "VectorValue", "VectorOverrides", "DoubleVectorValues");
-        bool hasSwitches = HasAnyPropertyNamed(entry, "StaticSwitchValues", "StaticSwitchValue", "SwitchOverrides", "Values"); // legacy: bool Values
-        bool hasTextures = HasAnyPropertyNamed(entry, "TextureValues", "TextureValue", "Textures", "Texture", "TextureOverrides");
+        bool hasSwitches = HasAnyPropertyNamed(entry, "StaticSwitchValues", "StaticSwitchValue", "SwitchOverrides", "Values");        bool hasTextures = HasAnyPropertyNamed(entry, "TextureValues", "TextureValue", "Textures", "Texture", "TextureOverrides");
         bool hasRvt = HasAnyPropertyNamed(entry, "RuntimeVirtualTextureValues", "RuntimeVirtualTextures", "RuntimeVirtualTexture");
         bool hasSvt = HasAnyPropertyNamed(entry, "SparseVolumeTextureValues", "SparseVolumeTextures", "SparseVolumeTexture");
         bool hasFonts = HasAnyPropertyNamed(entry, "FontValues", "FontPageValues", "Fonts", "Font");
@@ -332,20 +190,13 @@ internal static class MaterialCachedExpressionReader
         }
     }
 
-    // Pulls usable names from a single struct. Tries (in order):
-    //   1. Nested `ParameterInfo.Name` (FMaterialParameterInfo wrapper).
-    //   2. Direct `Name` / `ParameterName` (flat struct).
-    //   3. `ParameterInfoSet` array (TSet<FMaterialParameterInfo>).
-    //   4. `ParameterInfos` array (alias used by some forks).
     private static List<string> ExtractParameterNames(FStructFallback entry)
     {
         var names = new List<string>();
         if (entry == null) return names;
 
-        // Single-info shapes.
         TryAddFromInfo(entry, names);
 
-        // Set-shaped containers (modern path).
         TryAddInfoSet(entry, "ParameterInfoSet", names);
         TryAddInfoSet(entry, "ParameterInfos", names);
         TryAddInfoSet(entry, "ParameterInfo", names);
@@ -388,9 +239,6 @@ internal static class MaterialCachedExpressionReader
 
     private static bool HasAnyPropertyNamed(FStructFallback owner, params string[] names)
     {
-        // FStructFallback exposes Properties via the base. We treat the
-        // mere presence of the named property as the signal — value type
-        // doesn't matter because we just need to bias the bucket guess.
         if (owner?.Properties == null) return false;
         foreach (FPropertyTag tag in owner.Properties)
         {
@@ -403,13 +251,6 @@ internal static class MaterialCachedExpressionReader
         return false;
     }
 
-    // --- Source B: typed instance overrides on the property bag -----
-    //
-    // UMaterialInstance keeps explicit ScalarParameterValues /
-    // VectorParameterValues / TextureParameterValues / etc. arrays as
-    // first-class UProperties (not under CachedExpressionData). They
-    // cook unconditionally because the runtime applies them as
-    // overrides on top of the parent material's evaluation result.
     private static void ReadInstanceOverrides(UMaterialInterface material, CachedParameterNames dest)
     {
         AppendInstanceOverride(material, "ScalarParameterValues", dest.ScalarNames);
@@ -436,22 +277,12 @@ internal static class MaterialCachedExpressionReader
         }
     }
 
-    // --- Source C: UMaterialExpression typed walk ----------------------
-    //
-    // Only relevant for assets cooked with editor data. The expression
-    // graph is walked in-place by CUE4Parse's UMaterial.GetParams; we
-    // mirror the relevant cases here so we capture parameter names even
-    // when GetParams hasn't been called.
     private static void ReadMaterialExpressions(UMaterialInterface material, CachedParameterNames dest)
     {
         if (material is not UMaterial umat) return;
         foreach (FPackageIndex idx in umat.Expressions)
         {
             if (!idx.TryLoad(out UMaterialExpression expression)) continue;
-            // Pattern-match by class name to avoid taking a hard
-            // dependency on every expression-parameter subclass living
-            // in the same assembly version. Custom engines often add
-            // their own expression types we'd otherwise miss.
             string typeName = expression.GetType().Name;
             string? nm = TryReadExpressionName(expression);
             if (string.IsNullOrWhiteSpace(nm)) continue;
@@ -471,39 +302,24 @@ internal static class MaterialCachedExpressionReader
 
     private static string? TryReadExpressionName(UMaterialExpression expression)
     {
-        // Prefer the strongly-typed ParameterName field if present
-        // (UMaterialExpressionParameter and subclasses).
         Type t = expression.GetType();
         FieldInfo? f = t.GetField("ParameterName", BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
         if (f?.GetValue(expression) is FName fname && !fname.IsNone) return fname.Text;
 
-        // Fallback: read off the shared property bag.
         if (expression.TryGetValue(out FName n, "ParameterName") && !n.IsNone) return n.Text;
         if (expression.TryGetValue(out string s, "ParameterName") && !string.IsNullOrEmpty(s)) return s;
         return null;
     }
 
-    // --- Source D: recursive sweep -------------------------------------
-    //
-    // Last-resort: walk every nested FStructFallback in the cache and
-    // collect parameter-name-shaped values. The walk is depth-bounded
-    // because a custom asset could be arbitrarily deep, and we trail
-    // the property path so finds get bucketed by context.
-    //
-    // We do NOT recurse into already-extracted typed buckets — the
-    // sweep is purely a safety net for fork-renamed sub-structs.
     private static void RecursiveSweep(FStructFallback root, CachedParameterNames dest, int depth, string propertyTrail)
     {
         if (root?.Properties == null) return;
-        if (depth > 6) return;     // budget — UE cached struct depth maxes around 5
-
+        if (depth > 6) return;
         foreach (FPropertyTag tag in root.Properties)
         {
             string propName = tag.Name.Text;
             string trail = string.IsNullOrEmpty(propertyTrail) ? propName : propertyTrail + "." + propName;
 
-            // Heuristic: if the property name is "Name"/"ParameterName" and
-            // the value is a string-like, classify by trail.
             object? raw = tag.Tag?.GenericValue;
             if (raw is FName fname && !fname.IsNone && IsNameish(propName))
             {
@@ -511,7 +327,6 @@ internal static class MaterialCachedExpressionReader
                 continue;
             }
 
-            // Recurse into nested FStructFallback / arrays.
             if (raw is FStructFallback child)
             {
                 RecursiveSweep(child, dest, depth + 1, trail);

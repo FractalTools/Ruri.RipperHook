@@ -3,45 +3,6 @@ using System.Diagnostics;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Orchestrator for the FModel-hook side. Pass numbers reflect actual
-// execution order (digits == sequence). Pass 010 (SaveShaderArchive)
-// runs from the hook itself before this — it produces the .ushaderlib
-// bytes that downstream sidecars reference. `HashedNamesResolver` is a
-// stateless utility consumed by Pass 050, not a sequencing step (no
-// number).
-//
-// Pass 020 + Pass 030 build cumulative cross-library state (IoStore
-// shader-map-hash table + material graph) which Pass 040-070 use to
-// emit per-library sidecars. Pass 080 writes the cumulative
-// UnifiedShaderMetadata.json after every archive (was once-per-session
-// before — that gate was the root cause of "UnknownMaterial" outputs
-// for any archive after the first). Caching gates on ExportPipelineState
-// prevent the expensive cross-library passes from rerunning.
-//
-// Export pipeline (driver-agnostic; needs state.Provider — set by either the
-// FModel ExportData hook OR the headless CLI mount):
-//   Pass 005  Warm the material + Niagara caches from a prior run's
-//             UnifiedShaderMetadata.json (black-hole cache; gated once per
-//             session, format+game-version guarded) so already-pulled symbols
-//             are never re-pulled — the fix for "每次导出都很慢".
-//   Pass 010  Save IoStore archive as flat FSerializedShaderArchive  (runs from hook BEFORE Run)
-//             also stashes the archive's shader-map hashes on state for Pass 030 scoping
-//   Pass 020  Extract IoStore shader-map hashes -> Root.PackageShaderMapHashes (cached)
-//             First inside Run because Pass 030 uses its package->hash index
-//             to scope the scan to materials that reference the current archive
-//   Pass 030  Scan material packages whose hashes intersect the current archive
-//             -> Root.MaterialInterfaces (cumulative cache across hook fires)
-//   Pass 035  Extract Niagara shader-map ResourceHash bridge -> Root.NiagaraShaderMapHashes
-//             Independent ID space from material side; required for archives
-//             whose shader-maps come from Niagara compute scripts (e.g.
-//             X6Game_10_2537 — 101 maps with zero IoStore-side overlap).
-//             Cached: like Pass 020 it's whole-provider scoped, runs once.
-//   ----      HashedNamesResolver — utility, no number, called by Pass 050
-//   Pass 040  Build per-library archive view -> Root.ShaderCodeArchives[lib]
-//   Pass 050  Build stable shader records -> state.AssetInfo + state.StableInfo
-//   Pass 060  Write `<base>.assetinfo.json` from state.AssetInfo
-//   Pass 070  Write `<base>.stableinfo.json` from state.StableInfo
-//   Pass 080  Write `UnifiedShaderMetadata.json`                     (every archive, idempotent)
 internal static class ExportPipeline
 {
     public static void Run(ExportPipelineState state)

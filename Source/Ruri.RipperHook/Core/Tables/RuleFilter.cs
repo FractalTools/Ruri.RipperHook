@@ -2,26 +2,13 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.Tables;
 
-/// <summary>One Include/Exclude constraint over a row's derived columns -- the Process-Monitor
-/// rule shape every host UI edits. Every ENABLED rule is required: Include(X) means the row must
-/// match X, Exclude(X) means it must not.</summary>
 public sealed record FilterRule(string Field, string Relation, string Value, bool Include, bool Enabled);
 
-/// <summary>
-/// The one Include/Exclude rule evaluator, over ANY table that can name a row's field value.
-/// <see cref="CabTableSearch"/> runs it over the cabmap's derived columns and a projected
-/// ColumnTable runs it over its own, so the relation semantics every host shows are declared here
-/// exactly once -- a second copy is how "contains" quietly stops meaning the same thing in two
-/// browsers.
-/// </summary>
 public static class RuleFilter
 {
     public static bool AnyEnabled(IReadOnlyList<FilterRule>? rules)
         => rules is not null && rules.Any(static rule => rule.Enabled);
 
-    /// <summary>The candidates that pass every enabled rule, in the order given.
-    /// <paramref name="field"/> maps (row id, field name) to the row's value for that field --
-    /// the same display string the row view renders.</summary>
     public static int[] Apply(int[] candidates, IReadOnlyList<FilterRule> rules,
         Func<int, string, string> field)
     {
@@ -32,8 +19,6 @@ public static class RuleFilter
         {
             return candidates;
         }
-        // Regex instances are cloned per partition: Regex caches a single matcher state
-        // internally, so concurrent IsMatch on a shared instance is an allocation storm.
         bool[] keep = new bool[candidates.Length];
         int partitions = Math.Clamp(Environment.ProcessorCount, 1, candidates.Length);
         int perPartition = (candidates.Length + partitions - 1) / partitions;
@@ -56,8 +41,7 @@ public static class RuleFilter
                     }
                     catch (ArgumentException)
                     {
-                        regexes[r] = null; // invalid pattern: relation reports no-match, like both UIs
-                    }
+                        regexes[r] = null;                    }
                 }
             }
             for (int i = first; i < last; i++)

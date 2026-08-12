@@ -5,23 +5,6 @@ using System.Text.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Builds a once-per-process lookup: HLSL type signature (e.g.
-// `Texture3D<uint4>`) -> [UB name + resource name]. When the lookup
-// returns exactly ONE entry, the cooked anonymous slot of that exact
-// type can be confidently renamed to the real source name (e.g.
-// `View_VolumetricLightmapIndirectionTexture`). When >1 entry, the
-// type isn't uniquely identifying — caller falls back to the hash-
-// tagged form.
-//
-// Source: the regenerated engine UB metadata JSONs under
-// <exeDir>/EngineUbMetadata/<version>/<UB>_<hash>_MetaData.json.
-// Each resource's `ShaderType` field (added by Stage 49 TPK dumper)
-// carries the original macro type token from
-// `SHADER_PARAMETER_TEXTURE(<type>, <name>)` etc.
-//
-// Lookup key includes the UBMT kind so SRV/UAV/Texture/Sampler resources
-// with the same HLSL type don't collide (e.g. `Texture2D<float4>` exists
-// both as plain texture and as SRV of texture).
 internal static class EngineTypeUniquenessIndex
 {
     private static readonly object Lock = new();
@@ -35,7 +18,6 @@ internal static class EngineTypeUniquenessIndex
         resourceName = string.Empty;
         if (string.IsNullOrWhiteSpace(shaderType)) return false;
         EnsureBuilt();
-        // Exact-type first, RDG-aliased fallback. Prefer exact match.
         if (TryResolveUniqueInner(ubmtKind, shaderType, out ubName, out resourceName)) return true;
         string rdg = RdgAliasFor(ubmtKind);
         if (!string.IsNullOrEmpty(rdg) && TryResolveUniqueInner(rdg, shaderType, out ubName, out resourceName)) return true;
@@ -56,25 +38,6 @@ internal static class EngineTypeUniquenessIndex
         return false;
     }
 
-    // Context-aware ordered resolver. When the (UbmtKind, HlslType) pair
-    // isn't globally unique, narrow candidates to engine UBs the shader
-    // actually USES (from cbuffer declarations). If EXACTLY ONE such UB
-    // contributes resources of this type AND the anonymous-slot count is
-    // ≤ that UB's resource count for the type, take the FIRST N names in
-    // declaration order. UE's shader compiler is documented to emit UB
-    // resource declarations in source order, so the prefix-subset
-    // assumption holds for the vast majority of shaders. Worst-case
-    // mismatch: a shader that uses a NON-PREFIX subset of resources gets
-    // labelled with the wrong volumetric/distance-field name — still
-    // better than `h<hash>_T<N>` for the user's "real plaintext names"
-    // bar.
-    //
-    // shaderUsedUbs: lowercased set of cbuffer type names declared in
-    // the shader (e.g. "view", "translucentbasepass").
-    // expectedAnonCount: number of anonymous slots of this exact type
-    // the shader has.
-    // Returns the ordered list of resource names (first expectedAnonCount
-    // entries), or null when no clear single-UB owner exists.
     public static IReadOnlyList<string>? TryResolveOrderedByUbContext(
         string ubmtKind,
         string shaderType,
@@ -87,13 +50,6 @@ internal static class EngineTypeUniquenessIndex
         EnsureBuilt();
         EnsureOrderedBuilt();
 
-        // First try with the exact UbmtType (typical case). If that returns
-        // null because no UB matches OR none of the matches are RDG-only,
-        // also try with the RDG-aliased UbmtType (e.g. DBufferATexture is
-        // UBMT_RDG_TEXTURE in seeds, while the shader's `Texture2D` on a
-        // t-register classifies as UBMT_TEXTURE). Always prefer the exact-
-        // type result when both succeed — the seed's UbmtType is the source
-        // of truth for non-ambiguous cases.
         IReadOnlyList<string>? exact = TryResolveOrderedByUbContextInner(ubmtKind, shaderType, shaderUsedUbs, expectedAnonCount, out ownerUbName);
         if (exact != null) return exact;
         string rdgAlias = RdgAliasFor(ubmtKind);
@@ -128,15 +84,6 @@ internal static class EngineTypeUniquenessIndex
         KeyValuePair<string, List<string>> entry = System.Linq.Enumerable.First(byUb);
         string ub = entry.Key;
         if (!_orderedByUbAndType!.TryGetValue($"{ub}|{key}", out List<string>? ordered)) return null;
-        // PREFIX-SUBSET RULE: anon count must be ≤ UB resource count.
-        // Caller scopes shaderUsedUbs to UBs DECLARED AS CBUFFERS in the
-        // shader source — those are per-shader-bound and the cook only
-        // emits the resources the shader actually references, IN
-        // declaration order. So taking the first N is the right subset
-        // for Shader-bound UBs (View, LandscapeParameters, etc.).
-        // STATIC-bound UBs (OpaqueBasePass without a cbuffer declaration)
-        // are excluded by the caller and routed through usage-pattern
-        // matching instead — see ApplyUsagePatternMatches.
         if (expectedAnonCount > ordered.Count) return null;
         ownerUbName = ub;
         if (expectedAnonCount == ordered.Count) return ordered;
@@ -145,10 +92,6 @@ internal static class EngineTypeUniquenessIndex
 
     private static Dictionary<string, List<string>>? _orderedByUbAndType;
 
-    // Build (ubName + UbmtKind + ShaderType) -> [resource name in declaration
-    // order]. Declaration order = the order the resources appear in the UB
-    // metadata's "Resources" list (which the TPK dumper writes in member-
-    // declaration order, sorted by offset).
     private static void EnsureOrderedBuilt()
     {
         if (_orderedByUbAndType != null) return;
@@ -192,11 +135,6 @@ internal static class EngineTypeUniquenessIndex
                 string st = r.TryGetProperty("ShaderType", out JsonElement rs) && rs.ValueKind == JsonValueKind.String
                     ? rs.GetString() ?? string.Empty : string.Empty;
                 if (string.IsNullOrWhiteSpace(resName) || string.IsNullOrWhiteSpace(ubmt)) continue;
-                // RDG resources (DBufferATexture etc.) often come from the
-                // TPK dumper WITHOUT a ShaderType (gap). Default the HLSL
-                // type from UbmtType so they're indexable. The UbmtType is
-                // kept ORIGINAL (UBMT_RDG_TEXTURE etc.) — lookup-side
-                // coalesce decides when to also try the non-RDG alias.
                 if (string.IsNullOrWhiteSpace(st)) st = DefaultShaderTypeForRdg(ubmt);
                 if (string.IsNullOrWhiteSpace(st)) continue;
                 foreach (string normSt in NormalizeShaderType(st))
@@ -214,11 +152,6 @@ internal static class EngineTypeUniquenessIndex
         catch { }
     }
 
-    // Suggest a default HLSL type for RDG entries that the TPK dumper
-    // didn't record a ShaderType for. RDG resources appear in HLSL
-    // identically to their non-RDG cousins. Most RDG textures default to
-    // Texture2D (dominant cooked shape); outliers (cube, 3D, array) need
-    // explicit ShaderType in the dumper.
     private static string DefaultShaderTypeForRdg(string ubmt) => ubmt switch
     {
         "UBMT_RDG_TEXTURE"        => "Texture2D",
@@ -231,12 +164,6 @@ internal static class EngineTypeUniquenessIndex
         _ => string.Empty,
     };
 
-    // Maps a shader-side UBMT classification (returned by Pass200's
-    // ClassifyUbmtFromHlslType) to the RDG variant that the engine seeds
-    // may carry the same resource under. Used at LOOKUP time so a shader
-    // `Texture2D` on a t-register can find RDG-flavoured engine resources
-    // (DBufferATexture etc.) without polluting the primary UBMT_TEXTURE
-    // candidate set for resources that genuinely are not RDG.
     private static string RdgAliasFor(string ubmt) => ubmt switch
     {
         "UBMT_TEXTURE" => "UBMT_RDG_TEXTURE",
@@ -258,8 +185,6 @@ internal static class EngineTypeUniquenessIndex
             {
                 foreach (string file in Directory.EnumerateFiles(root, "*_MetaData.json", SearchOption.AllDirectories))
                 {
-                    // Skip the per-ShaderType seeds — they're keyed
-                    // differently and don't carry engine UB resources.
                     string norm = file.Replace('\\', '/');
                     if (norm.Contains("/_ShaderType/", StringComparison.OrdinalIgnoreCase)) continue;
                     if (norm.Contains("/_VertexFactoryType/", StringComparison.OrdinalIgnoreCase)) continue;
@@ -290,7 +215,6 @@ internal static class EngineTypeUniquenessIndex
                 string st = r.TryGetProperty("ShaderType", out JsonElement rs) && rs.ValueKind == JsonValueKind.String
                     ? rs.GetString() ?? string.Empty : string.Empty;
                 if (string.IsNullOrWhiteSpace(resName) || string.IsNullOrWhiteSpace(ubmt)) continue;
-                // Same default-ShaderType for RDG entries — see TryIngestOrdered.
                 if (string.IsNullOrWhiteSpace(st)) st = DefaultShaderTypeForRdg(ubmt);
                 if (string.IsNullOrWhiteSpace(st)) continue;
                 foreach (string normSt in NormalizeShaderType(st))
@@ -315,22 +239,13 @@ internal static class EngineTypeUniquenessIndex
                 }
             }
         }
-        catch { /* tolerate one bad file */ }
+        catch {}
     }
 
-    // UE source macros sometimes omit the template argument
-    // (`SHADER_PARAMETER_TEXTURE(Texture3D, Name)`) but the HLSL emitter
-    // always materialises one (`Texture3D<float4> Name`). To make the
-    // index match the cook's HLSL declarations, emit BOTH forms when
-    // ingesting: the original token AND a `<float4>`-defaulted variant
-    // for bare Texture/RWTexture/Buffer types. This is benign — types
-    // that already have an explicit `<...>` only emit the original.
     private static IEnumerable<string> NormalizeShaderType(string st)
     {
         yield return st;
         if (st.Contains('<', StringComparison.Ordinal)) yield break;
-        // Default-template suffix for typed textures + buffers.
-        // SamplerState / SamplerComparisonState are typeless — no suffix.
         if (st.StartsWith("Texture", StringComparison.Ordinal)
             || st.StartsWith("RWTexture", StringComparison.Ordinal)
             || st == "Buffer"

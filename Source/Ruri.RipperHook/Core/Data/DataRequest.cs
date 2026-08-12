@@ -3,11 +3,6 @@ using Ruri.RipperHook.Tables;
 
 namespace Ruri.RipperHook.Data;
 
-/// <summary>
-/// What a producer is handed: the positional arguments it declared, and the cancellation of the
-/// call. Arguments are strings because that is what crosses an interop boundary for free and what
-/// every caller already had; the typed readers are here so no producer parses them by hand.
-/// </summary>
 public readonly struct DataRequest
 {
     private readonly Datasets.Dataset _dataset;
@@ -24,16 +19,11 @@ public readonly struct DataRequest
         _map = map;
     }
 
-    /// <summary>The loaded cabmap, for a producer that reads assets out of bundles
-    /// (<see cref="ClosureReader"/>). Refused rather than null-returned: a producer that needs one
-    /// cannot do anything useful without it, and the caller simply has not loaded a map yet.</summary>
     public CabTable Map => _map ?? throw new InvalidOperationException(
         $"dataset '{_dataset.Id}' reads from bundles and needs a loaded cabmap.");
 
     public bool HasMap => _map is not null;
 
-    /// <summary>One argument, named in the error when it is missing -- the parameter list the
-    /// registration declared is what makes that message possible.</summary>
     public string Text(int index)
     {
         if (index < 0 || index >= Args.Length)
@@ -61,22 +51,12 @@ public readonly struct DataRequest
             : throw new ArgumentException(
                 $"dataset '{_dataset.Id}' argument '{Name(index)}' must be a number; got '{Text(index)}'.");
 
-    /// <summary>Everything from <paramref name="from"/> on -- the trailing variadic argument a
-    /// dataset that takes a LIST declares (vfs roots, cab names, column specs).</summary>
     public string[] Rest(int from) => from >= Args.Length ? [] : Args[from..];
 
     private string Name(int index) =>
         index < _dataset.Parameters.Length ? _dataset.Parameters[index] : $"#{index}";
 }
 
-/// <summary>
-/// Builds a <see cref="ColumnTable"/> row by row without a producer ever touching a Column type.
-///
-/// A producer declares its columns once and then pushes values; text goes straight into the UTF-8
-/// blob, numbers into their own arrays. This is the only thing standing between "a game publishes
-/// data" and the columnar shape everything downstream depends on, so making it trivial to use is
-/// what keeps the rule -- one shape, no exceptions -- cheap enough to actually hold.
-/// </summary>
 public sealed class TableBuilder
 {
     private readonly string _name;
@@ -87,9 +67,6 @@ public sealed class TableBuilder
     private int _cursor;
     private int _rows;
 
-    /// <summary>Declare the columns. A name ending in <c>#</c> is a NUMBER column (the marker is
-    /// stripped): numbers stay numbers across the bridge instead of being formatted and re-parsed,
-    /// and the search engine still reads them as text when a rule asks.</summary>
     public TableBuilder(string name, params string[] columns)
     {
         _name = name;
@@ -112,7 +89,6 @@ public sealed class TableBuilder
 
     public int RowCount => _rows;
 
-    /// <summary>Push one value into the next column of the current row.</summary>
     public TableBuilder Add(string? value)
     {
         Slot(out int index);
@@ -131,7 +107,6 @@ public sealed class TableBuilder
 
     public TableBuilder Add(bool value) => _numeric[_cursor] ? Add(value ? 1d : 0d) : Add(value ? "1" : "0");
 
-    /// <summary>A whole row at once, in column order.</summary>
     public TableBuilder Row(params object?[] values)
     {
         foreach (object? value in values)

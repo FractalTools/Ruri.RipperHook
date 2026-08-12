@@ -4,20 +4,6 @@ using System.Diagnostics;
 
 namespace Ruri.Tpk;
 
-/// <summary>
-/// Packs the external TypeTree JSON dumps into the single <c>RuriTypeTree.tpk</c> that
-/// <c>Ruri.RipperHook</c> embeds and interprets at runtime.
-///
-/// This used to be a full code generator: build a tpk, run the AssetRipper assembly dumper's 60+
-/// passes over it, rename the emitted assembly to <c>Ruri.SourceGenerated</c>, decompile it, rebuild
-/// it, and deploy a 53 MB DLL whose only job was to hold one <c>ReadRelease</c> per (class, engine
-/// version). <c>Ruri.RipperHook.Core.TypeTree</c> now reads those same trees directly, so the tpk is
-/// the whole deliverable and everything downstream of it is gone.
-///
-/// Input is the flat output directory produced by <c>TypeTree/RazTreeConverter.py</c>: one
-/// <c>&lt;unityVersion&gt;.json</c> per engine build, where a custom engine encodes itself as
-/// <c>2021.3.527x5</c> (type <c>x</c> = experimental, number 5 = <c>CustomEngineType.EndField</c>).
-/// </summary>
 internal static class Program
 {
     private const string DefaultDumpRoot = @"D:\Ruri\Git\FractalTools\TypeTree";
@@ -28,9 +14,6 @@ internal static class Program
         var sw = Stopwatch.StartNew();
         try
         {
-            // --drift does not pack anything: it diffs the same dumps against the closest OFFICIAL
-            // Unity trees (fetched from AssetRipper/TypeTreeDumps into memory, never cached to disk)
-            // and reports every place the fork deviates -- i.e. every place a hook is or should be.
             bool drift = args.Length > 0 && args[0] is "--drift";
             if (drift)
             {
@@ -78,10 +61,6 @@ internal static class Program
         }
     }
 
-    /// <summary>
-    /// The tpk lands inside the game hook submodule, alongside the hooks whose layouts it describes,
-    /// so it is versioned and embedded with them rather than sitting loose in the core project.
-    /// </summary>
     private static string DefaultOutputPath() =>
         Path.Combine(RepoLayout.HookSourceRoot, "TypeTree", TpkFileName);
 

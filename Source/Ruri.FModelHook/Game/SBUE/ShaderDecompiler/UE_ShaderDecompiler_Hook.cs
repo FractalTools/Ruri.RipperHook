@@ -25,11 +25,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
     [FModelHook(GameType.UE_ShaderDecompiler)]
     public class UE_ShaderDecompiler_Hook : RuriHook
     {
-        // One ExportPipelineState lives for the lifetime of the FModel
-        // session so the cumulative cross-library work (Pass 020 material
-        // scan, Pass 040 IoStore hash extraction, Pass 090 once-only
-        // unified-metadata write) only happens on the first library hit
-        // and reuses its results for subsequent libraries.
         private static readonly ExportPipelineState _exportState = new()
         {
             Log = HookLogger.Log,
@@ -37,19 +32,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
         };
         private static readonly object _exportStateLock = new();
 
-        // One-shot per session: warn the user the first time they trigger a
-        // shader export without mappings loaded, then remember their choice
-        // so a 200-shader-archive bulk export doesn't pop up 200 dialogs.
-        // 0 = ungated, 1 = user accepted "yes, continue without mappings",
-        // 2 = user rejected (suppress all subsequent shader exports).
         private static volatile int _mappingsWarningChoice;
 
-        // Live read from the persisted `ShaderDecompilerSettings` snapshot
-        // (mutated by the GUI's in-app Hooks settings dialog). The setter is
-        // kept for programmatic flips of the split-variants level; flipping it
-        // through this property bypasses the persistence layer, which is fine
-        // for one-off invocations. The headless CLI drives the same setting
-        // via its `--split-variants` flag (HeadlessShaderExportRunner.Options).
         public static bool SplitVariantsToHlslFiles
         {
             get => Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
@@ -66,12 +50,9 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             }
         }
 
-        // Use RetargetMethod to safely inject C# logic before the original method and fall through (IsReturn = false)
-        // Positional args: Type source, string methodName, bool isBefore, bool isReturn
         [RetargetMethod(typeof(CUE4ParseViewModel), "ExportData", true, false)]
         public static void ExportData_Hook(CUE4ParseViewModel self, GameFile entry, bool updateUi)
         {
-            // Enable ReadShaderMaps on the provider to ensure UMaterial deserializes the InlineShaderMap
             if (self.Provider is AbstractFileProvider abstractProvider)
             {
                 if (!abstractProvider.ReadShaderMaps)
@@ -82,20 +63,8 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
             if (entry == null) return;
 
-            // Only trigger on Shader Bytecode Library export
             if (entry.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase))
             {
-                // Mappings gate. Without a .usmap loaded, CUE4Parse can still
-                // load most assets but UMaterial property serialisation falls
-                // back to legacy schema-less reading: the FUniformExpressionSet
-                // tree we lean on (UniformNumericParameters / UniformTextureParameters /
-                // UniformBufferLayoutInitializer) reads as opaque structs and
-                // every author-facing parameter name disappears. The decompile
-                // still runs but the output collapses to anonymous Material_Tn /
-                // Material_<TypedSlot> placeholders, with zero of the per-material
-                // parameter names and shaderlab Property entries the user sees
-                // when mappings ARE loaded. Pop a warning so they can either
-                // load a .usmap first or knowingly accept the symbol-stripped run.
                 if (!ConfirmMappingsOrAbort(self))
                 {
                     HookLogger.Log("[UE_ShaderDecompiler] Skipped: user cancelled (no mappings loaded).");
@@ -104,12 +73,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
 
                 string exportBasePath = Path.Combine(UserSettings.Default.RawDataDirectory, UserSettings.Default.KeepDirectoryStructure ? entry.PathWithoutExtension : entry.NameWithoutExtension).Replace('\\', '/');
 
-                // Drive the shared per-archive pipeline: Pass 010 (.ushaderlib)
-                // -> export pipeline (sidecars + UnifiedShaderMetadata.json)
-                // -> in-process decompile. The cumulative cross-library state
-                // on `_exportState` persists across hook fires, so it must be
-                // serialised — `ProcessArchive` is not thread-safe and FModel
-                // can fire ExportData from its batch worker thread.
                 try
                 {
                     lock (_exportStateLock)
@@ -128,15 +91,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
             }
         }
 
-        // Returns true when export should proceed, false when the user
-        // cancelled. Behaviour:
-        //   * Mappings loaded         -> ungated (cache _mappingsWarningChoice = 1).
-        //   * Mappings missing, first call this session -> dispatch a yes/no
-        //     dialog on the UI thread. Cache the answer.
-        //   * Mappings missing, subsequent calls -> obey the cached answer.
-        // The dispatcher detour is necessary because ExportData_Hook can fire
-        // from the FModel worker thread when ExportData is invoked from a
-        // batch loop; AdonisUI's MessageBox must run on the dispatcher.
         private static bool ConfirmMappingsOrAbort(CUE4ParseViewModel vm)
         {
             if (vm?.Provider?.MappingsContainer != null)
@@ -145,9 +99,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 return true;
             }
 
-            // User opted out of the prompt entirely via settings — silently
-            // proceed (matches the behaviour you'd want for a long-running
-            // headless export setup that intentionally doesn't load mappings).
             if (!Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.WarnIfNoMappings)
             {
                 _mappingsWarningChoice = 1;
@@ -188,9 +139,6 @@ namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler
                 }
                 else
                 {
-                    // Headless / no dispatcher (CLI run) — preserve legacy
-                    // behaviour and let the export proceed; the user explicitly
-                    // wired up a non-UI run loop.
                     proceed = true;
                 }
             }

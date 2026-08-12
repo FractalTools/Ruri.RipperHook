@@ -7,27 +7,6 @@ using System.Text.Json;
 
 namespace Ruri.RipperHook.Bridge;
 
-/// <summary>
-/// Serializes an exported Mesh's SERIALIZED fields -- the exact same data its YAML document
-/// carries -- as one small JSON index plus one raw little-endian payload, consumed host-side as
-/// zero-parse numpy views (RuriRipperPyBridge mesh_decoder.decode_mesh_blob). The channel table, index
-/// buffer, bind poses and blendshape deltas cross the bridge as the bytes they already are,
-/// instead of round-tripping through megabytes of YAML hex text that CPython then re-parses.
-/// Vertex bytes come from <see cref="MeshExtensions"/>.GetVertexDataBytes(), the same source the
-/// YAML path inlines (YamlStreamedAssetExportCollection restores external StreamData into
-/// VertexData before serializing), so both representations are byte-identical by construction.
-///
-/// Payload layout (all little-endian), section offsets carried by the JSON index:
-///   vertexData · indexBuffer · bindPose (16 f32 row-major per matrix, e00..e33) ·
-///   boneNameHashes (u32) · shapeVertices (u32 index + 3 f32 vertex delta + 3 f32 normal delta) ·
-///   skin (4 f32 weights + 4 i32 bone indices per vertex).
-/// The skin section is what a pre-2018 mesh carries instead of BlendWeight/BlendIndices vertex
-/// channels: those channel ids did not exist yet, and the weights live in the separate m_Skin
-/// array. Without it a Unity 5 character imports with no vertex groups at all.
-/// Returns null for a mesh whose geometry is NOT plainly in hand (compressed vertex data, a
-/// channel-less legacy layout, or unresolvable stream data) -- the caller keeps the YAML document
-/// as the only representation and the host-side diagnosis wording stays exactly as it was.
-/// </summary>
 internal static class MeshRawBlob
 {
     private sealed record ChannelEntry(byte stream, byte offset, byte format, byte dimension);
@@ -173,7 +152,6 @@ internal static class MeshRawBlob
 
     private static void WriteMatrixRowMajor(Matrix4x4f matrix, Span<byte> span, ref int cursor)
     {
-        // Row-major e00..e33 -- the exact element order the YAML document spells the same matrix in.
         Span<float> values =
         [
             matrix.E00, matrix.E01, matrix.E02, matrix.E03,

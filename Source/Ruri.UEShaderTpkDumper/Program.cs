@@ -4,18 +4,6 @@ using Ruri.UEShaderTpkDumper.Parser;
 
 namespace Ruri.UEShaderTpkDumper;
 
-// CLI entry point. Default behaviour:
-//   * Scan `D:\GameStudy\UE` for first-level subdirs whose names contain a
-//     `<X>.<Y>.<Z>` version (e.g. `UnrealEngine-5.4.4-release`).
-//   * For each engine found, emit UB layout JSONs to
-//     `<Repo>/Source/Ruri.FModelHook/EngineUbMetadata/<X>.<Y>.<Z>/`.
-//
-// Flags:
-//   --ue-root <path>          Override the source root (default D:\GameStudy\UE)
-//   --out-root <path>         Override the output root (default = committed
-//                             EngineUbMetadata folder)
-//   --filter <regex>          Only process engines whose folder matches this
-//   --list                    Discover-only, print what would be processed
 public static class Program
 {
     private const string DefaultUeRoot = @"D:\GameStudy\UE";
@@ -46,11 +34,6 @@ public static class Program
 
         if (outRoot is null)
         {
-            // Default: write into the committed EngineUbMetadata folder so the
-            // C# tool drops files where the runtime decompiler reads them. The
-            // path is relative to the tool's binary location — `<repo>/Source/
-            // Ruri.UEShaderTpkDumper/bin/Debug/net8.0/` is `..\..\..\..\Ruri.FModelHook\
-            // EngineUbMetadata`.
             outRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ruri.FModelHook", "EngineUbMetadata"));
         }
 
@@ -77,24 +60,17 @@ public static class Program
     private static void ProcessEngine(DiscoveredEngine engine, string outRoot)
     {
         Console.WriteLine($"\n=== {engine.Version} ({engine.OriginalFolderName}) ===");
-        // 1. Pick the right UBMT integer mapping for this engine version.
         IReadOnlyDictionary<string, int> ubmtTable = UbmtTables.ForVersion(engine.Version.Major, engine.Version.Minor);
         Console.WriteLine($"[tpk] UBMT table: {ubmtTable.Count} entries (RDG_TEXTURE_UAV={ubmtTable["RDG_TEXTURE_UAV"]})");
 
-        // 2. Constants sweep (for array-dim resolution).
         var sourceFiles = UeSourceScanner.EnumerateSourceFiles(engine.RootDir).ToList();
         Console.WriteLine($"[tpk] source files: {sourceFiles.Count}");
         var constants = ConstantsCollector.Collect(sourceFiles);
         Console.WriteLine($"[tpk] constants: {constants.Count}");
 
-        // 3. Macro-table collection — UE's `VIEW_UNIFORM_BUFFER_MEMBER_TABLE`
-        //    et al. expand to multiple SHADER_PARAMETER lines inside struct
-        //    bodies. Collect them now so the walker can pre-expand each
-        //    struct body.
         var macroTables = MacroTableExpander.Collect(sourceFiles);
         Console.WriteLine($"[tpk] macro tables: {macroTables.Count}");
 
-        // 4. Struct block enumeration.
         Dictionary<string, StructBlock> registry = new(StringComparer.Ordinal);
         int blockCount = 0;
         foreach (string file in sourceFiles)
@@ -107,17 +83,9 @@ public static class Program
         }
         Console.WriteLine($"[tpk] struct blocks: {blockCount} ({registry.Count} unique)");
 
-        // 3b. IMPLEMENT_*_STRUCT scan — provides shader-side binding name +
-        // BindingFlags / StaticSlot indicator. The layout hash XOR-folds
-        // those flags so getting them wrong shifts every hash for static
-        // UBs.
         Dictionary<string, ImplementMapping> implementMap = ImplementStructScanner.ScanAll(sourceFiles);
         Console.WriteLine($"[tpk] IMPLEMENT_*_STRUCT mappings: {implementMap.Count}");
 
-        // 4. Walk each UB-class block, emit JSON. Only UNIFORM_BUFFER_STRUCT and
-        //    GLOBAL_SHADER_PARAMETER_STRUCT correspond to actual cooked UBs;
-        //    plain SHADER_PARAMETER_STRUCT entries are reusable structs that
-        //    only appear via SHADER_PARAMETER_STRUCT_INCLUDE.
         string outDir = Path.Combine(outRoot, engine.Version.ToString());
         Directory.CreateDirectory(outDir);
         int emitted = 0;
@@ -133,11 +101,7 @@ public static class Program
                 continue;
             }
             var hashResources = LayoutWalker.ToHashResources(layout, ubmtTable);
-            // BindingFlags + StaticSlot come from the IMPLEMENT_*_STRUCT
-            // scan. If a struct never has an IMPLEMENT macro, default to
-            // "Shader" — that's the Python generator's fallback too.
-            int bindingFlags = 1; // Shader
-            bool hasStaticSlot = false;
+            int bindingFlags = 1;            bool hasStaticSlot = false;
             string bindingFlagsName = "Shader";
             string emitBindingName = layout.BindingName;
             if (implementMap.TryGetValue(block.CppName, out ImplementMapping impl))
@@ -155,10 +119,6 @@ public static class Program
             }
             uint hash = ComputeLayoutHash.Compute(layout.Size, bindingFlags, hasStaticSlot, hashResources);
 
-            // LayoutResult.BindingName is the C++ struct name by default;
-            // swap in the shader binding name from the IMPLEMENT scan
-            // (`"View"`, `"Material"`, etc.) so the file name and JSON
-            // `Name` field match what the cooked HLSL actually binds.
             layout.BindingName = emitBindingName;
             JsonEmitter.EmitLayout(outDir, layout, hash, bindingFlagsName, ubmtTable,
                 engineVersion: engine.Version.ToString(),
@@ -167,18 +127,10 @@ public static class Program
         }
         Console.WriteLine($"[tpk] emitted {emitted} layout JSONs under {outDir}");
 
-        // 6. ShaderType seed extraction — LAYOUT_FIELD scan over every
-        //    FShader-derived class. Emits one seed JSON per class with the
-        //    parameter NAMES (source-declaration order). Pass180's
-        //    TryReconcileGlobalsCB pairs these names with cook-side real
-        //    byte offsets to recover `$Globals` member names.
         var classes = ShaderTypeSeedScanner.ScanAll(sourceFiles).ToList();
         int seedCount = ShaderTypeSeedEmitter.Emit(outDir, classes, engine.Version.ToString());
         Console.WriteLine($"[tpk] emitted {seedCount} ShaderType seed JSONs ({classes.Sum(c => c.Fields.Count)} LAYOUT_FIELDs)");
 
-        // 7. Hash-to-name indexes — three sister tables for ShaderType,
-        //    VertexFactoryType, and ShaderPipelineType. Same CityHash math,
-        //    different name sources.
         var (shaderTypeNames, vfNames, pipelineNames) = IndexNameCollector.CollectAll(sourceFiles);
         int stCount = HashNameIndexEmitter.Emit(outDir, "_ShaderType",
             "FShaderType::HashedName -> source-recovered class name. "

@@ -8,11 +8,6 @@ using AssetRipper.Primitives;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// 读取 <c>[SerializeReference]</c> 需要的三样东西 —— 载荷类型树、程序集管理器、是否嵌套 ——
-/// 上游 PR 是给 <c>SerializableStructure.Read</c> 加参数拿到的。
-/// 本工程走 AOP 不能改签名,故用**线程内环境上下文**顺着调用栈传递,语义等价。
-/// </summary>
 public static class SerializeReferenceContext
 {
     [ThreadStatic]
@@ -24,10 +19,6 @@ public static class SerializeReferenceContext
     [ThreadStatic]
     private static bool _readingReferencedObject;
 
-    /// <summary>
-    /// 文件自带的 <c>[SerializeReference]</c> 载荷类型树,按文件名索引
-    /// (集合与其序列化文件同名)。
-    /// </summary>
     private static readonly Dictionary<string, SerializedTypeReference[]> _refTypesByFile = new();
 
     public static IReadOnlyList<SerializedTypeReference> RefTypes => _refTypes ?? [];
@@ -36,13 +27,11 @@ public static class SerializeReferenceContext
 
     public static bool ReadingReferencedObject => _readingReferencedObject;
 
-    /// <summary>解析序列化文件时登记该文件的载荷类型树,按文件名索引。</summary>
     public static void RegisterRefTypes(string fileName, SerializedTypeReference[] refTypes)
     {
         if (refTypes.Length == 0 || string.IsNullOrEmpty(fileName))
         {
-            return; // 绝大多数文件没有 [SerializeReference],不占表
-        }
+            return;        }
         lock (_refTypesByFile)
         {
             _refTypesByFile[fileName] = refTypes;
@@ -61,7 +50,6 @@ public static class SerializeReferenceContext
         }
     }
 
-    /// <summary>在一次根资产读取期间提供上下文;离开即还原(嵌套安全)。</summary>
     public static Scope Enter(IReadOnlyList<SerializedTypeReference> refTypes, IAssemblyManager? assemblyManager)
     {
         Scope scope = new(_refTypes, _assemblyManager, _readingReferencedObject);
@@ -71,10 +59,6 @@ public static class SerializeReferenceContext
         return scope;
     }
 
-    /// <summary>
-    /// 读一条引用对象的载荷。嵌套结构里可能也带 registry 字段,但只有根资产写一份,
-    /// 故这段期间把嵌套标志置位,让 <c>Read</c> 跳过它们。
-    /// </summary>
     public static void ReadNested(
         SerializableStructure structure,
         ref EndianSpanReader reader,

@@ -9,15 +9,6 @@ using Ruri.RipperHook.Core.TypeTree;
 
 namespace Ruri.RipperHook.Core
 {
-    /// <summary>
-    /// The single entry point every hooked <c>ReadRelease</c> is retargeted to.
-    ///
-    /// A registered class is read with the game's own type tree (<see cref="TypeTreeReadPlan"/>)
-    /// straight into the stock AssetRipper object. This used to go through a generated
-    /// <c>Ruri.SourceGenerated</c> twin -- create a dummy of the game's layout, read it, then
-    /// name-match every field back onto the real asset -- which cost a 53 MB build artifact, a
-    /// reflective deep copy per asset, and a full codegen round trip for every new game version.
-    /// </summary>
     public static class HookDispatcher
     {
         public delegate void ReadReleaseDelegate(object asset, ref EndianSpanReader reader);

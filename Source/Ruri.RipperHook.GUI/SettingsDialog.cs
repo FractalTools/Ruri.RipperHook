@@ -26,7 +26,6 @@ internal sealed class SettingsDialog : Form
     private readonly List<Action> _applyActions = new();
     private readonly ShaderDecompilerSettings _shaderDraft;
 
-    // AR_* feature hook label + tooltip. hookId 末尾下划线是因为 attr.Version 为空.
     private static readonly (string HookId, string Label, string Hint)[] ArFeatureHooks =
     [
         ("AR_SkipStreamingAssetsCopy_", "Don't copy StreamingAssets into export",
@@ -108,21 +107,13 @@ internal sealed class SettingsDialog : Form
         foreach (Action apply in _applyActions) apply();
         _config.EnabledHooks.Clear();
         foreach (string id in _stagedHooks) _config.EnabledHooks.Add(id);
-        // Persist AR native settings INTO our unified JSON.
         _config.SetModuleSettings(ArSettingsModuleKey, ArSettingsSnapshot.From(cfg));
-        // Persist the shader-decompiler settings (Split-variants, …) on the SAME
-        // config instance so the single _config.Save() below writes them too.
-        // Previously this used Replace(persist:true): its saver re-loaded the file,
-        // wrote the shader module and saved — then _config.Save() immediately
-        // overwrote the file with _config, which carried NO shader module, silently
-        // dropping the Split-variants checkbox. Set it on _config and save once.
         _config.SetModuleSettings(ShaderDecompilerSettings.ModuleKey, _shaderDraft);
         ShaderDecompilerSettingsAccess.Replace(_shaderDraft);
         _config.Save(_configPath);
         SerializedSettings.DeleteDefaultPath();
     }
 
-    // ------ General tab ------
     private TabPage BuildGeneralTab(FullConfiguration cfg)
     {
         TabPage page = new("General");
@@ -169,7 +160,6 @@ internal sealed class SettingsDialog : Form
         return page;
     }
 
-    // ------ Export tab ------
     private TabPage BuildExportTab(FullConfiguration cfg)
     {
         TabPage page = new(Localization.MenuExport);
@@ -192,7 +182,6 @@ internal sealed class SettingsDialog : Form
         AddDropDown(table, ShaderExportModeDropDownSetting.Instance,
             cfg.ExportSettings.ShaderExportMode, v => cfg.ExportSettings.ShaderExportMode = v);
 
-        // Ruri shader hook checkbox directly under the dropdown — its sub-options reveal only while checked.
         CheckBox ruriShaderHook = new()
         {
             Text = "Use RuriShaderDecompiler (overrides AR's Dummy text exporter)",
@@ -248,7 +237,6 @@ internal sealed class SettingsDialog : Form
         return page;
     }
 
-    // ------ Builder helpers ------
     private static TableLayoutPanel NewTabTable()
     {
         TableLayoutPanel table = new()
@@ -340,8 +328,6 @@ internal sealed class SettingsDialog : Form
         _applyActions.Add(() => onApply(tb.Text));
     }
 
-    // Drives label + per-option display from AR's DropDownSetting singletons so the existing
-    // localized strings carry over without us maintaining a parallel translation table.
     private void AddDropDown<T>(TableLayoutPanel table, DropDownSetting<T> setting, T initial, Action<T> onApply) where T : struct, Enum
     {
         Label lab = new() { Text = setting.Title, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 10, 12, 6) };
@@ -394,8 +380,6 @@ internal sealed class SettingsDialog : Form
         catch { return default; }
     }
 
-    // AR native settings serialised into our unified JSON under this module key.
-    // Program.cs loads + applies on startup so this fully replaces AR's own SerializedSettings file.
     internal const string ArSettingsModuleKey = "ArSettings";
 
     internal sealed class ArSettingsSnapshot

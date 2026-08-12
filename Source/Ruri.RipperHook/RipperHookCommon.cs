@@ -14,7 +14,6 @@ namespace Ruri.RipperHook;
 
 public abstract class RipperHookCommon : RuriHook
 {
-    // Re-expose for compatibility
     public delegate void ReadReleaseDelegate(object asset, ref EndianSpanReader reader);
 
     private List<IHookModule> _modules = new();
@@ -25,8 +24,7 @@ public abstract class RipperHookCommon : RuriHook
 
     public override void Initialize()
     {
-        base.Initialize(); // Calls InitAttributeHook
-        ProcessGameHooks();
+        base.Initialize();        ProcessGameHooks();
 
         var ripperHookAttr = GetType().GetCustomAttribute<RipperHookAttribute>();
         if (ripperHookAttr != null)
@@ -42,17 +40,6 @@ public abstract class RipperHookCommon : RuriHook
         Registry.ApplyTypeHooks(module.GetType());
     }
 
-    /// <summary>
-    /// Resolves and installs every <see cref="SinceAttribute"/>-tagged capability declared for
-    /// <paramref name="game"/> at <paramref name="engineBuild"/> (see
-    /// <see cref="CapabilityResolver"/>) -- the data-driven replacement for hand-listing
-    /// AddMethodHook/RegisterModule calls per version. A version whose resolved capability set is
-    /// identical to another's needs no call of its own beyond this one.
-    /// </summary>
-    /// <remarks>
-    /// The version comes from this hook's own <c>[RipperHook(..., "1.4.4")]</c> rather than being
-    /// repeated at the call site -- there is one place a hook says which build it is.
-    /// </remarks>
     protected void ApplyCapabilities(GameType game)
     {
         RipperHookAttribute attr = GetType().GetCustomAttribute<RipperHookAttribute>()
@@ -63,19 +50,14 @@ public abstract class RipperHookCommon : RuriHook
     protected override void InitAttributeHook()
     {
         base.InitAttributeHook();
-        // Custom RipperHook logic can go here if needed
     }
 
-    /// <summary>
-    /// Scans for [TypeTreeHook] attributes on the current class and registers them.
-    /// </summary>
     protected void ProcessGameHooks()
     {
         var type = GetType();
         var ripperHookAttr = type.GetCustomAttribute<RipperHookAttribute>();
         if (ripperHookAttr == null) return;
 
-        // TypeTreeHookAttribute is AssetRipper specific
         var hookClassAttrs = type.GetCustomAttributes<TypeTreeHookAttribute>();
         if (!hookClassAttrs.Any())
         {
@@ -96,17 +78,8 @@ public abstract class RipperHookCommon : RuriHook
         HookClasses(classIds, targetVersion);
     }
 
-    /// <summary>
-    /// Which dumped type tree snapshot this hook reads with. A game overrides this with its lineage
-    /// (its directory under the external TypeTree dumps) and its own build string -- the string is
-    /// free-form, so a build number never has to be squeezed into a <c>UnityVersion</c> field again.
-    /// </summary>
     protected virtual TypeTreeVersion GetTargetVersion(RipperHookAttribute attr) => default;
 
-    /// <summary>
-    /// The Unity version this game's dumps report about themselves -- the fork's own build, read from
-    /// the packed manifest rather than hand-written next to the hook.
-    /// </summary>
     protected UnityVersion GetEngineVersion()
     {
         RipperHookAttribute attr = GetType().GetCustomAttribute<RipperHookAttribute>()
@@ -114,16 +87,6 @@ public abstract class RipperHookCommon : RuriHook
         return TypeTreeDatabase.GetEngineVersion(GetTargetVersion(attr));
     }
 
-    /// <summary>
-    /// Retargets every listed class's <c>ReadRelease</c> onto <see cref="HookDispatcher"/>, which
-    /// reads it with the game's own type tree at <paramref name="targetVersion"/> (see
-    /// <see cref="TypeTreeReadPlan"/>).
-    ///
-    /// Which stock AssetRipper class the game's files instantiate comes from the engine version the
-    /// dump reports about itself, not from a hand-written one -- a fork keeps its own build there
-    /// (EndField says <c>2021.3.34f5</c>), and AssetRipper's factory resolves that to the nearest
-    /// class version it generated.
-    /// </summary>
     protected void HookClasses(
         IEnumerable<ClassIDType> classIds,
         TypeTreeVersion targetVersion,
@@ -141,8 +104,6 @@ public abstract class RipperHookCommon : RuriHook
 
         UnityVersion lookupVersion = TypeTreeDatabase.GetEngineVersion(targetVersion);
 
-        // Classes hooked below carry their version through HookDispatcher, but AssetRipper's
-        // unknown-class fallback is reached without that context -- publish it for the fallback.
         TypeTreeDatabase.ActiveVersion = targetVersion;
         RegisterModule(new HookUtils.TypeTreeFallbackHook.TypeTreeFallbackHook());
         RegisterModule(new AR.EngineAssetsTpkHook());
@@ -190,10 +151,6 @@ public abstract class RipperHookCommon : RuriHook
         }
     }
 
-    /// <summary>
-    /// Finds the stock AssetRipper class the loader will instantiate for <paramref name="classId"/> at
-    /// <paramref name="lookupVersion"/>, by asking its factory for one.
-    /// </summary>
     private static Type ResolveSourceType(Assembly originalAssembly, ClassIDType classId, UnityVersion lookupVersion)
     {
         int id = (int)classId;
@@ -202,7 +159,6 @@ public abstract class RipperHookCommon : RuriHook
 
         Type? factoryType = originalAssembly.GetType($"{baseNamespace}.{enumName}");
 
-        // Some enum members carry a disambiguating "_<id>" suffix the class itself does not.
         if (factoryType == null)
         {
             string suffix = $"_{id}";
@@ -224,7 +180,6 @@ public abstract class RipperHookCommon : RuriHook
         return instance.GetType();
     }
 
-    // SetAssetListField is AR specific
     protected void SetAssetListField<T>(Type type, string name, ref EndianSpanReader reader, bool isAlign = true) where T : UnityAssetBase, new()
     {
         var field = type.GetField(name, ReflectionExtensions.PrivateInstanceBindFlag());

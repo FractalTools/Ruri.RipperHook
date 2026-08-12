@@ -7,65 +7,12 @@ using EngineDecompileOptions = Ruri.ShaderTools.DecompileOptions;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 180 — Phase 1 of the decompile pipeline: walk the wanted shader
-// indices, strip the UE shader-binary wrapper, build per-binary
-// SerializedProgramData metadata + EngineDecompileOptions, and stash the
-// result in `state.ShaderPrepByIndex`.
-//
-// Per-shader prep:
-//   1. Strip the UE shader-binary wrapper -> clean DXBC/DXIL bytes +
-//      UnrealMetadata (FShaderResourceTable, optional UB names, etc.)
-//   2. Pick the best material symbol source (UnifiedMaterialReader ->
-//      MaterialJsonSymbolReader). Both are caches; first lookup pays
-//      the JSON-parse cost, repeats are O(1).
-//   3. Assemble final SerializedProgramData by combining:
-//        - runtime symbols (FShaderCodeUniformBuffers + SRT-decoded
-//          texture/sampler/UAV names, refined by the material's
-//          MaterialUniformBufferLayout when available)
-//        - the material's own ConstantBuffer schemas
-//   4. Compose EngineDecompileOptions with `MaterialTextureNameInferrer.
-//      InferAndAppend` as the MetadataEnricher so UE's OpSampledImage-pair
-//      texture-name recovery plugs in at the right point (post-rewrite,
-//      pre-symbol-patch) without the engine itself knowing anything
-//      UE-specific.
-//
-// Shared readers/services live outside the pass; this file keeps only the
-// prep orchestration and a tiny local stage-name helper.
 internal static class Pass180_PrepareShaderBinaries
 {
-    // First-of-each-class dedup for ShaderType seed lookup diagnostics. One
-    // line logged per matched class so the log doesn't explode in archives
-    // with thousands of shaders. ConcurrentDictionary because the shader-prep
-    // loop runs in parallel.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_seedHitsByClass = new(StringComparer.Ordinal);
-    // Coverage-gap surfaces, summarised at end of Pass180.
-    //   _unknownShaderTypeHashes: cooked TypeHash not in any hash-to-name
-    //     index → class wasn't captured by generator's IMPLEMENT_*_SHADER_TYPE
-    //     scan. Candidate for generator scope extension.
-    //   _unmatchedClassNames: TypeHash resolved to a name BUT no seed exists
-    //     for the bare base class → seed catalogue can be extended by adding
-    //     LAYOUT_FIELD scans for this class's parent.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unknownShaderTypeHashes = new(StringComparer.Ordinal);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unmatchedClassNames = new(StringComparer.Ordinal);
 
-    // Build a `$Globals` ConstantBufferParameter by pairing seed loose-param
-    // NAMES (source-declaration order, no cook offsets) with cook's
-    // `LooseParameterBuffers[0].Parameters[]` (real offsets, no names).
-    //
-    // Returns null when the counts diverge (DXC may have packed the HLSL
-    // differently from the C++ source-decl order; in that case we can't
-    // safely pair without risking mis-names). Returns null when the cook
-    // has zero loose params (shader doesn't actually use `$Globals`).
-    //
-    // The cook's Parameters[i].Size carries the byte size (4 for scalar,
-    // 8 for vec2, 12 for vec3, 16 for vec4). We use it to derive the
-    // emitted member's RowCount when the seed's placeholder differs.
-    /// <summary>
-    /// 用 cook 的 <c>ParameterMapInfo</c> 把 UES 贴图名钉到真实 t 槽。资源槽从
-    /// <c>TextureSamplers</c> 与 <c>SRVs</c> 两个数组按 <c>BaseIndex</c> 升序合并去重
-    /// (UE 把材质贴图记在前者、把 buffer/SRV 记在后者,不同版本/平台分布不同,合并后按槽序
-    /// 才是稳定口径);数量与 UES 贴图数不等就整体不改名。
-    /// </summary>
     private static void ReconcileMaterialTextureBindings(PipelineState state, int shaderIndex, SerializedProgramData metadata)
     {
         bool hasPmi = state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out System.Text.Json.JsonElement pmi);
@@ -89,7 +36,6 @@ internal static class Pass180_PrepareShaderBinaries
                 if (entry.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
                 if (!entry.TryGetProperty("BaseIndex", out System.Text.Json.JsonElement bi)) continue;
                 if (!bi.TryGetInt32(out int slot)) continue;
-                // Sampler 槽与纹理槽在同一数组里靠 Type 区分;只有 SRV 型才是 t 寄存器。
                 if (entry.TryGetProperty("Type", out System.Text.Json.JsonElement ty)
                     && ty.ValueKind == System.Text.Json.JsonValueKind.String
                     && ty.GetString() is string typeName
@@ -127,9 +73,6 @@ internal static class Pass180_PrepareShaderBinaries
             return null;
         }
 
-        // Take the FIRST loose-param buffer — that's typically `$Globals`.
-        // Tail entries (e.g. ViewState) are bound at different cbuffer slots
-        // and the seed wouldn't carry their names anyway.
         System.Text.Json.JsonElement first = loose[0];
         if (!first.TryGetProperty("Parameters", out System.Text.Json.JsonElement parameters)
             || parameters.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -139,14 +82,6 @@ internal static class Pass180_PrepareShaderBinaries
 
         int seedCount = seed.ConstantBuffer!.VectorParameters.Length;
         int cookCount = parameters.GetArrayLength();
-        // Pair seed names with cook offsets up to the SHORTER of the two
-        // counts. Stripped-tail case: the cooker drops unused trailing
-        // loose params, leaving cookCount < seedCount. We still name the
-        // first N — far better than leaving every member anonymous.
-        // The opposite case (cookCount > seedCount) is rarer but possible
-        // if the seed scan missed LAYOUT_FIELDs declared via macro
-        // expansion — pair the prefix and fall through anonymous for the
-        // overflow.
         int pairCount = Math.Min(seedCount, cookCount);
         if (pairCount == 0) return null;
 
@@ -178,9 +113,6 @@ internal static class Pass180_PrepareShaderBinaries
             }
             else
             {
-                // Cook has more params than seed knows about — name the
-                // overflow `<Class>_<offset>` so they're at least
-                // identifiable in the rewrite output.
                 reconciled[i] = new VectorParameter
                 {
                     Name = $"_loose_at_c{baseIdx / 16}",
@@ -231,11 +163,6 @@ internal static class Pass180_PrepareShaderBinaries
         state.FailuresRoot = Path.Combine(outputDir, "_failures");
 
         ShaderLibrary lib = state.Library;
-        // Build the set of shader binaries that participate in any
-        // surviving shader-map. Skip everything else (it can be a global
-        // shader unreferenced by the materials we actually want, or a
-        // dedup'd variant outside the filter). Shader-maps drive emission,
-        // not the flat archive.
         HashSet<int> wantedIndices = new();
         foreach (ShaderMapInfo map in state.ShaderMaps)
         {
@@ -249,9 +176,6 @@ internal static class Pass180_PrepareShaderBinaries
             wantedIndices.IntersectWith(state.Options.ShaderIndexFilter);
         }
 
-        // Sequential prep, one PER UNIQUE SHADER BINARY. Even if a binary
-        // is shared across N shader-maps, its DXBC content is identical
-        // so we strip + decompile once and re-emit per map below.
         foreach (int i in wantedIndices.OrderBy(static x => x))
         {
             byte[]? raw = lib.GetShaderCode(i);
@@ -270,35 +194,18 @@ internal static class Pass180_PrepareShaderBinaries
 
         state.Log($"    PrepareShaderBinaries: prepped {state.ShaderPrepByIndex.Count}/{wantedIndices.Count} binaries.");
 
-        // ShaderType seed coverage summary. Two categories of miss:
-        //   * "unknown-hash": cooked TypeHash that's not in our hash-to-name
-        //     index — generator scan missed this IMPLEMENT_*_SHADER_TYPE
-        //     invocation. User can investigate by searching UE source for
-        //     `IMPLEMENT_*_SHADER_TYPE(...,<class>,...);` whose
-        //     CityHash64(UPPER(class)) matches the unknown hash.
-        //   * "unmatched-class": hash resolved to a class name BUT no
-        //     LAYOUT_FIELD seed exists for that base class — class probably
-        //     uses SHADER_PARAMETER_STRUCT(...) instead, which puts its
-        //     parameters in a named cbuffer (engine UB) NOT $Globals.
-        // The first count is what the generator should grow to cover.
         if (state.ShaderTypeSeedRegistry.HashToNameCount > 0)
         {
             int unknown = s_unknownShaderTypeHashes.Count;
             int unmatched = s_unmatchedClassNames.Count;
             int matched = s_seedHitsByClass.Count;
             state.Log($"    ShaderType seed coverage: matched-classes={matched} unmatched-class-with-name={unmatched} unknown-hashes={unknown}");
-            // Show the first 5 unknown hashes as a hint for which classes
-            // the user should consider adding to the generator's scan.
             int limit = 5;
             foreach (string h in s_unknownShaderTypeHashes.Keys)
             {
                 if (limit-- <= 0) break;
                 state.Log($"      unknown-hash={h} (generator's IMPLEMENT_*_SHADER_TYPE scan missed this class)");
             }
-            // Dump the unmatched-with-name list so we can see which classes
-            // resolve to a known name but have no seed file (or no prefix
-            // match in the seed registry). These are the next targets for
-            // the TPK dumper to emit per-class LAYOUT_FIELD JSONs.
             int unmatchedLimit = 50;
             foreach (string n in s_unmatchedClassNames.Keys)
             {
@@ -322,13 +229,9 @@ internal static class Pass180_PrepareShaderBinaries
         string provisionalStem = $"{containerKey}_{materialName}_{variantSuffix}";
         string failureDumpDir = Path.Combine(state.FailuresRoot, provisionalStem);
 
-        // Strip UE wrapper: produces clean DXBC/DXIL + UnrealMetadata.
         byte[] strippedCode = UnrealShaderParser.Parse(raw, out ShaderBinaryFormat detectedFormat, out UnrealShaderParser.UnrealMetadata? unrealMetadata);
 
-        // Pick the best symbol source for this shader's material(s).
         bool hadUsage = state.UsageByShaderIndex.TryGetValue(shaderIndex, out HashSet<string>? usedBy) && usedBy.Count > 0;
-        // 传本容器的 shader-map 哈希:一个材质编了多份 shader map,每份的 UES 布局不同,
-        // 不指名就会拿到别人那份(见 MaterialSymbolReaders.SelectUniformExpressionSet)。
         MaterialSymbolSource? bestSource = hadUsage
             ? ResolveBestSymbolSource(state, usedBy!, entry.Frequency, container?.ShaderMapHash)
             : null;
@@ -341,24 +244,6 @@ internal static class Pass180_PrepareShaderBinaries
 
         SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource, state.EngineUbRegistry, state.Log);
 
-        // ShaderType seed lookup (Stage 18). When we have a ShaderTypeHash
-        // for this shader (from .stableinfo.json via ContainerByShaderIndex
-        // = Pass130), check whether the source seed registry has source-
-        // declared loose-parameter names for the corresponding FShader
-        // subclass. The hash is `FShaderType::HashedName` =
-        // CityHash64WithSeed(UPPER(class_name), 0). When matched, the seed
-        // carries a `$Globals` ConstantBufferParameter whose member NAMES
-        // come from `LAYOUT_FIELD(FShaderParameter, ...)` declarations and
-        // textures/buffers come from `LAYOUT_FIELD(FShaderResourceParameter,
-        // ...)`. Currently DIAGNOSTIC-ONLY: counts hits per process and logs
-        // first-of-each-class lookups. Reconciliation against the cooked
-        // FShaderParameterMapInfo (real byte offsets) is the next
-        // sub-stage — without it, blindly injecting seed offsets risks
-        // mismatched names because DXC packs $Globals per HLSL source-decl
-        // order, not C++ source-decl order, and those may diverge.
-        // Track ShaderType lookup misses for a coverage report at end of run.
-        // Hash that's in the cook but missing from both seed registry AND
-        // hash-to-name index → candidate for generator scope extension.
         if (container != null
             && !string.IsNullOrWhiteSpace(container.ShaderTypeHash)
             && state.ShaderTypeSeedRegistry.HashToNameCount > 0)
@@ -366,19 +251,14 @@ internal static class Pass180_PrepareShaderBinaries
             string? resolvedName = state.ShaderTypeSeedRegistry.ResolveTypeName(container.ShaderTypeHash);
             if (resolvedName == null)
             {
-                // Hash unknown to the index — class wasn't captured by the
-                // generator's IMPLEMENT_*_SHADER_TYPE scan. Stash in the
-                // shared "unknown" bag (dedup'd, one entry per distinct hash).
                 s_unknownShaderTypeHashes.TryAdd(container.ShaderTypeHash, true);
             }
             else
             {
-                // Resolved name — record whether a seed exists for it.
                 if (state.ShaderTypeSeedRegistry.TryLookupWithFallback(
                         container.ShaderTypeHash, container.ShaderTypeName,
                         out EngineUbMetadata _, out string _))
                 {
-                    // Already counted via the hit-log path below.
                 }
                 else
                 {
@@ -394,11 +274,6 @@ internal static class Pass180_PrepareShaderBinaries
                 container.ShaderTypeHash, container.ShaderTypeName,
                 out EngineUbMetadata typeSeed, out string matchKind))
         {
-            // Key by (cooked-class-name, seed-class) so a single seed-class
-            // matched by multiple templated specialisations only logs once
-            // for each distinct (cook, seed) pair (e.g. one line each for
-            // `TBasePassPSFNoLightMap` → `TBasePassPS`,
-            // `TBasePassPSFHQLightMap` → `TBasePassPS`, etc.).
             string key = $"{container.ShaderTypeName}=>{typeSeed.Name}";
             if (s_seedHitsByClass.TryAdd(key, true))
             {
@@ -408,11 +283,6 @@ internal static class Pass180_PrepareShaderBinaries
                 state.Log($"[ShaderTypeSeed-hit] cookName={container.ShaderTypeName} via={matchKind} seedClass={typeSeed.Name} loose-params={loose} resources={tex + buf}");
             }
 
-            // Reconcile seed loose-parameter names against cook's
-            // `LooseParameterBuffers[0].Parameters[]` real byte offsets, then
-            // inject as `$Globals` ConstantBufferParameter so the rewriter
-            // names the slots. Only fires when ParameterMapInfo loaded
-            // (Pass165) AND seed has at least one loose VectorParameter.
             if (typeSeed.ConstantBuffer != null
                 && typeSeed.ConstantBuffer.VectorParameters != null
                 && typeSeed.ConstantBuffer.VectorParameters.Length > 0
@@ -426,55 +296,12 @@ internal static class Pass180_PrepareShaderBinaries
             }
         }
 
-        // Material TEXTURE bind indices. The UES gives the texture NAMES in the
-        // material's declaration order; the cook's `FShaderParameterMapInfo` gives the
-        // real `t<N>` register per resource in that SAME order
-        // (`FShaderResourceParameterInfo.BaseIndex`, MaterialResourceTypes.cs:418).
-        // Pairing them positionally is the cook's own contract and the ONLY source that
-        // says which slot is `Main_D` vs `Pattern_N` — the UES alone carries synthetic
-        // indices (see MaterialSymbolMetadataBuilder), so without this every material
-        // texture stays an anonymous `_NN` in the decompiled output.
-        // Gate: the two lists must have the SAME length. A mismatch means this
-        // permutation doesn't use the full texture set (or the pairing assumption
-        // doesn't hold), and a positional pairing would then mislabel slots — so we
-        // leave the names alone rather than emit a wrong one.
         ReconcileMaterialTextureBindings(state, shaderIndex, metadata);
 
-        // Per-shader shader-model selection. The library-level option is
-        // a default that callers tune to the lowest model they expect; an
-        // individual shader can request a higher model via either:
-        //   * `unrealMetadata.IsSm6Shader == true` (the parser already
-        //      decoded the optional-data `'6'` flag UE writes for any
-        //      cooked DXC-compiled shader). Bump to 67 so spirv-cross
-        //      accepts the full SM 6.x feature set (resource heap usage,
-        //      `[[vk::binding]]` -> `register(...)` mapping rules,
-        //      DXIL-only intrinsics like `WaveActiveSum`, sampling
-        //      non-float textures via Sample/SampleLevel, payload
-        //      access qualifiers, etc.).
-        //   * Format == Dxil with a DXC-style container chunk. The
-        //      lowest model dxil-spirv reliably produces SPV for is 6.0;
-        //      bumping is harmless for SM 6.x containers (spirv-cross
-        //      only uses the model to gate intrinsic emission, never to
-        //      reject input).
-        //
-        // We bump to **67** specifically because spirv-cross gates two
-        // common feature checks at SM versions higher than 60:
-        //   - "Wave ops requires SM 6.0 or higher" (gated at 60)
-        //   - "Sampling non-float textures is not supported in HLSL SM < 6.7"
-        // 67 covers both without forcing the user to know which version
-        // each shader needs. The lower-bound bump matches the highest
-        // common-case feature gate observed in the X6Game cook (35/36
-        // _failures in the Global archive were one of these two errors).
-        //
-        // Untouched when the parser said SM 5.x — we still default to
-        // the caller's library option (51 / 50) so the existing UE 5.4
-        // SM 5.1 fixture stays byte-identical.
         uint perShaderModel = state.Options.ShaderModel;
         bool optionallyMarkedSm6 = unrealMetadata?.IsSm6Shader == true;
         if (optionallyMarkedSm6 || detectedFormat == ShaderBinaryFormat.Dxil)
         {
-            // Only bump UPWARDS. If the caller explicitly asked for SM
-            // 6.2 / 6.6 we keep that (a higher caller intent wins).
             if (perShaderModel < 67) perShaderModel = 67;
         }
 
@@ -516,12 +343,6 @@ internal static class Pass180_PrepareShaderBinaries
         {
             MaterialSymbolSource? candidate = state.UnifiedMaterialReader?.GetSource(material, shaderPlatform, shaderMapHash)
                                             ?? state.MaterialJsonSymbolReader?.GetSource(material, shaderPlatform);
-            // UnifiedMaterialReader's source doesn't carry MaterialCollection<i>
-            // cbuffers (unified metadata strips ParameterCollectionInfos to keep
-            // the JSON small). If the per-material JSON IS available, pull just
-            // the MaterialCollection<i> entries from there and union them into
-            // the unified source's metadata. This makes the MPC recovery work
-            // identically across both reader paths.
             if (candidate != null && state.MaterialJsonSymbolReader != null)
             {
                 MaterialSymbolSource? jsonCandidate = state.MaterialJsonSymbolReader.GetSource(material, shaderPlatform);
@@ -539,9 +360,6 @@ internal static class Pass180_PrepareShaderBinaries
             }
             if (candidate != null)
             {
-                // Defensive copy — caches share metadata across every shader
-                // using the same material; SRT enrichment + texture-name
-                // inferrer mutate it in place.
                 SerializedProgramData clone = new()
                 {
                     ConstantBufferParameters = new List<ConstantBufferParameter>(candidate.Metadata.ConstantBufferParameters),
@@ -560,11 +378,6 @@ internal static class Pass180_PrepareShaderBinaries
         return null;
     }
 
-    // Resolution chain:
-    //   1. NameByShaderIndex (display name from unified metadata).
-    //   2. First entry in UsageByShaderIndex[i] -> filename component.
-    //   3. "Shader" — combined with `_<typeSuffix>_<shaderIndex>` is
-    //      already unique without a counter (shaderIndex is library-wide).
     private static string ResolveFinalName(PipelineState state, int shaderIndex)
     {
         if (state.NameByShaderIndex.TryGetValue(shaderIndex, out string? mapped) && !string.IsNullOrWhiteSpace(mapped))

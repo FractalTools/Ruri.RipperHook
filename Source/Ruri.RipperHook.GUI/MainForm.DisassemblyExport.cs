@@ -3,10 +3,6 @@ using AssetRipper.Import.Configuration;
 
 namespace Ruri.RipperHook.GUI;
 
-// "Export Disassembly" — decompile the entire IL2CPP/Mono codebase to readable .cs with native
-// x86/ARM disassembly injected as comments, skipping every asset. Enables AR_DisassemblyExporter_
-// (scripts-only + force-decompile-all) and AR_Il2CppMethodDump_ (the asm), forces
-// ScriptContentLevel=Level2, and skips StreamingAssets (code lives in the metadata, not bundles).
 public partial class MainForm
 {
 	private static readonly string[] DisassemblyExportHooks = { "AR_DisassemblyExporter_", "AR_Il2CppMethodDump_" };

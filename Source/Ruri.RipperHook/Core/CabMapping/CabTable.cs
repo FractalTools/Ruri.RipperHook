@@ -4,69 +4,25 @@ using System.Text;
 
 namespace Ruri.RipperHook.CabMapping;
 
-/// <summary>
-/// Columnar in-memory form of a cabmap: UTF-8 string blobs + offset tables per column, an
-/// int-indexed dependency graph in BOTH directions, and NO per-entry string/record
-/// materialization. This is the load-time and interop-time optimum: the RCM6 on-disk format
-/// stores exactly these buffers, so loading is one sequential stream read straight into the
-/// final arrays -- no intermediate whole-file buffer, no per-string parse -- and a pythonnet
-/// caller receives the same buffers in one crossing and slices them at C speed.
-///
-/// Entry ids are [0, Count). Dependency edges may reference CABs that are not entries themselves
-/// (a bundle can list a dependency the scan never found); those get PHANTOM ids in
-/// [Count, Count+PhantomCount) with a name but no columns, preserving classic BFS semantics
-/// exactly: a dangling dependency still appears in closure OUTPUT (callers that then look it up
-/// simply miss, same as before) while contributing no forward edges.
-///
-/// Invariants, guaranteed by construction (<see cref="FromEntries"/> is the only writer path):
-///   * real entries [0, Count) are sorted by CAB name, <see cref="StringComparer.OrdinalIgnoreCase"/> --
-///     <see cref="TryGetId"/> binary-searches on it, so no name-&gt;id dictionary ever exists;
-///   * chunk files are stored ONCE in a distinct-file table; each entry carries an index into it
-///     (a 237k-CAB game concentrates into a few dozen chunk files -- per-entry path strings were
-///     231x redundant);
-///   * the reverse adjacency (<see cref="Dependents"/>) is the exact transpose of
-///     <see cref="Dependencies"/>, rebuilt eagerly at every construction in one counting pass --
-///     forward and reverse can never disagree.
-///
-/// Strings are materialized lazily and only where a consumer genuinely needs a System.String
-/// (closure results, file-path resolution for the few dozen chunk files of one closure).
-/// </summary>
 public sealed class CabTable
 {
     public required string BaseFolder { get; init; }
 
-    /// <summary>Real entries only -- phantom dependency names live above this.</summary>
     public required int Count { get; init; }
     public required int PhantomCount { get; init; }
 
-    // CAB names: Count + PhantomCount strings (phantoms appended after real entries).
     public required byte[] CabBlob { get; init; }
-    public required int[] CabOffsets { get; init; }        // Count + PhantomCount + 1
-
-    // Distinct chunk files + per-entry index into them.
+    public required int[] CabOffsets { get; init; }
     public required byte[] DistinctFileBlob { get; init; }
-    public required int[] DistinctFileOffsets { get; init; }  // FileCount + 1
-    public required int[] FileIndex { get; init; }            // Count
-
+    public required int[] DistinctFileOffsets { get; init; }    public required int[] FileIndex { get; init; }
     public required byte[] EntryFileNameBlob { get; init; }
-    public required int[] EntryFileNameOffsets { get; init; } // Count + 1
-
-    // Container paths: flat string list + per-entry row ranges.
+    public required int[] EntryFileNameOffsets { get; init; }
     public required byte[] ContainerPathBlob { get; init; }
-    public required int[] ContainerPathOffsets { get; init; } // PathCount + 1
-    public required int[] ContainerPathStarts { get; init; }  // Count + 1 (indexes into ContainerPathOffsets rows)
-
+    public required int[] ContainerPathOffsets { get; init; }    public required int[] ContainerPathStarts { get; init; }
     public required int[] ClassIdsFlat { get; init; }
-    public required int[] ClassIdStarts { get; init; }        // Count + 1
-
-    public required int[] DependenciesFlat { get; init; }     // ids, may include phantom ids
-    public required int[] DependencyStarts { get; init; }     // Count + 1
-
-    // Transpose of the dependency graph: who depends on me. Phantom ids have rows too (their
-    // dependents), which is what lets a reverse walk start from a dangling name.
-    public required int[] ReverseFlat { get; init; }          // DependenciesFlat.Length
-    public required int[] ReverseStarts { get; init; }        // Count + PhantomCount + 1
-
+    public required int[] ClassIdStarts { get; init; }
+    public required int[] DependenciesFlat { get; init; }    public required int[] DependencyStarts { get; init; }
+    public required int[] ReverseFlat { get; init; }    public required int[] ReverseStarts { get; init; }
     public int FileCount => DistinctFileOffsets.Length - 1;
 
     public string CabName(int id) => Utf8(CabBlob, CabOffsets, id);
@@ -82,8 +38,6 @@ public sealed class CabTable
     public string ContainerPath(int id, int pathIndex)
         => Utf8(ContainerPathBlob, ContainerPathOffsets, ContainerPathStarts[id] + pathIndex);
 
-    /// <summary>Raw UTF-8 bytes of one container path -- the zero-allocation input for scans that
-    /// decode into a pooled buffer instead of materializing 438k strings.</summary>
     public ReadOnlySpan<byte> ContainerPathUtf8(int id, int pathIndex)
     {
         int row = ContainerPathStarts[id] + pathIndex;
@@ -98,8 +52,6 @@ public sealed class CabTable
 
     public int DependencyCount(int id) => DependencyStarts[id + 1] - DependencyStarts[id];
 
-    /// <summary>Entries that DIRECTLY depend on <paramref name="id"/> (real or phantom), ascending
-    /// id order. Zero-allocation view into the eagerly built transpose.</summary>
     public ReadOnlySpan<int> Dependents(int id)
         => ReverseFlat.AsSpan(ReverseStarts[id], ReverseStarts[id + 1] - ReverseStarts[id]);
 
@@ -108,8 +60,6 @@ public sealed class CabTable
 
     private int _maxContainerPathUtf8Length = -1;
 
-    /// <summary>Longest container-path row in bytes -- sizes the pooled decode buffer of a scan
-    /// (UTF-16 char count never exceeds UTF-8 byte count). Computed once, benign to race.</summary>
     public int MaxContainerPathUtf8Length
     {
         get
@@ -129,8 +79,6 @@ public sealed class CabTable
         }
     }
 
-    /// <summary>CAB name (real or phantom) -&gt; id. Binary search over the sorted real entries
-    /// (see the class invariants), then the few phantoms linearly. No dictionary, no upfront cost.</summary>
     public bool TryGetId(string cabName, out int id)
     {
         int lo = 0;
@@ -165,13 +113,8 @@ public sealed class CabTable
         return false;
     }
 
-    /// <summary>Transitive dependency closure over the int graph (seed ids included), classic BFS
-    /// semantics: phantom ids are visited/reported but contribute no edges.</summary>
     public int[] ClosureIds(IEnumerable<int> seedIds) => Walk(seedIds, DependencyStarts, DependenciesFlat, Count);
 
-    /// <summary>Transitive DEPENDENT closure -- every entry that directly or indirectly references
-    /// a seed (seeds included). Same walk as <see cref="ClosureIds"/> on the transposed edges;
-    /// phantom seeds expand too (their dependents are real entries).</summary>
     public int[] ReverseClosureIds(IEnumerable<int> seedIds) => Walk(seedIds, ReverseStarts, ReverseFlat, Count + PhantomCount);
 
     private int[] Walk(IEnumerable<int> seedIds, int[] starts, int[] flat, int expandableLimit)
@@ -199,8 +142,6 @@ public sealed class CabTable
         return order.ToArray();
     }
 
-    /// <summary>Exact transpose of the forward edges, one counting pass + one fill pass, fill in
-    /// ascending source-id order so each dependents row comes out sorted deterministically.</summary>
     private static (int[] Starts, int[] Flat) BuildReverse(int count, int phantomCount, int[] depStarts, int[] depFlat)
     {
         int total = count + phantomCount;
@@ -226,8 +167,6 @@ public sealed class CabTable
         return (starts, flat);
     }
 
-    /// <summary>Columnar build from Build's scan output. Establishes every class invariant:
-    /// name-sorted ids, the distinct-file table, and the reverse adjacency.</summary>
     public static CabTable FromEntries(string baseFolder, IReadOnlyDictionary<string, CabMap.Entry> entries)
     {
         string[] cabs = entries.Keys.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -238,7 +177,6 @@ public sealed class CabTable
             idOf[cabs[id]] = id;
         }
 
-        // Phantom pass: dependency names that are not entries.
         List<string> phantoms = new();
         foreach (string cab in cabs)
         {
@@ -262,7 +200,6 @@ public sealed class CabTable
             cabBlob.Add(phantom);
         }
 
-        // Distinct chunk files, first-seen order over the sorted entries (deterministic).
         Dictionary<string, int> fileIdOf = new(StringComparer.OrdinalIgnoreCase);
         BlobBuilder fileBlob = new(64);
         int[] fileIndex = new int[count];
@@ -346,27 +283,8 @@ public sealed class CabTable
         public int[] Offsets() => _offsets.ToArray();
     }
 
-    // ── RCM6 serialization ────────────────────────────────────────────────────
-    //
-    // Layout (little-endian throughout; this is a same-machine cache format, not an
-    // interchange format):
-    //   u32 magic "RCM6", i32 version
-    //   i32 baseLen, utf8 baseFolder (ABSOLUTE game root -- the map file itself is
-    //     location-independent: copy it anywhere and it behaves identically. Moving the
-    //     GAME invalidates the cache; rebuild, never re-anchor.)
-    //   i32 count, i32 phantomCount, i32 fileCount, i32 pathCount, i32 classTotal, i32 depTotal
-    //   int32[count+phantomCount+1] cabOffsets,  i32 blobLen + bytes cabBlob
-    //   int32[fileCount+1] fileOffsets,          i32 blobLen + bytes fileBlob
-    //   int32[count] fileIndex
-    //   int32[count+1] nameOffsets,              i32 blobLen + bytes nameBlob
-    //   int32[count+1] pathStarts, int32[pathCount+1] pathOffsets, i32 blobLen + bytes pathBlob
-    //   int32[count+1] classStarts, int32[classTotal] classFlat
-    //   int32[count+1] depStarts,   int32[depTotal]   depFlat
-    // The reverse adjacency is NOT stored: its rebuild is one counting pass at load (~3ms at
-    // 549k edges), cheaper than the disk bytes and impossible to let drift out of sync.
 
-    internal const uint Magic6 = 0x52434D36; // "RCM6"
-
+    internal const uint Magic6 = 0x52434D36;
     public void Save(string outPath)
     {
         string outDir = Path.GetDirectoryName(Path.GetFullPath(outPath))!;
@@ -402,10 +320,6 @@ public sealed class CabTable
         WriteInts(writer, DependenciesFlat);
     }
 
-    /// <summary>One sequential pass straight into the final arrays -- no whole-file intermediate
-    /// buffer, no per-string parse. Throws <see cref="InvalidDataException"/> for anything that is
-    /// not RCM6: a cabmap is a regenerable cache, so a format bump means rebuild, never a
-    /// multi-format compatibility reader.</summary>
     public static CabTable Load(string path)
     {
         using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
@@ -438,10 +352,6 @@ public sealed class CabTable
         int[] fileOffsets = ReadInts(stream, fileCount + 1);
         byte[] fileBlob = ReadBlob(stream);
 
-        // The map is location-independent (the base is absolute), so the only way this probe can
-        // come up empty is the GAME having moved or shrunk since the scan. Every downstream miss
-        // would be silent (scopes match nothing, closures resolve to zero files), so refuse the
-        // stale cache loudly: with entries present, at least one chunk file must still exist.
         if (fileCount > 0)
         {
             bool anyChunkExists = false;

@@ -1,4 +1,4 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using System.CommandLine.Binding;
 using System.IO;
 using System.Linq;
@@ -21,81 +21,24 @@ internal sealed class CliOptions
     public bool FailFast { get; init; } = true;
     public string[] Passthrough { get; init; } = [];
 
-    /// <summary>
-    /// Set to write a CABMap (.bin) for the directory given in <see cref="LoadPaths"/>[0],
-    /// then exit. Scanning every file in a big game tree is slow (minutes for Endfield_Data),
-    /// so build once and reuse via <see cref="CabMapPath"/>.
-    /// </summary>
     public string? BuildCabMapPath { get; init; }
 
-    /// <summary>
-    /// Set to build a name index (CAB → its AssetBundle Container addressable paths) for the directory in
-    /// <see cref="LoadPaths"/>[0], then exit. The readable names ("…/pelica/…") the hash-keyed CAB map can't
-    /// hold; written as a "<c>.names</c>" sidecar so <c>--cab-map --names</c> can resolve a name to its CABs
-    /// and their dependency closure without modifying the CAB map.
-    /// </summary>
-    /// <summary>
-    /// When set, the CABMap at this path is loaded and used to resolve the transitive
-    /// dependency closure of each file in <see cref="LoadPaths"/>. AR then sees every chk the
-    /// seed bundles cross-reference, which is the only way to get a complete character
-    /// AnimatorController (its BlendTrees / clip refs live in sibling chks).
-    /// </summary>
     public string? CabMapPath { get; init; }
 
-    /// <summary>
-    /// With <see cref="CabMapPath"/>, load ONLY the bundles that contain an asset of one of these
-    /// ClassID names (plus their transitive dependencies), instead of the whole game. The
-    /// "build map then precisely filter" path — e.g. <c>--load-types Shader ComputeShader</c> to
-    /// export shaders without loading every chk into memory. May be used without <c>--load</c>.
-    /// </summary>
     public string[] LoadTypes { get; init; } = [];
 
-    /// <summary>
-    /// Set to write every loaded prefab hierarchy as one complete .glb (skeleton, skinned meshes,
-    /// materials+textures, morph targets, generic+humanoid animations) into this directory instead
-    /// of running the Unity-project export. <c>--names</c> also filters which prefabs are written.
-    /// The directory is never deleted — files are only added. Auto-enables the AR_GlbExporter hook.
-    /// </summary>
     public string? ExportGlbPath { get; init; }
 
-    /// <summary>
-    /// Set to a VFS streaming map name (e.g. <c>base01_lv002</c>) to export that whole scene:
-    /// discovers the map's mesh-bearing placements (best available LOD per instance), resolves
-    /// their mesh+material container paths to CABs via <see cref="CabMapPath"/>, exports the
-    /// dependency closure as a Unity project into <see cref="ExportPath"/>, and writes a
-    /// <c>ruri_scene_placements.json</c> manifest (asset path + world transform + materials per
-    /// placement) at the export root. Requires <c>--load &lt;gameRoot&gt;</c> (the game install
-    /// root, used only to derive the VFS roots), <c>--cab-map</c>, <c>--export</c>, and a
-    /// VFS-game <c>--hook</c>.
-    /// </summary>
     public string? ExportSceneMap { get; init; }
 
-    /// <summary>
-    /// Which piece of <see cref="ExportSceneMap"/> to export, named the way the game names it:
-    /// <c>&lt;levelId&gt;[,&lt;scale&gt;[,&lt;sceneStateId&gt;...]]</c>, e.g. <c>map01_lv007</c> for
-    /// 供能高地 at the size the game itself gives that place. Absent means the whole map, which on a real
-    /// open-world map is thousands of chunks and a dependency closure no machine holds at once.
-    /// </summary>
     public string? SceneLandmark { get; init; }
 
-    /// <summary>
-    /// The same window stated as a world rect instead of a place name:
-    /// <c>&lt;minX&gt;,&lt;minZ&gt;,&lt;maxX&gt;,&lt;maxZ&gt;[,&lt;sceneStateId&gt;...]</c>. Mutually
-    /// exclusive with <see cref="SceneLandmark"/>.
-    /// </summary>
     public string? SceneWindow { get; init; }
 
-    /// <summary>
-    /// Skip loading scripts entirely (AssetRipper's ScriptContentLevel.Level0). An IL2Cpp game's
-    /// assemblies recover into tens of thousands of MonoScripts nothing downstream reads, and
-    /// loading them is most of a small export's wall time.
-    /// </summary>
     public bool NoScripts { get; init; }
 
-    /// <summary>转储原始 VFS 文件的目标目录。非 bundle 的战斗表就住在这层,AssetRipper 看不到它们。</summary>
     public string? DumpVfsPath { get; init; }
 
-    /// <summary>--dump-vfs 的块类型过滤(VFS 自己的分类,与 AR 的 ClassID 无关)。</summary>
     public string[] VfsTypes { get; init; } = [];
 }
 
@@ -148,9 +91,6 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             "--names",
             parseArgument: result =>
             {
-                // Interpreted on purpose: CabSelection's parallel scan clones per partition (a
-                // Compiled original would re-JIT per clone), and the export-side filter runs these
-                // a few hundred times at most.
                 const RegexOptions options = RegexOptions.IgnoreCase;
                 List<Regex> items = new();
                 if (result.Tokens.Count == 1 && File.Exists(result.Tokens[0].Value))

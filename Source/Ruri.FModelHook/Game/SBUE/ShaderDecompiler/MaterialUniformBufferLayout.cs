@@ -3,8 +3,6 @@ using System.Collections.Generic;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Replays FUniformExpressionSet::CreateBufferStruct() so an SRT ResourceIndex can
-// be mapped back to the canonical `Material` uniform-buffer member name.
 internal sealed class MaterialUniformBufferLayout
 {
     private readonly List<string> _resourceMemberNames;
@@ -48,21 +46,6 @@ internal sealed class MaterialUniformBufferLayout
         }
         else if (counts.TotalResourceCount is int total)
         {
-            // VTStacks not available (older serialization / IoStore cooks
-            // where CUE4Parse doesn't surface VTStacks). Infer the slot
-            // count from `Resources.Num()` and emit anonymous placeholders
-            // that consume the SAME number of slots the engine emitted —
-            // crucial so the post-VT `VirtualTexturePhysical`,
-            // `Wrap_/Clamp_WorldGroupSettings` resolve at the correct
-            // ResourceIndex.
-            //
-            // Engine `MaterialUniformExpressions.cpp:473-486` emits 2 or
-            // 3 resources per stack (PageTable0 + optional PageTable1 if
-            // NumLayers>4 + PageTableIndirection). Without the actual
-            // NumLayers we can't disambiguate the per-stack split, so we
-            // emit one anonymous slot per remaining resource and leave
-            // the actual VirtualTexturePhysical / Wrap / Clamp lookups
-            // correctly aligned downstream.
             int textureSamplerPairsConsumed = 2 * (counts.Standard2D + counts.Cube + counts.Array2D + counts.ArrayCube + counts.Volume + counts.External);
             int virtualPhysicalConsumed = 2 * counts.Virtual;
             int fixedTrailingSamplers = 2;

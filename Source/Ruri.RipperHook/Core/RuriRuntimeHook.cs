@@ -56,7 +56,6 @@ namespace Ruri.RipperHook
 
         public static void DisposeAll()
         {
-            // Dispose hooks tracked by Core
             HookManager.DisposeAll();
             global::Ruri.Hook.RuriHook.ClearAppliedHooks();
             ReflectionExtensions.ClearAppliedHookGuards();
@@ -66,7 +65,6 @@ namespace Ruri.RipperHook
                 LoadedGameHooks.Clear();
             }
 
-            // Dispose hooks tracked locally (if any)
             foreach (var hook in ilHooks)
             {
                 hook.Dispose();

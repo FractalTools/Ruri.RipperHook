@@ -3,15 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// 1:1 port of <c>AssetRipper.AssemblyDumper.Passes.ValidNameGenerator</c>.
-///
-/// The assembly dumper named every generated field after its type tree node, run through this
-/// sanitizer (<c>Pass002_RenameSubnodes.FixNamesRecursively</c> then <c>Pass015_AddFields</c>).
-/// Binding a raw tpk node onto an already generated AssetRipper type therefore has to apply the
-/// exact same transform -- e.g. <c>m_MeshMetrics[0]</c> only matches the field
-/// <c>m_MeshMetrics_0_</c>, and <c>size</c> only matches <c>m_Size</c>.
-/// </summary>
 public static partial class TypeTreeNameFixer
 {
     public static string GetValidFieldName(string originalName)

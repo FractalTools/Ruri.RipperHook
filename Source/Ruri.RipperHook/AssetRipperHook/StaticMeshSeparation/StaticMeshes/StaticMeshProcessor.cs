@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Import.Logging;
@@ -345,13 +345,10 @@ namespace Ruri.RipperHook.AR
 			compressedMesh.SetBindPoses(instanceMeshData.BindPose);
 			compressedMesh.SetTriangles(instanceMeshData.ProcessedIndexBuffer);
 
-			newMesh.KeepIndices = true;//Not sure about this. Seems to be for animated meshes
-			newMesh.KeepVertices = true;//Not sure about this. Seems to be for animated meshes
-			newMesh.MeshMetrics_0_ = CalculateMeshMetric(instanceMeshData.Vertices, instanceMeshData.UV0, instanceMeshData.ProcessedIndexBuffer, instanceMeshData.SubMeshes, 0);
+			newMesh.KeepIndices = true;			newMesh.KeepVertices = true;			newMesh.MeshMetrics_0_ = CalculateMeshMetric(instanceMeshData.Vertices, instanceMeshData.UV0, instanceMeshData.ProcessedIndexBuffer, instanceMeshData.SubMeshes, 0);
 			newMesh.MeshMetrics_1_ = CalculateMeshMetric(instanceMeshData.Vertices, instanceMeshData.UV1, instanceMeshData.ProcessedIndexBuffer, instanceMeshData.SubMeshes, 1);
 			newMesh.MeshUsageFlags = (int)AssetRipper.SourceGenerated.NativeEnums.Global.MeshUsageFlags.MeshUsageFlagNone;
 			newMesh.CookingOptions = (int)AssetRipper.SourceGenerated.NativeEnums.Global.MeshColliderCookingOptions.DefaultCookingFlags;
-			//I copied 30 from a vanilla compressed mesh (with MeshCompression.Low), and it aligned with this enum.
 			newMesh.SetMeshOptimizationFlags(MeshOptimizationFlags.Everything);
 			newMesh.SetMeshCompression(ModelImporterMeshCompression.Low);
 
@@ -368,9 +365,6 @@ namespace Ruri.RipperHook.AR
 
 		private static float CalculateMeshMetric(ReadOnlySpan<Vector3> vertexBuffer, ReadOnlySpan<Vector2> uvBuffer, uint[] indexBuffer, IReadOnlyList<SubMeshData> subMeshList, int uvSetIndex, float uvAreaThreshold = 1e-9f)
 		{
-			//https://docs.unity3d.com/ScriptReference/Mesh.GetUVDistributionMetric.html
-			//https://docs.unity3d.com/ScriptReference/Mesh.RecalculateUVDistributionMetric.html
-			//https://docs.unity3d.com/ScriptReference/Mesh.RecalculateUVDistributionMetrics.html
 
 			const float DefaultMetric = 1.0f;
 			if (vertexBuffer.Length == 0 || uvBuffer.Length == 0 || uvSetIndex >= subMeshList.Count)
@@ -403,7 +397,6 @@ namespace Ruri.RipperHook.AR
 			}
 			else
 			{
-				//Average of triangle area divided by uv area.
 				return vertexAreaSum / n / uvAreaSum;
 			}
 		}
@@ -420,7 +413,6 @@ namespace Ruri.RipperHook.AR
 
 		private static void ApplyTransformationToMeshData(MeshData instanceMeshData, Transformation transformation, Transformation inverseTransformation)
 		{
-			//We need to apply the inverse transform to reverse the static batching.
 			Transformation positionTransform = inverseTransformation;
 			Transformation tangentTransform = positionTransform.RemoveTranslation();
 			Transformation normalTransform = transformation.Transpose();
@@ -444,7 +436,6 @@ namespace Ruri.RipperHook.AR
 				{
 					Vector4 originalTangent = instanceMeshData.Tangents[i];
 					Vector3 transformedTangent = Vector3.Normalize(originalTangent.AsVector3() * tangentTransform);
-					//Unity documentation claims W should always be 1 or -1, but it's not always the case.
 					float w = originalTangent.W < 0 ? -1 : 1;
 					instanceMeshData.Tangents[i] = new Vector4(transformedTangent, w);
 				}
@@ -462,11 +453,9 @@ namespace Ruri.RipperHook.AR
 				Transformation localTransform = currentTransform.ToTransformation();
 				Transformation localInverseTransform = currentTransform.ToInverseTransformation();
 
-				//GlbModelExporter uses a top->down calculation of these transforms.
-				//Because this is bottom->up, the multiplication order is reversed.
-#pragma warning disable IDE0054 // Use compound assignment
+#pragma warning disable IDE0054
 				globalTransform = globalTransform * localTransform;
-#pragma warning restore IDE0054 // Use compound assignment
+#pragma warning restore IDE0054
 				globalInverseTransform = localInverseTransform * globalInverseTransform;
 
 				currentTransform = currentTransform.Father_C4P;
@@ -529,7 +518,6 @@ namespace Ruri.RipperHook.AR
 				newSubMesh.FirstIndex = offset;
 				newSubMesh.FirstVertex = offset;
 				newSubMesh.VertexCount = newSubMesh.IndexCount;
-				//newSubMesh.BaseVertex //Might need set
 				newSubMesh.LocalBounds = Bounds.CalculateFromVertexArray(new ReadOnlySpan<Vector3>(vertices, (int)offset, (int)newSubMesh.IndexCount));
 				subMeshes[k] = newSubMesh;
 
@@ -543,8 +531,7 @@ namespace Ruri.RipperHook.AR
 		{
 			if (array1 is not null)
 			{
-				array1[index1] = array2![index2];//array2 must have the same nullability as array1
-			}
+				array1[index1] = array2![index2];			}
 		}
 
 		private bool TryGetOrMakeCombinedMeshData(IMesh combinedMesh, out MeshData combinedMeshData)
@@ -751,7 +738,6 @@ namespace Ruri.RipperHook.AR
 				totalCount += count;
 			}
 
-			//lots of distance calculations
 			double averageRelativeDistance = totalSum / totalCount;
 			return averageRelativeDistance < MaxMeshDeviation / 2;
 		}

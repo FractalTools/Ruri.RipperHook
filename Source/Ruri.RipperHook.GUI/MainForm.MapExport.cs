@@ -9,22 +9,15 @@ using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.GUI;
 
-// CABMap-aware exports. A loaded map lets us load ONLY the bundles that actually contain a target
-// asset type (+ their dependencies) instead of reading the whole game into memory and filtering.
-// File → Load/Build CABMap manages the map; the map-aware menu items (Export All Shaders, Export by
-// Type, and the right-click "Export with dependencies") are enabled only while a map is loaded.
 public partial class MainForm
 {
 	private readonly ExportCabMap _exportMap = new();
 
-	// Accumulated bundle-granular load filter (chunk-entry file names) across appended scoped loads, so a
-	// reloaded old+new path set keeps every previously-loaded closure's bundles instead of filtering them out.
 	private readonly HashSet<string> _scopedLoadFilter = new(StringComparer.OrdinalIgnoreCase);
 
 	private const int ClassIdShader = (int)ClassIDType.Shader;
 	private const int ClassIdComputeShader = (int)ClassIDType.ComputeShader;
 
-	// ── map load / build ────────────────────────────────────────────
 	private async void loadCabMapToolStripMenuItem_Click(object? sender, EventArgs e)
 	{
 		using OpenFileDialog dialog = new()
@@ -42,13 +35,9 @@ public partial class MainForm
 		ToggleUi(false);
 		try
 		{
-			// Load the map off the UI thread (the map always carries names inline — no sidecar).
-			// No rows are materialised: the virtual list is id-driven over the columnar table
-			// through the shared CabTableSearch engine.
 			await Task.Run(() => _exportMap.Load(file));
 			SetStatus(string.Format(RuriLocalization.CabMapLoaded, _exportMap.CabCount, _exportMap.MapPath));
-			ShowVirtualRows();   // populate the Virtual Asset List tab (loaded assets untouched)
-		}
+			ShowVirtualRows();		}
 		catch (Exception ex)
 		{
 			MessageBox.Show(this, ex.ToString(), RuriLocalization.MenuLoadCabMap, MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -60,12 +49,6 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>
-	/// On-demand, bundle-granular load of the selected CABs (+ their dependency closure) into the loaded Asset
-	/// List. Only the closure's bundles are extracted from each chunk, so this stays memory-bounded even when a
-	/// selection's chunks hold 100k+ unrelated bundles. Append (default) accumulates across successive loads so
-	/// the Asset List grows; reset replaces it. The Virtual Asset List tab is left exactly as it was.
-	/// </summary>
 	internal async Task LoadCabsScopedAsync(IReadOnlyList<string> seedCabs, bool append)
 	{
 		(string[] files, HashSet<string> fileNames) = _exportMap.ResolveScopedClosure(seedCabs);
@@ -88,7 +71,6 @@ public partial class MainForm
 			? _lastLoadedPaths.Concat(files).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
 			: files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-		// Drop the Asset List search term so the freshly loaded closure shows in full (not filtered to a search).
 		listSearch.Clear();
 
 		GameBundleHook.LoadIncludeFile = _scopedLoadFilter.Count > 0 ? name => _scopedLoadFilter.Contains(name) : null;
@@ -100,15 +82,8 @@ public partial class MainForm
 		{
 			GameBundleHook.LoadIncludeFile = null;
 		}
-		tabControl1.SelectedTab = tabPage2;   // surface the loaded assets
-	}
+		tabControl1.SelectedTab = tabPage2;	}
 
-	/// <summary>
-	/// Unitypackage-style export of the selected CABs plus their full transitive dependency closure: load
-	/// just those bundles (bundle-granular) then run a real AssetRipper export — models, prefabs, meshes,
-	/// animations, textures, materials and everything they reference. The Virtual Asset List tab is preserved
-	/// (ResetForm clears only the loaded side), so browsing continues afterwards.
-	/// </summary>
 	internal async Task ExportCabsWithDepsAsync(IReadOnlyList<string> seedCabs, string outputDir)
 	{
 		(string[] files, HashSet<string> fileNames) = _exportMap.ResolveScopedClosure(seedCabs);
@@ -138,7 +113,6 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>The selected loaded assets' source CABs — the seeds for the Asset List's "Export with dependencies".</summary>
 	private List<string> SelectedCabsForDependencyExport()
 	{
 		HashSet<string> cabs = new(StringComparer.OrdinalIgnoreCase);
@@ -152,7 +126,6 @@ public partial class MainForm
 		return cabs.ToList();
 	}
 
-	// Loaded Asset List context menu (the Virtual Asset List builds its own in MainForm.AssetList.cs).
 	private void assetListContextMenuStrip_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
 	{
 		if (assetListView.SelectedIndices.Count == 0)
@@ -163,8 +136,7 @@ public partial class MainForm
 		contextExportWithDepsMenuItem.Enabled = _exportMap.HasMap;
 		int index = assetListView.SelectedIndices[0];
 		Func<string, string> value = column => (uint)index < (uint)_filteredAssets.Count ? AssetColumnValue(_filteredAssets[index], column) : string.Empty;
-		PopulateQuickFilterMenu(_assetQuickInclude, _assetQuickExclude, value);   // Process-Monitor-style Include/Exclude
-	}
+		PopulateQuickFilterMenu(_assetQuickInclude, _assetQuickExclude, value);	}
 
 	private async void buildCabMapToolStripMenuItem_Click(object? sender, EventArgs e)
 	{
@@ -212,7 +184,6 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>Title-bar map indicator + enable/disable of the map-aware menu items.</summary>
 	private void UpdateCabMapState()
 	{
 		RefreshTitle();
@@ -221,7 +192,6 @@ public partial class MainForm
 		contextExportWithDepsMenuItem.Enabled = _exportMap.HasMap;
 	}
 
-	/// <summary>Window title = app name + CABMap state + loaded-asset count. Call after either changes.</summary>
 	private void RefreshTitle()
 	{
 		string map = _exportMap.HasMap
@@ -231,7 +201,6 @@ public partial class MainForm
 		Text = $"RuriAssetRipper - {map}{assets}";
 	}
 
-	// ── map-aware exports ───────────────────────────────────────────
 	private async void shaderExportFromFolderToolStripMenuItem_Click(object? sender, EventArgs e)
 	{
 		await RunMapTypeExportAsync(
@@ -284,8 +253,6 @@ public partial class MainForm
 			return;
 		}
 
-		// Selected virtual files (CAB-map mode) or the selected assets' source CABs (Assets mode) → export
-		// each bundle + its full transitive dependency closure, bundle-granular.
 		List<string> cabs = SelectedCabsForDependencyExport();
 		if (cabs.Count == 0)
 		{
@@ -300,7 +267,6 @@ public partial class MainForm
 		await ExportCabsWithDepsAsync(cabs, output);
 	}
 
-	/// <summary>Resolve bundles for the types via the map, pick output, then export with the type filter applied.</summary>
 	private async Task RunMapTypeExportAsync(HashSet<int> typeIds, bool decompileShaders, FilteredExportText text)
 	{
 		if (!_exportMap.HasMap || typeIds.Count == 0)

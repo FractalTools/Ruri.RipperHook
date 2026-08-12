@@ -10,23 +10,6 @@ using AssetRipper.Tpk.TypeTrees;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// The runtime type tree source. Replaces the generated <c>Ruri.SourceGenerated</c> assembly: instead
-/// of baking one C# class per (class, engine version) ahead of time, the dumped type trees ship in a
-/// stock tpk and are interpreted here.
-///
-/// The tpk is a <c>TpkCollectionBlob</c> holding one <c>TpkTypeTreeBlob</c> per lineage plus a
-/// <c>TpkJsonBlob</c> manifest (see <see cref="TypeTreeManifest"/>) that maps free-form version
-/// strings to the ordinals used inside each lineage's blob. Both blob kinds are stock tpk types, so
-/// the container format is untouched.
-///
-/// Resolution order for the file:
-/// <list type="number">
-/// <item>the path in <c>RURI_TYPE_TREE_TPK</c> (iteration escape hatch -- point it at a freshly built tpk without rebuilding),</item>
-/// <item><c>RuriTypeTree.tpk</c> next to the running assembly,</item>
-/// <item>the <c>RuriTypeTree.tpk</c> embedded resource in this assembly.</item>
-/// </list>
-/// </summary>
 public static class TypeTreeDatabase
 {
     public const string ResourceName = "RuriTypeTree.tpk";
@@ -36,16 +19,6 @@ public static class TypeTreeDatabase
     private static readonly ConcurrentDictionary<(int ClassID, string Lineage, string Version), TypeTreeNode?> ReleaseRootCache = new();
     private static readonly ConcurrentDictionary<(int ClassID, string Lineage, string Version), TypeTreeNode?> EditorRootCache = new();
 
-    /// <summary>
-    /// The lineage version the enabled game hook targets, published by
-    /// <c>RipperHookCommon.HookClasses</c>.
-    ///
-    /// Registered classes carry their own version through <c>HookDispatcher</c>, but AssetRipper's
-    /// unknown-class fallback (<c>TypeTreeNodeStruct.TryMakeFromTpk</c>) is reached without any of
-    /// that context -- it only gets a ClassID and the serialized file's engine version, which says
-    /// nothing about which game build produced it. This is where that fallback learns which lineage
-    /// snapshot to read, so it resolves exactly like every other read path instead of guessing.
-    /// </summary>
     public static TypeTreeVersion ActiveVersion { get; set; }
 
     private static TypeTreeManifest? _manifest;
@@ -76,12 +49,6 @@ public static class TypeTreeDatabase
         }
     }
 
-    /// <summary>
-    /// The Unity version a snapshot reports about itself. A fork keeps its own build here
-    /// (EndField's dumps say <c>2021.3.34f5</c>), so the stock AssetRipper class the loader
-    /// instantiates is chosen from what the dump states rather than from a hand-written guess at the
-    /// engine it was forked from.
-    /// </summary>
     public static UnityVersion GetEngineVersion(TypeTreeVersion version)
     {
         EnsureLoaded();
@@ -96,14 +63,6 @@ public static class TypeTreeDatabase
         return UnityVersion.Parse(engine);
     }
 
-    /// <summary>
-    /// Resolves the release (build) type tree for <paramref name="classID"/> at
-    /// <paramref name="version"/>, or <see langword="null"/> when that lineage carries no definition.
-    ///
-    /// The lookup stays inside the requested lineage. A lineage's chain already begins with the
-    /// engine snapshots it builds on, so a class the game never redefines still resolves -- without
-    /// the lookup ever reaching into another game's definitions.
-    /// </summary>
     public static TypeTreeNode? GetReleaseRoot(ClassIDType classID, TypeTreeVersion version)
     {
         if (version.IsEmpty)
@@ -116,11 +75,6 @@ public static class TypeTreeDatabase
             static key => BuildRoot(key.ClassID, key.Lineage, key.Version, editor: false));
     }
 
-    /// <summary>
-    /// The editor (authoring) tree for the same class, or <see langword="null"/> when the lineage
-    /// carries none -- a game dump describes a build, and a build has no editor-only layout unless
-    /// the snapshot happens to record one.
-    /// </summary>
     public static TypeTreeNode? GetEditorRoot(ClassIDType classID, TypeTreeVersion version)
     {
         if (version.IsEmpty)
@@ -172,10 +126,6 @@ public static class TypeTreeDatabase
         return TypeTreeNode.FromTpk(lineage.Blob.NodeBuffer[root], lineage.Blob.StringBuffer, lineage.Blob.NodeBuffer);
     }
 
-    /// <summary>
-    /// Walks the lineage's sparse chain back to the newest definition at or before
-    /// <paramref name="ordinal"/>. A null entry marks "removed from here on" and resolves to nothing.
-    /// </summary>
     private static TpkUnityClass? GetItemForOrdinal(List<KeyValuePair<UnityVersion, TpkUnityClass?>> list, int ordinal)
     {
         TpkUnityClass? result = null;

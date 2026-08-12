@@ -1,8 +1,5 @@
 namespace AssetRipper.Export.Modules.Shaders.ShaderBlob;
 
-/// <summary>
-/// SerializedBindChannels
-/// </summary>
 public sealed class ParserBindChannels
 {
 	public ParserBindChannels() { }
@@ -14,8 +11,5 @@ public sealed class ParserBindChannels
 	}
 
 	public ShaderBindChannel[] Channels { get; set; } = [];
-	/// <summary>
-	/// m_FullChannelMask
-	/// </summary>
 	public int SourceMap { get; set; }
 }

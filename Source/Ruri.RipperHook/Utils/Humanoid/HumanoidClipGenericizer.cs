@@ -12,27 +12,15 @@ using Ruri.RipperHook.Animation;
 
 namespace Ruri.RipperHook.Humanoid;
 
-/// <summary>
-/// One muscle solve, sampled per frame: what a driven bone's local rotation is, where the hips
-/// actually are, and the extracted root motion. This is the Animator's own read of a humanoid
-/// clip, materialized -- consumers turn it into whatever curve container they write
-/// (<see cref="HumanoidClipGenericizer.Convert"/> back into the clip asset, the bridge into a
-/// curve blob for a host).
-/// </summary>
 public sealed class SolvedHumanoidPose
 {
     public required float SampleRate { get; init; }
     public required int FrameCount { get; init; }
 
-    /// <summary>Per solved bone, in the referential's driven order: the avatar transform path and
-    /// one quaternion per frame (hemisphere-aligned). The hips ride here too when solved.</summary>
     public required List<(string Path, Quaternion[] Rotations)> BoneRotations { get; init; }
 
-    /// <summary>The hips' reconstructed positions, when the clip carries root translation.</summary>
     public (string Path, Vector3[] Positions)? HipsPositions { get; init; }
 
-    /// <summary>Extracted root motion (curve path is the empty string, Unity's own addressing of
-    /// the animated root itself), when the clip carries any.</summary>
     public (Vector3[] Positions, Quaternion[] Rotations)? Motion { get; init; }
 }
 
@@ -40,9 +28,6 @@ public static class HumanoidClipGenericizer
 {
     private const float DefaultFloatWeight = 1f / 3f;
 
-    /// <summary>Whether the clip carries any humanoid muscle float curve -- the one test that says
-    /// "this clip's body (or part of it) is muscle-encoded". Root channels alone do not qualify:
-    /// a generic ACL clip ships RootT/RootQ next to complete per-bone transform tracks.</summary>
     public static bool HasMuscleCurves(IAnimationClip clip)
     {
         foreach (IFloatCurve floatCurve in clip.FloatCurves_C74)
@@ -67,14 +52,6 @@ public static class HumanoidClipGenericizer
         return false;
     }
 
-    /// <summary>
-    /// The solve itself, container-free: muscle/root float channels in, per-frame pose out.
-    /// Null when the channels carry no muscle attribute at all -- root motion alone is not a
-    /// humanoid encoding (see <see cref="HasMuscleCurves"/>). A bone whose muscles the clip does
-    /// not carry is left out entirely (per-bone binding, not all-or-nothing): EndField battle
-    /// clips genuinely ship ACL transform tracks for the upper body while ONLY the legs and hips
-    /// are muscle-encoded, so the solve fills exactly the muscle-encoded gap.
-    /// </summary>
     public static SolvedHumanoidPose? Solve(AvatarMuscleReferential referential,
         List<(string Attribute, HermiteCurve Curve)> channels, float sampleRate,
         bool keepPositionXz, bool keepPositionY, bool keepOrientation)
@@ -193,11 +170,6 @@ public static class HumanoidClipGenericizer
         };
     }
 
-    /// <summary>
-    /// Resolve a clip's muscle encoding into ordinary per-bone transform curves, in place -- the
-    /// in-pipeline consumer (GLB export bakes typed clips). Returns the number of curves written;
-    /// 0 when the clip carries no muscle encoding, in which case it is left untouched.
-    /// </summary>
     public static int Convert(IAnimationClip clip, AvatarMuscleReferential referential)
     {
         SolvedHumanoidPose? pose = Solve(referential, CollectMuscleChannels(clip),
@@ -244,9 +216,6 @@ public static class HumanoidClipGenericizer
         return false;
     }
 
-    /// <summary>q and -q encode the same rotation, but componentwise interpolation between an
-    /// antipodal pair sweeps through a degenerate quaternion -- align every key with its
-    /// predecessor once, here, so every consumer inherits continuity.</summary>
     private static void AlignHemispheres(Quaternion[] rotations)
     {
         for (int f = 1; f < rotations.Length; f++)
@@ -261,9 +230,6 @@ public static class HumanoidClipGenericizer
     private static void WriteRotationCurve(IAnimationClip clip, string path, Quaternion[] rotations,
         int frameCount, float sampleRate)
     {
-        // One binding per path per kind: a second curve on a path that already has one leaves
-        // which of them drives the bone up to whoever reads the clip, and a reader that keys by
-        // path silently keeps only one of them.
         var curves = clip.RotationCurves_C74;
         for (int i = curves.Count - 1; i >= 0; i--)
         {
@@ -292,7 +258,6 @@ public static class HumanoidClipGenericizer
     private static void WritePositionCurve(IAnimationClip clip, string path, Vector3[] positions,
         int frameCount, float sampleRate)
     {
-        // See WriteRotationCurve: one binding per path per kind.
         var curves = clip.PositionCurves_C74;
         for (int i = curves.Count - 1; i >= 0; i--)
         {

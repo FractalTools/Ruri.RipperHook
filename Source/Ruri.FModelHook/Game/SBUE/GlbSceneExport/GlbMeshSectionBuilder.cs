@@ -10,14 +10,8 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, VertexEmpty>;
 
-// Per-section glTF primitive build, moved from CUE4Parse-Conversion
-// Writers/Gltf/Gltf.cs ExportMeshSections. Upstream walks a whole LOD in one
-// private pass and names each primitive from the mesh's own material slot; the
-// scene export needs one section at a time so a placement's override material
-// can name the primitive instead.
 public static class GlbMeshSectionBuilder
 {
-    // Gltf.cs UnitScale: centimetres to metres.
     private const float UnitScale = 0.01f;
 
     public static void AddSection(
@@ -71,7 +65,6 @@ public static class GlbMeshSectionBuilder
         }
     }
 
-    // Gltf.cs PrepareTris, for a single vertex.
     private static VertexPositionNormalTangent ToVertex(MeshVertex vertex)
     {
         return new VertexPositionNormalTangent(

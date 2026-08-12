@@ -5,19 +5,6 @@ using icedreal::Iced.Intel;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// Instruction-aware symbol resolver handed to Iced's <see cref="MasmFormatter"/>. Because Iced tells us the exact
-/// operand kind, this replaces the old regex-over-formatted-text pass and fixes its core flaw: it can no longer turn
-/// an <b>immediate</b> (e.g. a GetHashCode seed <c>add eax,5E593F7Ah</c>) into a bogus <c>sub_</c> code label.
-/// <list type="bullet">
-/// <item>Branch / call target → managed method name / PE export / il2cpp key function / <c>sub_</c> / <c>loc_</c>.</item>
-/// <item>Absolute data global (RIP-relative or bare <c>[disp]</c>) → string literal / TypeInfo / method / field /
-/// constant-pool value / <c>g_</c> — all via <see cref="Il2CppAsmAnnotator.ResolveAddress"/>.</item>
-/// <item>Register-relative displacement (<c>[rcx+18h]</c>) → left raw here; it is a field/struct offset and is
-/// recovered as a trailing <c>; this.field</c> comment by <see cref="Il2CppRegisterFlow"/>.</item>
-/// <item>Immediate / anything else → not resolved (the real value is preserved).</item>
-/// </list>
-/// </summary>
 internal sealed class Il2CppSymbolResolver : ISymbolResolver
 {
     private readonly ApplicationAnalysisContext _app;
@@ -50,8 +37,6 @@ internal sealed class Il2CppSymbolResolver : ISymbolResolver
 
         if (kind == OpKind.Memory)
         {
-            // Only ABSOLUTE data references get a global symbol. A register-relative displacement is a field/struct
-            // offset (address is the small displacement, not a VA) and is handled by the register-flow comment pass.
             bool absolute = instruction.IsIPRelativeMemoryOperand
                 || (instruction.MemoryBase == Register.None && instruction.MemoryIndex == Register.None);
             if (!absolute)

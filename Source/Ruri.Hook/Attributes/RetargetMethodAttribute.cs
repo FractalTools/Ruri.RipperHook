@@ -17,10 +17,6 @@ namespace Ruri.Hook.Attributes
             SourceMethodName = sourceMethodName;
         }
 
-        // String-typed target with explicit injection mode. Use when the source type lives in
-        // another assembly and is internal (can't be referenced via typeof) — the registry resolves
-        // it by scanning loaded assemblies. isBefore/isReturn pick prefix-replace / prefix-continue /
-        // postfix as documented on the Type-typed overload.
         public RetargetMethodAttribute(string sourceTypeName, string sourceMethodName, bool isBefore, bool isReturn, params Type[]? methodParameters)
         {
             SourceTypeName = sourceTypeName;
@@ -49,7 +45,6 @@ namespace Ruri.Hook.Attributes
         public string? SourceTypeName { get; }
         public string? SourceMethodName { get; }
         
-        // Defaults to true (Prefix) and true (Return immediate)
         public bool IsBefore { get; } = true;
         public bool IsReturn { get; } = true;
     }

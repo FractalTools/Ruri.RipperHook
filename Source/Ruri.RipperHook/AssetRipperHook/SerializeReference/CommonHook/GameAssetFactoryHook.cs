@@ -17,13 +17,6 @@ namespace Ruri.RipperHook.AR;
 
 public partial class AR_SerializeReference_Hook
 {
-    /// <summary>
-    /// 整体替换 <c>ReadAsset</c>:三个分支逐条照抄,只把 MonoBehaviour 那支换成支持
-    /// <c>[SerializeReference]</c> 的读法(去掉原版的提前放弃)。
-    /// <para>不切它调的 <c>ReadMonoBehaviour</c>:那是 private static 且只有一处调用,
-    /// Release 下被内联进这里,hook 上去一次都不会被调到(实测命中 0 次)。</para>
-    /// <para>也不用条件前缀:那条只对 void 源方法成立,本方法有返回值。</para>
-    /// </summary>
     [RetargetMethod(typeof(GameAssetFactory), nameof(GameAssetFactory.ReadAsset))]
     public static IUnityObjectBase? ReadAsset(
         GameAssetFactory self,
@@ -33,7 +26,6 @@ public partial class AR_SerializeReference_Hook
     {
         if (assetInfo.Collection.Version.LessThan(3, 5))
         {
-            // 版本被剥/低于 3.5 的资产读不了(源同)。
             return new UnreadableObject(assetInfo, assetData.ToArray());
         }
         if (assetInfo.ClassID != (int)ClassIDType.MonoBehaviour)
@@ -70,7 +62,6 @@ public partial class AR_SerializeReference_Hook
 
     private static MethodInfo? _readNormalObjectMethod;
 
-    /// <summary><c>ReadNormalObject</c> 是 private static;取一次缓存后反射调用,行为与源一致。</summary>
     private static IUnityObjectBase? ReadNormalObject(
         GameAssetFactory self, AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData)
     {
@@ -79,7 +70,6 @@ public partial class AR_SerializeReference_Hook
         return _readNormalObjectMethod?.Invoke(null, new object[] { assetInfo, assetData }) as IUnityObjectBase;
     }
 
-    /// <summary>读结构;尾部多余字节保留已读字段并告警(URP/包升级后的常态,不算失败)。</summary>
     private static bool TryReadStructure(
         SerializableStructure structure,
         ref EndianSpanReader reader,
@@ -112,7 +102,6 @@ public partial class AR_SerializeReference_Hook
 
     private static PropertyInfo? _assemblyManagerProperty;
 
-    /// <summary><c>GameAssetFactory.AssemblyManager</c> 是私有属性;取一次缓存起来。</summary>
     private static IAssemblyManager? GetAssemblyManager(GameAssetFactory factory)
     {
         _assemblyManagerProperty ??= typeof(GameAssetFactory)

@@ -9,23 +9,6 @@ using System.Text;
 
 namespace Ruri.RipperHook.CabMapping;
 
-/// <summary>
-/// CABMap: CAB name → (chunk file, chunk-entry file name, dependencies, ClassIDs, readable
-/// AssetBundle Container addressable paths). One self-contained file — load it and the whole game
-/// is browsable by dependency graph (both directions) AND by readable name. Build it ONCE over the
-/// whole game folder (parallel across chunk files AND across the bundles inside each), then every
-/// resolve goes through <see cref="CabSelection"/> on the columnar <see cref="CabTable"/>; the
-/// helpers here cover the remaining shapes:
-///   * <see cref="ResolveCabsForFiles"/> — on-disk chunk files → the CABs they host (the seed step
-///     of a plain "load exactly these files" request),
-///   * <see cref="ResolveCabsForPaths"/> — addressable container paths → their hosting CABs (the
-///     seed step of a scene-placement or Blender-side path selection),
-///   * <see cref="ResolveClosureCabNames"/> / <see cref="ResolveReverseClosureCabNames"/> — pure
-///     in-memory transitive closure over dependencies / dependents, by CAB name.
-///
-/// Format: RCM6 only -- the columnar layout documented in <see cref="CabTable"/>. A cabmap is a
-/// regenerable cache: a format bump means rebuild, never a multi-format compatibility reader.
-/// </summary>
 public static class CabMap
 {
     public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
@@ -46,14 +29,6 @@ public static class CabMap
             return 1;
         }
 
-        // Scan mode: tell the VFS extractor to skip resource payloads (video/audio/tables/streaming),
-        // decrypting only the AssetBundles that host a CAB. Reset afterwards so normal loading is unaffected.
-        //
-        // Two parallel axes: the VFS extractor fans out one worker per inner bundle, and the outer
-        // lanes here pipeline the many small chunk files behind the giant ones (EndField packs ~62%
-        // of all CABs into a single .chk whose inner scan alone saturates the machine; without outer
-        // lanes every other chunk would wait for it). Outer width stays low on purpose — both axes
-        // share the thread pool, and each in-flight chunk holds decrypt buffers.
         GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
         List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)>?[] perFile = new List<(string, string, List<string>, List<int>, List<string>)>?[files.Length];
         try
@@ -66,8 +41,6 @@ public static class CabMap
             GameBundleHook.ScanIncludeFile = null;
         }
 
-        // Deterministic merge in directory-enumeration order, exactly like the serial scan wrote it:
-        // on a duplicate CAB name the later file wins.
         Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < files.Length; i++)
         {
@@ -90,18 +63,6 @@ public static class CabMap
         return 0;
     }
 
-    /// <summary>
-    /// Combined single-pass projection of one on-disk file: SerializedFile metadata (CAB name, deps,
-    /// ClassIDs) PLUS the readable names (chunk-entry file name, AssetBundle Container paths). Reads the
-    /// tiny AssetBundle object per CAB and nothing else — no other asset is materialized, no processor runs.
-    ///
-    /// EndField (and the other VFS games) wrap their SerializedFiles in encrypted, content-addressed chunk
-    /// containers (a <c>.chk</c> indexed by a sibling <c>&lt;dir&gt;.blc</c> manifest); a bare
-    /// <see cref="SchemeReader.LoadFile"/> only ever sees an opaque ResourceFile. The active game hook
-    /// exposes <see cref="GameBundleHook.ScanChunkFull"/> — a bounded-memory, parallel scan that decrypts
-    /// only CAB-hosting bundles and disposes each right after projection. We fall back to driving
-    /// <see cref="GameBundleHook.CustomFilePreInitialize"/> (or a direct scheme read) per file otherwise.
-    /// </summary>
     internal static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanFullMetadata(string file)
     {
         if (GameBundleHook.ScanChunkFull is { } scanChunk)
@@ -117,9 +78,6 @@ public static class CabMap
             }
         }
 
-        // Fallback (non-VFS games): drive the hook's file-pre-initialize unpack if present, otherwise a
-        // direct scheme read, then project each resulting SerializedFile. Bundles are disposed as they are
-        // read so a whole-game scan stays flat.
         List<(string, string, List<string>, List<int>, List<string>)> result = new();
         List<FileBase> fileStack = new();
 
@@ -158,15 +116,10 @@ public static class CabMap
                 }
                 else
                 {
-                    continue; // ResourceFile / FailedFile — no asset type table to read
-                }
+                    continue;                }
 
                 foreach (SerializedFile sf in serializedFiles)
                 {
-                    // Per-asset virtual-row expansion for non-bundled files (one row per named
-                    // Mesh/AnimationClip/Texture/... instead of one opaque row per container file)
-                    // -- see GameBundleHook.ReadFullMetadataRows. Bundled files come back as the
-                    // single container-path row they always were.
                     result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, fallbackName));
                 }
             }
@@ -176,7 +129,6 @@ public static class CabMap
             }
             finally
             {
-                // Free the decompressed bundle bytes immediately — a whole-game scan would balloon otherwise.
                 (fileBase as IDisposable)?.Dispose();
             }
         }
@@ -184,22 +136,15 @@ public static class CabMap
         return result;
     }
 
-    /// <summary>Load a cabmap as the columnar <see cref="CabTable"/> — one sequential stream read
-    /// straight into the final buffers (see <see cref="CabTable.Load"/>).</summary>
     public static CabTable LoadTable(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         return CabTable.Load(path);
     }
 
-    /// <summary>Transitive dependency closure by CAB name (seeds included). An unknown seed name is
-    /// reported back in the output — classic BFS "visited" semantics — it just expands nothing.</summary>
     public static string[] ResolveClosureCabNames(CabTable table, IEnumerable<string> seedCabNames)
         => ResolveWalkCabNames(table, seedCabNames, reverse: false);
 
-    /// <summary>Transitive DEPENDENT closure by CAB name (seeds included): every CAB that directly
-    /// or indirectly references a seed. The mirror of <see cref="ResolveClosureCabNames"/> on the
-    /// transposed graph, same unknown-seed semantics.</summary>
     public static string[] ResolveReverseClosureCabNames(CabTable table, IEnumerable<string> seedCabNames)
         => ResolveWalkCabNames(table, seedCabNames, reverse: true);
 
@@ -215,8 +160,7 @@ public static class CabMap
             }
             else
             {
-                names.Add(seed); // unknown seed: classic Bfs still reported it as visited
-            }
+                names.Add(seed);            }
         }
         foreach (int id in reverse ? table.ReverseClosureIds(seedIds) : table.ClosureIds(seedIds))
         {
@@ -225,11 +169,6 @@ public static class CabMap
         return names.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    /// <summary>
-    /// On-disk chunk files -> the CAB names they host. The seed step for a plain
-    /// "load exactly these files (plus what they need)" request. Distinct-file resolution runs once
-    /// per chunk file the map knows (a few dozen), never per CAB.
-    /// </summary>
     public static string[] ResolveCabsForFiles(CabTable table, IEnumerable<string> files)
     {
         HashSet<string> wanted = new(StringComparer.OrdinalIgnoreCase);
@@ -262,12 +201,6 @@ public static class CabMap
         return cabs.ToArray();
     }
 
-    /// <summary>
-    /// Addressable container paths -> the CAB names hosting them. Case-insensitive, and a path's
-    /// <c>##subname</c> suffix (a multi-object FBX sub-asset) is ignored on both sides. One parallel
-    /// pass over the path column probing a span lookup of the queries — no 438k-string index is ever
-    /// materialized for what is always a handful-to-thousands of queries.
-    /// </summary>
     public static string[] ResolveCabsForPaths(CabTable table, IEnumerable<string> containerPaths)
     {
         HashSet<string> queries = new(StringComparer.OrdinalIgnoreCase);

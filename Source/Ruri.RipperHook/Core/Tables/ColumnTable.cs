@@ -2,19 +2,12 @@ using System.Text;
 
 namespace Ruri.RipperHook.Tables;
 
-/// <summary>
-/// The one shape every consumer sees. Three column types, not more: variable-length text as a
-/// blob plus offsets, and the two scalar families. A cabmap row table, a game config table, a
-/// scene placement list and a VFS file index are all this, so they share one browser, one search
-/// engine and one interop crossing.
-/// </summary>
 public abstract class Column
 {
     public required string Name { get; init; }
     public abstract int RowCount { get; }
 }
 
-/// <summary>UTF-8 blob + <c>RowCount + 1</c> offsets. No System.String is created while building.</summary>
 public sealed class Utf8Column : Column
 {
     public required byte[] Blob { get; init; }
@@ -45,7 +38,6 @@ public sealed class ColumnTable
     public required int RowCount { get; init; }
     public required Column[] Columns { get; init; }
 
-    /// <summary>The same columns restricted to <paramref name="rows"/>, in that order.</summary>
     public ColumnTable SelectRows(int[] rows)
     {
         Column[] columns = new Column[Columns.Length];
@@ -80,10 +72,6 @@ public sealed class ColumnTable
         return builder.Build(column.Name);
     }
 
-    /// <summary>One row per distinct value of <paramref name="distinctColumn"/>. When several rows
-    /// share a value the one with a non-empty <paramref name="preferColumn"/> wins, so collapsing
-    /// "same model, listed once per place it stands" keeps the entry that actually has a name;
-    /// ties keep the earlier row, which is stable because the projection's order is.</summary>
     public ColumnTable DistinctBy(string distinctColumn, string preferColumn)
     {
         Utf8Column key = (Utf8Column)this[distinctColumn];
@@ -127,11 +115,6 @@ public sealed class ColumnTable
     }
 }
 
-/// <summary>Accumulates one UTF-8 column without materializing per-row strings.
-/// <para><paramref name="rowCount"/> is a HINT, not a limit: both buffers grow. A producer that
-/// knows its row count still gets a single allocation, and one that is streaming rows out of a
-/// container it is still reading does not have to count them first just to use the fast shape.</para>
-/// </summary>
 public sealed class Utf8ColumnBuilder
 {
     private byte[] _blob;
@@ -166,8 +149,6 @@ public sealed class Utf8ColumnBuilder
     {
         byte[] blob = new byte[_length];
         Array.Copy(_blob, blob, _length);
-        // Trimmed to the rows actually written: RowCount is Offsets.Length - 1, so a grown-past
-        // buffer would otherwise report phantom empty rows at the end.
         int[] offsets = _offsets;
         if (offsets.Length != _rows + 1)
         {

@@ -8,25 +8,6 @@ using AssetRipper.Tpk.TypeTrees;
 
 namespace Ruri.Tpk.Pipeline;
 
-/// <summary>
-/// Rewrites a freshly packed tpk into AssetRipper's own naming vocabulary by running AR's real
-/// <c>Pass002_RenameSubnodes</c> over it.
-///
-/// This is not optional polish. AssetRipper names every generated field after its type tree node --
-/// but only after Pass002 has rewritten a long list of them: <c>m_TextureFormat</c> becomes
-/// <c>m_Format</c>, <c>image data</c> becomes <c>m_ImageData</c>, <c>VertexData.m_DataSize</c>
-/// becomes <c>m_Data</c>, and every PPtr's <c>m_FileID</c>/<c>m_PathID</c> gain a trailing
-/// underscore. A runtime interpreter that binds raw dump names straight onto those fields silently
-/// drops every renamed node -- textures lose their format, and every asset reference reads as null.
-///
-/// Transcribing those ~500 lines into our own node model would just relocate the bug, so the real
-/// pass runs here instead and the shipped tpk carries the post-rename names. That also keeps us in
-/// step with upstream automatically: a rename added to AR is picked up by rebuilding the tpk.
-///
-/// <c>Pass000_ProcessTpk</c> is deliberately NOT used to load the blob -- it rewrites version keys
-/// (<c>StripType</c>/<c>StripBuild</c>/...), which would destroy the custom-engine discriminator
-/// that identifies a game's overlay (<c>2021.3.1404x5</c> -> EndField build 1404).
-/// </summary>
 internal static class TypeTreeRenamer
 {
     public static TpkTypeTreeBlob ApplyAssetRipperRenaming(TpkTypeTreeBlob blob)
@@ -35,8 +16,6 @@ internal static class TypeTreeRenamer
 
         PrepareSharedStateWorkingDirectory();
 
-        // The common string is no longer passed separately -- as of tpk 2 it travels inside the blob
-        // bytes, which SharedState keeps opaque (it only stores them for Pass557 to embed).
         SharedState.Initialize(
             blob.Versions.ToArray(),
             classes,
@@ -47,13 +26,6 @@ internal static class TypeTreeRenamer
         return ToBlob(blob, classes);
     }
 
-    /// <summary>
-    /// <see cref="SharedState"/>'s constructor resolves its reference modules and a documentation
-    /// history file relative to the working directory. Only the renaming pass is being run, and it
-    /// reads neither, so point the working directory at our own output (where the AssetRipper
-    /// assemblies already sit) and stub the history file rather than dragging the whole codegen
-    /// artifact set back in.
-    /// </summary>
     private static void PrepareSharedStateWorkingDirectory()
     {
         Directory.SetCurrentDirectory(AppContext.BaseDirectory);
@@ -84,18 +56,12 @@ internal static class TypeTreeRenamer
         return classes;
     }
 
-    /// <summary>
-    /// Repacks the renamed trees. The version list and the per-class version keys are carried over
-    /// untouched; only names change, so the runtime lookup keys stay exactly as the packer produced.
-    /// </summary>
     private static TpkTypeTreeBlob ToBlob(TpkTypeTreeBlob source, Dictionary<int, VersionedList<UniversalClass>> classes)
     {
         TpkTypeTreeBlob result = new();
         result.Versions.AddRange(source.Versions);
         result.CreationTime = source.CreationTime;
 
-        // Entry.String indexes the string buffer it was built against, and this is a fresh blob with a
-        // fresh buffer, so each entry is re-added by value rather than copied by index.
         foreach (KeyValuePair<UnityVersion, TpkCommonString.Entry[]> pair in source.CommonString.VersionInformation)
         {
             TpkCommonString.Entry[] entries = new TpkCommonString.Entry[pair.Value.Length];
@@ -142,7 +108,6 @@ internal static class TypeTreeRenamer
         return result;
     }
 
-    /// <summary>Exact inverse of <c>UniversalNode.FromTpkUnityNode</c>.</summary>
     private static ushort Convert(UniversalNode node, TpkStringBuffer stringBuffer, TpkUnityNodeBuffer nodeBuffer)
     {
         TpkUnityNode result = new()

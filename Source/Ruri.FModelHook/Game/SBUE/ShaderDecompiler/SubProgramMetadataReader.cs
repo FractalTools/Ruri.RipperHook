@@ -5,8 +5,6 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Thin orchestration layer so Pass180 consumes a named subprogram-reader service
-// instead of inlining the runtime/material merge directly.
 internal static class SubProgramMetadataReader
 {
     public static SerializedProgramData Read(

@@ -2,11 +2,6 @@ using AssetRipper.Import.Logging;
 
 namespace Ruri.RipperHook.CLI;
 
-/// <summary>
-/// AssetRipper log sink that writes everything to stderr (so stdout stays clean for the JSON
-/// summary). Honors <see cref="MinLevel"/> as a hard threshold; the AssetRipper Logger.AllowVerbose
-/// already gates Verbose globally.
-/// </summary>
 internal sealed class StderrLogger : ILogger
 {
     public LogType MinLevel { get; init; } = LogType.Info;
@@ -52,8 +47,6 @@ internal sealed class StderrLogger : ILogger
 
     private bool ShouldEmit(LogType type)
     {
-        // LogType ordering (per AssetRipper): Debug < Verbose < Info < Warning < Error.
-        // We rank manually because LogType is not an ordered enum in AR.
         return Rank(type) >= Rank(MinLevel);
     }
 

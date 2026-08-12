@@ -2,9 +2,6 @@ using System;
 
 namespace Ruri.ACL
 {
-    /// <summary>
-    /// Decompressor for ACL transform (qvvf) tracks. Pure C# implementation, no native dependency.
-    /// </summary>
     public class AclDecompressor
     {
         private readonly AclCompressedTracks _tracks;
@@ -39,7 +36,6 @@ namespace Ruri.ACL
 
         public void Dispose()
         {
-            // Managed implementation, nothing to release. Kept for API compatibility.
         }
     }
 }

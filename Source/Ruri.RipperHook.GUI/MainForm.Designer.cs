@@ -175,7 +175,6 @@ partial class MainForm
 		menuStrip1.Size = new System.Drawing.Size(1264, 24);
 		fileToolStripMenuItem.DropDownItems.AddRange([loadFileToolStripMenuItem, loadFolderToolStripMenuItem, appendFileToolStripMenuItem, appendFolderToolStripMenuItem, fileToolStripSeparator1, resetToolStripMenuItem, fileCabMapSeparator, loadCabMapToolStripMenuItem, buildCabMapToolStripMenuItem]);
 		fileToolStripMenuItem.Text = "File";
-		// CABMap: load a dependency/type index (like the Asset Browser), enabling map-aware exports.
 		loadCabMapToolStripMenuItem.Text = RuriLocalization.MenuLoadCabMap;
 		loadCabMapToolStripMenuItem.Click += loadCabMapToolStripMenuItem_Click;
 		buildCabMapToolStripMenuItem.Text = RuriLocalization.MenuBuildCabMap;
@@ -192,26 +191,14 @@ partial class MainForm
 		resetToolStripMenuItem.Click += resetToolStripMenuItem_Click;
 		settingsToolStripMenuItem.Text = "Settings";
 		settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
-		// Top-level button: load an input + export directly, no asset list / scene tree.
-		// Equivalent to the headless AR_ExportDirectly hook, but UI-triggered. Splits into
-		// file-vs-folder so single-bundle spot tests share the same path-derivation logic
-		// as whole-game exports. (Renamed "Direct Export" -> Quick Export; see RuriLocalization.)
-		// The "Export Code Only" sibling decompiles the whole IL2CPP codebase and skips all assets.
-		// All user-facing labels go through RuriLocalization (no hardcoded plaintext).
-		// Quick Export holds every export flavour: From file/folder (the old Direct Export), plus the
-		// heavier game-export features. Disassembly/Shader/By-Type are flattened in here (not separate
-		// top-level menus). The two map-aware ones are enabled only when a CABMap is loaded — see
-		// MainForm.cs UpdateCabMapState(). All labels via RuriLocalization (no hardcoded plaintext).
 		directExportToolStripMenuItem.Text = RuriLocalization.MenuQuickExport;
 		directExportToolStripMenuItem.DropDownItems.AddRange([directExportFromFileToolStripMenuItem, directExportFromFolderToolStripMenuItem, quickExportSeparator, disassemblyExportFromFolderToolStripMenuItem, shaderExportFromFolderToolStripMenuItem, byTypeExportToolStripMenuItem]);
 		directExportFromFileToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFile;
 		directExportFromFileToolStripMenuItem.Click += directExportFromFileToolStripMenuItem_Click;
 		directExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuQuickExportFromFolder;
 		directExportFromFolderToolStripMenuItem.Click += directExportFromFolderToolStripMenuItem_Click;
-		// Export Disassembly: all code + IL2CPP asm, skip assets (no map needed). MainForm.DisassemblyExport.cs.
 		disassemblyExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuDisassemblyExport;
 		disassemblyExportFromFolderToolStripMenuItem.Click += disassemblyExportFromFolderToolStripMenuItem_Click;
-		// Export All Shaders + Export by Type: map-aware (load only the bundles with that type + deps).
 		shaderExportFromFolderToolStripMenuItem.Text = RuriLocalization.MenuShaderExport;
 		shaderExportFromFolderToolStripMenuItem.Click += shaderExportFromFolderToolStripMenuItem_Click;
 		byTypeExportToolStripMenuItem.Text = RuriLocalization.MenuByTypeExport;
@@ -241,14 +228,12 @@ partial class MainForm
 		exportFilteredAssetsMenuItem.Click += exportFilteredAssetsMenuItem_Click;
 		assetListContextMenuStrip.Items.AddRange([contextExportSelectedAssetsMenuItem, contextExportSeparator, contextExportWithDepsMenuItem]);
 		assetListContextMenuStrip.Opening += assetListContextMenuStrip_Opening;
-		// CAB-map mode only: load the selected virtual files + their dependency closure into the Asset List.
 		contextExportSelectedAssetsMenuItem.DropDownItems.AddRange([contextExportSelectedConvertedAssetsMenuItem, contextExportSelectedYamlAssetsMenuItem]);
 		contextExportSelectedAssetsMenuItem.Text = "Export selected";
 		contextExportSelectedConvertedAssetsMenuItem.Text = "Converted";
 		contextExportSelectedConvertedAssetsMenuItem.Click += exportSelectedAssetsMenuItem_Click;
 		contextExportSelectedYamlAssetsMenuItem.Text = "YAML";
 		contextExportSelectedYamlAssetsMenuItem.Click += exportSelectedYamlAssetsMenuItem_Click;
-		// Map-aware: export the selected asset's whole bundle + transitive deps so nothing is lost.
 		contextExportWithDepsMenuItem.Text = RuriLocalization.ContextExportWithDeps;
 		contextExportWithDepsMenuItem.Click += contextExportWithDepsMenuItem_Click;
 		splitContainer1.Dock = DockStyle.Fill;
@@ -315,8 +300,6 @@ partial class MainForm
 		assetListView.TabIndex = 0;
 		assetListView.UseCompatibleStateImageBehavior = false;
 		assetListView.View = View.Details;
-		// Virtual mode: one list serves both loaded assets (hundreds–thousands) and CAB-map virtual files
-		// (258k+) without materialising a ListViewItem per row. Rows come from MainForm's active backing.
 		assetListView.VirtualMode = true;
 		assetListView.ContextMenuStrip = assetListContextMenuStrip;
 		assetListView.RetrieveVirtualItem += assetListView_RetrieveVirtualItem;

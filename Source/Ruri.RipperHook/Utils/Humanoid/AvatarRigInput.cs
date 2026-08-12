@@ -13,26 +13,15 @@ using AssetRipper.SourceGenerated.Subclasses.Xform;
 
 namespace Ruri.RipperHook.Humanoid;
 
-/// <summary>
-/// Everything a muscle referential is built FROM, source-neutral: the same numbers arrive either
-/// as AssetRipper's typed <see cref="IAvatar"/> (an asset loaded in-pipeline) or as the avatar's
-/// serialized document tree in JSON (Unity's own field names, stamped onto a Blender armature and
-/// handed back across the bridge at solve time). One build path consumes this; the two factories
-/// below are pure field extraction and hold no muscle knowledge of their own.
-/// </summary>
 public sealed class AvatarRigInput
 {
-    /// <summary>Per raw human-skeleton node (m_Human.m_Skeleton.m_Node): parent index and axes index.</summary>
     public required int[] NodeParent { get; init; }
     public required int[] NodeAxesId { get; init; }
 
-    /// <summary>CRC32 path ids per node (m_Skeleton.m_ID), the key space of <see cref="Tos"/>.</summary>
     public required uint[] NodeId { get; init; }
 
-    /// <summary>m_Skeleton.m_AxesArray: the muscle referential rows nodes point into via NodeAxesId.</summary>
     public required AxesRow[] Axes { get; init; }
 
-    /// <summary>m_TOS: CRC32 path hash -> full transform path.</summary>
     public required Dictionary<uint, string> Tos { get; init; }
 
     public required int[] HumanBoneIndex { get; init; }
@@ -40,7 +29,6 @@ public sealed class AvatarRigInput
     public required int[] RightHandBoneIndex { get; init; }
     public required float[] HumanBoneMass { get; init; }
 
-    /// <summary>m_Human.m_RootX.q: the rest root orientation the RootQ channel is relative to.</summary>
     public required Quaternion RootRestQ { get; init; }
 
     public required float ArmTwist { get; init; }
@@ -48,13 +36,11 @@ public sealed class AvatarRigInput
     public required float UpperLegTwist { get; init; }
     public required float LegTwist { get; init; }
 
-    /// <summary>m_Human.m_SkeletonPose.m_X: per-node local rest (t, q), the provisional-FK frame.</summary>
     public required (Vector3 T, Quaternion Q)[] SkeletonPose { get; init; }
 
     public readonly record struct AxesRow(
         Quaternion PreQ, Quaternion PostQ, Vector3 Sgn, Vector3 LimitMin, Vector3 LimitMax);
 
-    // ── typed-asset factory ──────────────────────────────────────────────────
 
     public static AvatarRigInput FromAvatar(IAvatar avatar)
     {
@@ -180,16 +166,7 @@ public sealed class AvatarRigInput
         return xform.Has_T3() ? ToVector3(xform.T3) : new Vector3(xform.T4!.X, xform.T4.Y, xform.T4.Z);
     }
 
-    // ── document-tree factory ────────────────────────────────────────────────
 
-    /// <summary>
-    /// The same numbers out of the avatar's serialized document tree (Unity's own m_* field names,
-    /// JSON-encoded): what a Blender armature carries as its <c>ruri_unity_avatar</c> stamp. Field
-    /// variants a version bump moves under us are tolerated the same way the typed side does:
-    /// OffsetPtr <c>{data: ...}</c> wrappers peel, int arrays may arrive as little-endian hex
-    /// strings, Sgn/Limit may carry three or four components, and numbers may arrive as strings.
-    /// Returns null when the document has no human rig at all (m_Human absent/empty).
-    /// </summary>
     public static AvatarRigInput? FromDocumentJson(string avatarDocumentJson)
     {
         JsonNode? root = JsonNode.Parse(avatarDocumentJson);
@@ -258,7 +235,6 @@ public sealed class AvatarRigInput
             GetVector3(limit?["m_Max"]));
     }
 
-    /// <summary>Peel Unity's OffsetPtr <c>{data: ...}</c> indirection.</summary>
     private static JsonNode? Unwrap(JsonNode? node)
     {
         while (node is JsonObject obj && obj.Count == 1 && obj.ContainsKey("data"))
@@ -268,8 +244,6 @@ public sealed class AvatarRigInput
         return node;
     }
 
-    /// <summary>m_TOS as {hash: path}: a list of {first, second} pairs, a {key: path} flow-map
-    /// entry list, or a plain dict -- the same three shapes the YAML side produces.</summary>
     private static Dictionary<uint, string> ParseTos(JsonNode? tos)
     {
         Dictionary<uint, string> result = new();
@@ -316,9 +290,6 @@ public sealed class AvatarRigInput
 
     private static readonly char[] HexDigits = "0123456789abcdefABCDEF".ToCharArray();
 
-    /// <summary>An int32 array that may arrive as a JSON list or as AssetRipper's little-endian
-    /// hex string (tolerant of the trailing -1 padding run: parsing stops at the first non-hex
-    /// 8-char chunk, everything needed precedes the padding).</summary>
     private static int[] IntArray(JsonNode? node)
     {
         if (node is JsonArray list)

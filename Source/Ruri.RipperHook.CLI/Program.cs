@@ -14,9 +14,6 @@ internal static class Program
     {
         Bootstrap.InstallAssemblyResolver();
 
-        // Capture original stdout for the JSON summary, then point Console.Out at stderr so any
-        // third-party Console.WriteLine (HookLogger, AssetRipper progress prints, etc.) doesn't
-        // contaminate our JSON line.
         HeadlessRunner.JsonStdout = Console.Out;
         Console.SetOut(Console.Error);
 
@@ -31,8 +28,6 @@ internal static class Program
 
         var parser = new CommandLineBuilder(root).UseDefaults().Build();
         int parseResult = parser.Invoke(args);
-        // System.CommandLine swallows handler return values when SetHandler is Action-shaped, so
-        // we capture exitCode out-of-band and prefer our value over the parser's 0/help fall-through.
         return parseResult != 0 ? parseResult : exitCode;
     }
 
@@ -74,24 +69,11 @@ internal static class Program
         {
             config.EnabledHooks.Add(NormalizeHookId(id));
         }
-        // Always on, unconditionally, not opt-in: "Copying streaming assets" blind-copies whatever
-        // sits in <game>/StreamingAssets verbatim into the export tree. For VFS games (EndField) that
-        // includes a stale, previously-decompiled shader HLSL cache dropped there by a prior session
-        // (Endfield_Data/StreamingAssets/VFS/<id>/<hash>Output/) -- so any export silently overwrote
-        // our freshly-decompiled shaders with old ones after the real decompile step ran, making every
-        // decompiler fix upstream look like it "did nothing" or "worked" at random depending on which
-        // files a given run happened to touch. Root-caused 2026-07-18 (user instruction: never let this
-        // run again without an explicit opt-in). --hook AR_SkipStreamingAssetsCopy still works too; this
-        // just removes the need to remember it every single invocation.
         config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
-        // AR_SerializeReference_ 不在这里加:每个 host 都必开,已收敛到 Bootstrap.AlwaysOnHookIds,
-        // 由下面的 Bootstrap.ApplyHooks 统一补上。
-        // --load-types implies the export should be filtered to those same types.
         if (opts.LoadTypes.Length > 0)
         {
             config.EnabledHooks.Add("AR_TypeFilterExport_");
         }
-        // --export-glb needs the full-model GLB builder installed over GlbModelExporter.ExportModel.
         if (opts.ExportGlbPath is { Length: > 0 })
         {
             config.EnabledHooks.Add("AR_GlbExporter_");
@@ -100,12 +82,6 @@ internal static class Program
         Bootstrap.ApplyHooks(config);
     }
 
-    /// <summary>
-    /// Hook ids are <c>GameName_Version</c>; AR_* hooks have empty Version which yields a
-    /// trailing <c>_</c>. Versions usually contain dots (<c>0.1.1.3</c>) but users frequently type
-    /// them with underscores (<c>0_1_1_3</c>) to keep the whole id underscore-separated. Accept
-    /// both forms by canonicalizing punctuation before comparing.
-    /// </summary>
     private static string NormalizeHookId(string id)
     {
         if (string.IsNullOrEmpty(id)) return id;
@@ -116,9 +92,6 @@ internal static class Program
         var allHooks = Hook.RuriHook.GetAvailableHooks();
         foreach (var (_, attr) in allHooks)
         {
-            // Check every id this attribute answers to (its own version plus any
-            // AlsoCoversVersions alias), not just its primary declared version -- otherwise
-            // --hook EndField_1.3.3 would never resolve to the 1.2.4 class that covers it.
             foreach (string candidate in Hook.RuriHook.BuildHookIds(attr))
             {
                 if (string.Equals(Canonicalize(candidate), target, StringComparison.OrdinalIgnoreCase))

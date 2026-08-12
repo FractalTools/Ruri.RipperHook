@@ -3,102 +3,29 @@ using System.Collections.Generic;
 
 namespace Ruri.FModelHook.CLI;
 
-// Minimal CLI option bag — parsed by hand so the CLI can boot without
-// dragging in System.CommandLine / argparse-style packages. Shader export is
-// fully headless: game directory, AES keys, mappings and EGame version all come
-// from the --game-config AppSettings snapshot (HeadlessGameConfig); the export
-// level is controlled entirely by the flags here (--split-variants / --export-only
-// / --skip-global / --archive-filter).
 internal sealed class CliOptions
 {
     public bool SkipGlobal { get; set; }
     public bool ListHooks { get; set; }
-    // Mount the provider from --game-config, enumerate every target
-    // .ushaderbytecode archive (respecting --skip-global / --archive-filter),
-    // print name + size, then exit WITHOUT exporting or decompiling. Lets a
-    // self-test pick a small in-game archive by name before committing to the
-    // multi-GB export — IoStore archives are virtual VFS entries, not loose
-    // files, so they can't be listed from disk.
     public bool ListArchives { get; set; }
-    // Mount (full AppSettings key set) and print every file path containing
-    // this substring, then exit — no shader export/decompile at all. Asset
-    // discovery: find a SkeletalMesh/material/texture's package path.
     public string? FindAsset { get; set; }
-    // Mount (full AppSettings key set) and directly export the given package
-    // path(s) — mesh + material + texture, via CUE4Parse-Conversion's own
-    // Exporter (same path FModel's GUI "Export" uses). Repeatable; also
-    // accepts a comma-separated list in one flag.
     public List<string> ExportAssetPaths { get; } = new();
-    // Mount and, for each given material package path, resolve its inline
-    // ResourceHash then report which mounted .ushaderbytecode archive(s)
-    // contain a shader-map with that hash — the fast, targeted way to find
-    // which archive to decompile for one specific material, without a full
-    // Tier1 bridge scan or a multi-hour full-archive decompile.
     public List<string> FindShaderForMaterialPaths { get; } = new();
-    // Narrows the headless shader-export decompile OUTPUT to shader-maps
-    // belonging to this material (path substring match). Additive: does NOT
-    // wipe the shared Decompiled/<library> output folder, so repeated
-    // incremental --material-filter runs (or one after a full run) coexist.
     public string? MaterialFilter { get; set; }
     public bool Help { get; set; }
-    public bool? SplitVariants { get; set; } // null = leave persisted setting alone
-    public List<string> Hooks { get; } = new();
-    // Decompile-only debug mode. When set, the CLI skips launching FModel
-    // entirely and just calls DecompilePipeline.Run against the supplied
-    // .ushaderlib (its sidecars must already sit next to it). Lets us
-    // validate Pass 110 / 180 / 190 / 200 fixes against a single archive
-    // without re-running the export side, which for the master 6.8 GB
-    // archive takes 10-15 minutes per iteration.
+    public bool? SplitVariants { get; set; }    public List<string> Hooks { get; } = new();
     public string? DecompileOnly { get; set; }
-    // Path to an FModel AppSettings(_Debug).json snapshot. The headless mount
-    // reads EVERYTHING from it directly — GameDirectory, EGame version, ALL AES
-    // main+dynamic keys, the mappings endpoint, Raw/OutputDirectory — via
-    // HeadlessGameConfig. No %AppData% install, no FModel host. This is the
-    // primary input; if omitted the CLI falls back to the live
-    // %AppData%/FModel/AppSettings(_Debug).json.
     public string? GameConfig { get; set; }
 
-    // Accepted for back-compat only — headless is now the DEFAULT (and only)
-    // shader-export mode, so this flag is a no-op. A plain `--game-config <json>`
-    // runs the headless pipeline; there is no WPF/auto-export path to opt out of.
     public bool Headless { get; set; }
-    // Comma/space/semicolon-separated archive-name tokens (substring match).
-    // When set, only matching .ushaderbytecode archives are exported — lets a
-    // self-test target one small archive instead of the multi-GB master.
     public string? ArchiveFilter { get; set; }
-    // Headless: build the cache + sidecars + .ushaderlib but SKIP decompile.
-    // The master archive's 261k-shader decompile is a multi-hour job; this
-    // populates the full material cache fast so `--decompile-only` can iterate.
     public bool ExportOnly { get; set; }
 
-    // Settings-free direct GLB scene export. When set, the CLI skips FModel boot
-    // entirely (like --decompile-only) and constructs a CUE4Parse
-    // DefaultFileProvider straight from the flags below, then exports each
-    // matching .umap as a self-contained .glb scene (World Partition included).
-    // This is both the headless self-test path and a scriptable batch exporter
-    // that needs no %AppData% FModel config.
     public bool ExportMapDirect { get; set; }
-    // Print every .umap the provider can see (after mounting) and exit. Use to
-    // discover map package paths before picking a --map filter.
     public bool ListMaps { get; set; }
-    public string? GameDir { get; set; }       // folder containing the Paks (or the game root)
-    public string? MappingsPath { get; set; }  // local .usmap
-    public string? UeVersion { get; set; }     // EGame enum name, e.g. GAME_UE5_1
-    public List<string> MapFilters { get; } = new(); // --map <substring> (repeatable)
-    public string? ExportOut { get; set; }     // output directory for the .glb + materials
-    public string? Aes { get; set; }           // optional AES main key (0x...)
-    public bool WithMaterials { get; set; }    // opt in to material + texture sidecar export (default: geometry + material names only)
-
-    // Settings-free direct UE -> Unity YAML export ("牛头蛇尾"): build a CUE4Parse
-    // provider from --game-dir / --ue-version / --mappings / --aes (same as
-    // --export-map-direct), walk matching packages, convert each export through
-    // the UnityExport mapper registry, and write .asset + .meta. This is the
-    // headless self-test loop for the Unity exporter.
+    public string? GameDir { get; set; }    public string? MappingsPath { get; set; }    public string? UeVersion { get; set; }    public List<string> MapFilters { get; } = new();    public string? ExportOut { get; set; }    public string? Aes { get; set; }    public bool WithMaterials { get; set; }
     public bool ExportUnity { get; set; }
-    public string? UnityVersion { get; set; }            // target Unity version, e.g. 2022.3.0f1 (default 2022.3.0f1)
-    public List<string> PackageFilters { get; } = new(); // --package-filter <substring> (repeatable / comma list)
-    public int? MaxPackages { get; set; }                // cap packages scanned (self-test throttle)
-
+    public string? UnityVersion { get; set; }    public List<string> PackageFilters { get; } = new();    public int? MaxPackages { get; set; }
     public static CliOptions Parse(string[] args)
     {
         var opts = new CliOptions();
@@ -224,9 +151,6 @@ internal sealed class CliOptions
                     if (i + 1 < args.Length && int.TryParse(args[i + 1], out int maxPkg)) { opts.MaxPackages = maxPkg; i++; }
                     break;
                 default:
-                    // Pass-through: forwarded to the hook-side ParseCliArgs so
-                    // any future flags it grows are auto-consumed without a
-                    // CLI-side update. Unknown flags are not an error.
                     break;
             }
         }

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Logging;
@@ -28,7 +28,6 @@ public sealed class PrefabProcessor : IAssetProcessor
 		ProcessedAssetCollection missingPrefabTransformCollection = processedBundle.AddNewProcessedCollection("Missing Prefab Transforms", gameData.ProjectVersion);
 		Dictionary<SceneDefinition, ProcessedAssetCollection> sceneCollectionDictionary = new();
 
-		//Add missing Transforms
 		foreach (IGameObject gameObject in gameData.GameBundle.FetchAssets().OfType<IGameObject>().Where<IGameObject>(HasNoTransform))
 		{
 			Logger.Warning(LogCategory.Processing, $"GameObject {gameObject.Name} has no Transform. Adding one.");
@@ -63,19 +62,16 @@ public sealed class PrefabProcessor : IAssetProcessor
 
 		HashSet<IGameObject> gameObjectsAlreadyProcessed = new();
 
-		//Create scene hierarchies
 		foreach (SceneDefinition scene in gameData.GameBundle.Scenes)
 		{
 			SceneHierarchyObject sceneHierarchy = CreateSceneHierarchyObject(sceneHierarchyCollection, scene);
 			gameObjectsAlreadyProcessed.AddRange(sceneHierarchy.GameObjects);
 		}
 
-		//Create hierarchies for prefabs with an existing PrefabInstance
 		foreach (IPrefabInstance prefab in gameData.GameBundle.FetchAssets().OfType<IPrefabInstance>())
 		{
 			if (prefab.RootGameObjectP is { } root && !gameObjectsAlreadyProcessed.Contains(root))
 			{
-				//Prior to 2018.3, Prefab was an actual asset inside "*.prefab" files.
 				if (prefab is IPrefabMarker prefabMarker)
 				{
 					foreach (IEditorExtension editorExtension in root.FetchHierarchy())
@@ -89,7 +85,6 @@ public sealed class PrefabProcessor : IAssetProcessor
 			}
 		}
 
-		//Create hierarchies for prefabs without an existing PrefabInstance
 		foreach (IGameObject asset in gameData.GameBundle.FetchAssets().OfType<IGameObject>())
 		{
 			if (gameObjectsAlreadyProcessed.Contains(asset))
@@ -102,7 +97,6 @@ public sealed class PrefabProcessor : IAssetProcessor
 			{
 				IPrefabInstance prefab = CreatePrefab(prefabInstanceCollection, root);
 
-				//Prior to 2018.3, Prefab was an actual asset inside "*.prefab" files.
 				if (prefab is IPrefabMarker prefabMarker)
 				{
 					foreach (IEditorExtension editorExtension in root.FetchHierarchy())
@@ -149,8 +143,6 @@ public sealed class PrefabProcessor : IAssetProcessor
 					sceneHierarchy.GameObjects.Add(gameObject);
 					break;
 				case IMonoBehaviour monoBehaviour:
-					// 老 API IMonoBehaviour.IsSceneObject() 已被删除; 等价判定:
-					// 挂在 GameObject 上的 MonoBehaviour 才是 scene object, ScriptableObject 没有 GameObjectP.
 					if (monoBehaviour.GameObjectP is not null)
 					{
 						sceneHierarchy.Components.Add(monoBehaviour);

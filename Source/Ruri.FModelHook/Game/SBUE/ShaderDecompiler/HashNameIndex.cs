@@ -6,17 +6,6 @@ using System.Text.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Minimal hash→name lookup loader for the sister indexes alongside
-// `_ShaderType/_HashToName.json`:
-//
-//   `_VertexFactoryType/_HashToName.json`  → FVertexFactoryType::HashedName
-//   `_ShaderPipelineType/_HashToName.json` → FShaderPipelineType::HashedName
-//
-// Same hash math as FShaderType (CityHash64WithSeed(UPPER(name), seed=0))
-// — we don't need per-class seeds for these, just the name. Pass145 loads
-// instances of this class so Pass146 can backfill blank
-// `VertexFactoryTypeName` / `PipelineTypeName` in container records the
-// cook left empty.
 internal sealed class HashNameIndex
 {
     private readonly Dictionary<ulong, string> _hashToName;
@@ -32,11 +21,6 @@ internal sealed class HashNameIndex
 
     public static HashNameIndex Empty { get; } = new(string.Empty, new Dictionary<ulong, string>());
 
-    // Load `_HashToName.json` for a given index subfolder (e.g.
-    // `_VertexFactoryType`). Scan-root priority mirrors ShaderTypeSeedRegistry:
-    //   1. `<directory>/<gameVersionEnum>/<subfolder>/_HashToName.json`
-    //   2. `<directory>/<base UE folder>/<subfolder>/_HashToName.json` when fallback enabled
-    //   3. Recursive sweep under `<directory>` for any matching file path.
     public static HashNameIndex LoadForGame(
         string? directory, string subfolder, string? gameVersionEnum, bool tryBaseFallback,
         Action<string>? log = null, Action<string>? logError = null)
@@ -47,10 +31,6 @@ internal sealed class HashNameIndex
             return Empty;
         }
 
-        // Version-scoped roots shared with the engine-UB / ShaderType
-        // registries, then narrowed to each root's `<subfolder>/_HashToName.json`.
-        // Scoping keeps a 5.4 cook off another version's hash→name table
-        // (harmless for canonical FNames, but consistent + cheaper).
         List<string> versionRoots = EngineUbMetadataRegistry.BuildScanRoots(directory, gameVersionEnum, tryBaseFallback);
         List<string> scanRoots = new();
         string needle = $"/{subfolder}/_HashToName.json";
@@ -67,7 +47,7 @@ internal sealed class HashNameIndex
                     }
                 }
             }
-            catch { /* ignore missing dirs */ }
+            catch {}
         }
 
         Dictionary<ulong, string> hashToName = new();
@@ -89,8 +69,6 @@ internal sealed class HashNameIndex
                         }
                         if (p.Value.ValueKind == JsonValueKind.String)
                         {
-                            // First-wins on collision (won't happen for legit
-                            // FName-style canonical names).
                             hashToName.TryAdd(h, p.Value.GetString() ?? string.Empty);
                         }
                     }

@@ -2,16 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.UEShaderTpkDumper.Parser;
 
-// A single macro call inside a `BEGIN_*` block, after `\`-continuation
-// collapse. Mirrors the Python generator's `Member` dataclass.
 public sealed record MemberLine(
-    string Macro,          // SHADER_PARAMETER, SHADER_PARAMETER_TEXTURE, ...
-    string CppType,        // FMatrix44f, FViewUniformShaderParameters, Texture2D, ...
-    string Name,           // member name
-    string? ArrayDecl,     // raw "[N]" / "[Foo::MaxItems]" if present
-    string? ShaderType,    // SHADER_PARAMETER_TEXTURE's HLSL type hint (Texture2D, Sampler, ...)
-    string Ubmt)           // resolved UBMT slot name (no "UBMT_" prefix)
-{
+    string Macro,    string CppType,    string Name,    string? ArrayDecl,    string? ShaderType,    string Ubmt){
     public bool IsResource => !string.IsNullOrEmpty(Ubmt)
         && Ubmt != "NESTED_STRUCT"
         && Ubmt != "INCLUDED_STRUCT";
@@ -19,15 +11,8 @@ public sealed record MemberLine(
 
 public static class MemberLineParser
 {
-    // Walk the block body, finding every `MACRO(...)` call from our catalog.
-    // Returns them in declaration order — critical because the layout walker
-    // pads members based on declared sequence.
     public static IEnumerable<MemberLine> ParseBody(string body)
     {
-        // Collapse `\` continuations so multi-line macros (rare but possible
-        // for SHADER_PARAMETER_STRUCT_INCLUDE with long type names) parse as
-        // a single token stream. Python does this implicitly because the
-        // regex matches across lines; in C# we explicitly drop continuations.
         string collapsed = body.Replace("\\\r\n", " ").Replace("\\\n", " ");
 
         Regex opener = new(@"\b(" + MemberMacros.MacroNameRegex + @")\s*\(", RegexOptions.Compiled);
@@ -64,8 +49,6 @@ public static class MemberLineParser
 
     private static List<string> SplitTopLevel(string s)
     {
-        // Splits at top-level commas (skipping nested <>, (), [], {}). Matches
-        // the Python generator's `split_top_commas`.
         List<string> result = new();
         int depth = 0;
         var current = new System.Text.StringBuilder();
@@ -91,25 +74,6 @@ public static class MemberLineParser
     {
         if (!MemberMacros.Catalog.TryGetValue(macro, out MemberMacroInfo info)) return null;
 
-        // Member-macro shape per macro family — mirroring `gen_ub_metadata.py`'s
-        // walker:
-        //
-        //   SHADER_PARAMETER(Type, Name)
-        //   SHADER_PARAMETER_EX(Type, Name, Precision)
-        //   SHADER_PARAMETER_ARRAY(Type, Name, [N])
-        //   SHADER_PARAMETER_ARRAY_EX(Type, Name, [N], Precision)
-        //   SHADER_PARAMETER_SCALAR_ARRAY(Type, Name, [N])
-        //   SHADER_PARAMETER_TEXTURE(HlslType, Name)
-        //   SHADER_PARAMETER_TEXTURE_ARRAY(HlslType, Name, [N])
-        //   SHADER_PARAMETER_SAMPLER(HlslType, Name)
-        //   ...
-        //   SHADER_PARAMETER_STRUCT(StructType, Name)
-        //   SHADER_PARAMETER_STRUCT_INCLUDE(StructType, Name)
-        //   RENDER_TARGET_BINDING_SLOTS()  — no args (we still record it for layout slot tracking)
-        //
-        // The Type/Name pair is invariant — the array/precision suffix is
-        // optional. We trust the catalog's IsResource flag rather than re-
-        // detecting from the macro name here.
         if (string.Equals(macro, "RENDER_TARGET_BINDING_SLOTS", StringComparison.Ordinal))
         {
             return new MemberLine(macro, string.Empty, string.Empty, null, null, info.UbmtName);
@@ -129,8 +93,7 @@ public static class MemberLineParser
         if (info.IsResource)
         {
             shaderType = typeOrHlsl;
-            cppType = typeOrHlsl;  // resources don't have a numeric size — recorded for diagnostics
-        }
+            cppType = typeOrHlsl;        }
         else
         {
             cppType = typeOrHlsl;

@@ -53,17 +53,6 @@ internal sealed class MaterialJsonSymbolReader
             return null;
         }
 
-        // Pick the asset entry that actually carries material symbols.
-        // `root[0]` is the right pick for a plain material/material-instance
-        // package (FMaterial / UMaterialInstanceConstant sit at index 0).
-        // But level/landscape packages (e.g. `_Generated_/MainGrid_L2_*`)
-        // have `LandscapeComponent` at index 0 with the material symbols
-        // hiding on later `LandscapeMaterialInstanceConstant` entries — we
-        // pick the FIRST entry whose `LoadedMaterialResources` is non-empty.
-        // First-wins is a coarse heuristic: each landscape file holds N
-        // instances (one per cell) with slightly different parameter
-        // overrides. The names (which is what symbol recovery needs) are
-        // identical across instances; only the override VALUES differ.
         JsonElement materialAsset = SelectMaterialAsset(root);
         SymbolInputs? inputs = SymbolInputsReader.Read(normalizedPath, shaderPlatform, materialAsset);
         if (inputs == null)
@@ -72,10 +61,6 @@ internal sealed class MaterialJsonSymbolReader
             return null;
         }
 
-        // Resolve `MaterialCollection<i>` cbuffers from the material's
-        // referenced UMaterialParameterCollection assets — these aren't in the
-        // Material UB itself, they're separate bindings that previously
-        // collapsed to anonymous `_m0[N]` flat arrays.
         MaterialParameterCollectionReader.ResolveAndInject(materialAsset, inputs, _exportRoot, _exportRootName);
 
         MaterialSymbolSource source = BuildSource(normalizedPath, inputs);
@@ -83,12 +68,6 @@ internal sealed class MaterialJsonSymbolReader
         return source;
     }
 
-    // Pick the JSON-array entry that owns the material symbols. For a
-    // plain material package this is just `root[0]`. For level packages
-    // (landscape-instance assets in particular) the LANDSCAPE COMPONENT
-    // sits at index 0 with the actual material data on later
-    // `LandscapeMaterialInstanceConstant` entries — fall back to the
-    // first entry that has a non-empty `LoadedMaterialResources` array.
     private static JsonElement SelectMaterialAsset(JsonElement root)
     {
         if (HasLoadedMaterialResources(root[0]))
@@ -159,14 +138,6 @@ internal sealed class UnifiedMaterialReader
     private readonly JsonDocument? _document;
     private readonly Dictionary<string, MaterialSymbolSource?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    // ---- On-disk seek-index mode (files past MaxInMemoryUnifiedBytes) ----
-    // `_index` maps NormalizeKey(materialPath) -> the byte range of that material's
-    // JSON value inside `MaterialInterfaces`. Lookups seek + parse ONE material,
-    // so peak memory is bounded by the single largest material entry instead of the
-    // whole cook. Symbols are therefore available at ANY cook size — the old
-    // behaviour (return null past the cap) silently downgraded every Material cb to
-    // anonymous `Material_loose[N]` on all-materials caches, which is exactly the
-    // "symbols must all be restored" red line.
     private readonly string? _indexedPath;
     private readonly Dictionary<string, MaterialEntryRange>? _index;
 
@@ -184,24 +155,9 @@ internal sealed class UnifiedMaterialReader
         _index = index;
     }
 
-    /// <summary>是否有可用的符号源(内存模式或索引模式其一)。</summary>
     private bool HasSource => _materialInterfaces != null || _index != null;
 
-    // Above this on-disk size the unified file is NOT loaded into a JsonDocument
-    // for per-material symbol lookup. Rationale: this reader holds the ENTIRE
-    // parsed document in memory for the session, and `JsonDocument` is backed by
-    // a single contiguous buffer that hits .NET's ~2GB array ceiling — a cook
-    // that references every material (the master archive, 23k materials) yields a
-    // ~3GB unified that can't be materialised at all (observed "Insufficient
-    // memory", which then starved the dxil-spirv native and failed the whole
-    // decompile). Past the cap we skip the rich symbol source and let naming fall
-    // back to the per-archive `.assetinfo.json` sidecar + the lean hash bridges.
-    // Archive-scoped exports (the common case) stay well under this and get full
-    // symbols. Past the cap we no longer give up: `BuildMaterialInterfaceIndex`
-    // streams the file once and records each material's byte range, and lookups
-    // seek+parse a single entry on demand (bounded memory, symbols at any size).
-    private const long MaxInMemoryUnifiedBytes = 1024L * 1024 * 1024; // 1 GiB
-
+    private const long MaxInMemoryUnifiedBytes = 1024L * 1024 * 1024;
     public static UnifiedMaterialReader? LoadFromFile(string unifiedMetadataPath)
     {
         if (string.IsNullOrWhiteSpace(unifiedMetadataPath) || !File.Exists(unifiedMetadataPath))
@@ -212,8 +168,6 @@ internal sealed class UnifiedMaterialReader
         long length = new FileInfo(unifiedMetadataPath).Length;
         if (length > MaxInMemoryUnifiedBytes)
         {
-            // Too big for a single JsonDocument (contiguous buffer, ~2GB array ceiling)
-            // → build an on-disk seek index instead of dropping the symbol source.
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             Dictionary<string, MaterialEntryRange>? index;
             try
@@ -237,9 +191,6 @@ internal sealed class UnifiedMaterialReader
 
         try
         {
-            // Stream the bytes (UTF-8) straight into JsonDocument instead of
-            // File.ReadAllText — the latter builds a UTF-16 string first and
-            // throws past ~1GB of text well before the file hits the cap above.
             using FileStream stream = File.OpenRead(unifiedMetadataPath);
             JsonDocument document = JsonDocument.Parse(stream);
             JsonElement root = document.RootElement;
@@ -263,14 +214,6 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    // Streams the unified metadata once with Utf8JsonReader and records the byte
-    // range of every value under `MaterialInterfaces`. Stops as soon as that object
-    // closes — the block sits near the file end on big cooks, but the scan is a
-    // single sequential pass either way and never materialises a value.
-    //
-    // Buffer management is the standard chunked-Utf8JsonReader pattern: the reader
-    // works on a span, so unconsumed bytes are compacted to the front and the buffer
-    // grows whenever a single value (a material entry can be MBs) doesn't fit.
     private static Dictionary<string, MaterialEntryRange>? BuildMaterialInterfaceIndex(string path)
     {
         var index = new Dictionary<string, MaterialEntryRange>(StringComparer.OrdinalIgnoreCase);
@@ -279,33 +222,17 @@ internal sealed class UnifiedMaterialReader
         byte[] buffer = new byte[1 << 20];
         int dataLength = stream.Read(buffer, 0, buffer.Length);
         bool isFinalBlock = dataLength < buffer.Length;
-        long bufferStartOffset = 0;                 // file offset of buffer[0]
-        JsonReaderState state = new(new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        long bufferStartOffset = 0;        JsonReaderState state = new(new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
 
         bool insideMaterialInterfaces = false;
-        // Depth of the PROPERTY NAMES inside the MaterialInterfaces object.
-        // Utf8JsonReader.CurrentDepth for a StartObject is the depth of the container
-        // itself, and its member property names sit one level deeper — so the inner
-        // depth is (StartObject depth + 1), and the object's own EndObject comes back
-        // at (inner - 1). Getting this off by one indexes ROOT-level siblings instead
-        // (e.g. the bool `MaterialScanComplete`), which then blows up as "requires an
-        // element of type 'Object', but the target element has type 'True'".
         int materialInterfacesInnerDepth = -1;
-        bool pendingMaterialInterfaces = false;     // saw the property name, next token is its value
-        string? pendingMaterialName = null;
+        bool pendingMaterialInterfaces = false;        string? pendingMaterialName = null;
         bool done = false;
 
         while (!done)
         {
             var reader = new Utf8JsonReader(buffer.AsSpan(0, dataLength), isFinalBlock, state);
             bool needMoreData = false;
-            // Resume checkpoint = (bytes consumed, reader state) captured BEFORE each
-            // token is read. A material entry is handled as a PropertyName + value
-            // PAIR across two Read() calls, so when the value doesn't fit in the
-            // current buffer we must rewind to before the NAME — resuming from the
-            // post-name position would re-enter the loop pointing at the value's
-            // first inner token and the whole entry would be walked as ordinary
-            // tokens and silently dropped from the index (measured: 3306 of 6357).
             long resumeConsumed = 0;
             JsonReaderState resumeState = state;
 
@@ -324,7 +251,6 @@ internal sealed class UnifiedMaterialReader
                         materialInterfacesInnerDepth = reader.CurrentDepth + 1;
                         continue;
                     }
-                    // Not an object → nothing to index.
                     if (!reader.TrySkip()) { needMoreData = true; break; }
                     continue;
                 }
@@ -340,7 +266,6 @@ internal sealed class UnifiedMaterialReader
                     continue;
                 }
 
-                // Inside MaterialInterfaces.
                 if (reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == materialInterfacesInnerDepth - 1)
                 {
                     done = true;
@@ -359,9 +284,6 @@ internal sealed class UnifiedMaterialReader
                 if (!reader.TrySkip()) { needMoreData = true; break; }
                 long valueEnd = bufferStartOffset + reader.BytesConsumed;
 
-                // Only object entries are material records; anything else under this
-                // block would be a schema change, and indexing it would hand a
-                // non-object to every downstream TryGetProperty.
                 if (isObjectValue && !string.IsNullOrEmpty(pendingMaterialName) && valueEnd > valueStart && valueEnd - valueStart < int.MaxValue)
                 {
                     index[NormalizeKey(pendingMaterialName!)] = new MaterialEntryRange(valueStart, (int)(valueEnd - valueStart));
@@ -380,7 +302,6 @@ internal sealed class UnifiedMaterialReader
             if (leftover > 0) Buffer.BlockCopy(buffer, consumed, buffer, 0, leftover);
             if (leftover == buffer.Length)
             {
-                // A single token/value spans the whole buffer — grow so TrySkip can finish.
                 Array.Resize(ref buffer, buffer.Length * 2);
             }
             int read = stream.Read(buffer, leftover, buffer.Length - leftover);
@@ -388,15 +309,11 @@ internal sealed class UnifiedMaterialReader
             isFinalBlock = read == 0;
             if (read == 0 && leftover == 0) break;
 
-            // A partially-consumed value must restart from a state that matches the
-            // compacted buffer; JsonReaderState already encodes that (it is position
-            // independent), so nothing else to fix up here.
         }
 
         return index;
     }
 
-    /// <summary>索引模式:按字节范围 seek + 解析单个材质条目(Clone 脱离临时文档,调用方持有即安全)。</summary>
     private JsonElement? LoadIndexedEntry(string normalizedKey)
     {
         if (_index == null || _indexedPath == null) return null;
@@ -427,10 +344,6 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    /// <param name="shaderMapHash">
-    /// 正在解码的容器的库哈希(<c>ShaderMapInfo.ShaderMapHash</c>)。传进来才能挑到
-    /// **这份 shader map 自己那一份** UES —— 详见 <see cref="SelectUniformExpressionSet"/>。
-    /// </param>
     public JsonElement? TryGetUniformExpressionSet(string materialPath, string? shaderPlatform = null, string? shaderMapHash = null)
     {
         if (!HasSource)
@@ -447,39 +360,6 @@ internal sealed class UnifiedMaterialReader
         return SelectUniformExpressionSet(materialEntry, shaderPlatform, shaderMapHash);
     }
 
-    // Iterates every (libraryShaderMapHash, ParameterMapInfo-by-ResourceIndex)
-    // tuple across every material. The on-disk LIBRARY hash is what
-    // `ShaderMapInfo.ShaderMapHash` carries — it's NOT the cook-internal
-    // `CookedShaderMapIdHash` (those diverge for IoStore cooks; see
-    // `UnifiedShaderMapMetadata.ResourceHash`'s doc comment). Resolution order
-    // per shader-map entry:
-    //   1. `ResourceHash` — the SAME field the material-linking bridge
-    //      (Pass 030 Tier 1/Tier 2, Pass 050) already treats as authoritative:
-    //      it IS the archive's `ShaderMapHashes` value for bShareCode cooks,
-    //      independent of array position. Correct for every IoStore cook.
-    //   2. `PackageShaderMapHashes[i]` (positional pairing with
-    //      `LoadedShaderMaps[i]`) — kept as a fallback for shader-maps whose
-    //      `ResourceHash` didn't survive extraction, but this pairing is only
-    //      as reliable as UE's array-order guarantee between the two lists.
-    //   3. `CookedShaderMapIdHash` / `ShaderContentHash` — last resort, only
-    //      matches non-IoStore cooks where the internal and on-disk hashes
-    //      happen to agree.
-    //
-    // Per-shader lookup is keyed by `ResourceIndex` (the shader's cooker-
-    // assigned slot within its owning shader-map, 0..NumShaders-1) rather than
-    // walking the JSON arrays by POSITION. This matters because a bShareCode
-    // material's base `MaterialShaderMapContent.Shaders[]` is genuinely empty
-    // — verified empirically, the frozen memory image is real (20-38KB, not
-    // truncated) but UE nests every actual VS/PS/etc under
-    // `OrderedMeshShaderMaps[i].Shaders[]` (one bucket per vertex-factory
-    // permutation) instead. Concatenating those buckets by ARRAY POSITION
-    // would only accidentally line up with the archive's own per-map ordering;
-    // `ResourceIndex` is the value both sides actually agree on —
-    // `ShaderMapMember.RelativeIndex`'s own doc comment already states
-    // "0..NumShaders-1, == metadata ResourceIndex". Folding both `Shaders[]`
-    // and every `OrderedMeshShaderMaps[i].Shaders[]` bucket into ONE
-    // ResourceIndex-keyed dictionary makes the join correct regardless of
-    // which bucket a cook happens to populate.
     public IEnumerable<(string LibraryShaderMapHash, Dictionary<int, JsonElement> ParameterMapInfoByResourceIndex)> EnumerateShaderMapShaders()
     {
         foreach (JsonElement materialEntry in EnumerateMaterialEntries())
@@ -491,8 +371,6 @@ internal sealed class UnifiedMaterialReader
             {
                 continue;
             }
-            // PackageShaderMapHashes is OPTIONAL (older cooks don't write it
-            // per-material) and only used as a positional fallback below.
             List<string?> packageHashes = new();
             if (materialEntry.TryGetProperty("PackageShaderMapHashes", out JsonElement pkgHashes)
                 && pkgHashes.ValueKind == JsonValueKind.Array)
@@ -537,12 +415,6 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    // Reads a container's `Shaders[]` array (works for both the top-level
-    // `MaterialShaderMapContent` and each `OrderedMeshShaderMaps[i]` entry —
-    // both carry a `Shaders` property of the same shape) and indexes every
-    // entry's `ParameterMapInfo` by its `ResourceIndex`. Shaders without a
-    // `ParameterMapInfo` (e.g. a placeholder for an unfrozen pointer slot) are
-    // skipped, not added as an empty entry.
     private static void CollectShadersByResourceIndex(JsonElement container, Dictionary<int, JsonElement> result)
     {
         if (!container.TryGetProperty("Shaders", out JsonElement shaders) || shaders.ValueKind != JsonValueKind.Array) return;
@@ -555,14 +427,6 @@ internal sealed class UnifiedMaterialReader
         }
     }
 
-    // Returns the JsonElement for the material's `RenderState` field if it
-    // was populated by Pass020. Null when the asset wasn't a UMaterialInterface
-    // subclass that carries render state (functions, collections), or when
-    // the unified metadata file pre-dates the render-state writer.
-    /// <summary>
-    /// 逐材质条目枚举(两种模式统一):内存模式直接给字典值;索引模式按索引键逐个 seek+解析,
-    /// 峰值内存 = 单个最大材质条目(条目 Clone 自带独立文档,消费方持有引用即安全)。
-    /// </summary>
     private IEnumerable<JsonElement> EnumerateMaterialEntries()
     {
         if (_materialInterfaces != null)
@@ -599,11 +463,6 @@ internal sealed class UnifiedMaterialReader
         return renderState.Clone();
     }
 
-    /// <param name="shaderMapHash">
-    /// 正在解码的容器的库哈希(<c>ShaderMapInfo.ShaderMapHash</c>)。缓存键**必须**带上它 ——
-    /// 同一个材质在不同 shader map 下的 cbuffer 布局本来就不同,共用一份缓存等于把 A 的布局
-    /// 发给 B。
-    /// </param>
     public MaterialSymbolSource? GetSource(string materialPath, string? shaderPlatform = null, string? shaderMapHash = null)
     {
         if (!HasSource)
@@ -631,10 +490,6 @@ internal sealed class UnifiedMaterialReader
             return null;
         }
 
-        // Path 1 — UniformExpressionSet from the inline shader map (older /
-        // non-IoStore cooks). When present, this is the gold standard
-        // because it carries name + byte-offset + type for every CB
-        // member in `Material_m0[N]`.
         JsonElement? uniformExpressionSet = SelectUniformExpressionSet(materialEntry, shaderPlatform, shaderMapHash);
         if (uniformExpressionSet.HasValue)
         {
@@ -642,18 +497,13 @@ internal sealed class UnifiedMaterialReader
             if (inputs != null)
             {
                 SerializedProgramData built = MaterialSymbolMetadataBuilder.Build(inputs);
-                // 材质贴图的**声明序名表**:UE 生成 HLSL 时按 UniformTextureParameters 的桶序 + 桶内序
-                // 声明 `Material.Texture2D_<i>` 等,寄存器随声明序分配 —— 所以这张扁平表的第 k 项就是
-                // 本 shader 第 k 个材质贴图槽。之前这里只建 cbuffer、完全不产 TextureParameters,
-                // 材质贴图因此永远无名(Pass200 只能靠引擎 UB 种子瞎猜,还猜出重名)。
                 foreach (string textureName in MaterialTextureOrder.Extract(uniformExpressionSet.Value))
                 {
                     built.TextureParameters.Add(new TextureParameter
                     {
                         Name = textureName,
                         NameIndex = -1,
-                        Index = built.TextureParameters.Count,   // 序数;真实 t 槽由 Pass200 按声明序对位
-                        SamplerIndex = -1,
+                        Index = built.TextureParameters.Count,                        SamplerIndex = -1,
                         MultiSampled = false,
                         Dim = 2,
                     });
@@ -669,14 +519,6 @@ internal sealed class UnifiedMaterialReader
             }
         }
 
-        // Path 2 — CachedParameters (parameter NAMES only). Used when the
-        // inline shader map is gone (modern UE5 IoStore cook). We can't
-        // reconstruct byte offsets from cached data alone, so the
-        // resulting source has parameter names but no constant-buffer
-        // layout — downstream patcher uses the names for OpName patches
-        // and falls through to anonymous Material_Tn for unnamed CB
-        // members. The author-facing names (vs `Material_m0`) are still
-        // a 100% improvement over the no-symbol baseline.
         if (materialEntry.TryGetProperty("CachedParameters", out JsonElement cached2)
             && cached2.ValueKind == JsonValueKind.Object)
         {
@@ -696,19 +538,12 @@ internal sealed class UnifiedMaterialReader
             DebugName = materialPath,
         };
 
-        // Best-effort: collect every name from the typed buckets the
-        // CachedParameterNames DTO writes. Bucket-name collisions are
-        // tolerated — duplicates land in the same flat name list.
         List<string> textureNames = new();
         AppendStringArray(cachedParams, "TextureNames", textureNames);
         AppendStringArray(cachedParams, "RuntimeVirtualTextureNames", textureNames);
         AppendStringArray(cachedParams, "SparseVolumeTextureNames", textureNames);
         AppendStringArray(cachedParams, "FontNames", textureNames);
 
-        // Texture parameter names go directly into the metadata's
-        // TextureParameters slot — the patcher matches by texture
-        // bind index, not by name, so the order here doesn't matter
-        // structurally. Each name takes a synthetic bind index.
         for (int i = 0; i < textureNames.Count; i++)
         {
             metadata.TextureParameters.Add(new TextureParameter
@@ -722,30 +557,11 @@ internal sealed class UnifiedMaterialReader
             });
         }
 
-        // CRITICAL — do NOT synthesise a numeric Material cbuffer from
-        // CachedParameters. CachedExpressionData carries parameter NAMES but
-        // NO byte offsets (those live only in the UniformExpressionSet, which
-        // this cook strips — LoadedShaderMaps is empty for ~all materials). The
-        // old behaviour placed each name at a guessed slot*16 offset and typed
-        // every scalar as float4; the rewriter then PINNED those guesses onto
-        // the flat `Material_m0[N]` whenever the synthetic offsets happened to
-        // pass access-chain validation — emitting WRONG names/offsets/types
-        // (e.g. the scalar `RefractionDepthBias` rendered `float4 ... : packoffset(c0)`).
-        // That is precisely the "metadata that doesn't correspond, forced onto
-        // the cb" failure mode. A guessed Material cb is worse than an honest
-        // anonymous `Material_loose[N]`, so we emit NONE here: numeric Material
-        // members are named ONLY through the byte-offset-accurate UES path
-        // (UnifiedMaterialReader Path 1 / MaterialConstantBufferReader). Texture
-        // names above are safe — the patcher matches them by bind index, not
-        // offset — so they stay.
         if (metadata.TextureParameters.Count == 0)
         {
             return null;
         }
 
-        // Score = 1 — non-zero so the source is preferred over a null
-        // result, but lower than score = 2 reserved for the inline-shader-
-        // map path (which has byte-offset accuracy).
         return new MaterialSymbolSource(materialPath, metadata, Score: 1, UsedLoadedMaterialResources: false, MaterialLayout: null);
     }
 
@@ -832,21 +648,6 @@ internal sealed class UnifiedMaterialReader
 
     private static string NormalizeKey(string key) => key.Replace('\\', '/').Trim().TrimStart('/');
 
-    /// <summary>
-    /// 从一个材质的 <c>LoadedShaderMaps</c> 里挑出**这份 shader map 自己那一份**
-    /// <c>UniformExpressionSet</c>。
-    ///
-    /// **判据是 shader map 哈希,不是数组位置、也不是"哪份 preshader 多"。**
-    /// 一个材质会编出多份 shader map(static switch 组合不同 = Unity 语义里的不同变体),
-    /// 每份有自己的 UES,`PreshaderBuffer` 布局互不相同。拿 A 的布局去解 B 的 shader,
-    /// 结果是 cbuffer 成员整体错位 —— 实测皮肤材质因此把 <c>PartIDInt</c>/<c>SubsurfaceProfile</c>
-    /// 错塞进自发光的 lerp 目标色,手臂腿整片发绿(正确布局下那里是 <c>SelectionColor</c>,值为 0)。
-    ///
-    /// <paramref name="targetShaderMapHash"/> = 正在解码的那个容器的库哈希,与
-    /// <c>LoadedShaderMaps[i].ResourceHash</c> 同一个 ID 空间(材质连接桥用的就是这个字段,
-    /// 见 <see cref="EnumerateShaderMapShaders"/> 的注释)。匹配上就是**唯一正确**的那份。
-    /// 匹配不上(哈希没落地)才退回平台 + 覆盖最全的启发式。
-    /// </summary>
     private static JsonElement? SelectUniformExpressionSet(JsonElement materialEntry, string? preferredShaderPlatform, string? targetShaderMapHash = null)
     {
         if (!materialEntry.TryGetProperty("LoadedShaderMaps", out JsonElement loadedShaderMaps) || loadedShaderMaps.ValueKind != JsonValueKind.Array)
@@ -886,9 +687,6 @@ internal sealed class UnifiedMaterialReader
                 continue;
             }
 
-            // **精确判据:哈希对上的就是它,直接返回。**
-            // 解析序与 `EnumerateShaderMapShaders` 完全一致(ResourceHash 优先,
-            // PackageShaderMapHashes 位置配对次之,cook 内部哈希兜底)。
             if (!string.IsNullOrWhiteSpace(targetShaderMapHash))
             {
                 string? mapHash = ReadString(shaderMap, "ResourceHash");
@@ -914,10 +712,6 @@ internal sealed class UnifiedMaterialReader
             bool platformMatches = !string.IsNullOrWhiteSpace(preferredShaderPlatform)
                 && string.Equals(shaderPlatform, preferredShaderPlatform, StringComparison.OrdinalIgnoreCase);
 
-            // 哈希对不上时的兜底:同一平台里取 preshader 覆盖最全的那份。
-            // 覆盖越全"洞"越少;多出来的尾部寄存器至多是没人读的冗余,而缺覆盖会直接喂错值进着色。
-            // 这只是启发式 —— 它对皮肤材质选对了,对白纱裙 `MI_S0165D_02` 选错过(整只材质被 clip 掉、
-            // 一个片元不出)。所以哈希路径能走就必须走哈希。
             int preshaderCount = ues.TryGetProperty("UniformPreshaders", out JsonElement preshaderArray)
                                  && preshaderArray.ValueKind == JsonValueKind.Array
                 ? preshaderArray.GetArrayLength()
@@ -949,25 +743,10 @@ internal sealed class UnifiedMaterialReader
         return bestMatch ?? fallback;
     }
 
-    /// <summary>哈希精确命中的 UES 选取次数。</summary>
     public static int HashMatchedSelections;
 
-    /// <summary>
-    /// 退回"平台 + 覆盖最全"启发式的次数。**这个数不为 0 就说明还有容器在赌布局** ——
-    /// 它对了是运气,错了就是整只材质被 clip 掉或整片偏色,所以要打出来盯着。
-    /// </summary>
     public static int HeuristicSelections;
 
-    /// <summary>
-    /// 诊断:列出一个材质的**所有** UES 候选及其 preshader 段大小。
-    ///
-    /// 为什么要看这个:`SelectUniformExpressionSet` 只按 <c>ShaderPlatform</c> 取
-    /// <c>LoadedShaderMaps</c> 里的第一份 —— 而同一 shader map 下不同 permutation
-    /// (静态开关组合不同)的 <c>UniformExpressionSet</c> 可以不同,`PreshaderBuffer` 布局自然也不同。
-    /// 拿 A 的布局去解 B 的 shader,就会出现"某个分量没有任何 preshader 覆盖、shader 却在读它"
-    /// 的矛盾(实测皮肤材质 `PreshaderBuffer[21].w`)。这里把所有候选的
-    /// `UniformPreshaderBufferSize` 打出来,不一致就直接坐实了这个猜测。
-    /// </summary>
     public IEnumerable<(string ShaderPlatform, int PreshaderBufferSize, int NumPreshaders)>
         EnumerateUniformExpressionSets(string materialPath)
     {
@@ -984,10 +763,6 @@ internal sealed class UnifiedMaterialReader
             int size = ues.TryGetProperty("UniformPreshaderBufferSize", out JsonElement sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt32() : -1;
             int count = ues.TryGetProperty("UniformPreshaders", out JsonElement pre) && pre.ValueKind == JsonValueKind.Array ? pre.GetArrayLength() : -1;
 
-            // 数值段的两个边界也一起打出来 —— 判"这份 UES 配不配得上这个 shader"要靠它们,
-            // 而不是靠 preshader 条数(那只是覆盖多寡)。
-            //   ConstantBufferSize      = 数值段总字节(UE 侧 FRHIUniformBufferLayout 的字段)
-            //   Resources[0].MemberOffset = 资源段起点,即数值段末尾
             int cbSize = -1;
             if (ues.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement ubl) && ubl.ValueKind == JsonValueKind.Object)
             {

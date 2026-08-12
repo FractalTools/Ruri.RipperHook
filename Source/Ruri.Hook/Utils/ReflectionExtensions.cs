@@ -20,10 +20,6 @@ namespace Ruri.Hook.Utils
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static BindingFlags AnyBindFlag()
         {
-            // FlattenHierarchy is required for a derived type's GetMethods(explicitFlags) to include
-            // a base class's *static* members (instance members are always included regardless of
-            // this flag). Without it, a hook class that inherits a shared static [RetargetMethod]
-            // from a common base never has that method discovered by Registry.ApplyTypeHooks(GetType()).
             return BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
         }
 
@@ -55,18 +51,6 @@ namespace Ruri.Hook.Utils
 
         #region Method Reflection
 
-        // Guards against the same original method being IL-hooked twice within one hook activation --
-        // e.g. an own-declared method that Registry.ApplyTypeHooks(GetType()) already found being
-        // re-submitted via AddMethodHook, or (after the FlattenHierarchy fix above) an inherited
-        // static surfacing from two different scan entry points. Policy is LAST WINS: a repeat
-        // registration disposes the previously-installed hook and installs its own, rather than being
-        // silently dropped. This matters beyond "identical duplicate is wasteful" -- RuriHook.
-        // InitAttributeHook runs Registry.ApplyTypeHooks(GetType()) (auto-discovery, including
-        // inherited statics after the flag fix) BEFORE processing the hand-curated AddMethodHook list,
-        // so when a version's explicit list intentionally supersedes something auto-discovery also
-        // finds (a newer override of an inherited base hook, the exact EndField TagIDToName /
-        // Safe_TagIDToName shape), the deliberate, later registration must be the one left standing.
-        // Cleared per hook activation, mirroring HookManager's own scope lifecycle.
         private static readonly Dictionary<MethodBase, IDisposable> _funcHookedSources = new();
         private static readonly Dictionary<MethodBase, IDisposable> _ctorFuncHookedSources = new();
         private static readonly Dictionary<(MethodBase Source, bool IsBefore, bool IsReturn), IDisposable> _callHookedSources = new();
@@ -119,11 +103,6 @@ namespace Ruri.Hook.Utils
             HookLogger.LogSuccessRaw($"    [+] Hooked {srcMethod.DeclaringType?.Name}.{srcMethod.Name} -> {func.Method.Name}");
         }
 
-        /// <summary>
-        /// Default behavior mimics prefix injection and return (replace original).
-        /// isBefore chooses injection point (Start vs End/Before Ret).
-        /// isReturn chooses whether to return immediately or continue.
-        /// </summary>
         public static void RetargetCall(MethodInfo srcMethod, MethodInfo targetMethod, int maxArgIndex = 1, bool isBefore = true, bool isReturn = true)
         {
             var callKey = (srcMethod, isBefore, isReturn);
@@ -158,8 +137,6 @@ namespace Ruri.Hook.Utils
                     ilCursor.Emit(OpCodes.Call, targetMethod);
                     if (isReturn && targetMethod.ReturnType == typeof(bool) && srcMethod.ReturnType == typeof(void))
                     {
-                        // 条件前缀:钩子返回 true 表示"我处理完了",立即 ret;false 落回原方法。
-                        // 用于只想拦截部分调用的场合(拦不到的分支原样走原实现,不必复刻其全部逻辑)。
                         var resume = ilCursor.DefineLabel();
                         ilCursor.Emit(OpCodes.Brfalse, resume);
                         ilCursor.Emit(OpCodes.Ret);
@@ -171,8 +148,7 @@ namespace Ruri.Hook.Utils
                     }
                     else if (targetMethod.ReturnType != typeof(void))
                     {
-                        ilCursor.Emit(OpCodes.Pop); // 非返回式前缀:丢弃钩子返回值,保持求值栈平衡
-                    }
+                        ilCursor.Emit(OpCodes.Pop);                    }
                     ilCursor.SearchTarget = SearchTarget.Next;
                 };
 

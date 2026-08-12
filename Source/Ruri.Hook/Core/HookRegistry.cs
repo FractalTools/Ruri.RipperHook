@@ -11,11 +11,6 @@ namespace Ruri.Hook.Core
 {
     public class HookRegistry
     {
-        /// <summary>
-        /// Scans the assembly for methods with RetargetMethod attributes.
-        /// Supports filtering by GameName if provided.
-        /// Also incorporates manually added method hooks for absolute compatibility.
-        /// </summary>
         public void ApplyAttributeHooks(Assembly assembly, string? targetGameName = null, IEnumerable<MethodInfo>? manualMethods = null)
         {
             var bindingFlags = ReflectionExtensions.AnyBindFlag();
@@ -25,7 +20,6 @@ namespace Ruri.Hook.Core
 
             if (!string.IsNullOrEmpty(targetGameName))
             {
-                // Attribute based filtering: Only scan types with [GameHook(targetGameName)]
                 targetTypes = types.Where(t => 
                 {
                     var attr = t.GetCustomAttribute<GameHookAttribute>();
@@ -87,8 +81,6 @@ namespace Ruri.Hook.Core
             var methodName = attr.SourceMethodName;
             if (string.IsNullOrEmpty(methodName))
             {
-                // Infer method name from hook method name
-                // Pattern: [SourceType]_[MethodName] or just [MethodName]
                 methodName = methodDest.Name;
                 var prefix = (attr.SourceType?.Name ?? attr.SourceTypeName?.Split('.').Last()) + "_";
                 if (methodName.StartsWith(prefix))
@@ -100,10 +92,8 @@ namespace Ruri.Hook.Core
             Type? sourceType = attr.SourceType;
             if (sourceType == null && !string.IsNullOrEmpty(attr.SourceTypeName))
             {
-               // Try Type.GetType first
                sourceType = Type.GetType(attr.SourceTypeName);
                
-               // Fallback: Scan all loaded assemblies (Robust to cross-assembly references)
                if (sourceType == null)
                {
                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -127,8 +117,6 @@ namespace Ruri.Hook.Core
             {
                 methodSrc = sourceType.GetMethod(methodName, bindingFlags, attr.MethodParameters);
 
-                // Fallback: If parameters were empty (default for params) and we didn't find a match, 
-                // try looking up by name only using LINQ (Robust fallback).
                 if (methodSrc == null && attr.MethodParameters.Length == 0)
                 {
                     try 
@@ -139,17 +127,13 @@ namespace Ruri.Hook.Core
 
                     if (methodSrc == null)
                     {
-                         // Final fallback: LINQ search (ignores overloads, takes first)
                          methodSrc = sourceType.GetMethods(bindingFlags).FirstOrDefault(m => m.Name == methodName);
                     }
                 }
             }
 
-            // Extended Fallback: If method is still not found, and we inferred the name, try relaxed naming conventions
             if (methodSrc == null && string.IsNullOrEmpty(attr.SourceMethodName))
             {
-                 // Logic for Endfield Hook inequivalence: Mesh_ReadRelease -> ReadRelease (Strip first segment)
-                 // This handles cases where the hook method includes a prefix that doesn't match the ClassName
                  if (methodName.Contains("_"))
                  {
                      var relaxedName = methodName.Substring(methodName.IndexOf('_') + 1);
@@ -164,7 +148,6 @@ namespace Ruri.Hook.Core
                              methodSrc = sourceType.GetMethod(relaxedName, bindingFlags, attr.MethodParameters);
                          }
 
-                         // LINQ fallback for relaxed name (if parameters match failed or were empty)
                          if (methodSrc == null && (attr.MethodParameters == null || attr.MethodParameters.Length == 0))
                          {
                               methodSrc = sourceType.GetMethods(bindingFlags).FirstOrDefault(m => m.Name == relaxedName);
@@ -178,7 +161,6 @@ namespace Ruri.Hook.Core
                  throw new Exception($"[HookRegistry] Could not find source method {sourceType.Name}.{methodName} (Relaxed lookup also failed)");
 
             int srcParamCount = methodSrc.GetParameters().Length;
-            // int destParamCount = methodDest.GetParameters().Length; // Unused?
 
             if (methodSrc.IsStatic) srcParamCount--;
 
@@ -188,9 +170,6 @@ namespace Ruri.Hook.Core
             }
             catch (Exception ex)
             {
-                // MonoMod reports an invalid IL rewrite from deep inside its own JIT path, naming
-                // neither side of the retarget. Without the pair, a hook that went stale against a
-                // moved upstream method is untraceable.
                 throw new InvalidOperationException(
                     $"[HookRegistry] Retarget failed: {methodSrc.DeclaringType?.FullName}.{methodSrc.Name} -> " +
                     $"{methodDest.DeclaringType?.FullName}.{methodDest.Name}", ex);
@@ -219,12 +198,10 @@ namespace Ruri.Hook.Core
 
                      MethodInfo? methodSrc = null;
 
-                     // 1. Try exact parameter match (if params provided)
                      if (attr.MethodParameters != null)
                      {
                         methodSrc = attr.SourceType.GetMethod(methodName, bindingFlags, attr.MethodParameters);
                      }
-                     // 2. Try exact name match (without params or if attr.Parameters was null)
                      if (methodSrc == null)
                      {
                          try 
@@ -234,7 +211,6 @@ namespace Ruri.Hook.Core
                          catch (AmbiguousMatchException) { }
                      }
 
-                     // 3. Fallback: LINQ search by name (first match)
                      if (methodSrc == null)
                      {
                          methodSrc = attr.SourceType.GetMethods(bindingFlags).FirstOrDefault(m => m.Name == methodName);

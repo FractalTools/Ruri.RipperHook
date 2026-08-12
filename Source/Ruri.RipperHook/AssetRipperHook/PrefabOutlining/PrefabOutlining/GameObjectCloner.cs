@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Structure.Assembly.Serializable;
@@ -24,7 +24,6 @@ public static class GameObjectCloner
 		{
 			PPtrConverter converter = new PPtrConverter(asset.Collection, clonedAsset.Collection, resolver);
 			clonedAsset.CopyValues(asset, converter);
-			//Ideally, IMonoBehaviour.Structure would be cloned in IMonoBehaviour.CopyValues, but that isn't currently feasible.
 			if (asset is IMonoBehaviour monoBehaviour)
 			{
 				SerializableStructure? structure = monoBehaviour.Structure is UnloadedStructure unloadedStructure

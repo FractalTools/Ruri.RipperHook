@@ -6,12 +6,6 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.GUI;
 
-// Settings dialog for the ShaderDecompiler module. Inherits AdonisWindow
-// so the chrome / colour scheme matches FModel's own dialogs. Click a
-// checkbox to toggle — the change is persisted immediately through
-// ShaderDecompilerSettingsAccess (which round-trips into the unified
-// host config). No Save / Cancel buttons; matches FModel's SettingsView
-// idiom of TwoWay-bound IsChecked properties.
 internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
 {
     private bool _suppressUpdates;
@@ -92,9 +86,6 @@ internal sealed class ShaderDecompilerSettingsDialog : AdonisWindow
         };
     }
 
-    // Each named arg is the new value for that one checkbox; the others
-    // are read from the live snapshot so we don't clobber them. Persists
-    // through the saver registered by Program.cs.
     private void Apply(bool? splitVariants = null, bool? warnIfNoMappings = null, bool? tryBaseEngine = null)
     {
         if (_suppressUpdates) return;

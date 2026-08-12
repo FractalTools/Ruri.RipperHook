@@ -4,12 +4,6 @@ using Ruri.UEShaderTpkDumper.Parser;
 
 namespace Ruri.UEShaderTpkDumper.Emit;
 
-// Emits one `<ClassName>_<HashedName:016X>_MetaData.json` per FShader subclass
-// that declares LAYOUT_FIELD parameters. Mirrors the Python generator's
-// `emit_shader_type_seeds`. Each seed lists the parameter NAMES in source
-// declaration order with placeholder offsets — the decompile-side
-// `TryReconcileGlobalsCB` pairs the names with cook-side real offsets at
-// runtime.
 public static class ShaderTypeSeedEmitter
 {
     public static int Emit(string outRootForVersion, IEnumerable<ShaderTypeClass> classes, string engineVersion)
@@ -23,10 +17,6 @@ public static class ShaderTypeSeedEmitter
             string fileName = $"{cls.CppName}_{hash:X16}_MetaData.json";
             string filePath = Path.Combine(targetDir, fileName);
 
-            // Build ConstantBuffer payload — VectorParameters carry the
-            // source-declared names with PLACEHOLDER offsets (sequential 0,
-            // 16, 32, ... — the decompile-side `Pass165` joins these with
-            // cook-side real offsets at runtime).
             var vectorParams = new List<Dictionary<string, object?>>();
             var resources = new List<Dictionary<string, object?>>();
             int slot = 0;

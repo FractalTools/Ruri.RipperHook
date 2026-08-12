@@ -4,7 +4,6 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Caller-facing inputs to the pipeline. Filled once per .ushaderlib run.
 public sealed class LibraryDecompileOptions
 {
     public string LibraryPath { get; init; } = string.Empty;
@@ -13,28 +12,9 @@ public sealed class LibraryDecompileOptions
     public string? MaterialFilter { get; init; }
     public IReadOnlyCollection<int>? ShaderIndexFilter { get; init; }
     public uint ShaderModel { get; init; } = 51;
-    // false → keep an existing output dir (incremental runs from FModelHook
-    // dispatching one library at a time); true → wipe & recreate (CLI batch).
     public bool RecreateOutputDirectory { get; init; } = true;
-    // Default-on: every per-shader Decompile failure dumps its inputs/
-    // intermediates/error under `<OutputDirectory>/_failures/<stem>/`,
-    // letting users diff pre-rewrite vs post-rewrite vs post-patch
-    // SPIR-V offline.
     public bool DumpFailures { get; init; } = true;
-    // When true and a shader-map's stage has more than one variant, each
-    // variant's HLSL body is emitted to a sibling `<stem>/<variant>.hlsl`
-    // file and the .shader file uses `#include` lines per `#if defined`
-    // branch. When false (default), all variants stay inline inside the
-    // .shader file under their `#if defined(VARIANT_*)` blocks (legacy
-    // single-file layout). Stages with exactly one variant always inline,
-    // regardless of this flag — distribution is only useful when there's
-    // actually a chain to slim down.
     public bool SplitVariantsToHlslFiles { get; init; }
-    // Directory containing `<UBName>_<LayoutHash:08x>_MetaData.json` files
-    // for engine uniform-buffer member naming (View, OpaqueBasePass, etc.).
-    // See `UE_SYMBOL_SOURCES.md` §6. When null/missing, engine UB members
-    // stay anonymous as `<UBName>_1_m0[N]` arrays (current behaviour).
-    // Default resolution: <exeDir>/EngineUbMetadata
     public string? EngineUbMetadataDirectory { get; init; }
     public Action<string>? Log { get; init; }
     public Action<string>? LogError { get; init; }
@@ -42,106 +22,42 @@ public sealed class LibraryDecompileOptions
 
 public sealed record DecompileSummary(int TotalShaders, int Decompiled, int Skipped, int Failed);
 
-// Mutable bag passed pass-to-pass. Each pass reads what previous passes
-// produced and writes its own outputs. Deferred-rendering analogy: each
-// pass writes one G-buffer attachment, the final pass reads them all.
 internal sealed class PipelineState
 {
     public LibraryDecompileOptions Options { get; }
     public Action<string> Log { get; }
     public Action<string> LogError { get; }
 
-    // Pass 000 outputs
     public ShaderLibrary? Library { get; set; }
 
-    // Pass 020 — `.assetinfo.json` -> on-disk shader-map hash to assets
     public Dictionary<string, HashSet<string>> ShaderMapToAssets { get; } = new(StringComparer.OrdinalIgnoreCase);
-    // Pass 030 — `.stableinfo.json` hash-level fan-out (shader-hash ->
-    // asset -> set of frequencies). Used to fan unique shader binaries
-    // out to materials when the owning shader-map didn't list them.
     public Dictionary<string, Dictionary<string, HashSet<byte>>> ShaderHashToAssetsByFreq { get; } = new(StringComparer.OrdinalIgnoreCase);
-    // Pass 040 — `UnifiedShaderMetadata.json` hash -> materials index
-    // (PackageShaderMapHashes + CookedShaderMapIdHash + ShaderContentHash
-    // folded together). Bridge from on-disk hashes to material paths.
     public Dictionary<string, HashSet<string>> HashToMaterialsFromUnified { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    // Pass 050 outputs (asset/usage/name index + per-shader-map view)
     public Dictionary<int, HashSet<string>> UsageByShaderIndex { get; } = new();
     public Dictionary<int, string> NameByShaderIndex { get; } = new();
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; } = new();
-    // Authoritative per-map view: containersByMapAndIndex[mapHash][archiveShaderIndex]
-    // returns the ShaderContainerInfo this shader has WHEN VIEWED FROM that map.
-    // The same shader binary can appear in multiple maps with different
-    // ShaderType/VertexFactoryType because UE deduplicates compiled bytecode
-    // across pipeline permutations. Pass080 emission must consult this so the
-    // pass-grouping in the .shader file reflects the map's own truth, not
-    // whichever map happened to register the shader last.
     public Dictionary<string, Dictionary<int, ShaderContainerInfo>> ContainersByMapAndIndex { get; set; } = new();
-    // Per-shader-map view: each shader-map produces ONE .shader file. A
-    // shader binary referenced by multiple maps appears in each owning
-    // .shader, decompiled-once-cached-many. This is the "right axis" for
-    // grouping: assets-per-map are 1:N (asset-info sidecar truth), but a
-    // shader-binary's ownership is one-per-map plus sharing — so emitting
-    // per-map keeps UsedMaterials honest (the map's own assets) instead of
-    // unioning every material that ever touched the dedup'd binary.
     public List<ShaderMapInfo> ShaderMaps { get; } = new();
 
-    // Pass 002 outputs (cached per-material symbol sources)
     public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
     public MaterialJsonSymbolReader? MaterialJsonSymbolReader { get; set; }
 
-    // Engine uniform-buffer member-name registry. Loaded once per pipeline
-    // run from `Options.EngineUbMetadataDirectory` (or its default beneath
-    // the exe). Never null — `Empty` registry when no dir is set or no
-    // files match the convention. See EngineUbMetadataLoader for semantics.
     public EngineUbMetadataRegistry EngineUbRegistry { get; set; } = EngineUbMetadataRegistry.Empty;
 
-    // Source-derived name catalogue keyed by `FShaderType::HashedName`
-    // (CityHash64WithSeed of UPPER class name, seed=0). Serves `$Globals` /
-    // loose-parameter and direct-resource name recovery for FShader
-    // subclasses whose names get dropped at cook by `FShaderParameterMap`.
-    // Loaded alongside the engine-UB registry in Pass145.
     public ShaderTypeSeedRegistry ShaderTypeSeedRegistry { get; set; } = ShaderTypeSeedRegistry.Empty;
 
-    // Sister hash-to-name indexes for VertexFactoryType and ShaderPipelineType.
-    // Generator: `gen_ub_metadata.py::emit_vertex_factory_hash_to_name_index`
-    // and `::emit_shader_pipeline_hash_to_name_index`. Same hash math as
-    // FShaderType (CityHash64WithSeed(UPPER name)), different name sources.
-    // Used by Pass146 to backfill `VertexFactoryTypeName` and
-    // `PipelineTypeName` in `ContainerByShaderIndex` records whose cooked
-    // stableinfo left them blank.
     public HashNameIndex VertexFactoryTypeNameIndex { get; set; } = HashNameIndex.Empty;
     public HashNameIndex PipelineTypeNameIndex { get; set; } = HashNameIndex.Empty;
 
-    // Per-archive-shader cook-side ParameterMapInfo (LooseParameterBuffers
-    // with real byte offsets, no names; TextureSamplers/SRVs with the same).
-    // Populated by Pass165 by joining UnifiedMaterialReader's
-    // `MaterialShaderMapContent.Shaders[]` against `ShaderMaps[].Members[]`.
-    // Consumed by Pass180 to reconcile ShaderType seed NAMES (loose-decl
-    // order from C++) against cook OFFSETS (DXC packing order from HLSL)
-    // before injecting `$Globals` into the rewrite metadata.
-    //
-    // Stored as JsonElement so the heavy 100MB+ unified metadata stays
-    // backed by the existing JsonDocument cache — no per-shader copy.
     public Dictionary<int, System.Text.Json.JsonElement> ShaderParameterMapInfoByArchiveIndex { get; } = new();
 
-    // FModel EGame enum name from UnifiedShaderMetadata.GameVersionEnum
-    // (e.g. "GAME_UE5_1", "GAME_InfinityNikki"). Filled by Pass 140 and
-    // consumed by the engine-UB registry load (Pass 145) to pick the
-    // matching `EngineUbMetadata/<EGame>/` subfolder. Empty when we
-    // decompiled without a UnifiedShaderMetadata.json (legacy / standalone).
     public string GameVersionEnum { get; set; } = string.Empty;
 
-    // Pass 180 — per-shader-binary prep artefacts (stripped DXBC, engine
-    // options, container metadata). Filled by Pass 180; consumed by
-    // Pass 190 (decompile) and Pass 200 (emit).
     public Dictionary<int, ShaderPrep> ShaderPrepByIndex { get; } = new();
 
-    // Pass 190 — engine.Decompile result per shader-index, decoded once
-    // per unique binary even when shared across many shader-maps.
     public Dictionary<int, DecompileResult> DecompileResultByIndex { get; } = new();
 
-    // Pass 003 running tallies + outputs
     public int Decompiled;
     public int Skipped;
     public int Failed;
@@ -162,18 +78,10 @@ internal sealed class ShaderContainerInfo
     public string MaterialName { get; init; } = string.Empty;
     public string ShaderMapHash { get; init; } = string.Empty;
     public string ShaderTypeHash { get; init; } = string.Empty;
-    // Pass146 backfills this from `ShaderTypeSeedRegistry.ResolveTypeName`
-    // when the cooked stableinfo left it blank (export-side resolver
-    // missed the source tree). Mutable for that one-shot fix-up only.
     public string ShaderTypeName { get; set; } = string.Empty;
     public string VertexFactoryTypeHash { get; init; } = string.Empty;
-    // Pass146 backfills this from `VertexFactoryTypeNameIndex` when the
-    // cook left it blank. Mutable for that one-shot fix-up only —
-    // everywhere else treats it as immutable.
     public string VertexFactoryTypeName { get; set; } = string.Empty;
     public string PipelineTypeHash { get; init; } = string.Empty;
-    // Same pattern as VertexFactoryTypeName: Pass146 backfills from
-    // `PipelineTypeNameIndex` when blank.
     public string PipelineTypeName { get; set; } = string.Empty;
     public int PermutationId { get; init; }
     public int ResourceIndex { get; init; }
@@ -181,16 +89,6 @@ internal sealed class ShaderContainerInfo
     public string ShaderHash { get; init; } = string.Empty;
 }
 
-// Per-shader-map record. There is a 1:N relationship from a single
-// shader-map to materials (the `Assets` list is the canonical truth from
-// the asset-info sidecar). Each shader-map gets its own .shader output.
-//
-// `MemberIndices` walks the on-disk archive in shader-map order — the
-// `i`-th entry is the i-th binary belonging to this map (also = the
-// metadata's per-map `ResourceIndex`). Use it when emitting variants so
-// permutation ids and shader-type hashes line up the way UE serialised
-// them, rather than the global archive ordering which is an arbitrary
-// allocation artefact.
 internal sealed class ShaderMapInfo
 {
     public int ShaderMapIndex { get; init; }
@@ -199,76 +97,28 @@ internal sealed class ShaderMapInfo
     public string PrimaryAsset { get; init; } = string.Empty;
     public string PrimaryName { get; init; } = string.Empty;
     public List<ShaderMapMember> Members { get; init; } = new();
-    // Per-map view of each shader binary's type/VF/permutation metadata.
-    // The same shader binary can be a member of multiple shader-maps, and
-    // each map records its own type/VF/permutation truth — populated from
-    // that map's own stableinfo entries, not "whichever map happened to
-    // be processed last", which is the bug the global ContainerByShaderIndex
-    // dictionary suffered from.
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; init; } = new();
-    // Pre-rendered shaderlab `Properties { ... }` block — populated by
-    // Pass070 from the primary asset's FUniformExpressionSet, consumed
-    // by Pass080 emission. Empty when no UES is available (e.g. global
-    // archive shader-maps that have no material side at all).
     public string PropertiesBlock { get; set; } = string.Empty;
 
-    /// <summary>
-    /// 材质贴图的**完整声明序**(UES 的 UniformTextureParameters,所有桶展平)。
-    /// Properties 块只覆盖 Standard2D 一桶,数组/立方体桶的参数在里面没有对应项;
-    /// 消费端把 HLSL 匿名贴图槽对回参数名时,只有那一份表会产生大量歧义。
-    /// </summary>
     public List<string> MaterialTextureOrder { get; set; } = new();
 
-    /// <summary>与 <see cref="MaterialTextureOrder"/> 同序的桶号,消费侧据此按类型配对。</summary>
     public List<int> MaterialTextureBuckets { get; set; } = new();
 
-    /// <summary>
-    /// <c>Material</c> cbuffer 每个成员的**实算值**(成员名 → 逗号分隔分量)。
-    /// 在 Pass170 里与 Properties / 贴图声明序**用同一个 asset 的同一份 UES**产出 ——
-    /// 之前走全局字典 + 按 PrimaryName 匹配,两边材质身份对不上,值表会静默整块缺失。
-    /// </summary>
     public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>成员名 → 它在 cbuffer 里的字节偏移。preshader 段按 float4 数组声明后,
-    /// 消费侧要靠 (寄存器, 分量) = (offset/16, offset%16/4) 才能把值填进数组。</summary>
     public Dictionary<string, int> MaterialCbufferOffsets { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// 成员名 → 它的**运算程序**(S 表达式)。值是"按这份 UES 的参数缺省算出的一个数",
-    /// 程序才是算法本身;消费侧渲染的材质实例覆盖了参数时,得拿程序重算。
-    /// 见 <c>MaterialConstantBufferReader.EvaluatedCbufferPrograms</c>。
-    /// </summary>
     public Dictionary<string, string> MaterialCbufferPrograms { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// 导出侧求值时**实际用的那套参数值**(参数原名 → 4 分量)。消费侧拿它跑一遍程序、
-    /// 能复现导出值,才敢改用自己实例的参数重算 —— 见
-    /// <c>MaterialConstantBufferReader.EvaluatedCbufferParams</c>。
-    /// </summary>
     public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
-    // Pre-rendered SubShader-level Tags + Pass-level render-state lines —
-    // populated by Pass175 from the primary asset's RenderState UProperty
-    // bag (see UnifiedMaterialMetadata.RenderState). Two outputs:
-    //   * SubShaderTags: full `Tags { ... }` block to drop inside SubShader,
-    //     before the Pass.
-    //   * PassCommands: per-Pass shaderlab commands (Cull, Blend, ZWrite,
-    //     ZTest, ColorMask, AlphaToMask) one per line, no leading indent.
-    // Both empty when the shader-map has no material backing (global
-    // archive entries) or the unified metadata predates render-state writes.
     public string SubShaderTags { get; set; } = string.Empty;
     public string PassCommands { get; set; } = string.Empty;
 }
 
 internal sealed class ShaderMapMember
 {
-    public int RelativeIndex { get; init; }      // 0..NumShaders-1, == metadata ResourceIndex
-    public int ArchiveShaderIndex { get; init; } // global archive index
-}
+    public int RelativeIndex { get; init; }    public int ArchiveShaderIndex { get; init; }}
 
-// Per-shader artefacts the prep pass (Pass 180) collects so Pass 190 only
-// touches binary + options and Pass 200 has everything it needs to write
-// outputs without re-reading metadata. Lives at top-level so it can be
-// referenced from PipelineState's typed dictionary slot.
 internal sealed class ShaderPrep
 {
     public required int ShaderIndex { get; init; }

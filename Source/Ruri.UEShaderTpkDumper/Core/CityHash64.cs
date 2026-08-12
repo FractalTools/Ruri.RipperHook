@@ -1,11 +1,5 @@
 namespace Ruri.UEShaderTpkDumper.Core;
 
-// Port of CityHash64 1.1.0 — matches UE's `FNameHash::Compute` /
-// `FShaderType::HashedName` math. Kept byte-identical to the C++
-// reference (`Engine/Source/Runtime/Core/Public/Hash/CityHash.h`)
-// because every cooked TypeHash / VertexFactoryHash / PipelineHash
-// depends on it. The Python generator's port (`gen_ub_metadata.py`)
-// is the same algorithm — this is a faithful C# rewrite.
 public static class CityHash64
 {
     private const ulong K0 = 0xc3a5c85c97cb3127UL;
@@ -112,10 +106,6 @@ public static class CityHash64
             mul);
     }
 
-    // CityHash 1.1.0 — matches UE 5.x `Hash/CityHash.cpp::HashLen33to64`.
-    // The 1.0.x variant (rotate-only, no bswap) produces different hashes for
-    // ≥33-byte strings and was the source of a long-class-name hash mismatch
-    // (e.g. TLightMapDensityPSFDummyLightMapPolicy hashed wrong vs cook).
     private static ulong Hash33To64(byte[] s, int p, int n)
     {
         ulong mul = unchecked(K2 + (ulong)n * 2);

@@ -2,10 +2,6 @@ using System;
 
 namespace Ruri.ACL
 {
-    /// <summary>
-    /// Decompressor for ACL scalar/float tracks (used for humanoid muscle curves).
-    /// Pure C# implementation, no native dependency.
-    /// </summary>
     public class AclFloatDecompressor
     {
         private readonly AclCompressedTracks _tracks;
@@ -40,7 +36,6 @@ namespace Ruri.ACL
 
         public void Dispose()
         {
-            // Managed implementation, nothing to release. Kept for API compatibility.
         }
     }
 }

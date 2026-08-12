@@ -6,62 +6,6 @@ using ShaderDecompilerEngine = Ruri.ShaderTools.ShaderDecompiler;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Orchestrator. Pass numbers reflect EXECUTION ORDER end-to-end —
-// Export must run first because Decompile reads the sidecars Export
-// produces. 10-increments leave room to insert without renumbering.
-//
-// Each pass is self-contained: it fills typed slots on PipelineState
-// and the orchestrator just sequences them. Passes never call into
-// another pass's helpers; if a piece of logic is shared by multiple
-// passes it lives as a state-attached data type (UnifiedMaterialReader,
-// MaterialUniformBufferLayout, etc.).
-//
-// Export pipeline (FModel-hook side; needs vm.Provider) — orchestrated
-// by ExportPipeline.Run, see ExportPipeline.cs. Pass digits == execution
-// order. The `HashedNamesResolver` static utility (no Pass number) is
-// consumed on demand by Pass 050; it has no execution slot so it doesn't
-// take one of the numeric labels.
-//   Pass 010  Save IoStore archive as flat FSerializedShaderArchive (from hook)
-//   Pass 020  Extract IoStore shader-map hashes (cached)
-//   Pass 030  Scan material packages -> Root.MaterialInterfaces (cached)
-//   Pass 035  Extract Niagara FShaderMap.ResourceHash bridge (cached) —
-//             independent ID space from material side, required for
-//             archives containing Niagara-only shader-maps
-//   Pass 040  Per-library archive metadata view
-//   Pass 050  Build per-shader-map stable records
-//   Pass 060  Write `<base>.assetinfo.json`
-//   Pass 070  Write `<base>.stableinfo.json`
-//   Pass 080  Write `UnifiedShaderMetadata.json` (rewritten every archive)
-//
-// Decompile pipeline (CLI-runnable; reads .ushaderlib + JSON sidecars):
-//   Pass 110  Read .ushaderlib bytes into ShaderLibrary
-//   Pass 120  Load .assetinfo.json     -> ShaderMapToAssets
-//   Pass 130  Load .stableinfo.json    -> hash-fanout + per-shader containers
-//   Pass 140  Load UnifiedShaderMetadata.json -> hash-to-materials index
-//   Pass 150  Compose 120-140 into per-shader-map view + usage / name maps
-//   Pass 160  Spin up per-material symbol-source readers
-//   Pass 170  Build shaderlab `Properties { ... }` from each map's UES
-//   Pass 175  Build SubShader Tags + per-Pass render-state lines from each
-//             map's RenderState UProperty bag (BlendMode/TwoSided/etc.)
-//   Pass 180  Phase 1 — strip UE wrapper, build SerializedProgramData +
-//             EngineDecompileOptions per shader binary -> ShaderPrepByIndex.
-//   Pass 190  Phase 2 — drive ShaderDecompilerEngine.Decompile across
-//             every prepped binary -> DecompileResultByIndex.
-//   Pass 200  Phase 3 — walk shader-maps in alphabetical order, render
-//             per-map .shader files with variants under `#if defined(...)`
-//             blocks.
-//
-// Pass 190 + Pass 200 are INTERLEAVED per-shader-map by the orchestrator:
-// for each map, decompile its pending binaries (Pass190.DoPassForOneMap)
-// then emit its `.shader` file (Pass200.DoPassForOneMap). This restores
-// the streaming behavior the user wanted — completed `.shader` files
-// land progressively as work advances rather than in a single burst at
-// the end. The cache in `state.DecompileResultByIndex` makes shared
-// binaries decompile once even when N maps own them.
-//
-// Future inserts (e.g. material-asset attribute extraction for
-// SubShader Tags / RenderQueue / ShadingModel) take the next free
-// 10-step slot without renumbering anything else.
 public static class DecompilePipeline
 {
     public static DecompileSummary Run(LibraryDecompileOptions options)
@@ -73,10 +17,6 @@ public static class DecompilePipeline
 
         PipelineState state = new(options);
 
-        // The engine-UB seed directory; loading is deferred until Pass 145
-        // (after Pass 140 has populated `state.GameVersionEnum` from
-        // UnifiedShaderMetadata.json so we can pick the right
-        // `EngineUbMetadata/<EGame>/` subfolder).
         string engineUbDir = options.EngineUbMetadataDirectory
             ?? Path.Combine(AppContext.BaseDirectory, "EngineUbMetadata");
 
@@ -88,20 +28,8 @@ public static class DecompilePipeline
             using (new TimingCookie(state, "Pass 140: Load UnifiedShaderMetadata")) Pass140_LoadUnifiedMetadataIndex.DoPass(state);
             using (new TimingCookie(state, "Pass 145: Load engine-UB metadata"))
             {
-                // Honour the user-facing toggle: when the game-specific folder
-                // is missing, fall back to the base UE folder (e.g. GAME_UE5_4
-                // for GAME_InfinityNikki). Default-on; only matters when the
-                // game name DOESN'T already start with GAME_UE — in that case
-                // the specific folder IS the base, no further fallback exists.
                 bool tryBaseFallback = Ruri.ShaderTools.ShaderDecompilerSettingsAccess.Current.TryMatchBaseEngineVersion;
 
-                // Detect the UE base version from GameVersionEnum so we can
-                // pick the right preshader-opcode layout (UE 5.4 inserted
-                // SparseVolumeTextureUniform at slot 43; UE 5.7 inserted
-                // Modulo at slot 9). Material expression decoding falls
-                // back to anonymous Material_f_<N> when the byte stream
-                // mis-dispatches, so getting this right is what unlocks
-                // expression-named parameters on 5.4+ cooks.
                 MaterialConstantBufferReader.PreshaderVersion = DetectPreshaderVersion(state.GameVersionEnum, state.Log);
                 state.EngineUbRegistry = EngineUbMetadataRegistry.LoadForGame(
                     engineUbDir,
@@ -109,23 +37,12 @@ public static class DecompilePipeline
                     tryBaseFallback,
                     state.Log, state.LogError);
 
-                // Same priority pattern for the ShaderType seed registry: it
-                // serves `FShaderType::HashedName` → loose-parameter name
-                // catalogue lookups (the `$Globals` cbuffer + direct texture
-                // bindings whose names are dropped at cook). Reuses the
-                // engineUbDir so the user only has one symbol pack to manage.
                 state.ShaderTypeSeedRegistry = ShaderTypeSeedRegistry.LoadForGame(
                     engineUbDir,
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
                     tryBaseFallback,
                     state.Log, state.LogError);
 
-                // Sister indexes — `_VertexFactoryType/_HashToName.json` and
-                // `_ShaderPipelineType/_HashToName.json`. Same generator pack,
-                // same fallback path. Used by Pass146 (backfill) to fill the
-                // blank `VertexFactoryTypeName` / `PipelineTypeName` slots
-                // that some cooks leave empty (e.g. when the cook stripped
-                // the editor-side string registry).
                 state.VertexFactoryTypeNameIndex = HashNameIndex.LoadForGame(
                     engineUbDir, "_VertexFactoryType",
                     string.IsNullOrEmpty(state.GameVersionEnum) ? null : state.GameVersionEnum,
@@ -145,10 +62,6 @@ public static class DecompilePipeline
             using (new TimingCookie(state, "Pass 175: Build render-state block"))   Pass175_BuildRenderStateBlock.DoPass(state);
             using (new TimingCookie(state, "Pass 180: Prepare shader binaries"))    Pass180_PrepareShaderBinaries.DoPass(state);
 
-            // Pass 190 + Pass 200 INTERLEAVED per shader-map for streaming.
-            // The engine instance lives across all maps so its one-time setup
-            // is amortised. Cache via state.DecompileResultByIndex makes
-            // shared binaries decompile only on the first owning map's pass.
             using (new TimingCookie(state, "Pass 190+200: Decompile + emit per map"))
             {
                 string outputDir = string.IsNullOrEmpty(state.OutputDirectory)
@@ -171,24 +84,10 @@ public static class DecompilePipeline
         }
         finally
         {
-            // Release the .ushaderlib FileStream that ShaderLibrary holds
-            // open for streaming code-body reads. Without this, the file
-            // stays locked until GC kicks in — bad for batch CLI runs that
-            // process N archives back-to-back and may want to read/move
-            // the .ushaderlib afterwards.
             state.Library?.Dispose();
         }
     }
 
-    // Map `state.GameVersionEnum` to the preshader-opcode layout used by
-    // the cook. Logic:
-    //   1. If GameVersionEnum is already a `GAME_UE5_<X>` token, use X
-    //      directly.
-    //   2. Otherwise (game-specific tag like `GAME_InfinityNikki`), try
-    //      to derive the base UE folder via the same helper the engine-UB
-    //      registry uses.
-    //   3. Default to Ue51 when nothing resolves — that's the layout the
-    //      reader's switch statement hardcodes.
     private static UeMaterialPreshaderVersion DetectPreshaderVersion(string? gameVersionEnum, Action<string>? log)
     {
         if (string.IsNullOrWhiteSpace(gameVersionEnum)) return UeMaterialPreshaderVersion.Ue51;
@@ -204,8 +103,6 @@ public static class DecompilePipeline
         }
         if (string.IsNullOrEmpty(baseUe)) return UeMaterialPreshaderVersion.Ue51;
 
-        // Pull the minor version number out of `GAME_UE5_<X>`.
-        // X<4 → Ue51, X in {4,5,6} → Ue54, X>=7 → Ue57.
         const string prefix = "GAME_UE5_";
         if (!baseUe!.StartsWith(prefix, StringComparison.Ordinal)) return UeMaterialPreshaderVersion.Ue51;
         if (!int.TryParse(baseUe!.AsSpan(prefix.Length), out int minor)) return UeMaterialPreshaderVersion.Ue51;

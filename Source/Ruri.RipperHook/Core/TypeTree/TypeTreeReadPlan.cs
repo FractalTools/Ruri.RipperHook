@@ -10,18 +10,6 @@ using AssetRipper.SourceGenerated;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// A cached, executable read layout for one (class, engine version, AssetRipper type) triple.
-///
-/// This is what replaces the generated <c>Ruri.SourceGenerated</c> assembly. Where the old pipeline
-/// ran the AssetRipper assembly dumper over the game's tpk to emit a parallel class hierarchy whose
-/// <c>ReadRelease</c> methods were then deep-copied onto the stock classes, the plan walks the same
-/// tpk tree at runtime and reads straight into the stock class -- one object graph built once per
-/// type, then reused for every asset.
-///
-/// Field binding, node dispatch and align placement are ports of <c>Pass015_AddFields</c> and
-/// <c>Pass100_FillReadMethods</c>; see <see cref="TypeTreeStep"/> for the per-node semantics.
-/// </summary>
 public sealed class TypeTreeReadPlan
 {
     private static readonly ConcurrentDictionary<(Type Target, ClassIDType ClassID, TypeTreeVersion Version, int Revision), TypeTreeReadPlan?> Cache = new();
@@ -47,10 +35,6 @@ public sealed class TypeTreeReadPlan
         this.postReaders = postReaders;
     }
 
-    /// <summary>
-    /// The plan for reading <paramref name="classID"/> at <paramref name="version"/> into
-    /// <paramref name="targetType"/>, or <see langword="null"/> when the tpk has no tree for it.
-    /// </summary>
     public static TypeTreeReadPlan? Get(ClassIDType classID, Type targetType, TypeTreeVersion version)
     {
         return Cache.GetOrAdd(
@@ -86,9 +70,6 @@ public sealed class TypeTreeReadPlan
         return new TypeTreeReadPlan(classID, version, rootNode, root, TypeTreeOverrides.FindPostReaders(classID));
     }
 
-    // -----------------------------------------------------------------
-    // plan construction
-    // -----------------------------------------------------------------
 
     private static TypeTreeFieldStep[] BuildFields(TypeTreeNode structNode, Type? ownerType, ClassIDType classID, string parentPath)
     {
@@ -112,8 +93,6 @@ public sealed class TypeTreeReadPlan
 
         if (field is null)
         {
-            // Nothing on the AssetRipper side holds this node. Capture it when a hook asked for it,
-            // otherwise consume its bytes so the stream stays aligned with the rest of the layout.
             return capture
                 ? new TypeTreeCaptureFieldStep(node, path)
                 : new TypeTreeFilledFieldStep(node, path, null, new TypeTreeDiscardStep(node));
@@ -148,10 +127,6 @@ public sealed class TypeTreeReadPlan
         return new TypeTreeFilledFieldStep(node, path, TypeTreeFieldAccess.CreateReferenceGetter(field), inner);
     }
 
-    /// <summary>
-    /// 1:1 port of <c>Pass100_FillReadMethods.IsArrayOrPrimitive</c>: these field types are assigned
-    /// from a returned value, everything else is filled in place.
-    /// </summary>
     private static bool IsAssignedInPlaceOfRead(Type type) => type.IsArray || type.IsPrimitive || type == typeof(Utf8String);
 
     private static bool TryBuildScalarReader(TypeTreeNode node, Type fieldType, out Delegate? read, out bool align)
@@ -170,8 +145,6 @@ public sealed class TypeTreeReadPlan
             case TypeTreeNodeType.Vector:
             case TypeTreeNodeType.Array:
             {
-                // Pass100 routes a byte-element sequence through the TypelessData reader whenever the
-                // generated field is a byte[]; anything else was an outright NotSupportedException.
                 if (fieldType != typeof(byte[])) return false;
                 TypeTreeNode arrayNode = node.NodeType == TypeTreeNodeType.Vector ? node.SubNodes[0] : node;
                 TypeTreeNode elementNode = arrayNode.SubNodes[1];
@@ -217,12 +190,6 @@ public sealed class TypeTreeReadPlan
             [node, path, read, align, setter, valueFix, capture])!;
     }
 
-    /// <remarks>
-    /// <paramref name="path"/> is the node's own path and becomes the parent path for anything nested
-    /// inside it, so a gate or capture can address <c>m_Shapes/m_Vertices</c>. Elements of a sequence
-    /// share their sequence's path -- overrides inside a repeated element are not addressable, which
-    /// no known deviation needs.
-    /// </remarks>
     private static TypeTreeStep? TryBuildInPlaceStep(TypeTreeNode node, Type fieldType, ClassIDType classID, string path)
     {
         switch (node.NodeType)

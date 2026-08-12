@@ -4,13 +4,6 @@ using Ruri.UEShaderTpkDumper.Parser;
 
 namespace Ruri.UEShaderTpkDumper.Emit;
 
-// Writes per-UB `<Name>_<LayoutHash:08X>_MetaData.json` files matching the
-// schema the runtime decompiler consumes. Shape mirrors what the Python
-// generator emits (committed examples in EngineUbMetadata/GAME_UE5_X/).
-//
-// Keep the schema BYTE-IDENTICAL — the C# runtime side reads the JSON via
-// System.Text.Json with PropertyNameCaseInsensitive=true, so casing
-// differences are tolerated but field NAMES are not.
 public static class JsonEmitter
 {
     public static void EmitLayout(string outputDir, LayoutResult layout, uint layoutHash, string bindingFlagsName, IReadOnlyDictionary<string, int> ubmtTable, string engineVersion, string engineSourcePath)
@@ -37,8 +30,6 @@ public static class JsonEmitter
         JsonSerializerOptions opts = new()
         {
             WriteIndented = true,
-            // Round-trip with the runtime loader's reader. Default options
-            // would encode `<`/`>` in struct names; we want them literal.
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
         string json = JsonSerializer.Serialize(obj, opts) + "\n";
@@ -155,9 +146,6 @@ public static class JsonEmitter
 
     private static List<Dictionary<string, object?>> BuildResourcesList(LayoutResult layout, IReadOnlyDictionary<string, int> ubmtTable)
     {
-        // Canonical flat resource list, 1:1 with FRHIUniformBufferLayoutInitializer
-        // .Resources[]. Sorted by (offset, ubmt) — the same order the layout
-        // hash was computed over. This is the source of truth for SRT lookup.
         var list = new List<Dictionary<string, object?>>();
         foreach (ResolvedResource r in layout.Resources)
         {
@@ -167,14 +155,6 @@ public static class JsonEmitter
                 ["Offset"] = r.Offset,
                 ["Name"] = r.Name,
                 ["UbmtType"] = "UBMT_" + r.Ubmt,
-                // HLSL/CPP-side type signature (e.g. "Texture3D<uint4>",
-                // "ByteAddressBuffer", "SamplerState"). Empty for macros
-                // that don't carry one (RENDER_TARGET_BINDING_SLOTS).
-                // Used at decompile time by the type-uniqueness rename
-                // path: if the engine has exactly one resource matching
-                // a given (UbmtType, ShaderType) pair, an anonymous slot
-                // of that exact type can be confidently renamed to the
-                // real UE source name.
                 ["ShaderType"] = r.ShaderType,
             });
         }

@@ -3,14 +3,6 @@ using Ruri.RipperHook.Tables;
 
 namespace Ruri.RipperHook.Data;
 
-/// <summary>
-/// A <see cref="ColumnTable"/> as the buffers it already is -- the one interop crossing.
-///
-/// Nothing is formatted, nothing is materialized per row: text columns hand over their UTF-8 blob
-/// and their offset array, numeric ones their raw values. A host maps each one straight into numpy
-/// and parses no byte. This is why "one shape" is also "the fast shape", and it is generic to the
-/// core rather than living next to one game's reader.
-/// </summary>
 public static class ColumnTablePacking
 {
     public const string TextKind = "text";

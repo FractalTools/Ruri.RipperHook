@@ -40,24 +40,8 @@ using SharpGLTF.Transforms;
 
 namespace Ruri.RipperHook.GlbExporter;
 
-/// <summary>
-/// Builds a complete glTF scene from a prefab/scene hierarchy: node tree, skinned + static meshes
-/// (full vertex data via AR's GlbSubMeshBuilder), materials with textures, morph targets, and
-/// animations. Generic transform curves bind by the paths AR's PathChecksumCache already recovered
-/// (Avatar TOS + hierarchy CRC32); humanoid muscle curves are solved to bone rotations against the
-/// owning animator's own referential (HumanoidClipGenericizer). Bones the prefab stripped but the Avatar still knows are
-/// synthesized from the avatar skeleton's default pose so every animation-dependent bone exists.
-/// </summary>
 public static class RuriGlbSceneBuilder
 {
-    /// <summary>
-    /// Build a glTF scene from a prefab/scene hierarchy.
-    /// <paramref name="humanoidClipPool"/> is the loaded scope's muscle-based clips that no Animator
-    /// references directly: humanoid muscle curves are avatar-relative, plaintext-named and
-    /// path-hash-independent, so when a prefab carries a humanoid Avatar every such clip is baked with
-    /// that Avatar's muscle referential. Keep the pool scoped to one character (the name closure) so a
-    /// character's rig doesn't get another character's motion. Null/empty = only Animator-referenced clips.
-    /// </summary>
     public static SceneBuilder Build(IEnumerable<IUnityObjectBase> assets, bool isScene, IReadOnlyList<IAnimationClip>? humanoidClipPool = null)
     {
         SceneBuilder scene = new();
@@ -79,7 +63,6 @@ public static class RuriGlbSceneBuilder
             }
         }
 
-        // Avatar 骨架补全要在网格/动画之前:被 strip 的骨骼节点先长出来。
         foreach (AnimatorEntry animator in context.Animators)
         {
             SynthesizeMissingAvatarBones(context, animator);
@@ -113,7 +96,6 @@ public static class RuriGlbSceneBuilder
         return scene;
     }
 
-    // ---- node tree -------------------------------------------------------------------------
 
     private static void AddTransformTree(BuildContext context, NodeBuilder? parentNode, ITransform transform, string? parentPath)
     {
@@ -123,15 +105,12 @@ public static class RuriGlbSceneBuilder
             return;
         }
 
-        // SharpGLTF 的 IsValidArmature 要求骨架树内节点名唯一,游戏层级常见重名(attach/effect 等)——
-        // 建树时确定性去重;蒙皮按 joint 索引、动画绑定按 Unity 路径字典,改名无损。
         string nodeName = context.UniqueNodeName(gameObject.Name);
         NodeBuilder node = parentNode is null ? new NodeBuilder(nodeName) : parentNode.CreateNode(nodeName);
         Vector3 localPosition = transform.LocalPosition_C4.CastToStruct();
         Quaternion localRotation = transform.LocalRotation_C4.CastToStruct();
         Vector3 localScale = transform.LocalScale_C4.CastToStruct();
 
-        // 根节点(prefab,非场景)按 AR 的约定保持单位变换;其余节点写本地 TRS。
         if (parentNode is not null || context.IsScene)
         {
             node.LocalTransform = new AffineTransform(
@@ -145,7 +124,6 @@ public static class RuriGlbSceneBuilder
             context.Scene.AddNode(node);
         }
 
-        // 动画路径:相对 root,root 自身为 ""(Unity 动画曲线路径约定)。
         string path = parentPath is null ? string.Empty : (parentPath.Length == 0 ? gameObject.Name : parentPath + "/" + gameObject.Name);
         context.NodeByTransform[transform] = node;
         context.NodeByPath[path] = node;
@@ -172,11 +150,6 @@ public static class RuriGlbSceneBuilder
         }
     }
 
-    /// <summary>
-    /// Grow avatar-skeleton bones the prefab hierarchy does not carry (stripped/optimized rigs):
-    /// every TOS path missing from the node tree is created under its skeleton parent with the
-    /// avatar DefaultPose local TRS, restoring the full skeleton shape the optimizer removed.
-    /// </summary>
     private static void SynthesizeMissingAvatarBones(BuildContext context, AnimatorEntry animatorEntry)
     {
         IAvatar? avatar = animatorEntry.Animator.AvatarP;
@@ -189,13 +162,11 @@ public static class RuriGlbSceneBuilder
         ISkeletonPose defaultPose = avatar.Avatar.DefaultPose.Data;
         int created = 0;
 
-        // 骨架数组父在前子在后;顺序遍历保证父节点先于子节点被补出来。
         for (int i = 0; i < skeleton.Node.Count && i < skeleton.ID.Count; i++)
         {
             if (!avatar.TOS.TryGetValue(skeleton.ID[i], out Utf8String? tosPath) || tosPath.IsEmpty)
             {
-                continue; // 根节点(路径 "")就是 animator 节点本身,永远已存在。
-            }
+                continue;            }
             string path = ResolvePath(animatorEntry.Path, tosPath.String);
             if (context.NodeByPath.ContainsKey(path))
             {
@@ -211,8 +182,7 @@ public static class RuriGlbSceneBuilder
             }
             if (!context.NodeByPath.TryGetValue(parentPath, out NodeBuilder? parentNode))
             {
-                continue; // 父链断裂(TOS 不完整),跳过该骨骼。
-            }
+                continue;            }
 
             int slash = path.LastIndexOf('/');
             string name = context.UniqueNodeName(slash < 0 ? path : path[(slash + 1)..]);
@@ -243,7 +213,6 @@ public static class RuriGlbSceneBuilder
         }
     }
 
-    // ---- meshes ----------------------------------------------------------------------------
 
     private static void BuildSkinnedMesh(BuildContext context, SkinnedRendererEntry entry)
     {
@@ -257,7 +226,6 @@ public static class RuriGlbSceneBuilder
         IMeshBuilder<MaterialBuilder> meshBuilder = BuildSubMeshes(context, mesh, meshData, renderer);
         string[] morphNames = AddMorphTargets(meshBuilder, mesh, meshData);
 
-        // 关节:SkinnedMeshRenderer.Bones 的顺序就是顶点蒙皮索引(BoneWeight4.Index)引用的顺序。
         int boneCount = renderer.BonesP.Count;
         InstanceBuilder instance;
         if (boneCount > 0)
@@ -273,7 +241,6 @@ public static class RuriGlbSceneBuilder
                 }
                 else
                 {
-                    // 兜底:缺失的骨骼挂到 renderer 节点,避免索引错位。
                     jointNodes[i] = entry.Node;
                     missing++;
                 }
@@ -282,9 +249,6 @@ public static class RuriGlbSceneBuilder
             {
                 Logger.Warning(LogCategory.Export, $"[GLB] '{renderer.GetBestName()}': {missing}/{boneCount} bones missing from hierarchy, skin will be partially rigid");
             }
-            // Unity 蒙皮顶点在 MESH 空间,不是世界空间——必须用网格自带的 m_BindPose(mesh→bone 逆绑定,
-            // AR CastToStruct 已转成行向量约定)镜像进 glTF 空间(C·B·C)。用关节世界变换反推只在
-            // 网格空间恰好等于世界空间时成立,角色 rig 带轴向旋转时网格会横躺 90°。
             Matrix4x4[]? bindPose = meshData.BindPose;
             if (bindPose is not null && bindPose.Length == boneCount)
             {
@@ -297,7 +261,6 @@ public static class RuriGlbSceneBuilder
             }
             else
             {
-                // 兜底:网格没有 bindpose 时退回关节世界反推(要求层级处于绑定姿势)。
                 instance = context.Scene.AddSkinnedMesh(meshBuilder, Matrix4x4.Identity, jointNodes);
             }
         }
@@ -319,7 +282,6 @@ public static class RuriGlbSceneBuilder
             return;
         }
 
-        // 静态合批的子网格子集处理与 AR GlbLevelBuilder 一致(SubsetIndices/StaticBatchInfo)。
         if (HasStaticBatchSubset(renderer))
         {
             int[] subsetIndices = GetSubsetIndices(renderer);
@@ -357,10 +319,6 @@ public static class RuriGlbSceneBuilder
         return meshBuilder;
     }
 
-    /// <summary>
-    /// Unity blendshape channels -> glTF morph targets (each channel's last frame = weight-1 target),
-    /// with Blender/three.js-conventional target names in mesh extras.
-    /// </summary>
     private static string[] AddMorphTargets(IMeshBuilder<MaterialBuilder> meshBuilder, IMesh mesh, MeshData meshData)
     {
         IBlendShapeData? shapes = mesh.Shapes;
@@ -410,7 +368,6 @@ public static class RuriGlbSceneBuilder
         return names;
     }
 
-    // ---- animation -------------------------------------------------------------------------
 
     private static void AddAnimations(BuildContext context)
     {
@@ -439,8 +396,6 @@ public static class RuriGlbSceneBuilder
                 }
             }
 
-            // Animator-referenced clips (generic path-hash curves need the controller association);
-            // then, for a humanoid rig, every avatar-portable muscle clip in the scope's pool.
             IEnumerable<IAnimationClip> clips = CollectClips(animatorEntry.Animator);
             if (referential is not null && context.HumanoidClipPool.Count > 0)
             {
@@ -453,11 +408,6 @@ public static class RuriGlbSceneBuilder
                 {
                     continue;
                 }
-                // The muscle solve, right where the correct avatar is known: a muscle-encoded
-                // clip resolves into per-bone transform curves against THIS animator's own
-                // referential before baking (per-bone -- a clip that muscle-encodes only part
-                // of the body keeps its real transform tracks for the rest). A muscle clip on
-                // a rig with no human referential can only bake its generic curves; say so.
                 if (HumanoidClipGenericizer.HasMuscleCurves(clip))
                 {
                     if (referential is null)
@@ -491,11 +441,6 @@ public static class RuriGlbSceneBuilder
         }
     }
 
-    /// <summary>
-    /// Every clip reaching here is already generic: any muscle encoding was resolved into ordinary
-    /// per-bone transform curves against the owning animator's referential just above, so this
-    /// bake has one kind of curve to handle.
-    /// </summary>
     private static void AddClip(BuildContext context, AnimatorEntry animatorEntry, IAnimationClip clip,
         string trackName)
     {
@@ -547,7 +492,6 @@ public static class RuriGlbSceneBuilder
             for (int k = 0; k < curve.Curve.Curve.Count; k++)
             {
                 IKeyframe_Vector3f key = curve.Curve.Curve[k];
-                // 缩放在两套坐标系下相同,不翻转。
                 track.SetPoint(key.Time, key.Value.CastToStruct());
             }
         }
@@ -569,7 +513,6 @@ public static class RuriGlbSceneBuilder
         }
     }
 
-    /// <summary>blendShape.&lt;name&gt; float curves -> glTF morph weight tracks (values /100, sampled at clip rate).</summary>
     private static void AddMorphWeightCurves(BuildContext context, IAnimationClip clip, string basePath, string trackName)
     {
         Dictionary<string, List<(int ChannelIndex, HermiteCurve Curve)>>? curvesByMeshPath = null;
@@ -652,9 +595,6 @@ public static class RuriGlbSceneBuilder
         return clips;
     }
 
-    // Animator 的控制器指针按 Unity 版本分了三种(4 / 4.3 / 5+),取存在的那个。
-    // 返回 IUnityObjectBase:IAnimatorController(91)与 IRuntimeAnimatorController(93)在 AR 里非父子,
-    // 调用方用运行时 is 判定具体类型。
     private static IUnityObjectBase? GetController(IAnimator animator)
     {
         if (animator.Has_Controller_PPtr_RuntimeAnimatorController_5())
@@ -672,14 +612,12 @@ public static class RuriGlbSceneBuilder
         return null;
     }
 
-    // ---- helpers ---------------------------------------------------------------------------
 
     private static bool TryGetNode(BuildContext context, string basePath, string curvePath, [NotNullWhen(true)] out NodeBuilder? node)
     {
         return context.NodeByPath.TryGetValue(ResolvePath(basePath, curvePath), out node);
     }
 
-    /// <summary>曲线路径相对 Animator 所在节点;animator 挂在 prefab 根时前缀为 ""。</summary>
     internal static string ResolvePath(string basePath, string curvePath)
     {
         if (basePath.Length == 0)
@@ -718,7 +656,6 @@ public static class RuriGlbSceneBuilder
         return Array.Empty<int>();
     }
 
-    /// <summary>Unity→glTF 的镜像基变换共轭:C·M·C,C=diag(-1,1,1)(行向量约定,C 自逆)。</summary>
     private static readonly Matrix4x4 MirrorScale = Matrix4x4.CreateScale(-1f, 1f, 1f);
 
     private static Matrix4x4 MirrorTransform(Matrix4x4 unityRowMatrix)
@@ -726,7 +663,6 @@ public static class RuriGlbSceneBuilder
         return MirrorScale * unityRowMatrix * MirrorScale;
     }
 
-    // Unity 欧拉(度,ZXY 内旋)→四元数。
     private static Quaternion EulerToQuaternion(Vector3 eulerDegrees)
     {
         const float deg2Rad = MathF.PI / 180f;
@@ -775,7 +711,6 @@ public static class RuriGlbSceneBuilder
         }
     }
 
-    // ---- context ---------------------------------------------------------------------------
 
     private sealed class BuildContext
     {
@@ -845,11 +780,6 @@ public static class RuriGlbSceneBuilder
 
     private readonly record struct MorphInstance(InstanceBuilder Instance, string[] ChannelNames);
 
-    /// <summary>
-    /// 把「animator 相对路径」查询映射到「prefab 根相对路径」字典上的零拷贝视图。
-    /// 契约:只有 TryGetValue/ContainsKey/索引器做前缀映射;Keys/Values/枚举透传底层字典
-    /// (键是 prefab 根相对路径)——烘焙器只按键查,不要拿这个视图做枚举。
-    /// </summary>
     private sealed class PrefixedPathLookup<TValue> : IReadOnlyDictionary<string, TValue>
     {
         private readonly IReadOnlyDictionary<string, TValue> _inner;

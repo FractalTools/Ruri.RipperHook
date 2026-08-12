@@ -2,16 +2,9 @@ extern alias icedreal;
 using System.Collections.Generic;
 using Cpp2IL.Core.Model.Contexts;
 using LibCpp2IL;
-using icedreal::Iced.Intel; // 真 Iced（MonoMod.Iced 也有 Iced.Intel，靠 alias 区分）
-
+using icedreal::Iced.Intel;
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// 用 Iced 自己解码方法的原生字节（而非 Cpp2IL 的扁平 PrintAssembly），从而拿到**每条指令的地址**，
-/// 据此把函数内的短跳/近跳目标渲染成独立的 <c>loc_XXXX:</c> 标签行——形成可读的汇编块（看得出每个跳转落在哪）。
-/// 每条指令文本再交给 <see cref="Il2CppAsmAnnotator.AnnotateLine"/> 把操作数地址替换成符号。
-/// 仅用于 x86（32/64）；ARM 等走 PrintAssembly 回退（无标签）。
-/// </summary>
 internal static class Il2CppX86Listing
 {
     private static ApplicationAnalysisContext _condemnationApp;
@@ -31,21 +24,11 @@ internal static class Il2CppX86Listing
         return instructions;
     }
 
-    /// <summary>
-    /// Lazily, once per assembly, flow EVERY method of the assembly a method being rendered belongs to, so the register
-    /// flow's consistency gate populates <see cref="Il2CppTypeModel.CondemnedVtableSlots"/>/<see cref="Il2CppTypeModel.CondemnedVtableMethods"/>
-    /// BEFORE any of that assembly's methods are rendered. A vtable slot/inherited method proven mis-mapped by one call
-    /// site is mis-mapped at all of them, so pre-collecting condemnations makes the retraction order-independent within
-    /// the assembly — a method rendered before its slot's proof, or one only ever reached by unobservable tail-jmp, still
-    /// gets the honest fallback. Per-assembly (not just Assembly-CSharp) so UI/Mirror/TMP etc. are covered too. Costs one
-    /// extra flow pass over each rendered assembly; per-method failures are swallowed (best-effort).
-    /// </summary>
     private static void EnsureCondemnationScan(ApplicationAnalysisContext app, Il2CppTypeModel model, MethodAnalysisContext current)
     {
         if (!ReferenceEquals(_condemnationApp, app)) { _condemnationApp = app; _condemnationScanned.Clear(); }
         AssemblyAnalysisContext assembly = current.DeclaringType?.DeclaringAssembly;
-        if (assembly == null || !_condemnationScanned.Add(assembly)) return; // scan each assembly exactly once (Add returns false if already present)
-        try
+        if (assembly == null || !_condemnationScanned.Add(assembly)) return;        try
         {
             bool is32 = LibCpp2IlMain.Binary.is32Bit;
             {
@@ -61,8 +44,7 @@ internal static class Il2CppX86Listing
                             if (bytes.Length == 0) continue;
                             List<Instruction> insns = DecodeInstructions(bytes, method.UnderlyingPointer, is32);
                             if (insns.Count == 0) continue;
-                            new Il2CppRegisterFlow(app, method, insns, model).Analyze(); // side effect: populates condemnation sets
-                        }
+                            new Il2CppRegisterFlow(app, method, insns, model).Analyze();                        }
                         catch { }
                     }
                 }
@@ -83,7 +65,6 @@ internal static class Il2CppX86Listing
 
         List<Instruction> instructions = DecodeInstructions(bytes, start, is32);
 
-        // 收集落在本方法内的近跳目标 → 需要标签的地址。
         HashSet<ulong> labels = new();
         foreach (Instruction instruction in instructions)
         {
@@ -94,24 +75,16 @@ internal static class Il2CppX86Listing
             }
         }
 
-        // 识别 il2cpp 元数据初始化惯用法，给那两个无名全局起语义名。
         Dictionary<ulong, string> overrides = DetectMetadataInitIdiom(app, instructions);
-        // 识别 il2cpp icall 惰性缓存惯用法，把缓存槽 g_ 起名成它缓存的那个内部调用（签名字符串就在近旁）。
         DetectIcallCacheIdiom(instructions, ref overrides);
 
-        // 预判常量池操作数（直接寻址、浮点 / 向量）：注解层据此把它们的文件字节解引用成实际值，替代裸 g_ 指针。
         Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> dataConstants = CollectDataConstants(instructions);
 
-        // 寄存器数据流：把 this/参数/实例字段/静态字段/数组/调用返回还原成符号，产出每条指令的访问注释（this.field 等）。
         Il2CppTypeModel model = Il2CppTypeModel.Get(app);
-        // 一次性预扫：先把「元数据 VTable 槽序与运行期不符」被证伪的 (类型,槽) 全部登记进 model.CondemnedVtableSlots，
-        // 使某槽被任一方法证伪后，所有方法都一致降级成 T::class[]（与渲染顺序无关、确定性；根治而非逐处削）。
         EnsureCondemnationScan(app, model, method);
         Il2CppRegisterFlow flow = new(app, method, instructions, model);
         flow.Analyze();
 
-        // 指令感知的符号解析器：分支/调用目标、绝对数据全局就地替换成符号；立即数保持原值
-        // （修复旧的纯文本正则会把立即数误标成 sub_ 代码标签的 bug）。每个 Render 用全新 formatter/output（线程隔离）。
         Il2CppSymbolResolver resolver = new(app, overrides, dataConstants);
         MasmFormatter formatter = new(resolver);
         StringOutput output = new();
@@ -135,13 +108,6 @@ internal static class Il2CppX86Listing
         return sb.ToString();
     }
 
-    /// <summary>
-    /// 识别 il2cpp 每方法元数据初始化惯用法：
-    /// <c>cmp byte ptr [X],0 / jne / push [Y] / call il2cpp_codegen_initialize_method / mov byte ptr [X],1</c>。
-    /// X = 本方法 "元数据已初始化" 标志，Y = 传给初始化器的元数据 token。两者元数据里都没有名字，这里起语义名。
-    /// 守卫读取既可能是 <c>cmp byte ptr [X],0</c>，也可能是编译器先清零寄存器再 <c>cmp byte ptr [X],sil</c>，
-    /// 或 <c>test byte ptr [X],…</c>——只要该字节既被读作守卫又被 <c>mov byte ptr [X],1</c> 置位，就是一次性标志。
-    /// </summary>
     private static Dictionary<ulong, string> DetectMetadataInitIdiom(ApplicationAnalysisContext app, List<Instruction> instructions)
     {
         ulong initMethod = Il2CppAsmAnnotator.KeyFunctionAddress(app, "initialize_method");
@@ -153,10 +119,8 @@ internal static class Il2CppX86Listing
             Instruction x = instructions[i];
             if (IsDirectMemoryOperand(x) && x.MemorySize == MemorySize.UInt8)
             {
-                // 置位：mov byte ptr [X],1（初始化完成标记）。
                 if (x.Mnemonic == Mnemonic.Mov && x.Op1Kind == OpKind.Immediate8 && x.Immediate8 == 1)
                     (setOne ??= new()).Add(x.MemoryDisplacement64);
-                // 守卫读取：cmp / test 该字节（对端是立即数 0 还是清零寄存器都算）。
                 else if (x.Mnemonic == Mnemonic.Cmp || x.Mnemonic == Mnemonic.Test)
                     (readGuard ??= new()).Add(x.MemoryDisplacement64);
             }
@@ -181,8 +145,6 @@ internal static class Il2CppX86Listing
         return result;
     }
 
-    // 第一操作数是"直接寻址"的内存：无变址，基址为空（32 位绝对 [disp]）或 RIP/EIP（64 位 IP 相对——
-    // 其 MemoryDisplacement64 即解析后的绝对目标，与格式化器打印的绝对地址、注解键一致）。
     private static bool IsDirectMemoryOperand(in Instruction instruction)
         => instruction.Op0Kind == OpKind.Memory
         && instruction.MemoryIndex == Register.None
@@ -190,27 +152,17 @@ internal static class Il2CppX86Listing
             || instruction.MemoryBase == Register.RIP
             || instruction.MemoryBase == Register.EIP);
 
-    /// <summary>
-    /// 识别 il2cpp 的内部调用（icall）惰性缓存惯用法，给那个匿名缓存槽命名成它缓存的调用：
-    /// <c>mov rax,[slot] / test / jne skip / lea rcx,[「Ns::method()」] / call resolve / mov [slot],rax / skip: call rax</c>。
-    /// 缓存槽在元数据里无名（运行期才填函数指针），但**它缓存哪个 icall 由近旁的签名 C 字符串明写**。
-    /// 安全性由「同一槽既在 lea 前被读作缓存检查、又在 resolve 调用后被写回」这一 once-cache 不变量保证 —— 双侧命中才命名，
-    /// 绝不把无关的 <c>mov [x],rax</c> 误当缓存。命名经逐方法 <paramref name="overrides"/> 传给注解层（槽的读/写都渲染成 <c>[icall&lt;sig&gt;]</c>）。
-    /// </summary>
     private static void DetectIcallCacheIdiom(List<Instruction> instructions, ref Dictionary<ulong, string> overrides)
     {
         for (int i = 0; i < instructions.Count; i++)
         {
             Instruction lea = instructions[i];
-            // lea 的内存操作数在 Op1（`lea reg,[mem]`），不能用查 Op0 的 IsDirectMemoryOperand。
             if (lea.Mnemonic != Mnemonic.Lea || lea.Op1Kind != OpKind.Memory || lea.MemoryIndex != Register.None
                 || (lea.MemoryBase != Register.None && lea.MemoryBase != Register.RIP && lea.MemoryBase != Register.EIP))
                 continue;
             string signature = Il2CppAsmAnnotator.ReadCString(lea.MemoryDisplacement64);
             if (signature == null || !signature.Contains("::"))
-                continue; // 只接内部调用签名形状（Namespace::method(...)）
-
-            // lea 之后几条内：一次 call，随后 mov [slot],rax（把解析出的函数指针写回缓存）。
+                continue;
             ulong slot = 0;
             bool sawCall = false;
             for (int j = i + 1; j < instructions.Count && j <= i + 6; j++)
@@ -227,7 +179,6 @@ internal static class Il2CppX86Listing
             if (slot == 0)
                 continue;
 
-            // once-cache 不变量：同一槽必须在 lea 之前不远处被读作缓存检查（mov rax,[slot]）。双侧命中才命名。
             bool readBefore = false;
             for (int k = i - 1; k >= 0 && k >= i - 10; k--)
             {
@@ -248,11 +199,6 @@ internal static class Il2CppX86Listing
         }
     }
 
-    /// <summary>
-    /// 预判本方法里所有"直接寻址的常量池操作数"：浮点标量、以及任意向量（含整型 SIMD 掩码）。
-    /// 返回 绝对地址 → 形状；标量整数刻意排除（其文件字节常是运行期才填充的全局指针，并非常量）。
-    /// 注解层在所有元数据都未命中后据此把文件字节解引用成实际值。
-    /// </summary>
     private static Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> CollectDataConstants(List<Instruction> instructions)
     {
         Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> result = null;
@@ -271,35 +217,25 @@ internal static class Il2CppX86Listing
         virtualAddress = 0;
         operand = default;
 
-        // 必须真正解引用内存且元素大小已知（自动排除 lea / 纯寄存器指令——它们 MemorySize 为 Unknown）。
         MemorySize memorySize = instruction.MemorySize;
         if (memorySize == MemorySize.Unknown) return false;
 
-        // 仅直接目标：无变址，基址为空或 RIP/EIP。
         if (instruction.MemoryIndex != Register.None) return false;
         Register memoryBase = instruction.MemoryBase;
         if (memoryBase != Register.None && memoryBase != Register.RIP && memoryBase != Register.EIP) return false;
 
         ulong address = instruction.MemoryDisplacement64;
-        if (address < 0x10000) return false; // 小立即数 / 栈相关，绝不会是全局常量
-
+        if (address < 0x10000) return false;
         MemorySizeInfo info = memorySize.GetInfo();
         if (info.ElementSize <= 0 || info.ElementCount <= 0) return false;
 
-        // andps/andnps/orps/xorps（+pd、+V 变体）是位运算：其浮点类型操作数实为位掩码（abs/sign 掩码等），
-        // 字节值当浮点读会出 NaN/-0 等误导文本 → 强制按十六进制渲染，而非浮点。
         bool isFloat = IsFloatElement(info.ElementType) && !IsBitwiseFloatLogical(instruction.Mnemonic);
-        // 元素宽度可还原校验：浮点 2/4/8；整数（含位掩码 / 标量整数）1/2/4/8。标量整数是否真常量由注解层
-        // 按"只读且已落盘的 PE 段"门控（Il2CppAsmAnnotator.ConstantAddressAllowed），避免把 .data 运行期
-        // 全局指针当常量——故此处放行标量整数、交给注解层裁决。
         if (isFloat)
         {
-            if (info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非常规浮点宽度（Float80/128/bf16）不解
-        }
+            if (info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false;        }
         else
         {
-            if (info.ElementSize != 1 && info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false; // 非 2 幂整数元素宽度不解
-        }
+            if (info.ElementSize != 1 && info.ElementSize != 2 && info.ElementSize != 4 && info.ElementSize != 8) return false;        }
 
         virtualAddress = address;
         operand = new Il2CppAsmAnnotator.DataConstantOperand(info.ElementSize, info.ElementCount, isFloat);
@@ -311,25 +247,12 @@ internal static class Il2CppX86Listing
         || elementType == MemorySize.Float32
         || elementType == MemorySize.Float64;
 
-    // 浮点位运算（内存操作数是位掩码、不是浮点值）：andps/andnps/orps/xorps + pd + V 变体。
     private static bool IsBitwiseFloatLogical(Mnemonic mnemonic)
         => mnemonic is Mnemonic.Andps or Mnemonic.Andnps or Mnemonic.Orps or Mnemonic.Xorps
             or Mnemonic.Andpd or Mnemonic.Andnpd or Mnemonic.Orpd or Mnemonic.Xorpd
             or Mnemonic.Vandps or Mnemonic.Vandnps or Mnemonic.Vorps or Mnemonic.Vxorps
             or Mnemonic.Vandpd or Mnemonic.Vandnpd or Mnemonic.Vorpd or Mnemonic.Vxorpd;
 
-    /// <summary>
-    /// 静态追踪 <c>il2cpp_init</c> 的调用图，给少数被高频引用的 il2cpp 运行时全局槽（.bss——运行期才填充、
-    /// 文件里无值，故无法静态读出"值"，但其"身份"可由 init 代码权威确定）命名。纯反汇编 + 与 global-metadata
-    /// 头部布局核对，绝不执行任何代码：
-    /// <list type="bullet">
-    /// <item><c>s_GlobalMetadata</c> / <c>s_GlobalMetadataHeader</c>：<c>GlobalMetadata::Initialize</c> 里同一
-    /// MapMetadata 结果先后存入相邻两槽，其一随即被按头部字段（<c>[rax+imm]</c>）解引用；先存者=base，后存者=header。</item>
-    /// <item><c>s_StringLiteralTable</c>：按 <c>header.stringLiteralSize</c>（<c>[header+0xC]</c>，标准 v29 头）
-    /// 分配、按字面量索引惰性填充的 <c>Il2CppString*</c> 缓存。</item>
-    /// </list>
-    /// 找不到（非 PE / 布局不符）就返回空表，优雅降级。
-    /// </summary>
     public static Dictionary<ulong, string> TraceRuntimeGlobals(ApplicationAnalysisContext app)
     {
         Dictionary<ulong, string> map = new();
@@ -406,14 +329,12 @@ internal static class Il2CppX86Listing
         return map;
     }
 
-    // mov [直接寻址], <reg>（.bss/.data 槽 = 寄存器）。
     private static bool IsDirectStoreOfRegister(in Instruction x, Register reg)
         => x.Mnemonic == Mnemonic.Mov && x.Op0Kind == OpKind.Memory
         && x.MemoryIndex == Register.None
         && (x.MemoryBase == Register.None || x.MemoryBase == Register.RIP || x.MemoryBase == Register.EIP)
         && x.Op1Kind == OpKind.Register && x.Op1Register == reg;
 
-    // call; mov [A],rax; …(rax 被 [rax+imm] 解引用、未被重写)…; mov [B],rax  → A=base, B=header。
     private static bool TryFindMetadataPair(List<Instruction> insns, out ulong slotBase, out ulong slotHeader)
     {
         slotBase = 0; slotHeader = 0;
@@ -425,9 +346,7 @@ internal static class Il2CppX86Listing
             for (int j = i + 1; j < insns.Count && j < i + 18; j++)
             {
                 Instruction y = insns[j];
-                if (y.Mnemonic == Mnemonic.Call) break;                                  // rax 被调用结果覆盖
-                // rax 被重写才终止；cmp/test 只读 Op0、不写，不能算重写（否则 `test rax,rax` 会误截断）。
-                if (y.Op0Kind == OpKind.Register && y.Op0Register == Register.RAX
+                if (y.Mnemonic == Mnemonic.Call) break;                if (y.Op0Kind == OpKind.Register && y.Op0Register == Register.RAX
                     && y.Mnemonic != Mnemonic.Cmp && y.Mnemonic != Mnemonic.Test) break;
                 if (y.MemoryBase == Register.RAX && y.MemoryIndex == Register.None) sawDeref = true;
                 if (sawDeref && IsDirectStoreOfRegister(y, Register.RAX))
@@ -440,7 +359,6 @@ internal static class Il2CppX86Listing
         return false;
     }
 
-    // mov rax,[header]; …(reg)←[rax+0Ch]…; call; mov [C],rax  → C = 字符串字面量缓存。
     private static bool TryFindStringLiteralCache(List<Instruction> insns, ulong headerSlot, out ulong slotCache)
     {
         slotCache = 0;

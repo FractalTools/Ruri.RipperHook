@@ -14,10 +14,6 @@ using AssetRipper.SerializationLogic;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>
-/// Unity <c>[SerializeReference]</c> 用的 <c>ManagedReferencesRegistry</c> 的运行期形态。
-/// 移植自 AssetRipper PR #2313 / #2238(作者以代码质量为由未合,功能本身是对的)。
-/// </summary>
 public sealed class ManagedReferencesRegistry : UnityAssetBase, IDeepCloneable
 {
     public const long UnknownRid = -1;
@@ -106,7 +102,6 @@ public sealed class ManagedReferencesRegistry : UnityAssetBase, IDeepCloneable
 
     IUnityAssetBase IDeepCloneable.DeepClone(PPtrConverter converter) => DeepClone(converter);
 
-    /// <summary>v1 靠 Terminus 哨兵终止,v2 是 count 前缀 + 显式 rid。两种都要认。</summary>
     public static ManagedReferencesRegistry Read(
         ref EndianSpanReader reader,
         UnityVersion version,

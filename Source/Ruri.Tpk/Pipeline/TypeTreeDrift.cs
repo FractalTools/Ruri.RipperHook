@@ -9,33 +9,11 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.Tpk.Pipeline;
 
-/// <summary>
-/// Diffs every dumped game type tree against the closest OFFICIAL Unity dump and reports exactly
-/// where the fork deviates -- which is the same thing as reporting every place a hook is needed.
-///
-/// Why this exists: the runtime already interprets the game's own trees, so a fork's extra field is
-/// read and then dropped on the floor, silently, because stock AssetRipper has nowhere to put it.
-/// A fork's extra ENUM VALUE is worse: stock code that decides by negation (<c>!= A &amp;&amp; != B</c>)
-/// swallows the unknown value into the wrong branch and crashes or exports garbage. EndField's
-/// <c>m_BlendSequenceData</c> / <c>m_BlendType == 5</c> was exactly that, and it was found only after
-/// it took down a whole export. This pass turns "find out when it bites" into a checklist.
-///
-/// Two things it does that hand inspection kept getting wrong:
-///   * it reports the FIRST version a drift appears in, across the whole lineage, so a hook lands on
-///     that version instead of being dumped into a Common class that over-applies;
-///   * it snaps each game's fabricated engine version to the nearest real one
-///     (see <see cref="OfficialTypeTreeIndex.ResolveClosest"/>) rather than trusting it.
-///
-/// Output is a report plus ready-to-fill capability stubs. The stubs are written OUTSIDE the compiled
-/// tree on purpose: an empty generated hook that compiles is dead code pretending to be coverage, so
-/// a stub only becomes real when someone moves it in and writes the backfill.
-/// </summary>
 internal static class TypeTreeDrift
 {
     private const string CommonDirectoryName = "Common";
     private const string AckFileName = "drift-ack.json";
 
-    /// <summary>Container shapes are structural, not fields anyone hooks; diffing them is pure noise.</summary>
     private static readonly HashSet<string> ContainerTypes = new(StringComparer.Ordinal)
     {
         "vector", "Array", "map", "pair", "set", "staticvector", "TypelessData",
@@ -53,20 +31,11 @@ internal static class TypeTreeDrift
     {
         public string Key => $"{Kind}|{OwnerType}|{Field}";
 
-        /// <summary>
-        /// Path to the owning struct from the class root, or null when it sits behind an array and
-        /// therefore has no single addressable path. <c>[TypeTreePostRead]</c> captures are
-        /// slash-joined FIELD chains, so only a non-null path can be turned into a real capture --
-        /// emitting a bare field name for an array-nested node would produce a capture that silently
-        /// never matches.
-        /// </summary>
         public string? OwnerPath { get; init; }
     }
 
-    /// <summary>A struct as it appears in one tree: its field list and how to reach it from the root.</summary>
     private sealed record StructShape(List<(string Name, string Type)> Fields, string? Path);
 
-    /// <summary>One drift, plus where it first shows up and which classes carry it.</summary>
     private sealed record Aggregated(Drift Drift, string FirstVersion, SortedSet<string> Classes, SortedSet<string> Versions);
 
     private sealed record AckEntry(string Lineage, string Key, string Reason);
@@ -141,11 +110,8 @@ internal static class TypeTreeDrift
                     {
                         if (!stockTypes.TryGetValue(typeName, out List<StructShape>? stockShapes))
                         {
-                            continue; // A type stock Unity has no counterpart for -- nothing to diff against.
-                        }
+                            continue;                        }
 
-                        // A game shape that matches ANY stock instantiation of this name exactly is
-                        // not drift -- it is the same template with the same payload.
                         foreach (StructShape gameShape in gameShapes.Where(g => !stockShapes.Exists(st => FieldsEqual(st.Fields, g.Fields))))
                         {
                         foreach (Drift drift in DiffFields(typeName, gameShape, ClosestShape(stockShapes, gameShape.Fields)))
@@ -177,23 +143,7 @@ internal static class TypeTreeDrift
         Console.WriteLine($"[Drift] {totalNew} unacknowledged drift point(s) -> {reportPath}");
     }
 
-    // -----------------------------------------------------------------
-    // diffing
-    // -----------------------------------------------------------------
 
-    /// <summary>
-    /// Collapses a tree into "for each named struct, its ordered field list". Comparing by STRUCT
-    /// rather than walking the two trees in lockstep is what makes an inserted field show up as one
-    /// drift instead of desynchronising everything after it.
-    /// </summary>
-    /// <summary>
-    /// Collects every DISTINCT shape a type name appears with. Unity's dumps monomorphize
-    /// templates -- <c>Keyframe</c> shows up once per curve payload (<c>float</c>,
-    /// <c>Quaternionf</c>, ...), <c>OffsetPtr</c> once per pointee -- so one name genuinely has
-    /// several field lists at once. An earlier cut of this kept a single "richest" shape per name,
-    /// and the cross-instantiation comparisons that fell out of it produced confidently wrong rows
-    /// like "Keyframe.value is `float` in the fork but `Quaternionf` officially".
-    /// </summary>
     private static void Flatten(UnityNode node, string? path, Dictionary<string, List<StructShape>> into)
     {
         if (node.SubNodes.Count > 0 && !ContainerTypes.Contains(node.TypeName))
@@ -212,17 +162,12 @@ internal static class TypeTreeDrift
             }
             else if (shapes[index].Path is null && path is not null)
             {
-                // Same shape seen again, this time somewhere addressable -- keep the usable path.
                 shapes[index] = shapes[index] with { Path = path };
             }
         }
 
         foreach (UnityNode sub in node.SubNodes)
         {
-            // Descending through a container loses addressability: a capture path names one node,
-            // and everything under an array exists once per element.
-            // Sanitized, because the runtime builds capture paths from the SAME transform
-            // (TypeTreeNameFixer) -- a raw `data` would never match the runtime's `m_Data`.
             string fixedName = TypeTreeNameFixer.GetValidFieldName(sub.Name);
             string? childPath = ContainerTypes.Contains(sub.TypeName) || path is null
                 ? null
@@ -262,11 +207,6 @@ internal static class TypeTreeDrift
         return true;
     }
 
-    /// <summary>
-    /// The stock shape a drifted game shape is diffed against: the one sharing the most field
-    /// names. With template monomorphs in the set, "closest" is what pairs the float Keyframe with
-    /// the float Keyframe instead of whichever instantiation happened to be visited first.
-    /// </summary>
     private static StructShape ClosestShape(List<StructShape> candidates, List<(string Name, string Type)> fields)
     {
         HashSet<string> names = new(fields.Select(static f => f.Name), StringComparer.Ordinal);
@@ -327,8 +267,6 @@ internal static class TypeTreeDrift
             }
         }
 
-        // Order is the binary layout. Same names in a different sequence means every reader that
-        // assumes stock order is wrong, so it is called out separately from add/remove.
         List<string> sharedGame = game.FindAll(f => stockByName.ContainsKey(f.Name)).ConvertAll(f => f.Name);
         List<string> sharedStock = stock.FindAll(f => gameByName.ContainsKey(f.Name)).ConvertAll(f => f.Name);
         if (!sharedGame.SequenceEqual(sharedStock, StringComparer.Ordinal))
@@ -339,9 +277,6 @@ internal static class TypeTreeDrift
         }
     }
 
-    // -----------------------------------------------------------------
-    // reporting + stub generation
-    // -----------------------------------------------------------------
 
     private static int WriteLineage(
         StringBuilder report,
@@ -392,12 +327,6 @@ internal static class TypeTreeDrift
         return fresh.Count;
     }
 
-    /// <summary>
-    /// Emits one capability skeleton per (first version, class) that carries unacknowledged ADDED
-    /// fields -- the wiring (game, since-version, class id, capture paths) is exactly what the diff
-    /// already knows, so it is filled in; the decode is left as a hole because only a human knows
-    /// what an ACL buffer or a nested shader blob means.
-    /// </summary>
     private static void WriteStubs(string lineage, List<Aggregated> fresh, string outputDirectory)
     {
         if (ResolveGame(lineage) is not GameType game)
@@ -420,9 +349,6 @@ internal static class TypeTreeDrift
             int classId = ParseId(className);
             string identifier = $"Drift_{Sanitize(version)}_{Sanitize(bareName)}";
 
-            // Only nodes with a single addressable path become captures. The rest live behind an
-            // array (one instance per element), so they are listed for a human instead of being
-            // emitted as a path that would compile and then never match anything.
             List<string> capturePaths = group
                 .Where(pair => pair.Row.Drift.OwnerPath is not null)
                 .Select(pair => TypeTreeNameFixer.GetValidFieldName(pair.Row.Drift.Field) is string leaf
@@ -481,11 +407,6 @@ internal static class TypeTreeDrift
         }
     }
 
-    /// <summary>
-    /// Classes already carrying a TypeTree-level hook, read straight out of the hook sources. This
-    /// only annotates the report -- a drift is never suppressed by it, because a hook on a class says
-    /// nothing about whether THIS field is the one it handles.
-    /// </summary>
     private static HashSet<string> ScanHandledClasses()
     {
         HashSet<string> handled = new(StringComparer.Ordinal);
@@ -570,12 +491,6 @@ internal static class TypeTreeDrift
         return builder.ToString();
     }
 
-    /// <summary>
-    /// A lineage directory is named after its <see cref="CustomEngineType"/> value (FRAMEWORK.md §10),
-    /// so the game a dump belongs to is read from the linked enum rather than guessed from the digits.
-    /// A number with no member is a retired engine whose dumps are still around -- it still gets a
-    /// report, it just cannot get compilable stubs, so say so instead of emitting broken code.
-    /// </summary>
     private static GameType? ResolveGame(string lineage)
     {
         if (!byte.TryParse(lineage, out byte value))
@@ -586,11 +501,6 @@ internal static class TypeTreeDrift
         return engineName is not null && Enum.TryParse(engineName, out GameType game) ? game : null;
     }
 
-    /// <summary>
-    /// The namespace a game's hooks actually live in, read out of the tree itself -- EndField's is
-    /// <c>Ruri.RipperHook.Endfield</c>, which no amount of casing convention would have produced from
-    /// <c>GameType.EndField</c>.
-    /// </summary>
     private static string ResolveNamespace(GameType game)
     {
         string fallback = $"Ruri.RipperHook.{game}";

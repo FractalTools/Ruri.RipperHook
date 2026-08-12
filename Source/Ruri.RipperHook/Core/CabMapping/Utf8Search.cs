@@ -3,21 +3,8 @@ using System.Text;
 
 namespace Ruri.RipperHook.CabMapping;
 
-/// <summary>
-/// Substring search over a UTF-8 blob + ascending offsets -- the shape every column table stores
-/// its text as. Case folding is done ONCE per blob, then the scan is a vectorized
-/// <see cref="MemoryExtensions.IndexOf{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> partitioned across
-/// cores on value boundaries.
-///
-/// Deliberately typed in buffers, not in any table type: the cabmap's row table and a game's own
-/// config table are both "blob + offsets", so they get the same engine instead of one each. This
-/// file therefore lives outside the game-hook tree and survives the Pure build.
-/// </summary>
 public static class Utf8Search
 {
-    /// <summary>ASCII-lowercase a UTF-8 blob with full-width SIMD: every 'A'..'Z' lane ORs in
-    /// 0x20, everything else (including all non-ASCII UTF-8 bytes, whose high bit keeps them out
-    /// of the A-Z window) passes through untouched.</summary>
     public static byte[] FoldBlob(byte[] blob, int length)
     {
         byte[] folded = new byte[length];
@@ -70,8 +57,6 @@ public static class Utf8Search
         return new string(folded);
     }
 
-    /// <summary>Vectorized sweep of one folded blob for the needle, partitioned across cores on
-    /// value boundaries; every hit that does not straddle a value boundary reports its value id.</summary>
     public static void ScanColumn(byte[] foldedBlob, int[] offsets, byte[] needle, bool[] mask,
         Action<bool[], int> onValueHit)
     {
@@ -103,8 +88,6 @@ public static class Utf8Search
                     break;
                 }
                 int position = begin + cursor + found;
-                // Map the hit position to its value id (offsets ascending; hits arrive in
-                // ascending position, so advance the cached cursor instead of re-bisecting).
                 while (offsets[valueId + 1] <= position)
                 {
                     valueId++;
@@ -112,13 +95,11 @@ public static class Utf8Search
                 if (position + needle.Length <= offsets[valueId + 1])
                 {
                     onValueHit(mask, valueId);
-                    // Whole value already matched: skip straight past it.
                     cursor = offsets[valueId + 1] - begin;
                 }
                 else
                 {
-                    cursor = cursor + found + 1; // straddles a boundary -- not a match in either value
-                }
+                    cursor = cursor + found + 1;                }
                 if (cursor >= span.Length)
                 {
                     break;

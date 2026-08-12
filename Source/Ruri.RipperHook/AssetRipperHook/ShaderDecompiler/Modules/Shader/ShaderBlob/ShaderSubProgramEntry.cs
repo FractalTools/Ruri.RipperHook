@@ -1,13 +1,10 @@
-﻿using AssetRipper.Assets.IO.Writing;
+using AssetRipper.Assets.IO.Writing;
 using AssetRipper.Primitives;
 
 namespace AssetRipper.Export.Modules.Shaders.ShaderBlob;
 
 public sealed record class ShaderSubProgramEntry
 {
-	/// <summary>
-	/// 2019.3 and greater
-	/// </summary>
 	public static bool HasSegment(UnityVersion version) => version.GreaterThanOrEquals(2019, 3);
 
 	public void Read(AssetReader reader)

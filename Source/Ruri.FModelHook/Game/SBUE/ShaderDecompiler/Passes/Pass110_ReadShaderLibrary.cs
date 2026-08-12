@@ -4,30 +4,6 @@ using System.IO;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 110 — Read the on-disk `.ushaderlib` (FSerializedShaderArchive
-// header v2 written by Pass 010) into a structured `ShaderLibrary`
-// object. The on-disk shape mirrors UE's serialized shader archive so
-// anything downstream stays decoupled from FModel's IoStore-only read
-// path.
-//
-// Layout (uint32 LE; SHA1 hashes are uppercase hex 40-char strings):
-//   uint32 Version = 2
-//   uint32 numShaderMapHashes; SHA1[20] * N
-//   uint32 numShaderHashes;    SHA1[20] * N
-//   uint32 numShaderMapEntries; FShaderMapEntry * N (4×uint32 each)
-//   uint32 numShaderEntries;    FShaderCodeEntry * N (uint64 + 3×uint32, last byte=Frequency)
-//   uint32 numPreloadEntries;   skipped (16 bytes each — we don't need them post-merge)
-//   uint32 numShaderIndices;    uint32 * N
-//   <remaining stream>          packed shader code buffer
-//
-// **Streaming code body**: the master ShaderArchive's code buffer is
-// 6.5 GB. Loading it into a `byte[]` is impossible — `Array.MaxLength`
-// caps at ~2.1 GB, and even the ReadBytes((int)remaining) cast wraps
-// negative. Instead, the code-body region of the file is left on disk
-// and `ShaderLibrary` exposes seek+read access via `GetShaderCode(int)`.
-// The ShaderLibrary owns the FileStream and disposes it when the
-// pipeline finishes. Peak RAM for a single shader read is bounded by
-// max(per-shader Size), which the cook caps at well under 1 MB.
 internal static class Pass110_ReadShaderLibrary
 {
     public static void DoPass(PipelineState state)
@@ -38,8 +14,6 @@ internal static class Pass110_ReadShaderLibrary
 
     private static ShaderLibrary ReadShaderLibrary(string path)
     {
-        // FileStream ownership transfers to the returned ShaderLibrary
-        // on success. On failure the stream is disposed before propagating.
         FileStream fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {
@@ -79,7 +53,6 @@ internal static class Pass110_ReadShaderLibrary
                 };
             }
 
-            // Preload entries are 16 bytes each (long offset + long size); skipped.
             count = reader.ReadInt32();
             fs.Seek((long)count * 16L, SeekOrigin.Current);
 
@@ -87,10 +60,6 @@ internal static class Pass110_ReadShaderLibrary
             lib.ShaderIndices = new uint[count];
             for (int i = 0; i < count; i++) lib.ShaderIndices[i] = reader.ReadUInt32();
 
-            // Capture the offset where the packed code body begins. Everything
-            // after this point is `<size>` bytes of shader code per entry,
-            // addressed by ShaderEntries[i].Offset (relative to CodeBaseOffset).
-            // The remaining file length is left on disk — see GetShaderCode.
             lib.AttachCodeStream(fs, codeBaseOffset: fs.Position);
             return lib;
         }
@@ -130,17 +99,10 @@ internal sealed class ShaderLibrary : IDisposable
     public ShaderCodeEntry[] ShaderEntries = Array.Empty<ShaderCodeEntry>();
     public uint[] ShaderIndices = Array.Empty<uint>();
 
-    // Streaming code-body access. The .ushaderlib FileStream stays open
-    // for the lifetime of the ShaderLibrary; GetShaderCode does a
-    // seek+read on demand. Necessary because the master archive's
-    // code body is ~6.5 GB and won't fit in a `byte[]` (Array.MaxLength
-    // ~2.1 GB).
     private FileStream? _codeStream;
     private long _codeBaseOffset;
     private readonly object _streamLock = new();
 
-    // Total length of the packed code body (file length minus header).
-    // Used by callers to bounds-check ShaderEntries[i].Offset+Size.
     public long CodeBodyLength { get; private set; }
 
     internal void AttachCodeStream(FileStream stream, long codeBaseOffset)
@@ -156,14 +118,10 @@ internal sealed class ShaderLibrary : IDisposable
         if (index < 0 || index >= ShaderEntries.Length) return null;
         ShaderCodeEntry entry = ShaderEntries[index];
 
-        // Bounds-check on the disk region. `(long)entry.Offset + entry.Size`
-        // stays in long arithmetic so a 6 GB+ code body doesn't wrap.
         long entrySize = entry.Size;
         long entryOffset = (long)entry.Offset;
         if (entryOffset < 0 || entrySize < 0 || entryOffset + entrySize > CodeBodyLength) return null;
         if (entrySize == 0) return Array.Empty<byte>();
-        // Per-shader size is bounded by uint32, but Array.MaxLength is the
-        // hard runtime cap. Anything bigger means corrupted metadata.
         if (entrySize > Array.MaxLength) return null;
 
         byte[] code = new byte[entry.Size];

@@ -4,15 +4,6 @@ using AssetRipper.Primitives;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// A value read straight out of the type tree with no AssetRipper field behind it.
-///
-/// Custom engines routinely add fields the stock AssetRipper classes have no home for -- EndField's
-/// <c>m_CollisionMeshBaked</c>, <c>m_AclCompressedBuffer</c>, <c>m_TOSData</c>. The old pipeline
-/// materialized them by generating a whole parallel class hierarchy; here they are captured into
-/// this structural value on demand (only for nodes a hook actually declared interest in) and handed
-/// to gates and post-read hooks.
-/// </summary>
 public sealed class TypeTreeValue
 {
     private readonly object? scalar;
@@ -43,7 +34,6 @@ public sealed class TypeTreeValue
 
     private static readonly Dictionary<string, TypeTreeValue> EmptyFields = new();
 
-    /// <summary>Member lookup by sanitized node name, e.g. <c>m_ACLArray</c>.</summary>
     public TypeTreeValue? this[string name] => fields is not null && fields.TryGetValue(name, out TypeTreeValue? value) ? value : null;
 
     public bool AsBoolean() => scalar is bool value ? value : throw Mismatch(nameof(Boolean));

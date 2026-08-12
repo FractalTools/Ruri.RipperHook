@@ -5,20 +5,6 @@ using CUE4Parse.UE4.Shaders;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 040 — Build the per-library `UnifiedShaderLibraryMetadata` view
-// for the current `state.Entry` and stash it under
-// `state.Root.ShaderCodeArchives[entry.PathWithoutExtension]`.
-//
-// Reads either layout flavour FModel hands us:
-//   - FSerializedShaderArchive (legacy / non-IoStore cooks): straightforward
-//     copy of ShaderMapHashes / ShaderHashes / entries / indices.
-//   - FIoStoreShaderCodeArchive (IoStore cooks): the entries lack
-//     uncompressed Size / Frequency that Pass 010 already merged;
-//     re-flatten what we can, leaving Size/UncompressedSize=0 since
-//     downstream consumers index this map by hash, not by byte slice.
-//
-// Runs every library hit (no caching gate) — a single FModel session
-// can export multiple libraries and each gets its own archive entry.
 internal static class Pass040_BuildShaderLibraryMetadata
 {
     public static void DoPass(ExportPipelineState state)

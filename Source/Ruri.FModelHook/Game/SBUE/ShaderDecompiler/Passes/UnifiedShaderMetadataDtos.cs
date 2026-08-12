@@ -3,101 +3,23 @@ using System.Collections.Generic;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// All DTO shapes for the FModel-hook export pipeline (Pass 010 - Pass 100).
-// These types are pure data — they hold what gets serialised to
-// `UnifiedShaderMetadata.json` / `.assetinfo.json` / `.stableinfo.json`
-// and what's passed between the build/write passes inside the host
-// process. No logic lives here.
-//
-// Why a single file: the DTO graph is densely cross-referenced — a split
-// would create tight one-way using-cycles between every pass file.
-// Keeping them together here lets each Pass file own ONLY its own
-// orchestration code.
 
 internal sealed class UnifiedShaderMetadataRoot
 {
-    // Black-hole cache format version. Bumped whenever the SHAPE of the
-    // extracted material/Niagara data changes (a new bridge field, a fixed
-    // extraction, etc.) so a stale cache from an older tool build is ignored
-    // by Pass 005 and re-scanned instead of silently serving incomplete
-    // symbols. The game-version guard alone can't catch this — the game is the
-    // same, only the tool changed. Bump `CurrentCacheFormatVersion` on any
-    // such change.
-    public const int CurrentCacheFormatVersion = 9;   // 2=+ResourceHash; 3=drop MemoryImageResult; 4=slim per-shader; 5=drop Shaders[] entirely (keep UniformExpressionSet) so the unified loads under the 2GB JSON limit; 6=+top-level MaterialResourceHashes bridge (Tier 1 hash->material) + MaterialScanComplete marker; bridge candidate set = container-header packages ∪ M_/MI_/MF_/MPC_/MAT_ prefixed; 7=cap MaterialResourceHashes to 16 materials/hash + Tier 2 enrich one representative material per hash; 8=restore lean Shaders[].ParameterMapInfo (Tier 2 enrich only, small set); 9=+OrderedMeshShaderMaps[].Shaders[] (this cook's REAL per-shader graph — base Shaders[] is empty for bShareCode materials, verified empirically) + ResourceIndex/TypeHash/VertexFactoryTypeHash on every emitted UnifiedShader; Pass165's join is now ResourceIndex-keyed instead of positional array-order
-    public int CacheFormatVersion { get; set; }
+    public const int CurrentCacheFormatVersion = 9;    public int CacheFormatVersion { get; set; }
 
-    // FModel's `EGame` enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
-    // captured at export time. Used by EngineUbMetadataLoader on the
-    // decompile side to auto-select the matching `EngineUbMetadata/<EGame>/`
-    // folder so game-specific UE forks pick up game-specific UB layouts
-    // without manual config. Empty string when the export pipeline ran
-    // outside of a live FModel context.
     public string GameVersionEnum { get; set; } = string.Empty;
 
     public Dictionary<string, List<string>> PackageShaderMapHashes { get; set; } = new();
     public Dictionary<string, UnifiedMaterialMetadata> MaterialInterfaces { get; set; } = new();
     public Dictionary<string, UnifiedShaderLibraryMetadata> ShaderCodeArchives { get; set; } = new();
 
-    // INDEPENDENT bridge for Niagara compute / sprite GPU shaders. The
-    // material side uses `PackageShaderMapHashes` (IoStore container header)
-    // and per-material `LoadedShaderMaps[*].CookedShaderMapIdHash` (inline
-    // FMaterialShaderMapId). Niagara uses neither — its shader-maps are
-    // identified by the engine via `FNiagaraShaderMapId` (CompilerVersion +
-    // DI type set + script hash + permutation), and the only on-disk hash
-    // that matches the `.ushaderbytecode` archive's `ShaderMapHashes` array
-    // for a Niagara shader-map is the `FShaderMapBase.ResourceHash` written
-    // when `bShareCode=true` (modern shipping cooks).
-    //
-    // This dict is populated by Pass 035 (ExtractNiagaraShaderMapBridge) by
-    // walking every Niagara package, loading every UNiagaraScript export,
-    // and reading
-    //   `LoadedScriptResources[i].RenderingThreadShaderMap.ResourceHash`.
-    //
-    // Pass 140 consumes it as a third hash bridge alongside the existing
-    // material bridges, which is what fixes "all-UnknownMaterial" archives
-    // like X6Game_10_2537 that contain orphan Niagara compute shaders
-    // unreferenced from the IoStore container header.
     public Dictionary<string, List<string>> NiagaraShaderMapHashes { get; set; } = new();
 
-    // TOP-LEVEL material naming bridge: shader-map hash -> the material
-    // package(s) whose inline `LoadedShaderMaps[*].ResourceHash` equals it.
-    // This is the COMPLETE material<->shader-map association — the IoStore
-    // container header (`PackageShaderMapHashes`) only carries a small,
-    // unreliable fraction of it on this cook, so the bulk of shader-maps would
-    // otherwise emit as UnknownMaterial. Built ONCE by Pass 030 walking every
-    // shader-map-owning package (the `PackageShaderMapHashes` keys) and reading
-    // each material's authoritative inline ResourceHash, then cached.
-    //
-    // Kept TOP-LEVEL (next to the Niagara bridge) rather than only inside the
-    // heavy `MaterialInterfaces` entries so it survives Pass 140's lean read:
-    // a full-material cook produces a multi-GB unified whose `MaterialInterfaces`
-    // block is SKIPPED past the 1 GiB ceiling, but this small (hash -> paths)
-    // dict stays readable, so material NAMING never regresses with file size
-    // even when the rich per-material CB symbols do.
     public Dictionary<string, List<string>> MaterialResourceHashes { get; set; } = new();
 
-    // Black-hole cache completion marker. Pass 035 is a WHOLE-PROVIDER walk
-    // (all Niagara packages, not archive-scoped) and is all-or-nothing — a
-    // partial walk would leave NiagaraShaderMapHashes incomplete. Pass 035
-    // sets this true ONLY after the full walk finishes, so the warm-cache
-    // pass (Pass 005) knows it can trust the persisted Niagara bridge and
-    // skip the multi-minute re-walk. Materials need no equivalent flag: the
-    // material cache is per-package and seeded entry-by-entry, so it's safe
-    // to reuse incrementally even from a partial prior run.
     public bool NiagaraBridgeComplete { get; set; }
 
-    // Black-hole cache completion marker for the MATERIAL side, mirroring
-    // NiagaraBridgeComplete. The IoStore container header's per-package
-    // `ShaderMapHashes` list associates only a small fraction of this cook's
-    // shader-maps to a package (verified ~3% on InfinityNikki/X6Game — the
-    // fork barely populates it), so a hash-scoped material scan leaves the
-    // rest as UnknownMaterial. The fix is a ONE-TIME full-provider scan that
-    // captures every material's inline `LoadedShaderMaps[*].ResourceHash`
-    // (the authoritative library key = the archive's ShaderMapHashes,
-    // independent of the container header). This marker is set true ONLY
-    // after that complete walk finishes, so the warm-cache pass (Pass 005)
-    // can trust the persisted MaterialInterfaces as exhaustive and skip the
-    // multi-minute re-scan — the "材质球符号拉一次就不再拉" guarantee.
     public bool MaterialScanComplete { get; set; }
 }
 
@@ -182,38 +104,13 @@ internal sealed class UnifiedMaterialMetadata
 {
     public string MaterialPath { get; set; } = string.Empty;
     public List<UnifiedShaderMapMetadata> LoadedShaderMaps { get; set; } = new();
-    // Rendering pipeline state captured from the material UProperty bag.
-    // Survives shipping cook because it drives runtime PSO setup. Null when
-    // the asset wasn't a UMaterial / UMaterialInstance (e.g. a function or
-    // collection).
     public UnifiedMaterialRenderState? RenderState { get; set; }
 
-    // Names harvested from the material's persistent CachedExpressionData
-    // property bag (FMaterialCachedExpressionData on the UAsset). Populated
-    // even when LoadedMaterialResources is empty (modern UE5 IoStore cooks
-    // externalize the shader-map blob to .ushaderbytecode and leave the
-    // inline list empty, but author-facing parameter names still live on
-    // the material UAsset).
-    //
-    // The reader walks the property bag recursively to extract any
-    // FMaterialParameterInfo / FName fields rather than relying on a fixed
-    // engine layout — custom UE forks rename these fields and the cache
-    // shape evolves between minor versions.
     public CachedParameterNames? CachedParameters { get; set; }
 
-    // The on-disk shader-map hashes that the IoStore container header lists
-    // for THIS material's package. Captured here so consumers don't have to
-    // round-trip through the separate `PackageShaderMapHashes` map to
-    // associate a material with the shader maps it produced. Empty when
-    // Pass040 didn't see any (non-IoStore cook, hash list missing, or the
-    // material has no compiled shader-maps in this archive).
     public List<string> PackageShaderMapHashes { get; set; } = new();
 }
 
-// Defensive parameter-name capture from CachedExpressionData. Only carries
-// raw names + a coarse "kind" tag — no offsets, no engine struct mirroring,
-// no value decoding. Anything beyond names is read via the inline shader
-// map path when available, since the cache doesn't carry register layout.
 internal sealed class CachedParameterNames
 {
     public List<string> ScalarNames { get; set; } = new();
@@ -223,39 +120,22 @@ internal sealed class CachedParameterNames
     public List<string> RuntimeVirtualTextureNames { get; set; } = new();
     public List<string> SparseVolumeTextureNames { get; set; } = new();
     public List<string> FontNames { get; set; } = new();
-    // Names that came back from the recursive walk but didn't fit any of
-    // the typed buckets above. Useful as a debug crumb for new UE forks
-    // without dropping data.
     public List<string> UnknownKindNames { get; set; } = new();
 }
 
-// User-facing render-state UProperties that survive shipping cook on the
-// `UMaterialInterface` UObject. CUE4Parse parses them via the property bag —
-// these are NOT engine-binary mirrors. Only fields that change ShaderLab
-// output go in here; engine-internal RHI state objects (per-pass stencil
-// initializers etc.) are NOT recoverable from cooked data and are left out.
 internal sealed class UnifiedMaterialRenderState
 {
-    // EBlendMode — drives ShaderLab Blend/ZWrite/Tags["Queue"].
     public string BlendMode { get; set; } = "BLEND_Opaque";
-    // EMaterialShadingModel — drives Tags["RenderType"].
     public string ShadingModel { get; set; } = "MSM_DefaultLit";
-    // EMaterialDomain — drives PassType / Tags["RenderType"] suffix.
     public string MaterialDomain { get; set; } = "MD_Surface";
-    // ETranslucencyLightingMode — annotation only (no direct ShaderLab map).
     public string TranslucencyLightingMode { get; set; } = "TLM_VolumetricNonDirectional";
-    // EBlendableLocation — for PostProcess materials only.
     public string? BlendableLocation { get; set; }
     public bool TwoSided { get; set; }
     public bool DisableDepthTest { get; set; }
     public bool IsMasked { get; set; }
     public bool DitheredLODTransition { get; set; }
     public float OpacityMaskClipValue { get; set; } = 0.333f;
-    // For UMaterialInstance only — true when BasePropertyOverrides was
-    // present in the cooked archive.
     public bool HasInstanceOverrides { get; set; }
-    // True when the parameter came from the FMaterialInstanceBasePropertyOverrides
-    // struct (instance-only override) rather than the parent UMaterial.
     public bool BlendModeOverridden { get; set; }
     public bool ShadingModelOverridden { get; set; }
     public bool OpacityMaskClipValueOverridden { get; set; }
@@ -266,15 +146,6 @@ internal sealed class UnifiedShaderMapMetadata
     public string? ShaderPlatform { get; set; }
     public string? CookedShaderMapIdHash { get; set; }
     public string? ShaderContentHash { get; set; }
-    // FShaderMapBase.ResourceHash — the SHA1-of-output-shader-hashes that the
-    // cooked material writes as its key into the shader library (UE
-    // ShaderMap.cpp: `Ar << ResourceHash` for bShareCode cooks; = the library
-    // FShaderMapResourceCode.ResourceHash). THIS is the value that matches the
-    // `.ushaderbytecode` archive's `ShaderMapHashes` array for modern IoStore
-    // cooks — unlike CookedShaderMapIdHash (derived from BaseMaterialId, a
-    // different ID space). Capturing it bridges shader-maps whose hash the
-    // IoStore container header forgot to associate to a package (e.g. extra
-    // quality/feature-level resources), which otherwise emit as UnknownMaterial.
     public string? ResourceHash { get; set; }
     public UnifiedPointerTable? ShaderMapPointerTable { get; set; }
     public UnifiedFrozenArchive? MemoryImageResult { get; set; }

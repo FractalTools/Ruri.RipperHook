@@ -2,9 +2,6 @@ using System;
 
 namespace Ruri.Hook.Attributes
 {
-    /// <summary>
-    /// 除非迫不得已 严禁使用此特性 因为代码过于依赖二进制 可维护性极差
-    /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
     public class RetargetMethodFuncAttribute : Attribute
     {

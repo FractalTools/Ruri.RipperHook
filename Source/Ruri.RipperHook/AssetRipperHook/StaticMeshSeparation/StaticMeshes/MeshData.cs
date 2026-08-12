@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Numerics;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Enums;
@@ -9,25 +9,6 @@ using Array = System.Array;
 
 namespace Ruri.RipperHook.AR
 {
-	/// <summary>
-	/// 
-	/// </summary>
-	/// <param name="Vertices"></param>
-	/// <param name="Normals"></param>
-	/// <param name="Tangents"></param>
-	/// <param name="Colors"></param>
-	/// <param name="Skin"></param>
-	/// <param name="UV0"></param>
-	/// <param name="UV1"></param>
-	/// <param name="UV2"></param>
-	/// <param name="UV3"></param>
-	/// <param name="UV4"></param>
-	/// <param name="UV5"></param>
-	/// <param name="UV6"></param>
-	/// <param name="UV7"></param>
-	/// <param name="BindPose"></param>
-	/// <param name="ProcessedIndexBuffer"></param>
-	/// <param name="SubMeshes"></param>
 	internal readonly record struct MeshData(
 		Vector3[] Vertices,
 		Vector3[]? Normals,
@@ -139,10 +120,6 @@ namespace Ruri.RipperHook.AR
 			}
 		}
 
-		/// <summary>
-		/// Makes a <see cref="MeshData"/> for which <see cref="IsComparable"/> will return <see langword="true"/>.
-		/// </summary>
-		/// <returns>This instance, if it is sufficient. Otherwise, a new instance is created.</returns>
 		public MeshData MakeComparableMeshData()
 		{
 			if (IsComparable)
@@ -192,11 +169,7 @@ namespace Ruri.RipperHook.AR
 				subMesh.VertexCount = subMesh.IndexCount;
 				subMesh.FirstVertex = subMesh.FirstIndex;
 
-				subMesh.BaseVertex = 0;//I'm concerned about this. This always seems to be 0 in static meshes,
-									   //but that doesn't mean 0 is an appropriate value here. Given that this method is used primarily on
-									   //dynamic meshes, their base vertex might not be 0. However, I have not seen a submesh holding a non-zero value
-									   //for that, even in dynamic meshes, so setting it to zero might actually be fine.
-			}
+				subMesh.BaseVertex = 0;			}
 
 			return new MeshData(vertices, normals, tangents, colors, skin, uv0, uv1, uv2, uv3, uv4, uv5, uv6, uv7, bindpose, processedIndexBuffer, subMeshes);
 		}
@@ -205,14 +178,9 @@ namespace Ruri.RipperHook.AR
 		{
 			if (array1 is not null)
 			{
-				array1[index1] = array2![index2];//array2 must have the same nullability as array1
-			}
+				array1[index1] = array2![index2];			}
 		}
 
-		/// <summary>
-		/// In order for mesh data to be properly comparable, vertex ordering must be standardized.
-		/// As such, <see cref="ProcessedIndexBuffer"/> must start at zero and be consecutively ordered.
-		/// </summary>
 		public bool IsComparable
 		{
 			get

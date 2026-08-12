@@ -20,19 +20,6 @@ using Ruri.Hook.Core;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
 {
-    // Default-on, toggleable (via Hooks > Enabled Hooks...) interactive hook
-    // that adds "Export GLB Scene" to the asset-list right-click menu for
-    // .umap selections. It reuses FModel's world preview LOGIC
-    // (WorldActorCollector + WorldGlbExporter follow Renderer.LoadWorld /
-    // WorldMesh / CalculateTransform) but, unlike the preview, also resolves
-    // World Partition content so the whole map exports — not just the handful
-    // of actors cooked into the top-level .umap.
-    //
-    // Detours MainWindow.OnLoaded (prefix-continue) the same way HookMenuBootstrap
-    // does; multiple OnLoaded detours coexist. The menu
-    // item is injected via a global ContextMenu.OpenedEvent class handler
-    // because FModel's FileContextMenu is x:Shared="False" (a fresh instance per
-    // control), so there is no single menu object to hold a reference to.
     [FModelHook(GameType.UE_GlbSceneExport)]
     public sealed class UE_GlbSceneExport_Hook : RuriHook
     {
@@ -63,8 +50,6 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
         {
             if (sender is not ContextMenu menu || menu.PlacementTarget is not ListBox listBox) return;
 
-            // Only decorate the asset list (items are GameFileViewModel). Other
-            // ListBox context menus in the app are left untouched.
             var selectedMaps = listBox.SelectedItems
                 .OfType<GameFileViewModel>()
                 .Where(viewModel => viewModel.Asset.Extension.Equals("umap", StringComparison.OrdinalIgnoreCase))
@@ -126,17 +111,6 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
                 return;
             }
 
-            // ExportOptions is immutable, so the user's settings are read back
-            // and re-emitted with the two knobs this pass pins.
-            //
-            // Export geometry + material NAMES (baked into the glTF primitives)
-            // but NOT decoded texture sidecars. Bulk texture decode across a
-            // whole open world is intermittently crash-prone — a thread-safety
-            // race in CUE4Parse's parallel native texture decode — and a hard
-            // native crash here would take down the whole FModel process. The
-            // scene geometry is the deliverable; textures are re-linked by
-            // material name via FModel's normal per-asset texture export, or via
-            // the headless CLI: 'Ruri.FModelHook.CLI --export-map-direct --with-materials'.
             ExportOptions userOptions = UserSettings.GetExportOptions();
             var options = new ExportOptions(
                 meshFormat: EMeshFormat.Gltf2,
@@ -167,9 +141,6 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport
                         continue;
                     }
 
-                    // A fresh exporter per map keeps each .glb scene self-contained.
-                    // Pass the provider Files key (mapPath) so World Partition cell
-                    // scans match the file table, not the logical "/Game/..." path.
                     var perMap = new WorldGlbExporter(vm.Provider, options, HookLogger.Log, HookLogger.LogFailure);
                     perMap.Export(world, mapPath, outputDirectory, cancellationToken);
                 }

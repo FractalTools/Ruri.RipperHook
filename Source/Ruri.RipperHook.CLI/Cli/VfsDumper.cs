@@ -3,24 +3,14 @@ using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.CLI;
 
-/// <summary>
-/// 把原始 VFS 文件按名转储出来。
-/// <para>AssetRipper 只认 bundle;VFS 里还住着非 bundle 的载荷(战斗服务器表就是其中一类),
-/// 那些资产路径和 CABMap 都索引不到,只能从这一层直接取。</para>
-/// </summary>
 internal static class VfsDumper
 {
-    /// <summary>VFS 根搜索顺序 —— 热更覆盖层在前,基础客户端在后。</summary>
     private static string[] VfsRoots(string gameRoot) =>
     [
         Path.Combine(gameRoot, "Endfield_Data", "Persistent", "VFS"),
         Path.Combine(gameRoot, "Endfield_Data", "StreamingAssets", "VFS"),
     ];
 
-    /// <summary>
-    /// 枚举 → 按 <paramref name="namePatterns"/> 过滤 → 落盘。返回 (命中数, 类型直方图)。
-    /// 没给 pattern 时只统计不落盘 —— 先看清里面有什么再决定取什么。
-    /// </summary>
     internal static (int Matched, SortedDictionary<string, int> BlockTypes) Dump(
         string gameRoot, string outputDirectory, Regex[] filters, string[]? blockTypeFilter)
     {
@@ -53,7 +43,6 @@ internal static class VfsDumper
         return (matched, blockTypes);
     }
 
-    /// <summary>VFS 名可能带路径分隔与非法字符,压成单层安全文件名。</summary>
     private static string SafeName(string fileName)
     {
         char[] invalid = Path.GetInvalidFileNameChars();

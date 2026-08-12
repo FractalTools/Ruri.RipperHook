@@ -9,39 +9,6 @@ using JsonTextReader = Newtonsoft.Json.JsonTextReader;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 140 — Read `UnifiedShaderMetadata.json` and produce a
-// `state.HashToMaterialsFromUnified[hash] = {materialPaths}` index.
-//
-// `UnifiedShaderMetadata.json` is the cross-library global written by
-// Pass 080 on the export side. It carries THREE independent hash bridges,
-// one per ID space the cook pipeline produces:
-//
-//   - `PackageShaderMapHashes`: per-package list of on-disk shader-map
-//     hashes (the IoStore container header's StoreEntries[i].ShaderMapHashes).
-//     This is the FMaterialShaderMap on-disk hash for IoStore cooks.
-//
-//   - `MaterialInterfaces[<x>].LoadedShaderMaps[*].CookedShaderMapIdHash`
-//     and `.ShaderContentHash`: per-material identifiers UE uses
-//     internally (NOT equal to the on-disk hash for IoStore cooks). Set
-//     by Pass 030 when the inline shader-map blob survives shipping cook.
-//
-//   - `NiagaraShaderMapHashes[hash] = {assetPaths}`: the FShaderMapBase.ResourceHash
-//     for Niagara compute / sprite GPU shaders. Populated by Pass 035 and
-//     INDEPENDENT from the material side because Niagara uses its own
-//     `FNiagaraShaderMapId` derivation (CompilerVersion + DI type set +
-//     script hash). Without this bridge, Niagara-only archives like
-//     X6Game_10_2537 (101/101 UnknownMaterial without it) have zero
-//     material-side overlap and every shader resolves anonymously.
-//
-// All three are folded into the same (hash -> assets) lookup so the
-// downstream Pass 150 doesn't need to know which bridge an entry came
-// from. Pass 050 uses it as the bridge from on-disk shader-map hash
-// to material when the asset-info sidecar already has the answer;
-// later passes use it for fallback lookups when the per-library sidecar
-// misses.
-//
-// Material filter (`state.Options.MaterialFilter`) is applied here so
-// downstream slots stay scoped to the user's request.
 internal static class Pass140_LoadUnifiedMetadataIndex
 {
     public static void DoPass(PipelineState state)
@@ -53,27 +20,8 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             return;
         }
 
-        // The unified file is read by STREAMING (JsonTextReader), never via
-        // File.ReadAllText — a cook that references every material (the master,
-        // 23k materials) produces a ~3GB file whose UTF-16 string blows the
-        // ~1GB string ceiling and aborts the load. Past `MaxFullReadBytes` the
-        // heavy `MaterialInterfaces` block (the per-material symbols + inline
-        // hash bridge) is SKIPPED; the authoritative `PackageShaderMapHashes`
-        // container-header bridge + the Niagara bridge are top-level and small,
-        // so naming still resolves for IoStore cooks. (Per-material rich symbols
-        // for an all-materials cache are surfaced by UnifiedMaterialReader,
-        // which has the same cap — export a narrower archive set for them.)
         long length = new FileInfo(unifiedPath).Length;
 
-        // 体积上限是为了兜住**内存**(全材质 cache 的 MaterialInterfaces 有 23k 条,整块反序列化
-        // 会撑爆)。但用户给了 `--material-filter` 时,逐条过滤后留在内存里的只有匹配的那几条 ——
-        // 内存本来就有界,再按体积整段跳过就纯属误伤。
-        //
-        // 误伤的后果不是"少点信息":per-material inline bridge 一旦被跳过,hash→材质 的桥就只剩
-        // 容器头那 24 条,绝大多数 shader map 认不出自己属于哪个材质,于是 `UnifiedMaterialReader`
-        // 拿不到该材质的 UES,cbuffer 符号只能沿用**别的材质**的名字。实测 S0165 这套 15 个材质
-        // 里只有 2 个拿到了真 UES —— 而那 2 个正是渲染结果最干净的两个;其余 13 个内核背着别家的
-        // 参数名,出现"红色反照率乘以下雨淋湿程度"这种荒谬读法,整条材质图因此算不对。
         string? materialFilter = state.Options.MaterialFilter;
         bool filtered = !string.IsNullOrWhiteSpace(materialFilter);
         bool lean = length > MaxFullReadBytes && !filtered;
@@ -99,8 +47,6 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         }
         if (root == null) return;
 
-        // Capture the game-version enum so Pass 145 can drive a
-        // game-aware EngineUbMetadata folder selection.
         if (!string.IsNullOrWhiteSpace(root.GameVersionEnum))
         {
             state.GameVersionEnum = root.GameVersionEnum!;
@@ -122,13 +68,6 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             }
         }
 
-        // Material ResourceHash bridge (Pass 030 Tier 1) — keyed BY HASH, the
-        // authoritative shader-map-hash -> material association. This is the
-        // dominant naming source on IoStore cooks whose container header
-        // (PackageShaderMapHashes) lists only a fraction of the material<->
-        // shader-map links. Top-level + small, so it loads even in the lean
-        // path (when MaterialInterfaces is skipped past the 1 GiB ceiling) —
-        // material naming therefore never regresses with unified-file size.
         if (root.MaterialResourceHashes != null)
         {
             foreach (KeyValuePair<string, List<string>> kvp in root.MaterialResourceHashes)
@@ -144,12 +83,6 @@ internal static class Pass140_LoadUnifiedMetadataIndex
             }
         }
 
-        // Niagara bridge — keyed BY HASH (not by package), so the value
-        // direction is reversed from PackageShaderMapHashes. Pass 035
-        // built this from FShaderMapBase.ResourceHash. The hash is the
-        // SAME on-disk hash format the .ushaderbytecode archive uses, so
-        // a single AddHash per (hash, asset) pair plugs straight into
-        // the existing lookup with no special casing downstream.
         if (root.NiagaraShaderMapHashes != null)
         {
             foreach (KeyValuePair<string, List<string>> kvp in root.NiagaraShaderMapHashes)
@@ -175,8 +108,6 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                 UnifiedMaterialEntry? mat = kvp.Value;
                 if (mat == null) continue;
 
-                // Bridge 1: hashes the inline shader-map carries (older /
-                // non-IoStore cooks).
                 List<UnifiedShaderMapEntry>? shaderMaps = mat.LoadedShaderMaps;
                 if (shaderMaps != null)
                 {
@@ -184,21 +115,10 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                     {
                         if (!string.IsNullOrWhiteSpace(sm?.CookedShaderMapIdHash)) AddHash(state.HashToMaterialsFromUnified, sm!.CookedShaderMapIdHash!, materialPath);
                         if (!string.IsNullOrWhiteSpace(sm?.ShaderContentHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ShaderContentHash!, materialPath);
-                        // ResourceHash IS the archive's ShaderMapHash for IoStore cooks —
-                        // the authoritative inline bridge that catches shader-maps the
-                        // container header didn't associate to a package.
                         if (!string.IsNullOrWhiteSpace(sm?.ResourceHash)) AddHash(state.HashToMaterialsFromUnified, sm!.ResourceHash!, materialPath);
                     }
                 }
 
-                // Bridge 2: per-material PackageShaderMapHashes copy
-                // (Pass020 mirrors the IoStore container header's
-                // shader-map-hash list onto every UMaterialInterface entry
-                // it scans). This is the AUTHORITATIVE bridge for modern
-                // UE5 IoStore cooks where the inline shader-map blob is
-                // empty — without it, every shader produced by an
-                // externalised shader-archive falls back to "UnknownMaterial"
-                // even though the material UAsset is right there.
                 List<string>? perMaterialHashes = mat.PackageShaderMapHashes;
                 if (perMaterialHashes != null)
                 {
@@ -213,17 +133,7 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         state.Log($"    UnifiedShaderMetadata.json: hash-to-materials index size={state.HashToMaterialsFromUnified.Count}.");
     }
 
-    // Above this the per-material `MaterialInterfaces` block is skipped (see the
-    // DoPass comment). Matches UnifiedMaterialReader's cap so the two readers
-    // make the same full-vs-lean decision.
-    private const long MaxFullReadBytes = 1024L * 1024 * 1024; // 1 GiB
-
-    // Streaming reader: walks the top-level object once, materialising only the
-    // properties the index needs. `PackageShaderMapHashes` + `NiagaraShaderMapHashes`
-    // are always read (small, top-level, the authoritative IoStore bridges);
-    // `MaterialInterfaces` (the multi-GB bulk) is read only when the file is
-    // small enough, else skipped. Never builds a whole-file string, so it is
-    // immune to the ~1GB string / 2GB array limits that File.ReadAllText hits.
+    private const long MaxFullReadBytes = 1024L * 1024 * 1024;
     private static UnifiedRoot ReadUnifiedRootStreaming(string path, bool includeMaterialInterfaces, string? materialKeyFilter = null)
     {
         var root = new UnifiedRoot();
@@ -263,8 +173,6 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                     }
                     else
                     {
-                        // 逐条过滤:只把键里含过滤串的条目materialise,其余 Skip()。
-                        // 这样多大的文件都只占"匹配条目"那点内存,不需要体积上限兜底。
                         var kept = new Dictionary<string, UnifiedMaterialEntry>(StringComparer.OrdinalIgnoreCase);
                         if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject)
                         {
@@ -287,8 +195,7 @@ internal static class Pass140_LoadUnifiedMetadataIndex
                     }
                     break;
                 default:
-                    reader.Skip(); // ShaderCodeArchives, CacheFormatVersion, NiagaraBridgeComplete — unused here
-                    break;
+                    reader.Skip();                    break;
             }
         }
         return root;
@@ -323,33 +230,16 @@ internal static class Pass140_LoadUnifiedMetadataIndex
 
     private sealed class UnifiedRoot
     {
-        // FModel EGame enum name (e.g. "GAME_UE5_1", "GAME_InfinityNikki")
-        // captured at export. Used to pick the right
-        // EngineUbMetadata/<EGame>/ subfolder so game-specific UE forks
-        // get game-specific layouts.
         public string? GameVersionEnum { get; set; }
         public Dictionary<string, List<string>>? PackageShaderMapHashes { get; set; }
         public Dictionary<string, UnifiedMaterialEntry>? MaterialInterfaces { get; set; }
-        // Niagara-side independent bridge written by Pass 035. Keyed
-        // BY HASH (FShaderMapBase.ResourceHash) — value is the list of
-        // Niagara asset paths whose `LoadedScriptResources[*].
-        // RenderingThreadShaderMap` produced that hash.
         public Dictionary<string, List<string>>? NiagaraShaderMapHashes { get; set; }
-        // Pass 030 Tier 1 — authoritative shader-map-hash -> material paths
-        // bridge built from each material's inline ResourceHash. Top-level so
-        // it survives the lean read; the dominant naming source on IoStore
-        // cooks with a sparse container header.
         public Dictionary<string, List<string>>? MaterialResourceHashes { get; set; }
     }
     private sealed class UnifiedMaterialEntry
     {
         public string? MaterialPath { get; set; }
         public List<UnifiedShaderMapEntry>? LoadedShaderMaps { get; set; }
-        // Mirror of the IoStore container header's shader-map-hash list
-        // for THIS material's package. Pass020 fills it from
-        // `state.Root.PackageShaderMapHashes[<package>]` so the unified
-        // file carries an authoritative bridge even when the inline
-        // shader map is gone.
         public List<string>? PackageShaderMapHashes { get; set; }
     }
     private sealed class UnifiedShaderMapEntry
@@ -357,28 +247,12 @@ internal static class Pass140_LoadUnifiedMetadataIndex
         public string? ShaderPlatform { get; set; }
         public string? CookedShaderMapIdHash { get; set; }
         public string? ShaderContentHash { get; set; }
-        // FShaderMapBase.ResourceHash — the library key that matches the
-        // archive's ShaderMapHashes for IoStore cooks (see Pass 030).
         public string? ResourceHash { get; set; }
     }
 }
 
-// Path-spelling variant builder. UE export pipelines spell material
-// paths inconsistently — with/without leading `/`, with/without the
-// leading game-name segment, with/without the `.MaterialName` object
-// suffix. Building a variant set per path lets callers match across
-// any of those forms with a single `HashSet.Overlaps` call. Lives at
-// file scope (not inside any pass) because both the metadata-index
-// pass and the symbol-source readers (Pass 060) need it.
 internal static class MaterialPathVariants
 {
-    // Splits a `--material-filter` value on comma/semicolon and unions each
-    // token's spelling-variant set — so one CLI flag can target several exact
-    // material paths in one decompile pass (e.g. every parent-template path a
-    // set of instance materials resolved to via ShareCode's shared-permutation
-    // reuse), matching the comma-separated convention every other CLI filter
-    // (archive-name, etc.) already uses. Each token still needs an EXACT (or
-    // spelling-variant) match — this is NOT a substring/contains search.
     public static HashSet<string> BuildFilterSet(string? filterValue)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -393,15 +267,6 @@ internal static class MaterialPathVariants
         return result;
     }
 
-    /// <summary>
-    /// 材质路径是否命中过滤器。判据两条,**任一命中即算**:
-    ///   1. 路径变体全等(把 `/Game/...`、`X6Game/Content/...`、去后缀等写法归一后比对) —— 用户
-    ///      给完整资产路径时的精确匹配;
-    ///   2. **子串包含** —— 这正是 `--material-filter` 的文档语义("shader-maps whose material
-    ///      path contains TOK")。此前只做了第 1 条,于是 `--material-filter S0165` 这种按套装/
-    ///      角色前缀捞一批材质的用法**静默匹配 0 条**(实测 shader-maps=0 decompiled=0),
-    ///      而那批 shader-map 明明存在(它们的 .shader 头 UsedMaterials 里就列着 MI_S0165*)。
-    /// </summary>
     public static bool Matches(string? materialPath, HashSet<string> filterVariants)
     {
         if (filterVariants.Count == 0) return true;

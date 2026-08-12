@@ -5,11 +5,6 @@ using Ruri.RipperHook.GUI.Services;
 
 namespace Ruri.RipperHook.GUI;
 
-// The "Virtual Asset List" tab — one row per CAB from the loaded CAB map (258k+), decoupled from the loaded
-// "Asset List": searching/filtering/sorting here never disturbs loaded assets. Selecting a row previews it on
-// demand (bundle-granular). Right-click loads the selection's dependency closure INTO the Asset List (Append by
-// default so successive loads accumulate, or Reset) or exports it with all dependencies. The tab + list +
-// context menu are built in code and inserted right after the loaded Asset List tab.
 public partial class MainForm
 {
 	private TabPage tabPageVirtual = null!;
@@ -25,7 +20,6 @@ public partial class MainForm
 	private int _virtualSortColumn = -1;
 	private bool _virtualSortAscending = true;
 
-	// ── tab / list / context menu construction ──────────────────────────────────────────────────────
 	private void BuildVirtualTab()
 	{
 		_virtualSearchTimer = new System.Windows.Forms.Timer(components) { Interval = 250 };
@@ -52,8 +46,7 @@ public partial class MainForm
 		virtualListView.RetrieveVirtualItem += virtualListView_RetrieveVirtualItem;
 		virtualListView.SelectedIndexChanged += virtualListView_SelectedIndexChanged;
 		virtualListView.ColumnClick += virtualListView_ColumnClick;
-		virtualListView.MouseUp += assetListView_MouseUp;   // shared sender-aware right-click selection
-
+		virtualListView.MouseUp += assetListView_MouseUp;
 		BuildVirtualContextMenu();
 		virtualListView.ContextMenuStrip = virtualContextMenu;
 
@@ -64,8 +57,7 @@ public partial class MainForm
 		int assetTabIndex = tabControl1.TabPages.IndexOf(tabPage2);
 		tabControl1.TabPages.Insert(assetTabIndex + 1, tabPageVirtual);
 
-		tabControl1.SelectedIndexChanged += tabControl1_SelectedIndexChanged;   // lazy loaded-list refresh
-	}
+		tabControl1.SelectedIndexChanged += tabControl1_SelectedIndexChanged;	}
 
 	private void BuildVirtualContextMenu()
 	{
@@ -135,18 +127,13 @@ public partial class MainForm
 		await ExportCabsWithDepsAsync(cabs, output);
 	}
 
-	// ── populate / filter / sort ────────────────────────────────────────────────────────────────────
-	// Column index -> the shared engine's field name (see CabTableSearch): 0 Name, 1 Container,
-	// 2 Type, 3 Source, 4 Deps.
 	private static readonly string[] VirtualColumnFields = ["name", "container", "type_names", "source", "deps"];
 
-	/// <summary>Show the loaded CAB map's virtual files; leaves loaded assets and the loaded Asset List untouched.</summary>
 	private void ShowVirtualRows()
 	{
 		_cabSearch = _exportMap.Table is { } table ? new CabTableSearch(table) : null;
 		_virtualPreviewCache.Clear();
-		_virtualSortColumn = 1;      // initial view: ascending by container path, as always
-		_virtualSortAscending = true;
+		_virtualSortColumn = 1;		_virtualSortAscending = true;
 		virtualSearch.Clear();
 		RebuildTypeList();
 		ApplyVirtualFilter();
@@ -165,14 +152,11 @@ public partial class MainForm
 			virtualListView.VirtualListSize = 0;
 			return;
 		}
-		// The ONE search/rule/sort engine (CabTableSearch) -- the same call the Blender/Painter
-		// bridge makes; this method owns no matching logic at all.
 		string sortColumn = (uint)_virtualSortColumn < (uint)VirtualColumnFields.Length
 			? VirtualColumnFields[_virtualSortColumn] : "name";
 		int sortDirection = _virtualSortColumn < 0 ? 0 : (_virtualSortAscending ? 1 : 2);
 		_visibleCabIds = _cabSearch.Search(virtualSearch.Text.Trim(), CabRulesForEngine(), sortColumn, sortDirection);
 
-		// VirtualListSize = 0 then count clears stale selection and forces a full redraw of the virtual rows.
 		virtualListView.VirtualListSize = 0;
 		virtualListView.VirtualListSize = _visibleCabIds.Length;
 		UpdateVirtualSortIndicator();
@@ -182,13 +166,8 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>The shared rule list in the engine's shape. GUI column labels map to engine field
-	/// names; PathID has no cabmap column and resolves to the empty string, exactly what the old
-	/// per-row getter returned for it.</summary>
 	private List<Tables.FilterRule> CabRulesForEngine()
 	{
-		// Qualified: this form has its own FilterRule (the UI row, with a display column name and
-		// a relation enum); the engine's is the flattened shape it converts to.
 		List<Tables.FilterRule> rules = new(_filterRules.Count);
 		foreach (FilterRule rule in _filterRules)
 		{
@@ -233,8 +212,7 @@ public partial class MainForm
 		ListViewItem item = new(name.Length > 0 ? name : cab);
 		item.SubItems.Add(container.Length > 0 ? container : cab);
 		item.SubItems.Add(_cabSearch.Field(id, "type_names"));
-		item.SubItems.Add(_cabSearch.Field(id, "source"));   // Source = the hosting .chk
-		item.SubItems.Add(_cabSearch.Field(id, "deps"));
+		item.SubItems.Add(_cabSearch.Field(id, "source"));		item.SubItems.Add(_cabSearch.Field(id, "deps"));
 		e.Item = item;
 	}
 
@@ -248,7 +226,6 @@ public partial class MainForm
 			return;
 		}
 
-		// Show the CAB summary immediately, then load+render the real asset on demand (async).
 		_currentPreviewItem = null;
 		_previewRequestVersion++;
 		ClearPreviewSurfaces();
@@ -265,7 +242,6 @@ public partial class MainForm
 
 	private void virtualListView_ColumnClick(object? sender, ColumnClickEventArgs e)
 	{
-		// Tri-state: asc → desc → unsorted (back to load order).
 		if (e.Column == _virtualSortColumn)
 		{
 			if (_virtualSortAscending)
@@ -309,7 +285,6 @@ public partial class MainForm
 		return types.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase);
 	}
 
-	// ── selection helpers ───────────────────────────────────────────────────────────────────────────
 	private List<RipperAssetEntry> SelectedAssetEntries()
 	{
 		List<RipperAssetEntry> result = [];

@@ -6,24 +6,12 @@ using AssetRipper.Tpk.TypeTrees;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// A normalized type tree node, built straight from a stock tpk type tree blob.
-///
-/// This is a 1:1 port of <c>AssetRipper.AssemblyDumper.UniversalNode</c> restricted to what the read
-/// path needs, with the two <c>Pass002_RenameSubnodes</c> transforms that change how bytes are read
-/// already baked in (field-name sanitizing, and the string -&gt; Utf8String collapse that lifts the
-/// inner Array node's align flag onto the string node). The remaining Pass002 work is type-name
-/// cosmetics used by codegen to pick a generated class; the interpreter resolves the target type
-/// from the AssetRipper field it binds to instead, so it does not need them.
-/// </summary>
 public sealed class TypeTreeNode
 {
     private static readonly TypeTreeNode[] NoSubNodes = Array.Empty<TypeTreeNode>();
 
-    /// <summary>Sanitized name -- matches the generated AssetRipper field name.</summary>
     public string Name { get; }
 
-    /// <summary>Raw name as it appears in the tpk, e.g. <c>m_MeshMetrics[0]</c>.</summary>
     public string OriginalName { get; }
 
     public string TypeName { get; }
@@ -63,11 +51,6 @@ public sealed class TypeTreeNode
 
     public override string ToString() => $"{TypeName} {OriginalName}";
 
-    /// <summary>
-    /// Builds the normalized tree for one tpk node. The packer already ran AssetRipper's
-    /// <c>Pass002_RenameSubnodes</c>, so the names here are final; the two normalizations below are
-    /// idempotent and stay as a safety net for a blob built without it.
-    /// </summary>
     internal static TypeTreeNode FromTpk(TpkUnityNode node, TpkStringBuffer stringBuffer, TpkUnityNodeBuffer nodeBuffer)
     {
         TypeTreeNode[] subNodes;
@@ -96,11 +79,6 @@ public sealed class TypeTreeNode
         return new TypeTreeNode(typeName, originalName, node.Version, metaFlag, subNodes);
     }
 
-    /// <summary>
-    /// 1:1 port of <c>Pass002_RenameSubnodes.ChangeStringToUtf8String</c>. The align flag lives on
-    /// the string's inner Array node in the tpk but on the Utf8String field in generated code, so it
-    /// has to be lifted or every aligned string desynchronizes the stream.
-    /// </summary>
     private static void ApplyStringRenaming(TypeTreeNode[] subNodes, ref string typeName, ref TransferMetaFlags metaFlag)
     {
         if (subNodes.Length != 1)
@@ -118,7 +96,6 @@ public sealed class TypeTreeNode
                     metaFlag |= TransferMetaFlags.AlignBytes;
                 }
                 break;
-            // ExposedReferenceTable: late 2019+ nests a Utf8String, 2017 - early 2019 nests an SInt32.
             case Utf8StringTypeName:
             case "SInt32":
                 typeName = PropertyNameTypeName;
@@ -128,7 +105,6 @@ public sealed class TypeTreeNode
         }
     }
 
-    /// <summary>1:1 port of <c>UniversalNode.GetFixedTypeName</c>.</summary>
     private static string GetFixedTypeName(string originalName) => originalName switch
     {
         "short" => "SInt16",
@@ -140,7 +116,6 @@ public sealed class TypeTreeNode
         _ => originalName,
     };
 
-    /// <summary>1:1 port of <c>UniversalNode.NodeType</c>.</summary>
     private static TypeTreeNodeType Classify(string typeName, TransferMetaFlags metaFlag, int subNodeCount)
     {
         return subNodeCount == 0

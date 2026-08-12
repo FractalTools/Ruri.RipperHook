@@ -2,14 +2,6 @@ using System.Drawing;
 
 namespace Ruri.RipperHook.GUI;
 
-// Process-Monitor-style filter editor opened from the top menu, laid out to match Process Monitor's own
-// Filter dialog 1:1: a two-line instruction header, a [Field][Relation][Value] then [Include/Exclude]
-// builder row with Add/Remove stacked in a fixed-width column to its right (not squeezed into the same
-// flow as the combo boxes -- that was the bug: a WrapContents=false FlowLayoutPanel whose six controls'
-// combined natural width exceeded the default client width, clipping "Add" off the right edge until the
-// window was manually widened), a rules grid below, and actions along the bottom. Non-modal and
-// live-apply (edits the shared rule list in place and calls back to re-apply both asset lists
-// immediately), so the bottom row is Close/Clear rather than Process Monitor's OK/Cancel/Apply.
 internal sealed class FilterDialog : Form
 {
 	private readonly List<MainForm.FilterRule> _rules;
@@ -38,10 +30,6 @@ internal sealed class FilterDialog : Form
 		Label intro = new() { Text = "Display rows matching ALL these conditions:", Dock = DockStyle.Top, Height = 20, Padding = new Padding(6, 8, 6, 0) };
 		Label heading = new() { Text = "(no rules ⇒ show all; every enabled rule must hold)", Dock = DockStyle.Top, Height = 18, Padding = new Padding(6, 0, 6, 4), ForeColor = SystemColors.GrayText };
 
-		// Top section: a flexible [Field][Relation][Value] then [Action] row filling the left, with
-		// Add/Remove stacked in a fixed-width column on the right -- the Process Monitor arrangement.
-		// TableLayoutPanel (not FlowLayoutPanel) so the Value cell can be given a Percent column style
-		// and genuinely absorb the leftover width on resize instead of a fixed pixel guess.
 		TableLayoutPanel top = new()
 		{
 			Dock = DockStyle.Top,
@@ -53,10 +41,6 @@ internal sealed class FilterDialog : Form
 		top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 		top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88f));
 
-		// Dock=Top (not Fill) + an explicit short Height: this row sits at 25px regardless of how tall
-		// the sibling button-stack cell is, so all five controls (including the "then" label) stay
-		// vertically aligned with each other instead of the label centering within the taller cell the
-		// two stacked Add/Remove buttons need.
 		TableLayoutPanel builder = new()
 		{
 			Dock = DockStyle.Top,
@@ -64,17 +48,11 @@ internal sealed class FilterDialog : Form
 			ColumnCount = 5,
 			RowCount = 1,
 		};
-		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118f));  // Field
-		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128f));  // Relation
-		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));   // Value -- flexes with the dialog
-		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42f));   // "then"
-		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96f));  // Action
-		_field.Items.AddRange(MainForm.FilterColumns);
+		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118f));		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128f));		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42f));		builder.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96f));		_field.Items.AddRange(MainForm.FilterColumns);
 		_field.SelectedIndex = 0;
 		_field.SelectedIndexChanged += (_, _) => UpdateValueItems();
 		foreach ((string label, MainForm.FilterRelation _) in MainForm.FilterRelationTable) _relation.Items.Add(label);
-		_relation.SelectedIndex = 2; // contains
-		_action.Items.AddRange(["Include", "Exclude"]);
+		_relation.SelectedIndex = 2;		_action.Items.AddRange(["Include", "Exclude"]);
 		_action.SelectedIndex = 0;
 		Label then = new() { Text = "then", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
 		builder.Controls.Add(_field, 0, 0);
@@ -83,7 +61,6 @@ internal sealed class FilterDialog : Form
 		builder.Controls.Add(then, 3, 0);
 		builder.Controls.Add(_action, 4, 0);
 
-		// Add above Remove, matching Process Monitor's button stack exactly.
 		FlowLayoutPanel buttonStack = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(6, 2, 0, 0) };
 		Button add = new() { Text = "Add", Width = 78, Height = 24, Margin = new Padding(0, 0, 0, 4) };
 		add.Click += (_, _) => AddFromBuilder();
@@ -133,7 +110,6 @@ internal sealed class FilterDialog : Form
 
 	private void UpdateValueItems()
 	{
-		// Picking Field = Type offers the available type names so a rule needs no typing.
 		string column = _field.SelectedItem as string ?? "Name";
 		_value.Items.Clear();
 		if (column == "Type")

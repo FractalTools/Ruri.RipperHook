@@ -4,16 +4,6 @@ using AssetRipper.IO.Endian;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// Structural read of a node driven purely by the type tree, with no AssetRipper type behind it.
-///
-/// Two uses: <see cref="Skip"/> consumes a node the stock classes have no field for (keeping the
-/// stream in sync), and <see cref="Read"/> materializes one into a <see cref="TypeTreeValue"/> when a
-/// gate or post-read hook declared interest in it.
-///
-/// Node dispatch and align placement match <c>Pass100_FillReadMethods</c> exactly, so a skipped node
-/// consumes precisely the bytes a generated read method would have.
-/// </summary>
 internal static class TypeTreeCaptureReader
 {
     public static TypeTreeValue Read(TypeTreeNode node, ref EndianSpanReader reader)
@@ -106,8 +96,6 @@ internal static class TypeTreeCaptureReader
 
     private static TypeTreeValue ReadSequence(TypeTreeNode node, TypeTreeNode elementNode, bool align, ref EndianSpanReader reader)
     {
-        // A byte sequence is the one shape worth special casing: an ACL blob captured element by
-        // element would be hundreds of thousands of boxed scalars instead of one array.
         if (IsBulkByteElement(elementNode))
         {
             byte[] bytes = TypeTreePrimitives.ReadByteArray(ref reader);

@@ -29,62 +29,21 @@ namespace Ruri.RipperHook.AR;
 
 public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 {
-    /// <summary>
-    /// Game-specific export observer (dependency inversion seam). The generic exporter carries ZERO
-    /// game logic  Eproprietary engines implement this in their GameHook and install an instance on
-    /// <see cref="Observer"/>; vanilla Unity installs nothing and every hook point is a no-op with no
-    /// argument allocation (all invocations are null-conditional). All methods default to no-op so an
-    /// observer implements only the lifecycle points it needs.
-    /// </summary>
     public interface IShaderExportObserver
     {
-        /// <summary>Per pass, right after the generic reader filled <paramref name="symbols"/> in.
-        /// Rewrite in place: proprietary register decoding, duplicate-binding dedupe, CB merging, …</summary>
         void OnPassSymbolsRead(SerializedProgramData symbols, ShaderSubProgram subProgram, ShaderReadContext context) { }
 
-        /// <summary>Once per shader, after <see cref="OnPassSymbolsRead"/> ran on every pass. Sees all
-        /// passes together  Efor engines whose metadata must be reasoned about across the stages of a
-        /// pass (e.g. a binding table recorded on only one stage) or across all passes of the shader
-        /// (e.g. a CB's member set split across passes).</summary>
         void OnShaderSymbolsRead(IReadOnlyList<ShaderPassView> passes) { }
 
-        /// <summary>Once per shader, after the batch decompile finished. <paramref name="passes"/> carry
-        /// the FINAL symbol state (decompile-time hooks mutate <see cref="SerializedProgramData"/> in
-        /// place) plus each pass's raw binary and outcome  Ee.g. for regression-fixture dumps.</summary>
         void OnShaderDecompiled(string shaderName, IReadOnlyList<ShaderPassResultView> passes) { }
 
-        /// <summary>
-        /// Which platform's bytecode to export this shader from. <paramref name="defaultChoice"/> is
-        /// what the generic priority picked; return it to accept. A shader's symbol tables are stored
-        /// once per program and shared by every platform's bytecode, so on a given engine they can
-        /// only describe ONE of them  Ewhich one is a fact about that engine, hence a hook decision.
-        /// A return value the shader doesn't actually ship is ignored.
-        /// </summary>
         GPUPlatform PickPlatform(IShader shader, IReadOnlyCollection<GPUPlatform> available, GPUPlatform defaultChoice) => defaultChoice;
 
-        /// <summary>
-        /// Split one subprogram's raw <c>ProgramData</c> into the bytecode modules it carries, each
-        /// tagged with the stage it belongs to. Return <see langword="null"/> (the default) for the
-        /// standard Unity shape  Ea single module for <paramref name="stage"/> behind the usual
-        /// header. An engine that packs several stages into one payload, or wraps it in a container
-        /// of its own, implements this; the exporter then emits one pass per returned module and
-        /// takes the stage from the module rather than from the program slot it was filed under.
-        /// </summary>
         IReadOnlyList<(string Stage, byte[] Binary)>? SplitProgramPayload(byte[] programData, GPUPlatform platform, string stage, UnityVersion version) => null;
     }
 
-    /// <summary>Installed by game hooks (one game per process); null for vanilla Unity.</summary>
     public static IShaderExportObserver? Observer;
 
-    /// <summary>
-    /// Live-read from the persisted ShaderDecompilerSettings snapshot
-    /// (loaded at host startup, mutated by the host's settings UI).
-    /// When true (default), multi-variant stages get their HLSL bodies
-    /// emitted to sibling `<shaderStem>/<variantKey>.hlsl` files and the
-    /// `.shader` references them via `#include`. When false, variants
-    /// stay inline inside the `.shader` file under their
-    /// `#if defined(KEYWORD)` blocks. Single-variant stages always inline.
-    /// </summary>
     public static bool SplitVariantsToHlslFiles
     {
         get => ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
@@ -101,52 +60,15 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         }
     }
 
-    /// <summary>
-    /// Default platform priority for the auto-pick: D3D11, because stock Unity's Vulkan bytecode
-    /// arrives SMOL-V compressed behind a version-dependent payload layout, whereas the DXBC path is
-    /// uniform across every Unity build this exporter reads. An engine whose bytecode is better read
-    /// from another platform says so through <see cref="IShaderExportObserver.PickPlatform"/> rather
-    /// than by reordering this list  Ewhich platform an asset's symbols actually describe is a
-    /// property of the engine that built it, not of the exporter. Platforms other than these two
-    /// (Metal MSL, GLSL, console) aren't ingestible by spirv-cross today, so we skip them entirely.
-    /// </summary>
     private static readonly GPUPlatform[] PreferredPlatforms = new[]
     {
         GPUPlatform.D3D11,
         GPUPlatform.Vulkan,
     };
 
-    /// <summary>
-    /// Fast-iteration mode: decompile only the LARGEST variant per
-    /// (SubShader, Pass, Stage) slot instead of every keyword permutation.
-    ///
-    /// A decompiler bug reproduces near-identically across a shader's variants  E
-    /// same structure, different <c>#if</c> branches enabled  Eso exporting all of
-    /// them multiplies wall-clock time for the same diagnostic signal during a
-    /// fix-rebuild-retry loop.
-    ///
-    /// LARGEST, not first. The first variant enumerated is usually the
-    /// no-keyword default, which is the SIMPLEST one: fewest features enabled,
-    /// smallest constant buffers, fewest access-chain shapes. Bytecode length is a
-    /// direct proxy for how much of the decompiler a variant exercises, so the
-    /// biggest blob is the one worth keeping when you only keep one.
-    ///
-    /// Off by default  Ea final export keeps every variant. Toggled via
-    /// <c>RURI_SHADER_FAST_ITERATION=1</c> so a CLI run can flip it without
-    /// touching the persisted <see cref="ShaderDecompilerSettings"/>.
-    /// </summary>
     public static bool OneVariantPerProgramSlot { get; set; } =
         Environment.GetEnvironmentVariable("RURI_SHADER_FAST_ITERATION") == "1";
 
-    /// <summary>
-    /// Bisection/regression-testing mode: the instant any pass fails to decompile, dump its
-    /// full error and kill the process (<see cref="Environment.Exit(int)"/>) instead of letting
-    /// the batch finish the remaining hundreds of shaders. Off by default  Ea normal export run
-    /// must still tolerate isolated per-blob failures and finish so `.shader.failures` dumps for
-    /// every failing blob land on disk in one pass. Toggle via <c>RURI_STRICT_SHADER_EXPORT=1</c>
-    /// when you need a yes/no answer on "did this change reintroduce any hard failure" in seconds
-    /// instead of waiting out a full-corpus run.
-    /// </summary>
     public static bool StrictShaderExport { get; set; } =
         Environment.GetEnvironmentVariable("RURI_STRICT_SHADER_EXPORT") == "1";
 
@@ -162,12 +84,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return DecompileShader(shader, platform, path);
     }
 
-    /// <summary>
-    /// Pick the platform to export from: the first of <see cref="PreferredPlatforms"/> the shader
-    /// actually ships, then whatever the installed game observer prefers instead, with
-    /// <c>RURI_SHADER_PLATFORM</c> overriding both. Returns <see cref="GPUPlatform.Unknown"/> when no
-    /// supported platform is present (e.g. a Metal-only mobile shader).
-    /// </summary>
     private static GPUPlatform PickBestPlatform(IShader shader)
     {
         if (shader.Platforms is null || shader.Platforms.Count == 0)
@@ -181,11 +97,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             available.Add((GPUPlatform)(int)p);
         }
 
-        // RURI_SHADER_PLATFORM=<GPUPlatform name> pins the pick, so a shader that ships several
-        // platforms can be exported from a specific one. Comparing what one platform's bytecode
-        // declares against the shared per-program parameter block is the only way to establish which
-        // platform that block was written for, so this stays available whatever the game hook
-        // prefers. Ignored when the shader doesn't ship that platform.
         string? pinned = Environment.GetEnvironmentVariable("RURI_SHADER_PLATFORM");
         if (!string.IsNullOrWhiteSpace(pinned)
             && Enum.TryParse(pinned, ignoreCase: true, out GPUPlatform pinnedPlatform)
@@ -289,8 +200,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         LogProgramEnumeration(shader.Name, stage, program, shader.Collection.Version);
 
-        // Where this slot's variants start, so fast-iteration mode can prune just
-        // them and leave everything earlier callers added untouched.
         int slotStart = result.Count;
 
         foreach (ShaderReadSource source in EnumerateProgramSources(program, shader.Collection.Version, platform))
@@ -304,10 +213,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                 continue;
             }
 
-            // A subprogram payload is normally one stage's bytecode behind the standard header, but an
-            // engine is free to lay its own container out differently (several stages in one payload,
-            // its own table, its own compression). That shape is the engine's, so the split is a game
-            // hook's call and only the default is implemented here.
             List<(string Stage, byte[] Binary)> binaries = [];
             IReadOnlyList<(string Stage, byte[] Binary)>? split =
                 Observer?.SplitProgramPayload(subProgram.ProgramData, platform, stage, shader.Collection.Version);
@@ -330,8 +235,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
             foreach ((string moduleStage, byte[] binary) in binaries)
             {
-                // A payload reachable from several program slots would otherwise produce the same
-                // module once per slot.
                 if (result.Any(existing => existing.SubShaderIndex == subShaderIndex
                     && existing.PassIndex == passIndex
                     && existing.Stage == moduleStage
@@ -364,16 +267,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         }
     }
 
-    /// <summary>
-    /// Collapse everything added from <paramref name="slotStart"/> onwards down to
-    /// the single largest-bytecode variant per module stage.
-    ///
-    /// Pruning AFTER enumeration rather than breaking out of it is what makes
-    /// "largest" possible at all  Ethe sizes are only comparable once every
-    /// variant has been read. One slot can still contribute several entries when
-    /// a game hook splits one payload into multiple stages, so the reduction is
-    /// per stage, not per slot.
-    /// </summary>
     private static void KeepLargestVariantPerStage(List<ShaderReadPass> result, int slotStart)
     {
         if (result.Count - slotStart <= 1)
@@ -406,11 +299,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         HashSet<(uint BlobIndex, uint? ParameterBlobIndex, string KeywordIdentity)> emitted = new();
 
-        // PlayerSubPrograms outer dimension is NOT per-platform in EndField (contrary to vanilla
-        // Unity layout). A pass typically has 4 outer groups with all real entries packed into
-        // the last group, mixing GpuProgramType across platforms (e.g. DX11VertexSM40 + SPIRV in
-        // one group). So we walk every group and filter per-entry by GpuProgramType→platform.
-        // ParameterBlobIndices is parallel to PlayerSubPrograms (per outer group, then per entry).
         if (program.Has_PlayerSubPrograms() && program.Has_ParameterBlobIndices()
             && program.PlayerSubPrograms is not null && program.ParameterBlobIndices is not null)
         {
@@ -445,9 +333,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             }
         }
 
-        // Older shader formats only populate the flat SubPrograms list; modern ones sometimes
-        // carry SPIRV entries here too. Dedupe by blob + parameter blob + keyword set so we
-        // don't collapse distinct variants that share the same bytecode blob.
         foreach (ISerializedSubProgram subProgram in program.SubPrograms)
         {
             var emissionKey = CreateEmissionKey(subProgram.BlobIndex, null, subProgram.KeywordIndices);
@@ -587,9 +472,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             });
         }
 
-        // Program-level numeric / buffer params (m_VectorParams / m_MatrixParams /
-        // m_BufferParams). Modern Unity packs almost everything into CBs so these
-        // are usually empty; the older flat-uniform path still uses them.
         foreach (var vector in parameters.VectorParams)
         {
             data.VectorParameters.Add(new VectorParameter
@@ -650,7 +532,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             AppendSymbols(symbols, read.ParameterSymbols);
             AppendRuntimeSymbols(symbols, read.SubProgram);
 
-            // Game-specific per-pass rewrite (dependency-inverted; no game branches here).
             observer?.OnPassSymbolsRead(symbols, read.SubProgram, new ShaderReadContext(
                 read.ShaderName, read.SubShaderIndex, read.PassIndex, read.BlobIndex, read.Version, read.Stage,
                 ProgramTypeToPlatform(read.SubProgram.GetProgramType(read.Version)),
@@ -659,9 +540,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             result.Add(new ShaderSymbolPass(read, symbols));
         }
 
-        // Game-specific whole-shader rewrite (dependency-inverted): the observer sees every pass at
-        // once for cross-stage / cross-pass reasoning. Argument list is only materialised when an
-        // observer is installed (null-conditional short-circuits before evaluation).
         observer?.OnShaderSymbolsRead(result.Select(static p => new ShaderPassView(
             p.Symbols,
             p.Read.SubShaderIndex,
@@ -675,33 +553,13 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return result;
     }
 
-    /// <summary>
-    /// Decompile every pass through the engine's batch API (CPU-aware parallel pool) and
-    /// stream the results to disk. Successful passes leave only the merged .shader text
-    /// behind; failures land in `<output>.failures/<passStem>/` with the engine's full
-    /// debug dump (input.bin + intermediate SPV + error.txt + metadata) so they can be
-    /// re-run via `Ruri.ShaderDecompiler.exe --batch <failures-root>`. Pass order is
-    /// preserved in the .shader file because consumers cross-reference passes by name
-    /// and reruns must be textually deterministic.
-    /// </summary>
     private static void DecompileAndWritePasses(IShader shader, List<ShaderSymbolPass> symbols, UnityShaderMetadata unityMetadata, string outputPath)
     {
-        // Failure dumps land beside the .shader output under
-        // `<output>.failures/<passStem>/`, populated by the engine's WriteFailureDump
-        // (input.bin, intermediate SPVs, error.txt, metadata.json). On success we
-        // intentionally write nothing per-pass  Ethe merged .shader file is the only
-        // artifact, keeping the export tree clean.
         string failuresRoot = outputPath + ".failures";
         int total = symbols.Count;
         var passStems = new string[total];
         var requests = new (byte[] Binary, DecompileOptions Options)[total];
 
-        // Ground-truth investigation aid: RURI_DUMP_INPUT_DIR=<dir> writes every pass's raw
-        // pre-decompile shader binary (the exact DXBC/DXIL/SPIR-V blob the engine shipped) as
-        // <dir>/<shaderName sanitized>.<passStem>.input.bin. Off by default (the normal export
-        // tree stays clean). Unlike the failure dump this fires on success too, so the RDEF
-        // reflection chunk of a shader that decompiles fine but resolves symbols imperfectly can
-        // be parsed offline against the engine's own bind-slot table.
         string? dumpInputDir = Environment.GetEnvironmentVariable("RURI_DUMP_INPUT_DIR");
 
         for (int i = 0; i < total; i++)
@@ -728,10 +586,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             });
         }
 
-        // 2. Run the batch. The engine handles concurrency / CPU throttling internally  E
-        // we just hand it the request list and let it parallelise. The progress callback
-        // fires on a worker thread per completion; we use it for ordered "[k/total]"
-        // logging via an atomic counter.
         int completed = 0;
         using ShaderDecompiler decompiler = new(AppDomain.CurrentDomain.BaseDirectory);
         DecompileResult[] results = decompiler.Decompile(requests, (idx, r) =>
@@ -749,18 +603,12 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             }
         });
 
-        // Game-specific post-decompile observation (dependency-inverted): symbols now carry their
-        // FINAL state (decompile-time hooks mutate SerializedProgramData in place). Argument list is
-        // only materialised when an observer is installed.
         Observer?.OnShaderDecompiled(shader.Name, Enumerable.Range(0, total).Select(i => new ShaderPassResultView(
             symbols[i].Symbols,
             symbols[i].Read.Binary,
             passStems[i],
             results[i]?.Success == true)).ToList());
 
-        // 3. Compose the final .shader text and write in one shot. Pass order matters  E
-        // consumers cross-reference passes by name and reruns must be textually
-        // deterministic even when the worker pool finishes blobs out of order.
         int succeeded = 0;
         for (int i = 0; i < total; i++)
         {
@@ -771,13 +619,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             symbols.Select(static s => new UnityShaderMetadataBuilder.ProgramResultLocation(s.Read.SubShaderIndex, s.Read.PassIndex, s.Read.Stage, s.Read.BlobIndex, s.Read.ParameterBlobIndex, s.Read.KeywordIndices)).ToArray(),
             results);
 
-        // Variant emission strategy is controlled by SplitVariantsToHlslFiles:
-        //   - true:  multi-variant stages spool to sibling
-        //            `<shaderStem>/<variantKey>.hlsl` files; .shader uses
-        //            `#include` lines per `#if defined(KEYWORD)` branch.
-        //   - false: every variant body stays inline inside the .shader file
-        //            (legacy single-file layout).
-        // Either way, single-variant stages skip the `#if` chain entirely.
         if (SplitVariantsToHlslFiles)
         {
             string variantFolderStem = Path.GetFileNameWithoutExtension(outputPath);
@@ -834,23 +675,8 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return newlineIndex < 0 ? message : message.Substring(0, newlineIndex).TrimEnd();
     }
 
-    /// <summary>
-    /// Build the merged .shader text in a single rented buffer and flush UTF-8 bytes
-    /// in one write. Hot path for large shaders (50+ passes, multi-MB sources): the
-    /// previous StreamWriter loop allocated a string per pass header / TrimEnd / each
-    /// interpolated `// SubShader ...` line. The new path:
-    ///   1. computes total UTF-16 char count up front,
-    ///   2. rents a `char[]` from ArrayPool,
-    ///   3. writes every section into the buffer via Span ops + `int.TryFormat`
-    ///      (no intermediate strings, integer formatting in-place),
-    ///   4. encodes UTF-8 in one pass into a second rented `byte[]`,
-    ///   5. writes the file with a single `FileStream.Write` call.
-    /// </summary>
     private static void WriteMergedShaderFile(string outputPath, string shaderName, List<ShaderSymbolPass> symbols, DecompileResult[] results)
     {
-        // Collect per-pass spans up front. The decompiler's source string is the only
-        // big payload; we hold it as a TrimEnd'd ReadOnlyMemory to skip the trailing-
-        // whitespace copy without materialising a new string.
         ReadOnlySpan<char> headerLine1Prefix = "// Shader: ".AsSpan();
         ReadOnlySpan<char> headerLine2 = "// Decompiled by ShaderRuriDecompileExporter".AsSpan();
         ReadOnlySpan<char> subShaderPrefix = "// SubShader ".AsSpan();
@@ -865,9 +691,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         var trimmedSources = new ReadOnlyMemory<char>[total];
         var firstErrorLines = new ReadOnlyMemory<char>[total];
 
-        // First pass: count chars exactly so we can rent a buffer of the right size.
-        // Integer widths are computed by simple base-10 digit count (avoids ToString
-        // allocations just to measure length).
         int charCount = 0;
         charCount += headerLine1Prefix.Length + shaderName.Length + nl.Length;
         charCount += headerLine2.Length + nl.Length;
@@ -877,18 +700,13 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             ShaderSymbolPass pass = symbols[i];
             DecompileResult? r = results[i];
 
-            charCount += nl.Length; // blank separator line before each pass
-
-            // "// SubShader N, Pass M, Blob K\n"
+            charCount += nl.Length;
             charCount += subShaderPrefix.Length + DecimalDigitCount(pass.Read.SubShaderIndex);
             charCount += passInfix.Length + DecimalDigitCount(pass.Read.PassIndex);
-            charCount += blobInfix.Length + DecimalDigitCount(pass.Read.BlobIndex);  // uint overload
-            charCount += nl.Length;
+            charCount += blobInfix.Length + DecimalDigitCount(pass.Read.BlobIndex);            charCount += nl.Length;
 
-            // "// PassName: <name>\n"
             charCount += passNamePrefix.Length + (pass.Read.PassName?.Length ?? 0) + nl.Length;
 
-            // "// DecompileError: <first-line>\n"  (only if message non-empty)
             string? msg = r?.ErrorMessage;
             ReadOnlyMemory<char> firstLine = default;
             if (!string.IsNullOrWhiteSpace(msg))
@@ -899,7 +717,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             }
             firstErrorLines[i] = firstLine;
 
-            // Body: the decompiled source (TrimEnd'd) or a stub line.
             ReadOnlyMemory<char> srcMem = default;
             if (r is { Success: true, SourceCode: { Length: > 0 } srcText })
             {
@@ -917,7 +734,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             }
         }
 
-        // Second pass: fill the buffer, then encode UTF-8 once and flush.
         char[] charBuffer = ArrayPool<char>.Shared.Rent(charCount);
         try
         {
@@ -967,8 +783,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
                 CopyAndAdvance(nl, buf, ref pos);
             }
 
-            // pos must equal charCount because the precount was exact; if not, our
-            // length math is off and we'd write garbage past `pos`.
             if (pos != charCount)
             {
                 throw new InvalidOperationException($"Shader-merge length math mismatched: expected {charCount} chars, wrote {pos}.");
@@ -1037,12 +851,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return 10;
     }
 
-    /// <summary>
-    /// Copy parameters/bindings from <paramref name="source"/> into <paramref name="target"/>
-    /// verbatim. The generic exporter is no longer responsible for decoding packed bindings  E
-    /// that decoder (formerly <c>DecodeUnityBindPoint</c>) is EndField-specific and now lives
-    /// in <see cref="IShaderExportObserver.OnPassSymbolsRead"/> game-hook observers.
-    /// </summary>
     private static void AppendSymbols(SerializedProgramData target, SerializedProgramData source)
     {
         foreach (ConstantBufferParameter buffer in source.ConstantBufferParameters)
@@ -1130,13 +938,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return table;
     }
 
-    /// <summary>
-    /// Strip Unity's program-data wrapper to recover the raw GPU bytecode (DXBC for D3D11,
-    /// SPIR-V for Vulkan, etc.). Layout per Unity ≥ 5.4 is the same across platforms:
-    ///   [u8 header_version] [5 bytes prefix/marker] [optional 0x20-byte common header for v≥2] [payload]
-    /// We don't peek the payload's magic bytes here  Ethe downstream
-    /// <see cref="ShaderDecompiler"/> auto-detects DXBC / DXIL / SPIR-V by their own magic.
-    /// </summary>
     private static byte[] ExtractPayload(byte[] programData, UnityVersion version)
     {
         if (programData.Length == 0)
@@ -1160,7 +961,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         return trimmed;
     }
 
-    /// <summary>Public: game-hook observers reuse this for filenames derived from shader names.</summary>
     public static string SanitizeFileName(string value)
     {
         char[] invalidChars = Path.GetInvalidFileNameChars();
@@ -1249,12 +1049,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 		throw new NotSupportedException($"Unsupported gpu program type {value} for Unity {version}");
     }
 
-    /// <summary>
-    /// In-process equivalent of <see cref="ShaderGpuProgramTypeExtensions.ToGPUPlatform"/>
-    /// without throwing on console types (which require a BuildTarget we don't carry). Returns
-    /// <see cref="GPUPlatform.Unknown"/> for anything we don't currently route through
-    /// <see cref="ShaderDecompiler"/>.
-    /// </summary>
     private static GPUPlatform ProgramTypeToPlatform(ShaderGpuProgramType type)
     {
         return type switch
@@ -1289,18 +1083,6 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         };
     }
 
-    /// <summary>
-    /// Per-pass context handed to <see cref="IShaderExportObserver.OnPassSymbolsRead"/>. Identifies the
-    /// shader and pass so a game-specific observer can branch on identity (debug logging, per-pass quirks).
-    ///
-    /// <paramref name="CommonSymbols"/> / <paramref name="ParameterSymbols"/> are the two serialized
-    /// sources that <see cref="BuildSymbols"/> concatenated (in that order) into the merged table the
-    /// observer receives  E<c>SerializedProgram.m_CommonParameters</c> and
-    /// <c>SerializedSubProgram.m_Parameters</c>. The merge is lossy about provenance, and provenance
-    /// matters: the two streams are populated by different halves of the engine's shader importer and
-    /// can disagree about the same buffer. Handing both through keeps that recoverable without
-    /// re-reading the asset.
-    /// </summary>
     public readonly record struct ShaderReadContext(
         string ShaderName,
         int SubShaderIndex,
@@ -1312,20 +1094,8 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         SerializedProgramData CommonSymbols,
         SerializedProgramData ParameterSymbols);
 
-    /// <summary>
-    /// View of one decompile pass handed to <see cref="IShaderExportObserver.OnShaderSymbolsRead"/>: its
-    /// mutable symbol table plus the identity (which SubShader/Pass/Stage) and whether the blob is DXBC
-    /// (D3D11) so a game observer can group stages of the same pass and branch on DX11 vs Vulkan without
-    /// depending on the AssetRipper platform enum.
-    /// </summary>
     public sealed record ShaderPassView(SerializedProgramData Symbols, int SubShaderIndex, int PassIndex, string Stage, bool IsDxbc, uint BlobIndex, byte[] Binary, IReadOnlyList<ushort> KeywordIndices);
 
-    /// <summary>
-    /// View of one decompiled pass handed to <see cref="IShaderExportObserver.OnShaderDecompiled"/>:
-    /// the FINAL symbol state (decompile-time hooks mutate it in place), the pass's raw shader binary,
-    /// the exporter's canonical pass stem ("subN.passN.stage.blobN.passName", filename-safe) and whether
-    /// the decompile succeeded.
-    /// </summary>
     public sealed record ShaderPassResultView(SerializedProgramData Symbols, byte[] Binary, string PassStem, bool Success);
 
     private sealed record ShaderReadSource(uint BlobIndex, uint? ParameterBlobIndex, List<ushort> KeywordIndices, ISerializedProgramParameters? Parameters);

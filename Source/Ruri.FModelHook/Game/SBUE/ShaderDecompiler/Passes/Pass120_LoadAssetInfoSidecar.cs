@@ -6,21 +6,6 @@ using System.Text.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 020 — Read the per-library `.assetinfo.json` sidecar.
-//
-// Sidecar contract (written by Pass 110): the IoStore container header
-// reports a list of cooked shader-map hashes per package (material). This
-// pass is the pure-input side of that contract: it inverts that list
-// into `state.ShaderMapToAssets[hash] = {materials...}` so subsequent
-// passes can ask "what assets own this on-disk shader-map hash?".
-//
-// `.assetinfo.json` shape — `{ AssetInfoVersion: 2,
-// ShaderCodeToAssets: [{ ShaderMapHash, Assets[] }] }`.
-//
-// Standalone pass because the dictionary it produces is consumed by
-// BOTH the usage-fan-out logic (Pass 050) AND the shader-map view
-// (Pass 050) — splitting reads from interpretation makes each step
-// trivially testable in isolation.
 internal static class Pass120_LoadAssetInfoSidecar
 {
     public static void DoPass(PipelineState state)

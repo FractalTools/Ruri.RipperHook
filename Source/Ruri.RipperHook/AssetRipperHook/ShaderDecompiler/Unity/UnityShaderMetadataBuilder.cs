@@ -24,15 +24,6 @@ internal static class UnityShaderMetadataBuilder
 
     public readonly record struct ProgramResultLocation(int SubShaderIndex, int PassIndex, string Stage, uint BlobIndex, uint? ParameterBlobIndex, List<ushort> KeywordIndices);
 
-    /// <param name="actualPrograms">
-    /// The (SubShader, Pass, Stage) slots the reader really produced bytecode for. It is the
-    /// authority whenever it covers a slot, because which program slot a subprogram is FILED under
-    /// need not be the stage it IS: a Vulkan container carries the whole pass, so the fragment
-    /// module arrives under the vertex program and <paramref name="enumerateProgramBlobIndices"/>
-    /// would report the fragment slot as empty — leaving the emitted ShaderLab pass with no
-    /// `#pragma fragment` even though the stage decompiled fine. Slots absent from it fall back to
-    /// the enumerator, so single-module platforms behave exactly as before.
-    /// </param>
     public static UnityShaderMetadata Build(
         IShader shader,
         GPUPlatform platform,
@@ -202,13 +193,6 @@ internal static class UnityShaderMetadataBuilder
         return pass;
     }
 
-    // Build the SerializedProgram for one stage slot and attach it to the pass. The
-    // SubPrograms list is populated from `enumerateProgramBlobIndices` (which already
-    // does the per-platform filtering and dedupes the (Blob, ParamBlob, Keyword) tuples
-    // across SubPrograms + PlayerSubPrograms). PlayerSubPrograms / ParameterBlobIndices /
-    // CommonParameters are intentionally left empty: they're Unity-wire round-trip
-    // fields, and the Writer / decompiler only consume `SubPrograms`. Decompile output
-    // (Success / SourceCode / ErrorMessage) is filled in later by BackfillProgramSources.
     private static void AssignProgramSlot(
         UnitySerializedPass pass,
         string stage,

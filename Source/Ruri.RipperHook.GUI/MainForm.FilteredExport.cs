@@ -4,19 +4,12 @@ using Ruri.Hook.Config;
 
 namespace Ruri.RipperHook.GUI;
 
-// Shared plumbing for the "export only X" menu features (Export Disassembly, Export All Shaders).
-// Each feature: pick a game folder + output folder, temporarily enable some feature hooks and tweak
-// a few settings, load + export, then restore everything. The chosen game hook (e.g. EndField_1.2.4)
-// must already be selected in the Hooks tree so the title actually loads. All text comes from
-// RuriLocalization — no hardcoded plaintext.
 public partial class MainForm
 {
-	// Localized status/caption strings for one filtered-export flavour.
 	private readonly record struct FilteredExportText(
 		string Caption, string Preparing, string Loading, string Exporting, string Done,
 		string FailedCaption, string FailedStatus);
 
-	// Two folder pickers: game root, then output dir. Returns false if the user cancels either.
 	private bool TryPickGameAndOutput(out string gameFolder, out string outputFolder)
 	{
 		gameFolder = string.Empty;
@@ -50,7 +43,6 @@ public partial class MainForm
 		return true;
 	}
 
-	// Single output-folder picker (for map-driven exports whose input comes from the loaded map).
 	private bool TryPickOutputFolder(out string outputFolder)
 	{
 		outputFolder = string.Empty;
@@ -67,9 +59,6 @@ public partial class MainForm
 		return true;
 	}
 
-	/// <param name="extraHooks">Feature hook ids to enable for this export only (restored afterwards).</param>
-	/// <param name="applyOverrides">Mutate GameFileLoader.Settings before load (e.g. ScriptContentLevel).</param>
-	/// <param name="restoreOverrides">Undo <paramref name="applyOverrides"/> in the finally block.</param>
 	private async Task RunFilteredExportAsync(
 		IReadOnlyList<string> inputPaths,
 		string outputPath,

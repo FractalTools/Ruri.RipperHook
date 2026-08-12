@@ -23,17 +23,6 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.CLI;
 
-// Headless console entry. The CLI mounts a CUE4Parse provider directly
-// from a --game-config AppSettings snapshot and runs the shader
-// export+decompile pipeline with NO FModel WPF host — no Hooks menu, no
-// settings dialog, no MainWindow, no dispatcher. (The old auto-export
-// path that booted FModel and drove it through a MainWindow.OnLoaded
-// detour has been removed; headless is the only mode.)
-//
-// All native dependencies (CUE4Parse-Natives, Oodle, the NuGet
-// dxil-spirv / spirv-cross runtimes) live in the shared FModel bin
-// output folder which this CLI also publishes into; running from there
-// is the supported invocation.
 public static class Program
 {
     [STAThread]
@@ -46,10 +35,6 @@ public static class Program
             return 0;
         }
 
-        // Force-load the hook-carrying assembly so RuriHook.GetAvailableHooks()
-        // sees every hook even before the user runs --list-hooks. The GUI does
-        // the same dance via typeof() pinning + Assembly.Load fallback; we
-        // mirror it so the CLI behaviour matches.
         EnsureHookAssembliesLoaded();
 
         if (opts.ListHooks)
@@ -57,58 +42,29 @@ public static class Program
             return RunListHooks();
         }
 
-        // Decompile-only debug path. Skip FModel boot entirely; just run
-        // DecompilePipeline against the supplied .ushaderlib. The export
-        // side already wrote it on a previous run, plus the .assetinfo /
-        // .stableinfo / UnifiedShaderMetadata sidecars next to it.
         if (!string.IsNullOrWhiteSpace(opts.DecompileOnly))
         {
             return RunDecompileOnly(opts.DecompileOnly!, opts);
         }
 
-        // Settings-free GLB scene export. Skips FModel boot entirely and drives
-        // CUE4Parse directly, so it needs no %AppData% FModel config — handy for
-        // scripted batch export and as the headless self-test for the GLB scene
-        // exporter (World Partition aware).
         if (opts.ExportMapDirect || opts.ListMaps)
         {
             return RunExportMapDirect(opts);
         }
 
-        // Direct single/multi-asset export (mesh + material + texture) via the
-        // full AppSettings-driven mount (needed for games with 1000+ dynamic
-        // keys that --export-map-direct's single-key mount can't handle).
         if (opts.ExportAssetPaths.Count > 0)
         {
             return RunExportAsset(opts);
         }
 
-        // Targeted lookup: which .ushaderbytecode archive owns a specific
-        // material's shaders. No shader pipeline touched at all.
         if (opts.FindShaderForMaterialPaths.Count > 0)
         {
             return RunFindShaderForMaterial(opts);
         }
 
-        // Headless shader export+decompile. Builds a CUE4Parse provider straight
-        // from the --game-config AppSettings (all AES dynamic keys + mappings +
-        // version) and runs the full export+decompile pipeline with NO FModel
-        // WPF host. This is the "直接 CLI + 配置好的设置直接反编译" path the user
-        // asked for — no GUI, no dispatcher, no hidden-window mapping race.
-        // Headless shader export + decompile is the one and only shader path:
-        // build a CUE4Parse provider straight from the --game-config AppSettings
-        // (every AES dynamic key + mappings + EGame version) and run the full
-        // export+decompile pipeline with NO FModel WPF host. The old no-flag
-        // fallback that booted FModel and drove the auto-export hook is gone;
-        // `--headless` is implied now, so a plain `--game-config <json>` works.
         return RunHeadlessShaderExport(opts);
     }
 
-    // Decompile-only debug runner. Resolves UnifiedShaderMetadata.json by
-    // walking up to the project root (`<RawDataDirectory>/<ProjectName>/UnifiedShaderMetadata.json`,
-    // matching what UE_ShaderDecompiler_Hook does). Output lands at
-    // `<libraryDir>/Decompiled/<libraryStem>/` so the dump matches the
-    // shape produced by the full export+decompile pipeline.
     private static int RunDecompileOnly(string libraryPath, CliOptions opts)
     {
         if (!File.Exists(libraryPath))
@@ -120,11 +76,6 @@ public static class Program
         string libStem = Path.GetFileNameWithoutExtension(libraryPath);
         string outDir = Path.Combine(libDir, "Decompiled", libStem);
 
-        // Resolve UnifiedShaderMetadata.json. The hook writes it under
-        // `<RawDataDirectory>/<ProjectName>/UnifiedShaderMetadata.json`.
-        // For decompile-only we don't have a CUE4ParseViewModel handy, so
-        // walk upwards from the .ushaderlib looking for the file. The
-        // export pipeline always sites it at the project-root level.
         string? unifiedPath = null;
         DirectoryInfo? probe = new(libDir);
         while (probe != null)
@@ -140,16 +91,8 @@ public static class Program
 
         try
         {
-            // SplitVariants: explicit --split-variants / --no-split-variants wins;
-            // otherwise the persisted setting (read via the public access shim so
-            // we don't have to boot HookConfig).
             bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
 
-            // Diagnostic gate: `RURI_SHADER_INDEX_FILTER=1234,5678` limits the
-            // pipeline to those shader indices only. Skips the multi-minute
-            // full-archive walk so hot-iteration on a target shader is fast.
-            // When the env var is absent the pipeline behaves identically to
-            // before (full archive). Whitespace-tolerant; ignores non-int.
             HashSet<int>? indexFilter = null;
             string? envFilter = Environment.GetEnvironmentVariable("RURI_SHADER_INDEX_FILTER");
             if (!string.IsNullOrWhiteSpace(envFilter))
@@ -167,15 +110,7 @@ public static class Program
                 LibraryPath = libraryPath,
                 OutputDirectory = outDir,
                 UnifiedMetadataPath = unifiedPath,
-                // `--material-filter` must reach the pipeline here too, not just on the
-                // export path (HeadlessShaderExportRunner) — without it `--decompile-only`
-                // silently walks the WHOLE archive (261k shaders on X6Game-main) while the
-                // user asked for a handful of materials. Same additive semantics as the
-                // export side: a filtered run does NOT wipe prior output.
                 MaterialFilter = opts.MaterialFilter,
-                // Don't wipe existing output when a filter is active —
-                // diagnostic re-runs target a single shader / a few materials, full
-                // archive results from prior runs stay intact.
                 RecreateOutputDirectory = indexFilter == null && string.IsNullOrWhiteSpace(opts.MaterialFilter),
                 SplitVariantsToHlslFiles = splitVariants,
                 ShaderIndexFilter = indexFilter,
@@ -192,15 +127,6 @@ public static class Program
         }
     }
 
-    // Settings-free direct GLB scene export: build a CUE4Parse provider from
-    // explicit flags, then export each matching .umap as a .glb scene with full
-    // World Partition aggregation. Mirrors --decompile-only in that it never
-    // boots FModel's WPF host.
-    // Headless shader export+decompile. Reads ALL AES dynamic keys + mappings
-    // + EGame version from the --game-config AppSettings (InfinityNikki carries
-    // 100+ dynamic keys, so the single-key --aes flag of --export-map-direct is
-    // not enough), mounts a CUE4Parse provider directly, and runs the full
-    // per-archive pipeline. No FModel WPF host, no dispatcher.
     private static int RunHeadlessShaderExport(CliOptions opts)
     {
         string? configPath = opts.GameConfig;
@@ -230,7 +156,6 @@ public static class Program
             return 2;
         }
 
-        // Archive filter: --archive-filter flag wins, else RURI_ARCHIVE_NAME_FILTER env var.
         string? filterRaw = !string.IsNullOrWhiteSpace(opts.ArchiveFilter)
             ? opts.ArchiveFilter
             : Environment.GetEnvironmentVariable("RURI_ARCHIVE_NAME_FILTER");
@@ -241,10 +166,6 @@ public static class Program
             HookLogger.Log($"[Headless] Archive filter: [{string.Join(", ", filter)}]");
         }
 
-        // Honour --split-variants / --no-split-variants in headless mode too; fall back to the
-        // persisted setting when neither was passed. (The flag was previously wired only into the
-        // WPF/auto-export path, so the headless runner silently ignored it and always emitted
-        // single-variant — every stage's non-primary permutations were decompiled but elided.)
         bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
         HookLogger.Log($"[Headless] Config: game='{cfg.GameDirectory}' version={cfg.UeVersion} keys={1 + cfg.DynamicKeys.Count} rawData='{cfg.RawDataDirectory}' splitVariants={splitVariants}");
 
@@ -273,20 +194,6 @@ public static class Program
         }
     }
 
-    // Direct single/multi-asset export: mesh + material + texture for one or
-    // more package paths (e.g. found via --find-asset), via CUE4Parse-
-    // Conversion's own `Exporter` class — the EXACT dispatch FModel's GUI
-    // "Export" action uses, so a USkeletalMesh cascades into its referenced
-    // materials + their decoded PNG textures automatically. Uses the full
-    // AppSettings-driven mount (same as the shader export path), unlike
-    // --export-map-direct's single-AES-key mount which can't handle a game
-    // with 1000+ dynamic keys.
-    // Targeted lookup: for each given material package path, resolve its
-    // inline ResourceHash then report which mounted .ushaderbytecode
-    // archive(s) contain a shader-map with that hash. The fast, incremental
-    // way to find WHICH archive to point --archive-filter/--material-filter
-    // at, without a full Tier1 bridge scan or blindly decompiling every
-    // archive to find one material's shaders.
     private static int RunFindShaderForMaterial(CliOptions opts)
     {
         string? configPath = opts.GameConfig;
@@ -366,10 +273,6 @@ public static class Program
 
         try
         {
-            // UEFormat (.uemodel/.uetexture) is the default mesh format — user
-            // has the io_import_ueformat Blender plugin for it and does NOT
-            // want ActorX (.psk/.pskx). MaterialFormat left at the library
-            // default (AllLayersNoRef, JSON) since that's format-independent.
             var exportOptions = SbueExportOptions.Create(EMeshFormat.UEFormat);
             HeadlessShaderExportRunner.ExportAssetResult result = HeadlessShaderExportRunner.ExportAssetPackages(
                 cfg,
@@ -470,18 +373,10 @@ public static class Program
                 return 2;
             }
 
-            // Geometry + material names by default; texture sidecar decode is
-            // opt-in via --with-materials (it can intermittently hard-crash on
-            // large worlds — a race in CUE4Parse's parallel native decode).
             var options = SbueExportOptions.Create(EMeshFormat.Gltf2, opts.WithMaterials);
             string outputDirectory = string.IsNullOrWhiteSpace(opts.ExportOut)
                 ? Path.Combine(AppContext.BaseDirectory, "GlbSceneExport")
                 : opts.ExportOut!;
-            // Wipe + recreate so each run starts clean (matches --export-unity and
-            // the documented "CLI clears the output dir every run" rule). Without
-            // this, a prior run's Actors/ + Assets/ + .glb parts linger and a
-            // completeness reconciliation (actor/asset counts vs manifest) reads a
-            // stale mix.
             if (Directory.Exists(outputDirectory))
             {
                 try { Directory.Delete(outputDirectory, recursive: true); }
@@ -538,13 +433,9 @@ public static class Program
 
     private static void EnsureHookAssembliesLoaded()
     {
-        // Matches the GUI's belt-and-braces approach. The typeof() pin is
-        // enough on most configs but Assembly.Load by name is the
-        // canonical resolver fallback if the JIT skips type metadata for
-        // an unreferenced type.
         _ = typeof(Ruri.FModelHook.GameType);
         _ = typeof(Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook);
-        try { Assembly.Load("Ruri.FModelHook"); } catch { /* logged below if 0 hooks */ }
+        try { Assembly.Load("Ruri.FModelHook"); } catch {}
 
         int hookCount = RuriHook.GetAvailableHooks().Count;
         HookLogger.Log($"[Ruri.FModelHook.CLI] Hook assemblies loaded — discovered {hookCount} [GameHookAttribute] type(s).");

@@ -9,25 +9,6 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// HashedNamesResolver — FHashedName-equivalent resolver. UE's FHashedName
-// (Engine/Source/Runtime/Core/Public/Serialization/MemoryImage.h:850)
-// hashes UPPERCASED UTF-8 / ASCII bytes with CityHash64WithSeed where
-// the seed is the FName's internal number (0 for shader/struct type
-// names). Cooked metadata strips type names but keeps the 64-bit hash;
-// to recover names we either:
-//   (a) hash everything in TypeDependencies and look up in that map
-//       (preferred — purely metadata-driven; what Pass 050 uses), or
-//   (b) scan UE source's `IMPLEMENT_*_SHADER_TYPE` macros and hash the
-//       captured names (fallback — works without TypeDependencies).
-//
-// Both paths converge on `HashName()`, the public CityHash entry; the
-// `Resolve*` accessors are the (b)-path UE-source-scan fallback.
-//
-// This is a STATIC UTILITY, not a sequenced pass — it's consumed on
-// demand by Pass 050 (BuildStableShaderRecords) when it needs to
-// translate an FHashedName 64-bit hash back to a readable type name.
-// That's why it lacks a "Pass NNN_" prefix: it has no execution slot
-// in the pipeline; the orchestrator never calls it directly.
 internal static class HashedNamesResolver
 {
     private static readonly object Lock = new();
@@ -43,15 +24,6 @@ internal static class HashedNamesResolver
     public static string ResolveVertexFactoryTypeName(string hash) => Resolve(hash, Ensure().vertexFactories);
     public static string ResolvePipelineTypeName(string hash) => Resolve(hash, Ensure().pipelines);
 
-    // FHashedName-equivalent hash. Mirror of
-    // Engine/Source/Runtime/Core/Private/Serialization/MemoryImage.cpp:1159-1214:
-    // input is uppercased, ANSI-direct (or UTF-8 for wide) bytes, hashed
-    // with CityHash64WithSeed(InternalNumber). For shader/struct type
-    // names the FName has no number suffix so seed=0.
-    //
-    // Public so other components (notably the unified-metadata exporter)
-    // can hash TypeDependencies entries to recover symbolic names without
-    // scanning the entire UE source tree.
     public static string HashName(string name) => ComputeHashedName(name);
 
     private static string Resolve(string hash, Dictionary<string, string> map)
@@ -69,30 +41,10 @@ internal static class HashedNamesResolver
                 return (_shaderTypeNames, _vertexFactoryNames, _pipelineNames);
             }
 
-            // Primary path: load the precomputed _HashToName.json files
-            // emitted by Ruri.UEShaderTpkDumper under
-            // <exeDir>/EngineUbMetadata/<version>/_<TypeKind>/_HashToName.json.
-            // This is the canonical source of (hash → name) now that the
-            // TPK dumper has replaced the ad-hoc Python generator — it
-            // covers `##`-concatenated wrapper-macro expansions (e.g.
-            // TLightMapDensityPSFDummyLightMapPolicy) that a naïve regex
-            // scan over IMPLEMENT_*_SHADER_TYPE call sites can't see.
-            //
-            // We sweep recursively because the deploy holds multiple
-            // engine versions side-by-side (5.0.3/, 5.1.1/, …, plus the
-            // legacy GAME_UE5_X/ folders left over from before the
-            // version-aware migration). CityHash collisions across
-            // versions are statistically negligible so cross-version
-            // merge is safe.
             _shaderTypeNames = LoadPrecomputedHashIndex("_ShaderType");
             _vertexFactoryNames = LoadPrecomputedHashIndex("_VertexFactoryType");
             _pipelineNames = LoadPrecomputedHashIndex("_ShaderPipelineType");
 
-            // Fallback: if the deploy doesn't carry _HashToName.json
-            // (uninstalled or stripped build), fall back to a runtime
-            // regex scan of an explicitly configured UE source tree.
-            // Empty hash-maps after the precomputed load only happens
-            // for misconfigured installs — log it loudly.
             if (_shaderTypeNames.Count == 0 && _vertexFactoryNames.Count == 0 && _pipelineNames.Count == 0)
             {
                 string? envRoot = Environment.GetEnvironmentVariable("UE_SOURCE_ROOT");
@@ -107,10 +59,6 @@ internal static class HashedNamesResolver
         }
     }
 
-    // Walks <exeDir>/EngineUbMetadata/ recursively and merges every
-    // `<typeKind>/_HashToName.json` it finds. Each file is a flat
-    // `{ "<HEX64>": "<TypeName>", ... }` object; later entries on hash
-    // collision are dropped (TryAdd).
     private static Dictionary<string, string> LoadPrecomputedHashIndex(string typeKindFolder)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -120,8 +68,6 @@ internal static class HashedNamesResolver
 
         foreach (string file in Directory.EnumerateFiles(root, "_HashToName.json", SearchOption.AllDirectories))
         {
-            // Match only the requested type-kind subfolder. Path separators
-            // vary across OS so check both directions.
             string folder = Path.GetFileName(Path.GetDirectoryName(file) ?? "");
             if (!string.Equals(folder, typeKindFolder, StringComparison.OrdinalIgnoreCase)) continue;
 
@@ -131,10 +77,6 @@ internal static class HashedNamesResolver
                 using JsonDocument doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
 
-                // The TPK emitter wraps the actual map under an `Entries`
-                // object alongside `Note` / `EntryCount` metadata. Older
-                // hand-organised files use a flat root object — accept
-                // either shape so the loader stays robust.
                 JsonElement entries = doc.RootElement.TryGetProperty("Entries", out JsonElement nested)
                     ? nested
                     : doc.RootElement;
@@ -151,10 +93,6 @@ internal static class HashedNamesResolver
             }
             catch
             {
-                // Tolerate malformed/partial JSONs — one bad file shouldn't
-                // poison the whole hash-to-name index. Silent here because
-                // this code path runs lazily on first Resolve* call; the
-                // caller has no good place to surface a parse warning.
             }
         }
         return map;
@@ -199,28 +137,11 @@ internal static class HashedNamesResolver
         return hash.ToString("X16");
     }
 
-    // CityHash relies on naturally-wrapping ulong arithmetic, but this
-    // project compiles with `<CheckForOverflowUnderflow>true</...>` which
-    // makes EVERY ulong * ulong / ulong - ulong throw OverflowException
-    // the first time a result wraps. Mark the full hash machinery
-    // `unchecked` so the CityHash-spec-correct wrapping is preserved.
-    //
-    // Constants from UE's canonical CityHash 1.1.0:
-    //   D:/GameStudy/UnrealEngine-5.1.1-release/Engine/Source/Runtime/Core/Private/Hash/CityHash.cpp:122-124
-    //   k0 = 0xc3a5c85c97cb3127  k1 = 0xb492b66fbe98f273  k2 = 0x9ae16a3b2f90404f
-    // The Murmur-inspired final-mix uses a DIFFERENT constant `kMul` that
-    // only appears in the 2-arg HashLen16(u,v) form (Hash128to64::kMul).
-    // Earlier versions of this file substituted kMul for k1/k2 in places
-    // and silently produced wrong hashes — the issue was caught when the
-    // Python port at `_generator/gen_ub_metadata.py` was cross-checked
-    // against cooked TypeDependency hashes.
     private const ulong K0 = 0xc3a5c85c97cb3127UL;
     private const ulong K1 = 0xb492b66fbe98f273UL;
     private const ulong K2 = 0x9ae16a3b2f90404fUL;
     private const ulong KMulHash16 = 0x9ddfea08eb382d69UL;
 
-    // CityHash64WithSeed(s, len, seed) per CityHash.cpp:430-440:
-    //   CityHash64WithSeeds(s, len, k2, seed) = HashLen16(CityHash64(s) - k2, seed)
     private static ulong CityHash64WithSeed(byte[] s, ulong seed) => unchecked(
         HashLen16(CityHash64(s) - K2, seed));
 

@@ -6,28 +6,6 @@ using System.Text.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 030 — Read the per-library `.stableinfo.json` sidecar.
-//
-// `.stableinfo.json` is the per-shader-map breakdown that holds
-// type/VF/permutation truth recovered by Pass 110 from the cooked
-// material's UniformExpressionSet + TypeDependencies. It populates
-// THREE state slots, all keyed for downstream lookups:
-//
-//   1. `state.ShaderHashToAssetsByFreq[shaderHash][asset] = {freq...}`
-//      — the hash-level usage fan-out used as a fallback for shaders
-//      whose owning shader-map didn't list them.
-//
-//   2. `state.ContainerByShaderIndex[archiveIndex] = ShaderContainerInfo`
-//      — last-write-wins global view, used as a fallback when callers
-//      don't know which shader-map a binary belongs to.
-//
-//   3. `state.ContainersByMapAndIndex[mapHash][archiveIndex] = ...`
-//      — authoritative per-map view; the SAME shader binary can show up
-//      under different ShaderType/VF in different maps, and emission
-//      must read the OWNING-map's truth.
-//
-// File holds nothing else — DTO shapes are private to keep the JSON
-// schema localised to the pass that owns the read.
 internal static class Pass130_LoadStableInfoSidecar
 {
     public static void DoPass(PipelineState state)
@@ -44,10 +22,6 @@ internal static class Pass130_LoadStableInfoSidecar
 
         foreach (StableInfoEntry shaderMap in root.ShaderMaps)
         {
-            // Merge stableinfo's per-map asset list into the shared
-            // ShaderMapToAssets index. assetinfo is the primary source, but
-            // stableinfo carries the same association and can rescue maps the
-            // assetinfo sidecar missed.
             if (!string.IsNullOrWhiteSpace(shaderMap.ShaderMapHash) && shaderMap.Assets != null)
             {
                 if (!state.ShaderMapToAssets.TryGetValue(shaderMap.ShaderMapHash!, out HashSet<string>? assets))
@@ -62,7 +36,6 @@ internal static class Pass130_LoadStableInfoSidecar
                 }
             }
 
-            // Slot 1: hash-level fan-out.
             if (shaderMap.ShaderHashes != null && shaderMap.Frequencies != null && shaderMap.Assets != null)
             {
                 int count = Math.Min(shaderMap.ShaderHashes.Count, shaderMap.Frequencies.Count);
@@ -89,7 +62,6 @@ internal static class Pass130_LoadStableInfoSidecar
                 }
             }
 
-            // Slots 2 & 3: per-shader container info.
             if (shaderMap.Shaders == null || shaderMap.Shaders.Count == 0) continue;
 
             string firstAsset = shaderMap.Assets?.Where(static a => !string.IsNullOrWhiteSpace(a))
@@ -99,8 +71,6 @@ internal static class Pass130_LoadStableInfoSidecar
             string materialName = Path.GetFileNameWithoutExtension(firstAsset);
             if (string.IsNullOrWhiteSpace(materialName)) materialName = "UnknownMaterial";
 
-            // Per-map slot — every map has its own dict regardless of
-            // whether other maps share its binaries.
             Dictionary<int, ShaderContainerInfo>? perMap = null;
             if (!string.IsNullOrWhiteSpace(shaderMap.ShaderMapHash))
             {
@@ -116,9 +86,7 @@ internal static class Pass130_LoadStableInfoSidecar
                 if (entry.ArchiveShaderIndex < 0) continue;
                 ShaderContainerInfo info = BuildContainerInfo(shaderMap, entry, materialName);
 
-                // Slot 2: global last-write-wins.
                 state.ContainerByShaderIndex[entry.ArchiveShaderIndex] = info;
-                // Slot 3: per-map authoritative.
                 if (perMap != null) perMap[entry.ArchiveShaderIndex] = info;
             }
         }

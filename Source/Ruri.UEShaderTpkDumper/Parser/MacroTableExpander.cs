@@ -2,22 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.UEShaderTpkDumper.Parser;
 
-// Collects `#define NAME[(args)] body` macros whose body contains
-// `SHADER_PARAMETER` / `_UNIFORM_BUFFER_MEMBER` — UE's "macro tables".
-// `VIEW_UNIFORM_BUFFER_MEMBER_TABLE` is the canonical example: a single
-// macro that expands to several hundred SHADER_PARAMETER lines defining
-// the View UB's members. Without expanding these we'd see ~141 UBs as
-// 138 — the missing 3 are macro-table-only (no inline member declarations
-// at all).
-//
-// Mirrors the Python generator's `collect_macro_tables` + `expand_macro_tables`.
-// Two-pass approach: collapse `\`-line-continuations first (so multi-line
-// bodies parse as one token), then a simple `#define NAME[(args)] body`
-// regex. Skipping the foundational macros that ship with
-// `ShaderParameterMacros.h` (BEGIN_*, END_*, SHADER_PARAMETER_*, INTERNAL_*,
-// IMPLEMENT_*, RENDER_TARGET_*, RDG_*) because expanding them would
-// explode every member into `INTERNAL_SHADER_PARAMETER_EXPLICIT(...)`
-// gibberish and prevent later re-parsing.
 public static class MacroTableExpander
 {
     public sealed record TableEntry(string Name, string[] Params, string Body);
@@ -79,18 +63,12 @@ public static class MacroTableExpander
         return inner.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
     }
 
-    // Recursively substitute every macro-table identifier in `text` with its
-    // expansion. Mirrors the Python `expand_macro_tables`. Depth-capped at 6
-    // to absorb the typical 3-level chain (VIEW_UNIFORM_BUFFER_MEMBER_TABLE
-    // → VIEW_UNIFORM_BUFFER_MEMBER → SHADER_PARAMETER) without infinite-
-    // looping on a self-recursive macro.
     public static string Expand(string text, IReadOnlyDictionary<string, TableEntry> tables, int depth = 0)
     {
         if (depth > 6) return text;
         bool changed = false;
         string current = text;
 
-        // Function-like first (more specific match wins over object-like).
         foreach (TableEntry entry in tables.Values)
         {
             if (entry.Params.Length == 0) continue;
@@ -116,7 +94,6 @@ public static class MacroTableExpander
             }
         }
 
-        // Object-like.
         foreach (TableEntry entry in tables.Values)
         {
             if (entry.Params.Length != 0) continue;

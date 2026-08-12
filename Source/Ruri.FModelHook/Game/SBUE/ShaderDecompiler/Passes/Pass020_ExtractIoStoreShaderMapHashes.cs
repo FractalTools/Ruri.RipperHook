@@ -7,22 +7,6 @@ using CUE4Parse.UE4.Versions;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 020 — Walk every mounted IoStore reader and harvest the
-// per-package shader-map-hash list from the container header.
-//
-// CUE4Parse commit e56242ae commented out `ShaderMapHashes` from
-// `FFilePackageStoreEntry` (the field is still serialized in the binary
-// at the same offset). Since the submodule is frozen, we re-read the
-// raw container header chunk and parse ShaderMapHashes manually.
-//
-// Result populates `state.Root.PackageShaderMapHashes` keyed by
-// `PathWithoutExtension`.
-//
-// Runs FIRST inside ExportPipeline.Run so Pass 030's material scan can
-// scope itself to packages whose hashes intersect the current archive.
-//
-// Cached: same FModel session keeps the same provider, so this only
-// runs once per `ExportPipelineState`.
 internal static class Pass020_ExtractIoStoreShaderMapHashes
 {
     public static void DoPass(ExportPipelineState state)
@@ -86,20 +70,16 @@ internal static class Pass020_ExtractIoStoreShaderMapHashes
             version = Ar.Read<EIoContainerHeaderVersion>();
         }
 
-        Ar.Position += 8; // skip ContainerId (FIoContainerId = ulong)
-
+        Ar.Position += 8;
         if (version < EIoContainerHeaderVersion.OptionalSegmentPackages)
-            Ar.Position += 4; // skip packageCount (uint)
-
+            Ar.Position += 4;
         if (version == EIoContainerHeaderVersion.BeforeVersionWasAdded)
-            return null; // no ShaderMapHashes in old format
-
+            return null;
         var pidCount = Ar.Read<int>();
         if (pidCount != header.PackageIds.Length)
             return null;
 
-        Ar.Position += pidCount * 8; // skip package ID data
-
+        Ar.Position += pidCount * 8;
         var storeEntriesSize = Ar.Read<int>();
         if (storeEntriesSize <= 0)
             return null;
@@ -121,10 +101,8 @@ internal static class Pass020_ExtractIoStoreShaderMapHashes
             return [];
 
         if (version < EIoContainerHeaderVersion.NoExportInfo)
-            Ar.Position += 8; // skip ExportCount + ExportBundleCount
-
-        Ar.Position += 8; // skip ImportedPackages CArrayView header
-
+            Ar.Position += 8;
+        Ar.Position += 8;
         var smhStart = Ar.Position;
         var smhCount = Ar.Read<int>();
         var smhOffset = Ar.Read<int>();

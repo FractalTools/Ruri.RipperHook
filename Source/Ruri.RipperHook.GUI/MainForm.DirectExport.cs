@@ -3,10 +3,6 @@ using AssetRipper.Import.Logging;
 
 namespace Ruri.RipperHook.GUI;
 
-// GUI counterpart to AR_ExportDirectly_Hook: pick an input (single file for spot
-// testing, or a folder for whole-game), load, then export straight to a sibling
-// "<name>Output" folder. Scene tree and asset list are NOT populated — whole-game
-// exports happen here and the in-memory views would blow up.
 public partial class MainForm
 {
 	private async void directExportFromFileToolStripMenuItem_Click(object? sender, EventArgs e)
@@ -48,13 +44,8 @@ public partial class MainForm
 			return;
 		}
 
-		// Output dir is derived from the first input — mirrors AR_ExportDirectly_Hook.
-		// For multi-file selection that's "near enough"; users selecting many files share a
-		// parent folder anyway.
 		string outputPath = ComputeDirectExportOutputPath(inputPaths[0]);
 
-		// Web UI's ExportUnityProject would pop a native confirm dialog when the target is
-		// non-empty; settle this in WinForms instead so the prompt sits over MainForm.
 		if (Directory.Exists(outputPath) && Directory.EnumerateFileSystemEntries(outputPath).Any())
 		{
 			DialogResult result = MessageBox.Show(
@@ -70,8 +61,6 @@ public partial class MainForm
 			}
 		}
 
-		// Whatever the user had loaded before is dropped — direct export is a one-shot,
-		// not a side activity layered on top of the current session.
 		ResetLoadedSession();
 		_adapter.Reset();
 		ResetForm();
@@ -82,8 +71,6 @@ public partial class MainForm
 		bool savedHeadless = GameFileLoader.Headless;
 		try
 		{
-			// Suppress the AssetRipper-native confirmation dialog inside ExportUnityProject;
-			// we already confirmed above.
 			GameFileLoader.Headless = true;
 
 			string[] pathArray = inputPaths.ToArray();
@@ -110,8 +97,6 @@ public partial class MainForm
 		finally
 		{
 			GameFileLoader.Headless = savedHeadless;
-			// Whole-game GameData stays huge; drop it now so the GUI returns to baseline
-			// memory instead of holding the entire bundle graph until the user resets.
 			_adapter.Reset();
 			GC.Collect();
 			GC.WaitForPendingFinalizers();
@@ -120,8 +105,6 @@ public partial class MainForm
 		}
 	}
 
-	// Mirrors AR_ExportDirectly_Hook.GameFileLoaderHook: derive the sibling folder name
-	// from the input. Folder input uses its own name; file input uses the file stem.
 	private static string ComputeDirectExportOutputPath(string inputPath)
 	{
 		string trimmed = inputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

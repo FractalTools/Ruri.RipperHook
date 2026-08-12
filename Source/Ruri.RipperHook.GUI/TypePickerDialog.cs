@@ -2,10 +2,6 @@ using AssetRipper.SourceGenerated;
 
 namespace Ruri.RipperHook.GUI;
 
-/// <summary>
-/// "Export by Type" picker — a checkbox list of the asset ClassIDs present in the loaded CABMap.
-/// The user ticks the types to batch-export; <see cref="SelectedClassIds"/> holds the result.
-/// </summary>
 internal sealed class TypePickerDialog : Form
 {
 	private sealed record Row(int ClassId, string Label)

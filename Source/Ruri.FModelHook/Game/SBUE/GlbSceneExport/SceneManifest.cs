@@ -5,26 +5,6 @@ using Newtonsoft.Json;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Top-level "what landed in this scene package" report.
-//
-// One per --export-map-direct run, written as `scene-manifest.json` next to
-// the .glb output, listing:
-//
-//   * Source map package path + EGame version.
-//   * Render layer: number of placements, unique meshes, written .glb part
-//     files, materials emitted.
-//   * Lossless layer: actor / component / property counts written under
-//     Actors/.
-//   * Closure layer: asset counts written under Assets/.
-//   * Dropped: ANY actor / component / asset the pipeline saw but failed to
-//     export. The user requirement is `dropped == 0`; the manifest is the
-//     audit trail that proves it.
-//
-// FOUNDATION (this revision): everything is filled today EXCEPT the
-// per-actor / per-component counts that the deferred CompleteSceneDataExporter
-// and DependencyClosureExporter will increment. They expose simple counter
-// accessors so the cell only has to call `manifest.RecordActor(...)` /
-// `manifest.RecordAsset(...)` from inside their existing loops.
 public sealed class SceneManifest
 {
     public string SourceMapPackagePath { get; set; } = string.Empty;

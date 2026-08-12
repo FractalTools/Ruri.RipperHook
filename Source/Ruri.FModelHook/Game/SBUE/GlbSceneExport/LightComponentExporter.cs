@@ -9,173 +9,12 @@ using SharpGLTF.Schema2;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// Translates every placed ULightComponentBase-derived component into a
-// SharpGLTF LightBuilder + node transform and pushes both into the shared scene
-// graph through GlbSceneContext.AddLight. The pipeline must hit every UE light
-// family without dropping a single placement; whatever the glTF
-// `KHR_lights_punctual` extension cannot model is forwarded to the lossless
-// layer (the per-actor JSON sidecar written by CompleteSceneDataExporter) while
-// the closest possible punctual approximation still emits into the GLB so
-// downstream renderers see at least the position, color, range and dominant
-// emission lobe.
-//
-// ---------------------------------------------------------------------------
-// Property model (UE light-component families and the fields consumed):
-//   * ULightComponentBase — Intensity, LightColor, CastShadows, bAffectsWorld,
-//                           IndirectLightingIntensity,
-//                           VolumetricScatteringIntensity, LightGuid.
-//   * ULightComponent     — Temperature, bUseTemperature, IESTexture,
-//                           bUseIESBrightness, IESBrightnessScale,
-//                           MaxDrawDistance.
-//   * ULocalLightComponent — IntensityUnits, AttenuationRadius,
-//                           InverseExposureBlend.
-//   * UPointLightComponent — SourceRadius / SoftSourceRadius / SourceLength /
-//                           LightFalloffExponent / bUseInverseSquaredFalloff.
-//   * USpotLightComponent — InnerConeAngle / OuterConeAngle (degrees).
-//   * URectLightComponent — SourceWidth / SourceHeight / BarnDoorAngle /
-//                           BarnDoorLength / SourceTexture / SourceTextureScale /
-//                           SourceTextureOffset / LightFunctionConeAngle.
-//   * UDirectionalLightComponent — LightSourceAngle / LightSourceSoftAngle /
-//                           bAtmosphereSunLight / AtmosphereSunLightIndex /
-//                           AtmosphereSunDiskColorScale / forward axis.
-//   * USkyLightComponent  — bRealTimeCapture / SourceType / Cubemap /
-//                           SourceCubemapAngle / SkyDistanceThreshold /
-//                           LowerHemisphereColor / OcclusionTint /
-//                           OcclusionMaxDistance / OcclusionExponent /
-//                           OcclusionCombineMode.
-//   Properties surfaced as strongly typed accessors on the CUE4Parse marker
-//   types are consumed directly; everything else is read with GetOrDefault so
-//   the dump and the GLB stay in lockstep with the asset bytes.
-//   * Intensity-unit conversion (LightUtils.ConvertToIntensityToNits +
-//     GetUnitsConversionFactor): Candelas multiplies by 100*100 (cm^2->m^2),
-//     Lumens by 100*100/(4*pi), Nits by the capsule area, EV passes through
-//     EV100ToLuminance, Unitless uses the legacy *16 scale. Native defaults:
-//     spot InnerConeAngle 0 / OuterConeAngle 44 degrees; directional Intensity
-//     10.
-//   * Light translation is driven from the COMPONENT type rather than the actor
-//     ExportType, so that BP-attached lights (whose host actor's ExportType is
-//     BP_*_C) are covered as well as PointLight / SpotLight / RectLight /
-//     SkyLight / DirectionalLight. Dropping a directional light from a level
-//     package would be a directly visible regression, so every family emits.
-//   * SharpGLTF KHR_lights_punctual surface (SharpGLTF.Toolkit 1.0.2):
-//       SharpGLTF.Scenes.LightBuilder (abstract base) — Color (Vector3),
-//                                                      Intensity (float),
-//                                                      Range (float).
-//       SharpGLTF.Scenes.LightBuilder.Point — point light, no extra fields.
-//       SharpGLTF.Scenes.LightBuilder.Spot  — spot light: InnerConeAngle,
-//                                                          OuterConeAngle
-//                                                          (RADIANS),
-//                                                          SetSpotCone(inner,outer).
-//       SharpGLTF.Scenes.LightBuilder.Directional — directional light.
-//       SharpGLTF.Scenes.SceneBuilder.AddLight(LightBuilder, Matrix4x4).
-//     The KHR_lights_punctual extension itself (referenced by `directional`,
-//     `point`, `spot` strings in SharpGLTF.Core.dll) is what SharpGLTF emits
-//     when SceneBuilder.AddLight is called; verifiable on the JSON chunk of
-//     the produced GLB.
-//
-// ---------------------------------------------------------------------------
-// Coordinate system mapping (light-axis remap, ONLY needed for Spot /
-// Directional which carry a direction; Point / Rect / Sky are direction-free):
-//   * Unreal light local axes: forward = +X (the cone / sun direction), right = +Y,
-//                              up = +Z.
-//   * glTF   light local axes: forward = -Z (KHR_lights_punctual spec section
-//                              `Directional` & `Spot`), right = +X, up = +Y.
-//   * FModel's Transform.Matrix bakes the (X,Y,Z) -> (X,Z,Y) swizzle + W
-//     negation into both rotation and position so the placement is already in
-//     glTF-world space. After that swizzle the Unreal light-local axes land as:
-//         UE forward (+X) -> glTF +X
-//         UE right   (+Y) -> glTF +Z
-//         UE up      (+Z) -> glTF +Y
-//     To turn that placement into a glTF-conformant light node frame
-//     (forward = -Z, right = +X, up = +Y) we rotate the local frame by +90 deg
-//     around the Y axis. This is the SAME remap the camera exporter applies
-//     (CameraComponentExporter.cs:142). Axis fixed-points:
-//         Ry(+90): (-Z) -> (+X), (+X) -> (+Z), (+Y) -> (+Y).
-//   * In System.Numerics row-vector convention the camera path composes its
-//     correction on the LEFT (NodeMatrix = correction * placement, applied
-//     via Matrix4x4.Multiply(A, B) which is A * B in row-vector space — see
-//     CameraComponentExporter.cs:173-176). Mirror the same composition here.
-//
-// ---------------------------------------------------------------------------
-// Intensity unit conversion (UE -> glTF candela / lux):
-//   * glTF KHR_lights_punctual spec: point + spot intensity is in CANDELA
-//     (lm/sr), directional intensity is in LUX (lm/m^2). Color is linear RGB
-//     so the temperature blend has to happen in linear space.
-//   * UE local lights (point / spot / rect) ship `Intensity` in one of five
-//     unit choices (Unitless / Candelas / Lumens / EV / Nits). The
-//     `ULocalLightComponent::ComputeLightBrightness` family normalises every
-//     value into the rendering-engine
-//     internal scale by multiplying it through ConvertToIntensityToNits or the
-//     unit table at LightUtils.cs:32-55. We reuse the SAME `LightUtils`
-//     helper that CUE4Parse already exposes — it is the cooked-engine
-//     equivalent. The candela value we hand SharpGLTF is then
-//        Intensity[cd] = (UE intensity in Candelas) ~ Lumens / (4*pi * SR^2)
-//                                                     -> per the unit row,
-//                                                     factor lifted to candela
-//                                                     by LightUtils.
-//     We do this via UnitConversionFactorToCandelaPerSpotCone(...) so the
-//     numbers match the engine's per-light brightness without depending on a
-//     particular shader pass — the value is in the same physical unit space
-//     UE emits at any post-tonemap stage.
-//   * UE directional light Intensity is already in LUX
-//     (DirectionalLightComponent.h:35 — `Total energy that the light emits`,
-//     UE_PI native default = 10) and the glTF directional value is in LUX as
-//     well, so the value passes through with no conversion.
-//   * Temperature: when `bUseTemperature` is set we blend `LightColor` with
-//     the chromaticity of `Temperature` (Kelvin) via the canonical
-//     Krystek/PostScale approximation (matches the UE `FLinearColor::MakeFromColorTemperature`
-//     used by `ULightComponentBase::GetColorTemperature`). The blended color is
-//     emitted as the glTF light `Color`; the unmodulated `LightColor` and the
-//     raw temperature both still appear in the lossless JSON.
-//
-// ---------------------------------------------------------------------------
-// Audit + lossless preservation:
-//   * EVERY placed light produces (a) one glTF punctual light node, and (b)
-//     one `[GlbScene][Light]` audit note on the manifest listing the chosen
-//     punctual family + the intensity / range / cone parameters. The audit
-//     note is also where the SKY LIGHT / RECT LIGHT extras land: when a UE
-//     family does NOT map to a punctual primitive (SkyLight has no punctual
-//     equivalent and RectLight requires KHR_lights_punctual.spot as a
-//     fallback), the note carries the rect dimensions / cubemap reference so
-//     a downstream re-import can reconstruct the exact UE light from the
-//     accompanying lossless JSON.
-//   * The per-actor JSON sidecar written by CompleteSceneDataExporter is the
-//     authoritative byte-equivalent dump for every light property — every
-//     UPROPERTY-tagged field on every light class is rooted there. This
-//     exporter is allowed to LOSSILY collapse what does not fit punctual; the
-//     JSON layer guarantees the original data is still in the package.
-//   * Failures (only conceivable on genuinely corrupt struct properties — the
-//     GetOrDefault path itself does not throw) are reported via
-//     `manifest.RecordDroppedComponent(...)` so the `dropped == 0` audit
-//     stays meaningful.
 public sealed class LightComponentExporter : IComponentExporter
 {
-    // glTF KHR_lights_punctual spec: spot inner / outer cone angles must lie
-    // in [0, PI/2]. UE's USpotLightComponent::GetHalfConeAngle clamps to
-    // 89 degrees (just under PI/2) for the SAME reason — see
-    // ULightComponent.cs:122-126 and SpotLightComponent.cpp. Mirror the
-    // clamp so a placement with an out-of-spec outer angle still produces a
-    // valid GLB rather than crashing SharpGLTF's spec validator.
-    private const float SpotConeMaximumRadians = 1.5707963267948966f; // PI/2
-    private const float SpotConeEpsilonRadians = 0.001f;              // matches ULightComponent.cs:124
-
-    // UE native default for ULightComponentBase::Intensity is PI (the
-    // CUE4Parse ULightComponent deserialiser uses that same fallback).
-    // Directional re-overrides it to 10 in its constructor; both are read with
-    // GetOrDefault so the cooked value wins whenever it is present.
-    //
-    // Conversion table per LightUtils.cs:32-55 — UE source unit -> the engine
-    // brightness scaling. We follow the SAME table when converting to
-    // glTF candela so the radiance match is exact at any unit setting.
+    private const float SpotConeMaximumRadians = 1.5707963267948966f;    private const float SpotConeEpsilonRadians = 0.001f;
 
     public bool CanExport(UObject component)
     {
-        // ULightComponentBase covers point / spot / rect / directional / sky /
-        // dome / atmospheric and any future UE light subclass. CUE4Parse
-        // surfaces every concrete UE light as either ULightComponentBase
-        // directly (sky / source-light) or one of its derived marker types
-        // (ULocalLightComponent / UPointLightComponent / USpotLightComponent /
-        // URectLightComponent / UDirectionalLightComponent / USkyLightComponent).
         return component is ULightComponentBase;
     }
 
@@ -184,8 +23,6 @@ public sealed class LightComponentExporter : IComponentExporter
         UObject component = placed.Component;
         if (component is not ULightComponentBase lightComponentBase)
         {
-            // Defensive: CanExport already filtered. Drop with reason so the
-            // audit trail catches a future contract violation immediately.
             string defensivePath = component.GetPathName();
             context.LogError($"[GlbScene] LightComponent '{defensivePath}' did not surface as ULightComponentBase; dropped.");
             context.Manifest.RecordDroppedComponent($"{defensivePath}: light component cast to ULightComponentBase failed.");
@@ -196,22 +33,10 @@ public sealed class LightComponentExporter : IComponentExporter
         {
             LightTranslationResult translation = TranslateLight(lightComponentBase);
 
-            // Build the per-component world-space matrix the same way the
-            // camera exporter does (CameraComponentExporter.cs:173-176): for
-            // direction-bearing families (Spot / Directional) compose the +90
-            // deg Y rotation on the LEFT so the node's -Z axis aligns with
-            // UE's +X (the light forward). For direction-free families
-            // (Point / Rect / Sky) the placement matrix is used unchanged
-            // because KHR_lights_punctual.point ignores orientation.
             Matrix4x4 lightNodeMatrix = translation.RequiresDirectionalAxisRemap
                 ? Matrix4x4.Multiply(LightAxisRemapGltfFromUnreal, placed.WorldTransform.Matrix)
                 : placed.WorldTransform.Matrix;
 
-            // KHR_lights_punctual emission happens at the Schema2 layer inside
-            // GlbSceneContext.WritePendingLights (the SceneBuilder LightBuilder
-            // ctors are internal in this SharpGLTF build). We hand over the
-            // translated parameters; the directional axis remap is already
-            // folded into lightNodeMatrix above.
             context.AddLight(
                 translation.LightType,
                 translation.Common.LinearColor,
@@ -231,26 +56,12 @@ public sealed class LightComponentExporter : IComponentExporter
         }
     }
 
-    // Pre-baked +90 deg rotation about Y. Applied on the LEFT (row-vector
-    // convention) to the placement world matrix so the light node's local
-    // -Z axis aligns with the Unreal light forward (UE +X mapped through
-    // FModel's YZ swizzle into glTF +X). Identical math to
-    // CameraComponentExporter.CameraAxisRemapGltfFromUnreal — same axis
-    // convention deltas, only the consumer changes.
     private static readonly Matrix4x4 LightAxisRemapGltfFromUnreal =
         Matrix4x4.CreateRotationY(MathF.PI / 2.0f);
 
-    // -----------------------------------------------------------------------
-    // Dispatch: pick the punctual family and fill its parameters.
-    // -----------------------------------------------------------------------
 
     private static LightTranslationResult TranslateLight(ULightComponentBase lightComponentBase)
     {
-        // Order matters: USpotLightComponent : UPointLightComponent and
-        // URectLightComponent : ULocalLightComponent : UPointLightComponent —
-        // a `is UPointLightComponent` check would otherwise swallow every
-        // derived type and emit the wrong punctual family. The strongly typed
-        // CUE4Parse markers make this dispatch concrete.
         return lightComponentBase switch
         {
             USpotLightComponent spot       => TranslateSpotLight(spot),
@@ -263,23 +74,6 @@ public sealed class LightComponentExporter : IComponentExporter
         };
     }
 
-    // -----------------------------------------------------------------------
-    // Spot light
-    // -----------------------------------------------------------------------
-    //
-    // UE: USpotLightComponent inherits the entire UPointLightComponent surface
-    // (attenuation radius, source radius, falloff exponent, intensity units)
-    // and adds InnerConeAngle / OuterConeAngle in DEGREES, clamped per
-    // `ULightComponent.cs:120-126` to [0, 89] inner and [inner+0.001, 89.001]
-    // outer (radians). The cooked native default is Inner=0, Outer=44 deg
-    // (SpotLightComponent.cpp:201-202).
-    //
-    // glTF KHR_lights_punctual.spot: cone angles in RADIANS, both in [0, PI/2].
-    // Intensity is in candela, range is the attenuation radius in METERS.
-    //
-    // Direction: KHR_lights_punctual.spot emits along the node's local -Z.
-    // The placement matrix already carries UE forward in glTF +X (post FModel
-    // swizzle), so we compose Ry(+90 deg) on the left to rotate +X onto -Z.
     private static LightTranslationResult TranslateSpotLight(USpotLightComponent spot)
     {
         LightCommonReadout common = ReadLightCommon(spot);
@@ -308,8 +102,6 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // Clamp + ordering rules straight from USpotLightComponent::GetHalfConeAngle
-    // (ULightComponent.cs:120-126). Outputs in RADIANS for SharpGLTF.
     private static (float Inner, float Outer) ResolveSpotConeAnglesRadians(USpotLightComponent spot)
     {
         float innerConeAngleDegrees = spot.InnerConeAngle;
@@ -322,35 +114,16 @@ public sealed class LightComponentExporter : IComponentExporter
             innerClampedRadians + SpotConeEpsilonRadians,
             SpotConeMaximumRadians + SpotConeEpsilonRadians);
 
-        // glTF spec floor at PI/2 (LightBuilder.Spot setter validates this
-        // bound). After UE's 89-degree clamp the value is already inside the
-        // legal range, but defensively clamp once more so an out-of-spec
-        // serialisation cannot bring down ToGltf2().
         if (outerClampedRadians > SpotConeMaximumRadians) outerClampedRadians = SpotConeMaximumRadians;
         if (innerClampedRadians > outerClampedRadians)    innerClampedRadians = outerClampedRadians;
 
         return (innerClampedRadians, outerClampedRadians);
     }
 
-    // -----------------------------------------------------------------------
-    // Point light
-    // -----------------------------------------------------------------------
-    //
-    // UE: UPointLightComponent omnidirectional; intensity in candela / lumens /
-    // nits / EV / unitless per IntensityUnits; AttenuationRadius bounds the
-    // light's influence (LocalLightComponent.h:44). Default falloff exponent
-    // 8 with inverse-squared on (PointLightComponent.cpp:110-114).
-    //
-    // glTF KHR_lights_punctual.point: candela, range in meters, no direction.
     private static LightTranslationResult TranslatePointLight(UPointLightComponent point)
     {
         LightCommonReadout common = ReadLightCommon(point);
         float attenuationRadiusMeters = ReadAttenuationRadiusMeters(point);
-        // For a non-spot local light the solid-angle term collapses to 4*PI
-        // (full sphere), so cosHalfConeAngle does not participate; we still
-        // pass -1 which matches the engine's GetUnitsConversionFactor default
-        // (LocalLightComponent::GetUnitsConversionFactor(cosHalfConeAngle = -1)
-        // at LocalLightComponent.h:59).
         float intensityCandela = ConvertLocalLightIntensityToCandela(
             point,
             common.IntensityRawValue,
@@ -372,23 +145,6 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // -----------------------------------------------------------------------
-    // Rect light
-    // -----------------------------------------------------------------------
-    //
-    // UE: URectLightComponent emits from a rectangle (SourceWidth x
-    // SourceHeight in cm) with an optional barn-door cone. glTF
-    // KHR_lights_punctual has NO rectangular light: we fall back to a
-    // spot-light approximation centered on the rectangle, with the cone
-    // bounded by the barn-door angle when that is non-zero. The rect dimensions
-    // / barn-door / source texture all still survive on the audit note and the
-    // lossless JSON (byte parity), so the data is not lost — only the GLB
-    // shape is a fallback.
-    //
-    // The punctual fallback mirrors the engine's own behavior of falling back
-    // to a spot light when a rect-light approximation is needed. The OUTER cone
-    // = clamp(BarnDoorAngle, 1, 89) degrees so the area light's emission lobe
-    // still resembles the cooked behavior.
     private static LightTranslationResult TranslateRectLight(URectLightComponent rect)
     {
         LightCommonReadout common = ReadLightCommon(rect);
@@ -399,11 +155,6 @@ public sealed class LightComponentExporter : IComponentExporter
         float rectAreaSquareMeters = (sourceWidthCentimeters / 100.0f)
                                    * (sourceHeightCentimeters / 100.0f);
 
-        // GetCosHalfConeAngle equivalent for a rect light: the barn-door
-        // angle bounds the cone, defaulted to 88 degrees per
-        // RectLightComponent.h declaration (also enforced by
-        // ULightComponent.cs:202 with a 88.0 fallback). Compute cos(outer/2)
-        // for the unit-conversion factor.
         float barnDoorAngleDegrees = rect.BarnDoorAngle;
         float halfConeAngleRadians = Math.Clamp(barnDoorAngleDegrees, 1.0f, 89.0f)
                                    * MathF.PI / 180.0f;
@@ -432,25 +183,9 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // -----------------------------------------------------------------------
-    // Directional light
-    // -----------------------------------------------------------------------
-    //
-    // UE: UDirectionalLightComponent parallel rays; Intensity in LUX (lm/m^2),
-    // no AttenuationRadius. Direction = actor forward (+X in UE local space).
-    // Native default Intensity = 10 (DirectionalLightComponent.cpp:986).
-    //
-    // glTF KHR_lights_punctual.directional: Intensity in LUX (lm/m^2);
-    // emits along node's local -Z. No range (set 0 — spec ignores it).
     private static LightTranslationResult TranslateDirectionalLight(UDirectionalLightComponent directional)
     {
         LightCommonReadout common = ReadLightCommon(directional);
-        // UE directional Intensity is already in lux; no unit table to walk.
-        // Engine constructor default of 10 is captured in common.IntensityRawValue
-        // because the CUE4Parse deserializer ULightComponent.cs:22 falls back
-        // to PI for the base then DirectionalLight's own UPROPERTY default fills
-        // in 10 when the cooked package supplied it. If neither shows up the
-        // GetOrDefault on UPROPERTY tag tree returns whatever the cooker baked.
         float intensityLux = common.IntensityRawValue;
 
         return new LightTranslationResult(
@@ -469,37 +204,9 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // -----------------------------------------------------------------------
-    // Sky light
-    // -----------------------------------------------------------------------
-    //
-    // UE: USkyLightComponent contributes the ambient term from a captured
-    // cubemap. glTF KHR_lights_punctual has NO sky / ambient equivalent — the
-    // closest punctual surrogate is an unbounded omnidirectional point light
-    // at the actor's position with a low candela value so it shows up in
-    // viewers that respect the lights array. The cubemap reference + full
-    // SkyLight property tree round-trip through the lossless JSON sidecar
-    // (CompleteSceneDataExporter writes every UPROPERTY), AND we emit the
-    // cubemap reference, capture type and intensity in the audit note so a
-    // downstream re-import has the GLB-side breadcrumb too.
-    //
-    // The "zero loss" rule: we MUST place SOMETHING into the GLB for the sky
-    // light so its existence is visible from the binary alone. Dropping it
-    // would mean a user inspecting only the GLB cannot see the sky-light's
-    // count / position. The lossless JSON still owns the byte-equivalent
-    // dump.
     private static LightTranslationResult TranslateSkyLight(USkyLightComponent skyLight)
     {
-        // USkyLightComponent derives from ULightComponentBase (NOT
-        // ULightComponent), so it carries no Temperature / MaxDrawDistance /
-        // IES surface. Reading via the base-only path is the only legal way
-        // to populate the common record without referencing fields that do
-        // not exist on this marker type. The sky-specific cubemap +
-        // bRealTimeCapture readouts land in the audit-note suffix below.
         LightCommonReadout common = ReadLightCommonBaseOnly(skyLight);
-        // Sky light "Range" has no UE counterpart; pick 0 so glTF viewers
-        // treat it as an unbounded ambient point. The audit note documents
-        // the surrogate's role.
         float intensityCandela = MathF.Max(common.IntensityRawValue, 0.0f);
 
         string skyCubemapPathName = ReadSkyLightCubemapPathName(skyLight);
@@ -528,31 +235,13 @@ public sealed class LightComponentExporter : IComponentExporter
         {
             return string.Empty;
         }
-        // ResolvedObject is the cheapest path to a string without a deferred
-        // load — the JSON sidecar owns the asset bytes; here we only need a
-        // human-readable identifier on the audit note.
         return cubemapIndex.ResolvedObject?.GetPathName() ?? string.Empty;
     }
 
-    // -----------------------------------------------------------------------
-    // ULightComponent without a concrete derived type (rare — atmospheric
-    // light placeholders / dome light variants on a particular game cooker)
-    // -----------------------------------------------------------------------
-    //
-    // We treat any concrete `ULightComponent` that did not match a more
-    // specific derived type as a point light — the data we have (Intensity,
-    // LightColor, Temperature, MaxDrawDistance) is the strict subset that
-    // every UE light shares. The unit conversion path defaults to Unitless so
-    // an unknown subclass still produces a non-zero candela for inspection.
     private static LightTranslationResult TranslateGenericLight(ULightComponent generic)
     {
         LightCommonReadout common = ReadLightCommon(generic);
-        // ULightComponent.GetLightUnits() returns Unitless by default; the
-        // derived locals override it. For an unknown concrete subclass we
-        // assume the Unitless conversion (intensity * 16) — same scale UE
-        // uses for the legacy fallback in PointLightComponent.cpp:225.
-        float assumedAreaInSqMeters = 1.0f; // unit area placeholder for the table
-        float assumedSolidAngle = 4.0f * MathF.PI;
+        float assumedAreaInSqMeters = 1.0f;        float assumedSolidAngle = 4.0f * MathF.PI;
         float intensityCandela = LightUtils.ConvertToIntensityToNits(
             common.IntensityRawValue,
             assumedAreaInSqMeters,
@@ -575,9 +264,6 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // ULightComponentBase concrete (only the bareest fields — Intensity /
-    // LightColor / CastShadows). Used as the absolute floor so we never drop a
-    // light just because it surfaced as the base type.
     private static LightTranslationResult TranslateBaseOnlyLight(ULightComponentBase lightComponentBase)
     {
         LightCommonReadout common = ReadLightCommonBaseOnly(lightComponentBase);
@@ -597,14 +283,7 @@ public sealed class LightComponentExporter : IComponentExporter
             skyRealTimeCapture: false);
     }
 
-    // -----------------------------------------------------------------------
-    // Common light readouts
-    // -----------------------------------------------------------------------
 
-    // Intensity / LightColor / Temperature / CastShadows / MaxDrawDistance —
-    // all read off the strongly typed CUE4Parse markers when available, with
-    // a defensive GetOrDefault fallback for cooked packages that omit the
-    // tagged property entirely.
     private static LightCommonReadout ReadLightCommon(ULightComponent lightComponent)
     {
         Vector3 linearColor = ResolveLightColor(lightComponent);
@@ -620,9 +299,6 @@ public sealed class LightComponentExporter : IComponentExporter
             iesBrightnessScale: lightComponent.IESBrightnessScale);
     }
 
-    // ULightComponentBase has no Temperature / IES surface — we still capture
-    // the trio Intensity / LightColor / CastShadows so the audit note carries
-    // the absolute floor of light data for any base-only subclass.
     private static LightCommonReadout ReadLightCommonBaseOnly(ULightComponentBase lightComponentBase)
     {
         Vector3 linearColor = FLinearColorToGlbColor(lightComponentBase.GetLightColor());
@@ -638,12 +314,6 @@ public sealed class LightComponentExporter : IComponentExporter
             iesBrightnessScale: 1.0f);
     }
 
-    // Linear RGB: when bUseTemperature is set, blend the LightColor (linearized)
-    // with the chromaticity of `Temperature` Kelvin. We use the canonical
-    // Krystek / Mitsas approximation that UE's
-    // FLinearColor::MakeFromColorTemperature implements (EngineUtils.cpp).
-    // The blended value is what UE feeds the renderer; the unmodulated
-    // LightColor + raw temperature both still appear in the lossless JSON.
     private static Vector3 ResolveLightColor(ULightComponent lightComponent)
     {
         Vector3 baseLinear = FLinearColorToGlbColor(lightComponent.GetLightColor());
@@ -652,29 +322,12 @@ public sealed class LightComponentExporter : IComponentExporter
             return baseLinear;
         }
         Vector3 temperatureLinear = ColorTemperatureKelvinToLinearRgb(lightComponent.Temperature);
-        // UE multiplies the LightColor by the temperature chromaticity
-        // (FLinearColor::MakeFromColorTemperature returns the temperature as a
-        // linear RGB; ULightComponent::GetColorTemperature multiplies it into
-        // the base LightColor). Mirror that.
         return new Vector3(
             baseLinear.X * temperatureLinear.X,
             baseLinear.Y * temperatureLinear.Y,
             baseLinear.Z * temperatureLinear.Z);
     }
 
-    // FLinearColor as returned by CUE4Parse's ULightComponentBase.GetLightColor()
-    // is the FColor byte value divided by 255 — CUE4Parse does NOT apply the
-    // sRGB->linear pow transform (ULightComponent.cs:27-30 just does
-    // `LightColor.R / 255.0f`). That matches what UE's
-    // ULightComponentBase::GetLightColor returns in the cooked-runtime path:
-    // a normalised value the renderer treats as linear-on-the-wire because
-    // the cooker stored LightColor on the FColor byte already in the
-    // engine's working color space (UE LightComponent serialises the value
-    // post-encoding). Mirror that: clamp non-negative + emit as-is for the
-    // GLB. glTF KHR_lights_punctual color is linear RGB, so the value we
-    // hand SharpGLTF is consistent with what UE feeds its renderer at this
-    // stage of the pipeline. Per-byte fidelity is owned by the lossless JSON
-    // layer; this is the GLB-side projection.
     private static Vector3 FLinearColorToGlbColor(CUE4Parse.UE4.Objects.Core.Math.FLinearColor lightColor)
     {
         return new Vector3(
@@ -683,20 +336,9 @@ public sealed class LightComponentExporter : IComponentExporter
             MathF.Max(lightColor.B, 0.0f));
     }
 
-    // FLinearColor::MakeFromColorTemperature equivalent — UE uses Mitsas
-    // approximation for Kelvin -> XYZ -> linear RGB. We reproduce the simpler
-    // Krystek polynomial (matches at ~3% across 1000K-12000K, identical to
-    // FLinearColor::MakeFromColorTemperature for cooked content tuned in that
-    // band). Output is linear RGB suitable to multiply against the base
-    // LightColor.
     private static Vector3 ColorTemperatureKelvinToLinearRgb(float temperatureKelvin)
     {
         float clampedKelvin = Math.Clamp(temperatureKelvin, 1000.0f, 15000.0f);
-        // Reproduce the rational fit UE keys off (see
-        // Engine/Source/Runtime/Core/Public/Math/Color.h
-        // FLinearColor::MakeFromColorTemperature). The values below match the
-        // engine result within float epsilon for the daylight band that
-        // virtually every cooked light targets.
         float u = (0.860117757f + 1.54118254e-4f * clampedKelvin + 1.28641212e-7f * clampedKelvin * clampedKelvin)
                 / (1.0f + 8.42420235e-4f * clampedKelvin + 7.08145163e-7f * clampedKelvin * clampedKelvin);
         float v = (0.317398726f + 4.22806245e-5f * clampedKelvin + 4.20481691e-8f * clampedKelvin * clampedKelvin)
@@ -710,8 +352,6 @@ public sealed class LightComponentExporter : IComponentExporter
         float xTristimulus = yLuminance / yChromaticity * xChromaticity;
         float zTristimulus = yLuminance / yChromaticity * zChromaticity;
 
-        // sRGB D65 matrix (XYZ -> linear RGB), same constants UE uses in
-        // FLinearColor::MakeFromColorTemperature.
         float r =  3.2404542f * xTristimulus + -1.5371385f * yLuminance + -0.4985314f * zTristimulus;
         float g = -0.9692660f * xTristimulus +  1.8760108f * yLuminance +  0.0415560f * zTristimulus;
         float b =  0.0556434f * xTristimulus + -0.2040259f * yLuminance +  1.0572252f * zTristimulus;
@@ -724,10 +364,6 @@ public sealed class LightComponentExporter : IComponentExporter
 
     private static string ResolveIesPathName(ULightComponent lightComponent)
     {
-        // CUE4Parse's ULightComponent deserialiser always returns a fresh
-        // FPackageIndex when the cooked tagged-property is missing (so the
-        // value is never .NET-null), but a guard against future API drift
-        // costs nothing. The actual "no IES" sentinel is FPackageIndex.IsNull.
         FPackageIndex iesTexture = lightComponent.IESTexture;
         if (iesTexture is null || iesTexture.IsNull)
         {
@@ -736,32 +372,12 @@ public sealed class LightComponentExporter : IComponentExporter
         return iesTexture.ResolvedObject?.GetPathName() ?? string.Empty;
     }
 
-    // FModel preview converts 1 Unreal cm -> 1 viewer meter (SCALE_DOWN_RATIO);
-    // glTF light Range is in METERS so the attenuation radius (cm in cooked)
-    // is divided by 100. ULocalLightComponent declares AttenuationRadius
-    // default 1000 (LocalLightComponent.h:44 + ULightComponent.cs:92).
     private static float ReadAttenuationRadiusMeters(ULocalLightComponent localLight)
     {
         float radiusCentimeters = localLight.AttenuationRadius;
         return radiusCentimeters * 0.01f;
     }
 
-    // -----------------------------------------------------------------------
-    // Local-light Intensity -> glTF candela.
-    // -----------------------------------------------------------------------
-    //
-    // The conversion uses the same
-    // `GetUnitsConversionFactor(srcUnits, Candelas, cosHalfConeAngle)` the
-    // engine uses to normalise across IntensityUnits choices before handing the
-    // value to the renderer (available via LightUtils). The product
-    // `Intensity * GetUnitsConversionFactor(srcUnits, Candelas, cosHalfConeAngle)`
-    // converts ANY of the UE units into candela (lm/sr). That is exactly
-    // what KHR_lights_punctual expects for point + spot families.
-    //
-    // The math:
-    //   GetSourceUnitsFactor lifts the UE value into a common scale.
-    //   GetTargetUnitsModifier brings that scale down to Candela (1/100/100).
-    //   Combined product is in [lm/sr] = candela.
     private static float ConvertLocalLightIntensityToCandela(
         ULocalLightComponent localLight,
         float intensityRawValue,
@@ -780,17 +396,6 @@ public sealed class LightComponentExporter : IComponentExporter
         return candela;
     }
 
-    // -----------------------------------------------------------------------
-    // Audit note
-    // -----------------------------------------------------------------------
-    //
-    // Mirrors the camera path's per-translation note (CameraComponentExporter
-    // .RecordAuditNote): one entry per translated light so the manifest carries
-    // the count + key parameters without parsing the GLB JSON chunk. The note
-    // also surfaces the sky cubemap / rect dimensions / barn-door angle that
-    // the punctual surrogate could not fold into the binary representation —
-    // a downstream re-import can read the note + the per-actor lossless JSON
-    // and reconstruct the original cooked light verbatim.
     private static void RecordAuditNote(
         UObject component,
         in LightTranslationResult translation,
@@ -832,12 +437,7 @@ public sealed class LightComponentExporter : IComponentExporter
         context.Manifest.Notes.Add(note);
     }
 
-    // -----------------------------------------------------------------------
-    // Local record-shaped value types
-    // -----------------------------------------------------------------------
 
-    // What concrete glTF KHR_lights_punctual family + UE source family is
-    // emitted. Drives the audit note formatting + future re-imports.
     private enum PunctualLightFamily
     {
         Point,
@@ -849,8 +449,6 @@ public sealed class LightComponentExporter : IComponentExporter
         BaseAsPoint,
     }
 
-    // Per-translation result bundle. Keeps the dispatch path single-return
-    // and centralizes the audit-note inputs.
     private readonly struct LightTranslationResult
     {
         public readonly PunctualLightType LightType;

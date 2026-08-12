@@ -4,21 +4,11 @@ using AssetRipper.IO.Endian;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
-/// <summary>
-/// Reads one type tree node into an already-allocated instance, or consumes its bytes when there is
-/// nothing to fill.
-///
-/// The step hierarchy is a 1:1 port of the read methods
-/// <c>AssetRipper.AssemblyDumper.Passes.Pass100_FillReadMethods</c> used to emit -- same node
-/// dispatch, same count-then-loop shape, same <c>Capacity</c> trim, same align placement -- with the
-/// CIL emission replaced by a cached object graph so the layout can come from a tpk at runtime.
-/// </summary>
 internal abstract class TypeTreeStep
 {
     public abstract void ReadInto(object? instance, ref EndianSpanReader reader, TypeTreeReadContext context);
 }
 
-/// <summary>Binds one node of a structure to one field of the object that declares it.</summary>
 internal abstract class TypeTreeFieldStep
 {
     protected TypeTreeFieldStep(TypeTreeNode node, string path)
@@ -31,7 +21,6 @@ internal abstract class TypeTreeFieldStep
 
     public string Path { get; }
 
-    /// <summary>When set and it returns false, the node is absent from the stream entirely.</summary>
     public Func<TypeTreeReadContext, bool>? Gate { get; set; }
 
     public void Read(object? owner, ref EndianSpanReader reader, TypeTreeReadContext context)
@@ -46,12 +35,6 @@ internal abstract class TypeTreeFieldStep
     protected abstract void ReadCore(object? owner, ref EndianSpanReader reader, TypeTreeReadContext context);
 }
 
-/// <summary>
-/// A primitive, <c>Utf8String</c> or <c>byte[]</c> field: read the value (aligning when the node asks
-/// for it), then store it. A null setter means the game tree has a node this AssetRipper class has no
-/// field for, so the bytes are consumed and dropped -- the same outcome the old generated-dummy plus
-/// name-matched deep copy produced.
-/// </summary>
 internal sealed class TypeTreeScalarFieldStep<T> : TypeTreeFieldStep
 {
     private readonly TypeTreePrimitiveReader<T> read;
@@ -99,11 +82,6 @@ internal sealed class TypeTreeScalarFieldStep<T> : TypeTreeFieldStep
     }
 }
 
-/// <summary>
-/// A field that is filled in place: a generated subclass instance, an <c>AssetList</c>, an
-/// <c>AssetDictionary</c>. The generated constructors already allocated it, so the step fetches the
-/// reference and hands it to the inner step.
-/// </summary>
 internal sealed class TypeTreeFilledFieldStep : TypeTreeFieldStep
 {
     private readonly Func<object, object?>? getter;
@@ -123,10 +101,6 @@ internal sealed class TypeTreeFilledFieldStep : TypeTreeFieldStep
     }
 }
 
-/// <summary>
-/// A game-only node no AssetRipper field can hold, retained structurally so gates and post-read hooks
-/// can reach it. Only built when a hook declared the path in its Captures list.
-/// </summary>
 internal sealed class TypeTreeCaptureFieldStep : TypeTreeFieldStep
 {
     public TypeTreeCaptureFieldStep(TypeTreeNode node, string path) : base(node, path)
@@ -139,7 +113,6 @@ internal sealed class TypeTreeCaptureFieldStep : TypeTreeFieldStep
     }
 }
 
-/// <summary>A structure: read each subnode in order, then align if the node asks for it.</summary>
 internal sealed class TypeTreeStructStep : TypeTreeStep
 {
     private readonly TypeTreeFieldStep[] fields;
@@ -166,11 +139,6 @@ internal sealed class TypeTreeStructStep : TypeTreeStep
     }
 }
 
-/// <summary>
-/// <c>AssetList&lt;T&gt;</c> of primitives. 1:1 port of the primitive branch of
-/// <c>Pass100_FillReadMethods.MakeListMethod</c>: clear, read the count, add each element, trim the
-/// capacity, then align.
-/// </summary>
 internal sealed class TypeTreePrimitiveListStep<T> : TypeTreeStep where T : notnull, new()
 {
     private readonly TypeTreePrimitiveReader<T> read;
@@ -211,10 +179,6 @@ internal sealed class TypeTreePrimitiveListStep<T> : TypeTreeStep where T : notn
     }
 }
 
-/// <summary>
-/// <c>AssetList&lt;T&gt;</c> of generated subclasses. 1:1 port of the asset branch of
-/// <c>Pass100_FillReadMethods.MakeListMethod</c> -- <c>AddNew()</c> then read into the new element.
-/// </summary>
 internal sealed class TypeTreeAssetListStep<T> : TypeTreeStep where T : notnull, new()
 {
     private readonly TypeTreeStep element;
@@ -248,10 +212,6 @@ internal sealed class TypeTreeAssetListStep<T> : TypeTreeStep where T : notnull,
     }
 }
 
-/// <summary>
-/// <c>AssetDictionary&lt;TKey, TValue&gt;</c>. 1:1 port of
-/// <c>Pass100_FillReadMethods.MakeDictionaryMethod</c>.
-/// </summary>
 internal sealed class TypeTreeDictionaryStep<TKey, TValue> : TypeTreeStep
     where TKey : notnull, new()
     where TValue : notnull, new()
@@ -287,10 +247,6 @@ internal sealed class TypeTreeDictionaryStep<TKey, TValue> : TypeTreeStep
     }
 }
 
-/// <summary>
-/// <c>AssetPair&lt;TKey, TValue&gt;</c>. 1:1 port of <c>Pass100_FillReadMethods.MakePairMethod</c>:
-/// a primitive member is assigned, a subclass member is filled in place.
-/// </summary>
 internal sealed class TypeTreePairStep<TKey, TValue> : TypeTreeStep
     where TKey : notnull, new()
     where TValue : notnull, new()
@@ -368,10 +324,6 @@ internal sealed class TypeTreePairStep<TKey, TValue> : TypeTreeStep
     }
 }
 
-/// <summary>
-/// Consumes a node that has no home on the AssetRipper side. Element/member layout still comes from
-/// the tree, so the stream stays in sync no matter how deeply the fork nested the extra data.
-/// </summary>
 internal sealed class TypeTreeDiscardStep : TypeTreeStep
 {
     private readonly TypeTreeNode node;

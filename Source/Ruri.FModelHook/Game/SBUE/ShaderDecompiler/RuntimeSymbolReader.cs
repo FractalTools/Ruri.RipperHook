@@ -10,9 +10,6 @@ internal static class RuntimeSymbolReader
 {
     private static readonly Regex GeneratedUniformBufferNamePattern = new("^CB\\d+UBO$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    // Per-process dedup: log each (ubName, hash) miss only once. Tracks
-    // distinct missing layouts across the entire decompile run so the log
-    // doesn't fill with one line per shader.
     private static readonly HashSet<(string, uint)> s_loggedMisses = new();
     private static readonly object s_loggedMissesLock = new();
 
@@ -28,26 +25,6 @@ internal static class RuntimeSymbolReader
             return symbols;
         }
 
-        // Engine-UB CB definitions inject named member layouts so the
-        // SPIR-V rewriter can split `<UB>_1_m0[N]` into typed scalars/
-        // vectors/matrices instead of leaving the anonymous array. Each
-        // match is keyed on (UBName, ResourceTableLayoutHashes[i]) so we
-        // never name across a layout-shape boundary (different engine
-        // version, modded UB, etc.). See `UE_SYMBOL_SOURCES.md` §6.
-        //
-        // When the cook stripped the UB name (SPIRV-Cross / dxil-spirv
-        // generate `CB<N>UBO` placeholders for unnamed cbuffers), the
-        // ResourceTableLayoutHashes entry still carries the canonical
-        // 32-bit XOR fold — and the engine UB metadata index is keyed on
-        // that exact hash. Fall back to a hash-only reverse lookup; if
-        // exactly ONE seed has that hash we have an unambiguous source-
-        // truth match. UB index → resolved name is also recorded in
-        // resolvedUbNamesByIndex so the rest of the pipeline (SRT decoder,
-        // BufferBindingParameters) sees the real name.
-        // RURI_UB_DEBUG=1 — diagnostic dump of UB-name + layout-hash table
-        // once per shader to stderr. Use with RURI_SHADER_INDEX_FILTER to
-        // scope to a single shader; otherwise output is overwhelming on
-        // archives with thousands of shaders.
         bool ubDebug = Environment.GetEnvironmentVariable("RURI_UB_DEBUG") == "1";
 
         Dictionary<int, string> resolvedUbNamesByIndex = new();
@@ -75,23 +52,10 @@ internal static class RuntimeSymbolReader
                 EngineUbMetadata? meta = null;
                 if (IsCanonicalUniformBufferName(ubName))
                 {
-                    // Exact (name, hash) match against a seed. NAME-ONLY
-                    // fallback was attempted (Stage TODO) but produced
-                    // BROKEN output: when the cook's hash doesn't match a
-                    // seed, the chosen vanilla seed's layout disagrees with
-                    // the cook's actual layout at NON-PREFIX offsets, and
-                    // the SymbolRewriter collapses the entire cbuffer to
-                    // empty struct braces (worse than `_loose[N]`). A safe
-                    // tolerant fallback needs to (a) know the cook's actual
-                    // cb size at this layer to bound the seed by size and
-                    // (b) verify member-offset compatibility against the
-                    // cook's `LooseParameterBuffers` slot list before
-                    // committing. Defer that to a follow-up pass.
                     meta = engineUbRegistry.Lookup(ubName, h);
                 }
                 else if (h != 0u)
                 {
-                    // Cook stripped the name; hash survives → reverse-lookup.
                     meta = engineUbRegistry.LookupByHashOnly(h);
                     if (meta != null)
                     {
@@ -120,12 +84,6 @@ internal static class RuntimeSymbolReader
             }
         }
 
-        // Apply any hash-only resolutions back to UniformBufferNames so the
-        // SRT decoder (which uses the names array to label records) and the
-        // BufferBindingParameters loop below see the recovered name. This
-        // mutation is local to the metadata reference held by the caller —
-        // intentional: the runtime symbol path is the one true source for
-        // names downstream, and the cook's stripped placeholder is useless.
         if (resolvedUbNamesByIndex.Count > 0)
         {
             List<string> patched = new(metadata.UniformBufferNames);
@@ -273,10 +231,6 @@ internal static class ShaderResourceTableSymbolizer
             DumpSrt(srt, uniformBufferNames);
         }
 
-        // Pre-resolve per-UB engine-metadata once so each SRT record lookup
-        // is O(1). Index by UniformBufferIndex; null entries mean either
-        // the UB has no metadata (placeholder fallback) or it's Material
-        // (uses its own layout, not the registry).
         EngineUbMetadata?[]? perUbEngineMeta = null;
         if (engineUbRegistry is { FileCount: > 0 }
             && srt.ResourceTableLayoutHashes is { Count: > 0 } hashes
@@ -310,11 +264,6 @@ internal static class ShaderResourceTableSymbolizer
             }
         }
 
-        // Material gap-fill moved into MaterialTextureNameInferrer —
-        // material texture names are added there at decompile time, not
-        // here at metadata load time. Running gap-fill in EnrichSymbolData
-        // would always see an empty Material_Texture2D_N set because
-        // MaterialTextureNameInferrer hasn't fired yet.
     }
 
     private static void DumpSrt(FShaderResourceTable srt, IReadOnlyList<string>? uniformBufferNames)
@@ -438,7 +387,6 @@ internal static class ShaderResourceTableSymbolizer
             ? $"UB{record.UniformBufferIndex}"
             : record.UniformBufferName!;
 
-        // Mechanism 1: Material UB via .uasset replay of CreateBufferStruct.
         if (string.Equals(ubName, "Material", StringComparison.Ordinal) && materialLayout != null)
         {
             string? typed = materialLayout.ResolveResourceName(record);
@@ -448,10 +396,6 @@ internal static class ShaderResourceTableSymbolizer
             }
         }
 
-        // Mechanism 2: Engine UB via external metadata keyed on layout hash.
-        // The slot's `Index` is the engine-side resource-table position
-        // (== record.ResourceIndex), populated from the canonical
-        // FRHIUniformBufferLayoutInitializer.Resources[] order.
         if (perUbEngineMeta != null
             && record.UniformBufferIndex >= 0
             && record.UniformBufferIndex < perUbEngineMeta.Length
@@ -466,7 +410,6 @@ internal static class ShaderResourceTableSymbolizer
             }
         }
 
-        // Mechanism 3: typed placeholder (closed-world ceiling fallback).
         string suffix = record.RegisterType switch
         {
             SrtRegisterType.Sampler => $"Sampler{record.ResourceIndex}",

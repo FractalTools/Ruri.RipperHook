@@ -15,7 +15,6 @@ using AssetRipper.SerializationLogic;
 
 namespace Ruri.RipperHook.AR;
 
-/// <summary>注册表里的一条引用对象:rid + 类型三元组 + 载荷。</summary>
 public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
 {
     public long Rid { get; set; }
@@ -44,7 +43,6 @@ public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
         walker.DivideAsset(this);
         if (walker.EnterField(this, "data"))
         {
-            // 空载荷也要写出空映射,否则 Unity 不认这条引用。
             (Data ?? EmptyReferencedObjectData.Instance).WalkEditor(walker);
             walker.ExitField(this, "data");
         }
@@ -95,7 +93,6 @@ public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
 
     IUnityAssetBase IDeepCloneable.DeepClone(PPtrConverter converter) => DeepClone(converter);
 
-    /// <summary>读一条引用;遇到 v1 的 Terminus 哨兵返回 null 表示列表到头。</summary>
     public static ReferencedObject? Read(
         ref EndianSpanReader reader,
         UnityVersion version,
@@ -128,7 +125,6 @@ public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
         return referencedObject;
     }
 
-    /// <summary>载荷布局优先取文件自带的类型树;没有再回程序集解析托管类型。</summary>
     private static IUnityAssetBase ReadData(
         ref EndianSpanReader reader,
         UnityVersion version,
@@ -158,7 +154,6 @@ public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
             }
         }
 
-        // 布局无从得知 ⇒ 后续字节全部错位,只能整体失败,不许猜。
         throw new InvalidDataException(
             $"Unable to resolve SerializeReference type [{type.AsmName}]{type.Namespace}.{type.ClassName}.");
     }
@@ -179,7 +174,6 @@ public sealed class ReferencedObject : UnityAssetBase, IDeepCloneable
     }
 }
 
-/// <summary>引用对象的程序集限定类型名。</summary>
 public sealed class ReferencedManagedType : UnityAssetBase, IDeepCloneable
 {
     public string ClassName { get; set; } = "";
@@ -266,7 +260,6 @@ public sealed class ReferencedManagedType : UnityAssetBase, IDeepCloneable
         };
     }
 
-    /// <summary>字符串后补对齐(2.1.0 起 Unity 恒如此);AR 的同名扩展是 internal,这里等价复刻。</summary>
     private static string ReadAlignedString(ref EndianSpanReader reader)
     {
         Utf8String value = reader.ReadUtf8String();
@@ -275,7 +268,6 @@ public sealed class ReferencedManagedType : UnityAssetBase, IDeepCloneable
     }
 }
 
-/// <summary>空载荷占位:让 YAML 里写出一个空映射。</summary>
 internal sealed class EmptyReferencedObjectData : UnityAssetBase
 {
     public static EmptyReferencedObjectData Instance { get; } = new();

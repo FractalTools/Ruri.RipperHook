@@ -4,13 +4,6 @@ using Ruri.RipperHook.GUI.Services;
 
 namespace Ruri.RipperHook.GUI;
 
-// Process-Monitor-equivalent filtering shared by both asset lists (loaded "Asset List" + "Virtual Asset List").
-// Rules — [Field] [Relation] [Value] then Include/Exclude — live in one shared list edited from a small dialog
-// opened via the top "Filter" menu; right-click a row for one-click Include/Exclude of its values. Every enabled
-// rule is a required constraint: Include(X) means the row MUST match X, Exclude(X) means the row must NOT match
-// X. A row shows only when it matches the tab's quick search AND satisfies every enabled rule. No rules ⇒
-// everything shows. Folding Type into the rules (Type contains Animation → Include, Type contains Mesh →
-// Exclude) replaces the old single/multi-select Type dropdown.
 public partial class MainForm
 {
 	internal enum FilterRelation { Is, IsNot, Contains, Excludes, BeginsWith, EndsWith, LessThan, MoreThan, Matches, NotMatches }
@@ -44,11 +37,8 @@ public partial class MainForm
 	private ToolStripMenuItem _assetQuickInclude = null!;
 	private ToolStripMenuItem _assetQuickExclude = null!;
 
-	// ── top "Filter" menu + asset-list quick search wiring ──────────────────────────────────────────
 	private void BuildFilterMenu()
 	{
-		// The old single-select Type combo + inline filter panel are gone: quick search stays inline per tab and
-		// the full rule editor lives in a dialog opened from this menu item.
 		typeFilterComboBox.Visible = false;
 		tabPage2.Controls.Remove(typeFilterComboBox);
 
@@ -60,7 +50,6 @@ public partial class MainForm
 		filterMenu.Click += (_, _) => OpenFilterDialog();
 		menuStrip1.Items.Add(filterMenu);
 
-		// Right-click Include/Exclude for the loaded-asset list (the virtual list builds its own pair).
 		_assetQuickInclude = new ToolStripMenuItem("Include");
 		_assetQuickExclude = new ToolStripMenuItem("Exclude");
 		assetListContextMenuStrip.Items.Insert(0, new ToolStripSeparator());
@@ -68,8 +57,7 @@ public partial class MainForm
 		assetListContextMenuStrip.Items.Insert(0, _assetQuickInclude);
 	}
 
-	internal void QuickSearchChanged() // listSearch.TextChanged (asset list) — debounced
-	{
+	internal void QuickSearchChanged()	{
 		_assetSearchTimer.Stop();
 		_assetSearchTimer.Start();
 	}
@@ -86,7 +74,6 @@ public partial class MainForm
 		_filterDialog.BringToFront();
 	}
 
-	/// <summary>Re-run the shared rules against both lists (called whenever a rule is added/removed/toggled).</summary>
 	internal void ReapplyAllFilters()
 	{
 		ApplyAssetFilter();
@@ -115,7 +102,6 @@ public partial class MainForm
 		ReapplyAllFilters();
 	}
 
-	// ── evaluation (shared by both lists; each passes its own quick-search text + column getter) ──────
 	private bool RowPasses(string quick, Func<string, string> value)
 	{
 		if (quick.Length > 0)
@@ -195,7 +181,6 @@ public partial class MainForm
 		return relation.ToString();
 	}
 
-	// ── right-click quick filters (Process Monitor style — Include/Exclude the clicked row's values) ──
 	private void PopulateQuickFilterMenu(ToolStripMenuItem include, ToolStripMenuItem exclude, Func<string, string> value)
 	{
 		include.DropDownItems.Clear();

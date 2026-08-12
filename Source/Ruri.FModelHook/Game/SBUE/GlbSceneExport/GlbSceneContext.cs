@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
@@ -19,46 +19,10 @@ namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
 using MESH = MeshBuilder<VertexPositionNormalTangent, VertexColorXTextureX, VertexEmpty>;
 
-// Shared scene-building services every IComponentExporter writes through.
-//
-// The previous monolithic WorldGlbExporter owned three concerns in one class:
-//   (1) iterate actors and pick the right component family;
-//   (2) build the SharpGLTF SceneBuilder + share meshes across instances;
-//   (3) flush in budgeted parts and stitch the final files.
-// (1) now lives in ComponentResolver + the per-family IComponentExporter
-// table. (2) and (3) move here so every exporter writes into ONE scene and
-// the part-flush cadence stays bounded by the same instance budget regardless
-// of which families show up.
-//
-// Mesh-sharing key (critical correctness fix):
-// the FModel Renderer caches by `mesh.LightingGuid` and then RUN-PATCHES
-// the cached model's materials via `OverrideMaterials` per placement
-// (Renderer.cs:642-652). Sharing by LightingGuid alone lets the first
-// caller's material set win the cache, so every subsequent placement that
-// carries OverrideMaterials inherits the wrong materials. Since we cannot
-// mutate the shared MeshBuilder per-placement, the only correct fix is to
-// fold the override material set into the cache key: identical mesh +
-// identical material override list = share; any difference = a fresh
-// MeshBuilder. That keeps the byte-for-byte equality with
-// GlbMeshSectionBuilder and still instances heavily when
-// nothing overrides.
-//
-// Part flushing: SharpGLTF's `ToGltf2()` materialises one Schema2 node per
-// AddRigidMesh, and a UE5 open world expands InstancedStaticMeshComponent
-// into hundreds of thousands of placements — over a budget the resulting
-// ModelRoot exhausts memory. So when the in-flight scene has accumulated
-// MaxInstancesPerGlb nodes the context flushes to "<base>.partNNN.glb" and
-// starts a fresh SceneBuilder; the part counter is shared across families so
-// a mixed scene still falls inside one budgeted file when it fits.
 public sealed class GlbSceneContext
 {
-    // Node budget per .glb part. Kept well under the point where ToGltf2()
-    // exhausts memory on a large open world, while keeping the part count low.
     public const int MaxInstancesPerGlb = 50_000;
 
-    // The scene always renders LODs[0], so the conversion must put the highest
-    // quality there. Deferring to the user's ExportOptions.MeshQuality would
-    // put the LOWEST LOD at index 0 whenever that setting is Lowest.
     private const EMeshQuality SceneMeshQuality = EMeshQuality.Highest;
 
     public IFileProvider Provider { get; }
@@ -68,34 +32,17 @@ public sealed class GlbSceneContext
     public GlbMaterialFactory MaterialFactory { get; }
     public SceneManifest Manifest { get; }
 
-    // Reset on every part flush so peak memory is bounded by one part. Each
-    // mesh is cached against (LightingGuid + ordered override material path
-    // list) so a placement that overrides materials does NOT collide with a
-    // base placement that left them alone. See class doc.
     private SceneBuilder _sceneBuilder = new();
     private readonly Dictionary<MeshShareKey, MESH?> _meshCache = new();
 
-    // Persist across parts: materials are written once (deduped) and the
-    // distinct mesh / part bookkeeping is for the summary log.
     private readonly List<UMaterialInterface> _materials = new();
     private readonly List<string> _materialKeys = new();
     private readonly HashSet<string> _writtenMaterialKeys = new(StringComparer.Ordinal);
     private readonly HashSet<MeshShareKey> _distinctMeshKeys = new();
     private readonly List<string> _writtenParts = new();
 
-    // Punctual lights collected across the whole render pass. In this SharpGLTF
-    // build the SceneBuilder LightBuilder.Point/Spot/Directional constructors are
-    // INTERNAL — there is no public way to hand a light to SceneBuilder.AddLight.
-    // So lights are buffered here and emitted at the Schema2 layer in a dedicated
-    // final part (WritePendingLights) after every mesh part is flushed. They do
-    // not participate in the instance budget (a few hundred lights vs hundreds of
-    // thousands of mesh placements).
     private readonly List<PendingLight> _pendingLights = new();
 
-    // Cameras have the SAME problem as lights in this SharpGLTF build:
-    // SceneBuilder.AddCamera is a silent no-op (ToGltf2 emits zero LogicalCameras).
-    // So cameras are buffered too and emitted at the Schema2 layer alongside
-    // the lights in the dedicated final part.
     private readonly List<PendingCamera> _pendingCameras = new();
 
     private string _outputBasePath = string.Empty;
@@ -131,18 +78,6 @@ public sealed class GlbSceneContext
         _outputBasePath = outputBasePath;
     }
 
-    // Append a static-mesh placement to the in-flight scene. Returns true if
-    // the call added a node (false = mesh failed to build, e.g. no LODs).
-    //
-    // `overrideMaterials` is the per-section override array the Renderer reads
-    // off the component (Renderer.cs:642-652), already loaded by the caller.
-    // Nulls in the array mean "this slot keeps the section's base material".
-    // The path-name list passed in tandem is precomputed by the caller and
-    // used as the cache key — so identical (mesh, override list) tuples share
-    // a single MeshBuilder, while any different override list builds a fresh
-    // one. This closes the write/read key inconsistency: cache write and
-    // lookup use the *same* formula because the caller pre-computes the
-    // path-name list once.
     public bool AddRigidMesh(
         UStaticMesh mesh,
         IReadOnlyList<UMaterialInterface?> overrideMaterials,
@@ -157,16 +92,6 @@ public sealed class GlbSceneContext
         }
         if (meshBuilder == null)
         {
-            // BuildMesh failed — the mesh has no LODs / no sections. Mirror
-            // the Renderer behaviour (`if (meshBuilder == null) return;` in
-            // AddMeshInstance): swallow the placement silently. The
-            // BuildMesh path already wrote its own [GlbScene] log entry naming
-            // the mesh, so the audit trail is intact. We do NOT record this
-            // as manifest.dropped because (a) per-instance placements off an
-            // ISM with a null-mesh would spam thousands of identical entries,
-            // and (b) the lossless layer already captures the owning actor's
-            // full property tree, so the data is still in the package even
-            // if the geometry isn't.
             return false;
         }
 
@@ -182,11 +107,6 @@ public sealed class GlbSceneContext
         return true;
     }
 
-    // Append a spline-mesh placement. CUE4Parse bends positions/normals as it
-    // walks the LOD (MeshLodDto.FromStaticMesh applies CalcSliceTransform per
-    // vertex), so the bend is not a distinct UStaticMesh: `bendGuid` stands in
-    // for LightingGuid in the share key so identical bends instance and
-    // different bends build separately.
     public bool AddSplineMesh(
         USplineMeshComponent spline,
         string meshName,
@@ -215,14 +135,6 @@ public sealed class GlbSceneContext
         return true;
     }
 
-    // Buffer one punctual light. The LightComponentExporter computes the glTF
-    // KHR_lights_punctual parameters (linear color, candela/lux intensity, range
-    // in metres, spot cone half-angles in radians) plus the world node matrix
-    // and hands them here; emission happens at the Schema2 layer in
-    // WritePendingLights. `extrasJson`, when non-empty, is attached to the light
-    // node so fallback families (Rect-as-Spot, Sky-as-Point) keep an audit note
-    // on the node itself; the full per-byte light data still lives in the
-    // lossless Actors/ JSON regardless.
     public void AddLight(
         PunctualLightType lightType,
         Vector3 color,
@@ -241,12 +153,6 @@ public sealed class GlbSceneContext
     public int PendingLightCount => _pendingLights.Count;
     public int PendingCameraCount => _pendingCameras.Count;
 
-    // Buffer one camera. CameraBuilder.Perspective/Orthographic ARE publicly
-    // constructable (so the exporter keeps doing its filmback/FOV math through
-    // them), but SceneBuilder.AddCamera does not survive ToGltf2 in this build,
-    // so we read the builder's resolved parameters here and re-emit at the
-    // Schema2 layer in WritePendingLightsAndCameras. `name` gives the camera node
-    // a meaningful identifier (the owning component's name).
     public void AddCamera(CameraBuilder camera, Matrix4x4 nodeMatrix, string name)
     {
         switch (camera)
@@ -262,13 +168,6 @@ public sealed class GlbSceneContext
         }
     }
 
-    // Emit every buffered punctual light into a dedicated final .glb part at the
-    // Schema2 layer (one node per light carrying a PunctualLight). Called by
-    // WorldGlbExporter AFTER the mesh render pass + final FlushBatch, so the
-    // light set is complete and lands in exactly one file. An empty
-    // SceneBuilder.ToGltf2() yields a model with a default scene, and
-    // ModelRoot.CreatePunctualLight + Node.PunctualLight produce a glb whose JSON
-    // chunk carries the KHR_lights_punctual extension.
     public void WritePendingLightsAndCameras()
     {
         if (_pendingLights.Count == 0 && _pendingCameras.Count == 0) return;
@@ -296,7 +195,6 @@ public sealed class GlbSceneContext
                 PunctualLight punctual = model.CreatePunctualLight(light.Name, light.LightType);
                 punctual.Color = light.Color;
                 punctual.Intensity = light.Intensity;
-                // glTF range applies to point/spot only; directional ignores it.
                 if (light.Range > 0.0f && light.LightType != PunctualLightType.Directional)
                 {
                     punctual.Range = light.Range;
@@ -329,9 +227,6 @@ public sealed class GlbSceneContext
         }
     }
 
-    // Flush the in-flight SceneBuilder to disk. Called by WorldGlbExporter at
-    // the end of the render pass; also called internally when the per-part
-    // node budget is reached.
     public void FlushBatch()
     {
         if (_batchInstanceCount == 0) return;
@@ -348,18 +243,6 @@ public sealed class GlbSceneContext
         _batchInstanceCount = 0;
     }
 
-    // Single-mesh build plus the override-material substitution at material-
-    // name level so each distinct (mesh, overrides) tuple emits a distinct
-    // MeshBuilder. Geometry bytes are still produced by
-    // GlbMeshSectionBuilder, so vertex/index/UV bytes remain identical
-    // to FModel's "Save Model" output.
-    //
-    // The override-material substitution follows the Renderer path
-    // (Renderer.cs:642-652): index by `section.MaterialIndex`, bounds-check
-    // against the override array (and the section count), fall through if
-    // the cell is null or not a UMaterialInterface — in which case the
-    // section keeps its base material so SharpGLTF still gets a sensible
-    // material name.
     private MESH? BuildMesh(
         string meshName,
         Func<StaticMeshDto> convert,
@@ -395,36 +278,20 @@ public sealed class GlbSceneContext
         {
             MeshSectionDto section = lod.Sections[sectionIndex];
 
-            // Matches Renderer.cs:646-650: matIndex must fit inside the mesh's
-            // Materials array AND the override array. Keying the upper bound on
-            // the section count would be divergent — a mesh with more material
-            // slots than sections (common for atlas-packed meshes) would skip
-            // valid overrides. Use the mesh's Materials.Length as the renderer
-            // does.
             UMaterialInterface? overrideMaterial = ResolveOverrideMaterial(
                 section.MaterialIndex,
                 meshMaterialSlotCount,
                 overrideMaterials);
 
-            // An override replaces the slot's material outright; the triangles
-            // are the section's either way, so only the primitive's material
-            // name changes.
             MeshMaterialDto? materialSlot = convertedMesh.GetMaterial(section);
             UMaterialInterface? sectionMaterial =
                 overrideMaterial ?? materialSlot?.Material?.Load<UMaterialInterface>();
 
-            // The embed pass looks bundles up by UMaterialInterface.Name
-            // (GlbMaterialFactory.TryGetEmbedBundleByMaterialName), so the
-            // primitive must carry that exact name. The slot name is only a
-            // fallback for sections whose material fails to load.
             string materialName =
                 sectionMaterial?.Name ?? materialSlot?.SlotName ?? $"material_{sectionIndex}";
 
             GlbMeshSectionBuilder.AddSection(meshBuilder, lod, section, materialName);
 
-            // De-duplicate by PathName so a material shared across the scene is
-            // decoded and written only once (even though its geometry is
-            // re-emitted into each part that uses it).
             if (Options.ExportMaterials && sectionMaterial != null)
             {
                 string materialKey = sectionMaterial.GetPathName();
@@ -438,11 +305,6 @@ public sealed class GlbSceneContext
         return meshBuilder;
     }
 
-    // Matches Renderer.cs:646-650 selection: bounds-check matIndex against
-    // both the mesh's Materials slot count AND the override array length,
-    // then read the override slot. Renderer.cs returns the slot loaded as
-    // UMaterialInterface or skips; here we pre-loaded so the entry is
-    // already a UMaterialInterface or null.
     private static UMaterialInterface? ResolveOverrideMaterial(
         int materialIndex,
         int meshMaterialSlotCount,
@@ -458,7 +320,6 @@ public sealed class GlbSceneContext
     {
         try
         {
-            // Same call CUE4Parse uses for single-mesh GLB export (Gltf.cs:111).
             ModelRoot model = sceneBuilder.ToGltf2();
             Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
             var glb = model.WriteGLB();
@@ -473,9 +334,6 @@ public sealed class GlbSceneContext
         }
     }
 
-    // One buffered punctual light: the glTF KHR_lights_punctual parameters plus
-    // the world node matrix, captured during the render pass and emitted by
-    // WritePendingLights.
     private readonly struct PendingLight
     {
         public readonly PunctualLightType LightType;
@@ -511,17 +369,10 @@ public sealed class GlbSceneContext
         }
     }
 
-    // One buffered camera: the resolved glTF projection parameters plus the
-    // world node matrix, captured during the render pass and emitted by
-    // WritePendingLightsAndCameras.
     private readonly struct PendingCamera
     {
         public readonly bool IsOrthographic;
-        public readonly float? AspectRatio;  // perspective only (null = unconstrained)
-        public readonly float VerticalFov;   // perspective only, radians
-        public readonly float XMag;          // orthographic only
-        public readonly float YMag;          // orthographic only
-        public readonly float ZNear;
+        public readonly float? AspectRatio;        public readonly float VerticalFov;        public readonly float XMag;        public readonly float YMag;        public readonly float ZNear;
         public readonly float ZFar;
         public readonly string Name;
         public readonly Matrix4x4 NodeMatrix;
@@ -546,12 +397,6 @@ public sealed class GlbSceneContext
             => new(true, null, 0f, xMag, yMag, zNear, zFar, name, nodeMatrix);
     }
 
-    // Shared mesh cache key: LightingGuid + ordered override material PathNames.
-    // Identical mesh + identical override list = share; any difference = a
-    // fresh MeshBuilder. Both sides of the cache (write/read) compute the key
-    // the same way (the resolver builds the override-name list once per
-    // placement and the context uses it both as cache key and as the input to
-    // BuildMesh's override loop, so a write-side miss is impossible).
     private readonly struct MeshShareKey : IEquatable<MeshShareKey>
     {
         private readonly CUE4Parse.UE4.Objects.Core.Misc.FGuid _lightingGuid;

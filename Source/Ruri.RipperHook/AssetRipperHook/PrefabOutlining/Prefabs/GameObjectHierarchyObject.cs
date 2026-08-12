@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Assets.Traversal;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
@@ -67,10 +67,3 @@ public abstract class GameObjectHierarchyObject : UnityObjectBase
 
 	protected PPtr AssetToPPtr(IUnityObjectBase? asset) => Collection.ForceCreatePPtr(asset);
 }
-/*
-Potential issue:
-
-Any object referenced must be emitted and it is nontrivial to find all the references.
-Scene objects can only be referenced within the scene,
-but prefab objects can be referenced from anywhere.
-*/

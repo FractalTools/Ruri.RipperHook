@@ -2,19 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Ruri.UEShaderTpkDumper.Parser;
 
-// Auto-discover UE source trees under a single root (default
-// `D:\GameStudy\UE`). Each first-level subdir is one engine version —
-// the version string is extracted from the folder name with a flexible
-// pattern, so the user-downloaded raw names like `UnrealEngine-5.4.4-release`
-// don't have to be renamed. Patterns recognised:
-//
-//   * `UnrealEngine-<X>.<Y>.<Z>-release`
-//   * `UnrealEngine-<X>.<Y>-release`
-//   * `UE-<X>.<Y>.<Z>`
-//   * Anything matching `<X>.<Y>(.<Z>)?` somewhere in the leaf name
-//
-// Once a version is parsed we point at `Engine/Source` to walk the
-// scanner roots (Runtime/Developer/Editor/Plugins).
 public sealed record UeVersion(int Major, int Minor, int Patch)
 {
     public override string ToString() => Patch == 0 ? $"{Major}.{Minor}" : $"{Major}.{Minor}.{Patch}";
@@ -36,7 +23,6 @@ public static class UeSourceScanner
             string leaf = Path.GetFileName(dir);
             UeVersion? ver = TryParseVersion(leaf);
             if (ver == null) continue;
-            // Sanity check: must contain Engine/Source.
             if (!Directory.Exists(Path.Combine(dir, "Engine", "Source"))) continue;
             yield return new DiscoveredEngine(dir, ver, leaf);
         }
@@ -49,15 +35,10 @@ public static class UeSourceScanner
         int x = int.Parse(m.Groups["x"].Value);
         int y = int.Parse(m.Groups["y"].Value);
         int z = m.Groups["z"].Success ? int.Parse(m.Groups["z"].Value) : 0;
-        // Reject impossibly low/high values to avoid matching arbitrary digit
-        // pairs in non-version folder names.
         if (x < 4 || x > 9 || y > 99) return null;
         return new UeVersion(x, y, z);
     }
 
-    // The four UE source roots that actually ship FShader / FRHI*Layout*
-    // declarations. Anything else (ThirdParty, Programs/Build, etc.) is
-    // skipped because it never contains material/shader-binding code.
     private static readonly string[] s_relativeRoots =
     {
         "Engine/Source/Runtime",
@@ -89,9 +70,6 @@ public static class UeSourceScanner
         }
     }
 
-    // Strip `// ...` and `/* ... */` so subsequent regex passes don't trip
-    // over macro-shaped text inside doc comments. Block comments use
-    // Singleline so they can span lines.
     private static readonly Regex s_blockComment = new(@"/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex s_lineComment = new(@"//[^\n]*", RegexOptions.Compiled);
 

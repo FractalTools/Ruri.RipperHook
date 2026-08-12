@@ -12,11 +12,6 @@ using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.GUI;
 
-// On-demand preview of a CAB-map virtual file: selecting one kicks off a bundle-granular load of just that
-// CAB (+ its dependency closure) in the background, and as soon as it's read the real asset is rendered —
-// the texture shows, the mesh shows, and the info panel gets the real size and type details. The list stays
-// in CAB-map mode; results are cached per CAB so re-selecting is instant. All loads share one lock so a
-// preview never races an explicit Load/Export of the same global AssetRipper state.
 public partial class MainForm
 {
 	private readonly Dictionary<string, PreviewData> _virtualPreviewCache = new(StringComparer.OrdinalIgnoreCase);
@@ -24,8 +19,7 @@ public partial class MainForm
 
 	private async void PreviewVirtualFileAsync(ExportCabMap.CabRow row)
 	{
-		int requestVersion = _previewRequestVersion;   // bumped by the selection handler that called us
-		string cab = row.Cab;
+		int requestVersion = _previewRequestVersion;		string cab = row.Cab;
 
 		if (_virtualPreviewCache.TryGetValue(cab, out PreviewData? cached))
 		{
@@ -39,8 +33,7 @@ public partial class MainForm
 
 		try
 		{
-			await Task.Delay(220);   // debounce arrow-key navigation — only load once the selection settles
-			if (requestVersion != _previewRequestVersion)
+			await Task.Delay(220);			if (requestVersion != _previewRequestVersion)
 			{
 				return;
 			}
@@ -62,11 +55,6 @@ public partial class MainForm
 				{
 					return;
 				}
-				// Append the previewed closure into the shared (global) AssetRipper state — there is only one —
-				// so the real asset can be read and it joins the loaded Asset List. Append (never reset) matches
-				// the load model, so previewing a virtual file never wipes previously loaded assets. The loaded
-				// Asset List is refreshed lazily (when that tab is next shown) to avoid clearing assetListView's
-				// selection / bumping the preview version mid-render.
 				foreach (string fileName in fileNames)
 				{
 					_scopedLoadFilter.Add(fileName);
@@ -106,8 +94,7 @@ public partial class MainForm
 			{
 				if (_virtualPreviewCache.Count > 64)
 				{
-					_virtualPreviewCache.Clear();   // simple cap — keep the cache from growing unbounded
-				}
+					_virtualPreviewCache.Clear();				}
 				_virtualPreviewCache[cab] = preview;
 				RenderPreview(preview);
 			}
@@ -125,7 +112,6 @@ public partial class MainForm
 		}
 	}
 
-	/// <summary>The most previewable asset hosted by <paramref name="cab"/> among the just-loaded closure.</summary>
 	private RipperAssetEntry? PickPreviewAsset(string cab)
 	{
 		RipperAssetEntry? best = null;

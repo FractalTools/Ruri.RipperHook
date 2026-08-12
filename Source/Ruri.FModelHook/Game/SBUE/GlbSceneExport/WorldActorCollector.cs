@@ -12,11 +12,6 @@ using FModel.Views.Snooper;
 
 namespace Ruri.FModelHook.Game.SBUE.GlbSceneExport;
 
-// One collected placement: an actor (or component-holder) plus the base
-// transform of the world it belongs to. WP cells / streaming sub-levels are
-// authored in world space, so the base is Identity for everything today —
-// the field exists so level-instance offsets can be threaded through later
-// without reshaping the API.
 internal readonly struct WorldActor
 {
     public readonly IPropertyHolder Actor;
@@ -29,29 +24,6 @@ internal readonly struct WorldActor
     }
 }
 
-// Resolves the COMPLETE set of placed actors for a UWorld — the piece FModel's
-// own world preview does not do. FModel's Snooper only walks the actors cooked
-// directly into the opened .umap (Renderer.cs:443-456); a UE5 World Partition
-// map keeps almost all of its content in separate packages (baked streaming
-// cells, or One-File-Per-Actor source assets), so the top-level map looks empty.
-//
-// This collector aggregates every source so the exported scene is whole:
-//   1. Actors embedded in the persistent level            (Renderer parity).
-//   2. World Partition runtime-hash cells                 (cooked open worlds):
-//        WorldSettings -> WorldPartition -> RuntimeHash -> cells ->
-//        LevelStreaming.WorldAsset -> cell UWorld -> its actors.
-//      Both runtime-hash shapes are handled: UWorldPartitionRuntimeSpatialHash
-//      (StreamingGrids -> GridLevels -> LayerCells -> GridCells) and
-//      UWorldPartitionRuntimeHashSet (RuntimeStreamingData -> {Spatially,
-//      NonSpatially}LoadedCells).
-//   3. Generated cell maps discovered by package path      (cooked safety net):
-//        any *.umap under "<MainMap>/..." namespace.
-//   4. Streaming sub-levels (UWorld.StreamingLevels).
-//   5. One-File-Per-Actor external actors under "<mount>/Content/__ExternalActors__/...".
-//
-// Worlds are de-duplicated by package name so a cell reached through several
-// sources is only walked once. Dispatch is by data (hash type / package path),
-// never by per-game branches.
 internal sealed class WorldActorCollector
 {
     private readonly IFileProvider _provider;
@@ -80,9 +52,6 @@ internal sealed class WorldActorCollector
         var worldQueue = new Queue<UWorld>();
         worldQueue.Enqueue(mainWorld);
 
-        // Pre-scan the provider once, bucketing the two path-derived sources
-        // (generated cell maps + OFPA external actors) so we touch Files only
-        // a single time even for large games.
         ScanProviderFiles(mainWorldPackagePath, out var generatedCellKeys, out var externalActorKeys);
 
         foreach (var key in generatedCellKeys)
@@ -133,8 +102,6 @@ internal sealed class WorldActorCollector
             _cancellationToken.ThrowIfCancellationRequested();
             if (actorIndex == null || actorIndex.IsNull) continue;
             if (actorIndex.Load() is not { } actor) continue;
-            // HLOD proxy actors duplicate real geometry at lower detail; skip
-            // them exactly as the FModel preview does (Renderer.cs:448).
             if (actor.ExportType == "LODActor") continue;
             result.Add(new WorldActor(actor, Transform.Identity));
             EmbeddedActorCount++;
@@ -279,9 +246,6 @@ internal sealed class WorldActorCollector
         }
     }
 
-    // Single pass over the provider file table. Generated cell maps are *.umap
-    // packages nested under the main map's package namespace; external actors
-    // are *.uasset packages under the matching "__ExternalActors__" prefix.
     private void ScanProviderFiles(string mainWorldPackagePath, out List<string> generatedCellKeys, out List<string> externalActorKeys)
     {
         generatedCellKeys = new List<string>();
@@ -306,10 +270,6 @@ internal sealed class WorldActorCollector
         }
     }
 
-    // "<mount>/Content/Maps/MyMap" -> "<mount>/Content/__ExternalActors__/Maps/MyMap/".
-    // Mirrors Unreal's OFPA on-disk layout (the "/Game/Maps/MyMap" logical path
-    // becomes "/Game/__ExternalActors__/Maps/MyMap", and "/Game" maps to
-    // "<mount>/Content" in provider paths).
     private static string? BuildExternalActorPrefix(string mainWorldPackagePath)
     {
         const string contentSegment = "/Content/";

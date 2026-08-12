@@ -7,15 +7,6 @@ using Newtonsoft.Json.Linq;
 
 namespace Ruri.FModelHook.Game.SBUE.Headless;
 
-// Plain config snapshot parsed DIRECTLY from an FModel `AppSettings(_Debug).json`
-// without touching FModel's WPF `UserSettings` view-model. This is what lets
-// the CLI mount a CUE4Parse provider and run the shader-decompile pipeline
-// headless — no `FModel.App()`, no dispatcher, no hidden window.
-//
-// Only the fields the headless mount actually needs are extracted; everything
-// else in the settings file (UI prefs, export-format toggles, Discord RPC, …)
-// is ignored. The schema mirrors FModel's `DirectorySettings` /
-// `EndpointSettings` / `AesResponse` JSON shape.
 public sealed class HeadlessGameConfig
 {
     public string GameDirectory { get; private set; } = string.Empty;
@@ -25,14 +16,9 @@ public sealed class HeadlessGameConfig
     public string MainAesKey { get; private set; } = string.Empty;
     public List<DynamicAesKey> DynamicKeys { get; } = new();
 
-    // `<RawDataDirectory>` is where the `.ushaderlib` + sidecars + per-project
-    // `UnifiedShaderMetadata.json` land (the same root the FModel hook uses).
     public string RawDataDirectory { get; private set; } = string.Empty;
-    // `<OutputDirectory>/.data` is FModel's mappings + chunk cache folder.
     public string OutputDirectory { get; private set; } = string.Empty;
 
-    // Mappings endpoint (FModel `Endpoints[1]`). Used only as a fallback when
-    // no cached `.usmap` is found under `<OutputDirectory>/.data`.
     public string? MappingEndpointUrl { get; private set; }
     public string? MappingEndpointPath { get; private set; }
     public string? MappingLocalFile { get; private set; }
@@ -45,9 +31,6 @@ public sealed class HeadlessGameConfig
         public string Key { get; init; } = string.Empty;
     }
 
-    // Parse an AppSettings JSON. `gameDirectoryOverride` selects which
-    // PerDirectory entry to mount when the file describes several games;
-    // defaults to the file's top-level `GameDirectory`.
     public static HeadlessGameConfig Load(string appSettingsPath, string? gameDirectoryOverride = null)
     {
         if (!File.Exists(appSettingsPath))
@@ -63,9 +46,6 @@ public sealed class HeadlessGameConfig
         string gameDir = gameDirectoryOverride ?? (string?)root["GameDirectory"] ?? string.Empty;
         cfg.GameDirectory = gameDir;
 
-        // Locate the matching PerDirectory entry (case-insensitive key match,
-        // mirroring FModel's preflight). Fall back to the first entry so a
-        // single-game settings file still mounts even if GameDirectory drifts.
         JObject? perDir = null;
         if (root["PerDirectory"] is JObject perDirMap)
         {
@@ -103,9 +83,6 @@ public sealed class HeadlessGameConfig
         if (perDir.TryGetValue("TexturePlatform", out JToken? texPlat) && texPlat.Type == JTokenType.Integer)
             cfg.TexturePlatform = (ETexturePlatform)(int)texPlat;
 
-        // Custom version / option / map-struct overrides aren't replicated yet
-        // (none of the targeted forks set them). Flag it loudly so a game that
-        // DOES carry them isn't silently mounted with the wrong layout.
         if (perDir["Versioning"] is JObject versioning)
         {
             bool any = versioning["CustomVersions"]?.HasValues == true
@@ -129,8 +106,6 @@ public sealed class HeadlessGameConfig
             }
         }
 
-        // Endpoints[1] is the mapping endpoint in FModel's ordering
-        // (0 = Aes, 1 = Mapping).
         if (perDir["Endpoints"] is JArray endpoints && endpoints.Count > (int)EndpointSlot.Mapping
             && endpoints[(int)EndpointSlot.Mapping] is JObject mapEndpoint)
         {

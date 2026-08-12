@@ -38,14 +38,8 @@ public partial class MainForm : Form
 	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private List<RipperAssetEntry> _filteredAssets = [];
-	// Two decoupled tabs share the filter rules + per-tab quick search: the loaded "Asset List" (preview /
-	// scene-tree; _filteredAssets) and the "Virtual Asset List" CAB-map tab (id-driven over the columnar table; _visibleCabIds,
-	// in MainForm.AssetList.cs). Loading/exporting a virtual selection resolves its dependency closure and
-	// appends it into the loaded Asset List, so browsing the virtual files never resets loaded assets.
 	private CabMapping.CabTableSearch? _cabSearch;
 	private int[] _visibleCabIds = [];
-	// Previewing a virtual file appends its closure to the shared loaded state; mark the loaded Asset List
-	// dirty and rebuild it lazily when that tab is next shown (not mid-preview).
 	private bool _assetListDirty;
 	private readonly Dictionary<string, int> _assetIndexByObjectKey = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, Components.GameObjectTreeNode> _nodeByObjectKey = new(StringComparer.Ordinal);
@@ -122,8 +116,7 @@ public partial class MainForm : Form
 		InitializeHookMenu();
 		ResetForm();
 		UpdateHookStatus();
-		UpdateCabMapState(); // map-aware menu items start disabled until a CABMap is loaded
-	}
+		UpdateCabMapState();	}
 
 	private async void loadFile_Click(object? sender, EventArgs e)
 	{
@@ -236,8 +229,6 @@ public partial class MainForm : Form
 		using SettingsDialog dialog = new(_hookConfig, _configPath);
 		if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
-		// Settings dialog已经把 JSON 写盘. AR_* feature 开关动了的话需要重新装 hook;
-		// 纯 native AR 设置 (Audio/Image/Export 那些) 已经直接改了 GameFileLoader.Settings, 不需要重装.
 		bool hookSetChanged = !before.SetEquals(_hookConfig.EnabledHooks);
 		if (hookSetChanged)
 		{
@@ -271,7 +262,6 @@ public partial class MainForm : Form
 		ApplyAssetFilter();
 	}
 
-	// Virtual-mode renderer for the loaded Asset List: one row per loaded asset (the CAB-map tab has its own).
 	private void assetListView_RetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
 	{
 		if ((uint)e.ItemIndex >= (uint)_filteredAssets.Count)
@@ -283,9 +273,7 @@ public partial class MainForm : Form
 		item.SubItems.Add(entry.Container);
 		item.SubItems.Add(entry.TypeString);
 		item.SubItems.Add(entry.PathId.ToString());
-		item.SubItems.Add(entry.SourceFile);                 // Source = the CAB / collection
-		item.SubItems.Add(string.Empty);                     // Deps — n/a for a single asset
-		e.Item = item;
+		item.SubItems.Add(entry.SourceFile);		item.SubItems.Add(string.Empty);		e.Item = item;
 	}
 
 	private void assetListView_SelectedIndexChanged(object? sender, EventArgs e)
@@ -333,7 +321,6 @@ public partial class MainForm : Form
 		}
 	}
 
-	// Shared by both lists (sender-aware): right-click a row that isn't selected → select just it before the menu.
 	private void assetListView_MouseUp(object? sender, MouseEventArgs e)
 	{
 		if (e.Button != MouseButtons.Right || sender is not ListView lv)
@@ -485,7 +472,6 @@ public partial class MainForm : Form
 		{
 			_assetIndexByObjectKey[GetObjectKey(_filteredAssets[i])] = i;
 		}
-		// VirtualListSize = 0 then count clears stale selection and forces a full redraw of the virtual rows.
 		assetListView.VirtualListSize = 0;
 		assetListView.VirtualListSize = _filteredAssets.Count;
 		UpdateSortIndicator();
@@ -524,7 +510,6 @@ public partial class MainForm : Form
 
 	private void assetListView_ColumnClick(object? sender, ColumnClickEventArgs e)
 	{
-		// 三态循环: 升 → 降 → 不排序 (回到 adapter 给的原始顺序). 不同列就重新从升序开始.
 		if (e.Column == _sortColumn)
 		{
 			if (_sortAscending)
@@ -607,9 +592,6 @@ public partial class MainForm : Form
 		}
 	}
 
-	// Clears the loaded Asset List + preview only; the Virtual Asset List (CAB-map) survives so a dependency
-	// export — which resets the loaded session — doesn't wipe the virtual browsing state. Full reset of the
-	// virtual side is done explicitly in resetToolStripMenuItem_Click.
 	private void ResetForm()
 	{
 		StopAudio();
@@ -641,8 +623,6 @@ public partial class MainForm : Form
 		_assetListDirty = false;
 	}
 
-	// Lazy refresh: previewing virtual files appends to the loaded state without rebuilding the (hidden) loaded
-	// Asset List; rebuild it the moment that tab is shown so it reflects everything loaded so far.
 	private void tabControl1_SelectedIndexChanged(object? sender, EventArgs e)
 	{
 		if (tabControl1.SelectedTab == tabPage2 && _assetListDirty)
@@ -1270,8 +1250,6 @@ public partial class MainForm : Form
 		}
 		catch (Exception ex)
 		{
-			// PNG 损坏 / GL 上下文丢失 / OOM 都会落到这里. 调用方靠 textureId == 0 判定失败,
-			// 但 GUI 用户看不到原因; 用 Warning 级让 logger sink 把详情记下来.
 			Logger.Warning(LogCategory.General, $"TryUploadTexture failed: {ex.GetType().Name}: {ex.Message}");
 			return 0;
 		}
@@ -1651,8 +1629,6 @@ public partial class MainForm : Form
 
 	private void InitializeHookMenu()
 	{
-		// AR_* hooks live in Settings → Features as toggleable feature flags. The tree only shows
-		// game-specific hooks (Arknights, EndField, …), one version per game.
 		_availableHooks = Hook.RuriHook.GetAvailableHooks();
 		Dictionary<string, List<(Type Type, GameHookAttribute Attribute)>> grouped = _availableHooks
 			.Where(static h => !h.Attribute.GameName.StartsWith("AR_", StringComparison.OrdinalIgnoreCase))
@@ -1660,7 +1636,6 @@ public partial class MainForm : Form
 			.OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
 			.ToDictionary(static g => g.Key, static g => g.OrderBy(h => h.Attribute.Version, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
 
-		// Force HWND so HideRootCheckBox's TVM_SETITEM call has a real handle to target.
 		_ = hookTreeView.Handle;
 
 		hookTreeView.BeginUpdate();
@@ -1670,9 +1645,6 @@ public partial class MainForm : Form
 			TreeNode gameNode = new(gameName);
 			foreach ((Type _, GameHookAttribute attr) in hooks)
 			{
-				// One tree node per id this attribute answers to -- its own declared version plus
-				// any AlsoCoversVersions alias (e.g. EndField 1.2.4 also covering 1.3.3) -- each
-				// independently selectable and resolving to the same underlying class.
 				foreach (string hookId in Hook.RuriHook.BuildHookIds(attr))
 				{
 					string version = hookId.Length > attr.GameName.Length + 1
@@ -1688,8 +1660,6 @@ public partial class MainForm : Form
 				}
 			}
 			hookTreeView.Nodes.Add(gameNode);
-			// 游戏节点纯粹是分组标签 —— 一个游戏只能装一个版本, 根节点摆个 checkbox 会让用户以为可以一键全勾.
-			// WinForms 的 TreeView.CheckBoxes 是 all-or-nothing, 只能走 Win32 把根节点的 state image 清成 0.
 			HideRootCheckBox(gameNode);
 		}
 		hookTreeView.EndUpdate();
@@ -1738,8 +1708,6 @@ public partial class MainForm : Form
 
 	private void UpdateGameNodeAppearance(TreeNode gameNode)
 	{
-		// 不能动 gameNode.Checked —— 一旦赋值, Win32 会把 state image 重新画出来, 之前藏掉的 checkbox 就回来了.
-		// 改用 bold + 自动展开 来表示 "这个游戏有版本被启用了".
 		bool anyActive = gameNode.Nodes.Cast<TreeNode>().Any(static n => n.Checked);
 		if (anyActive)
 		{
@@ -1758,8 +1726,6 @@ public partial class MainForm : Form
 
 	private void hookTreeView_BeforeCheck(object? sender, TreeViewCancelEventArgs e)
 	{
-		// 根节点 (游戏名) 的 checkbox 已经被 HideRootCheckBox 藏掉, 鼠标点不到 —— 但键盘空格还能切, 拦一道防止状态变化把藏掉的 state image 重新画出来.
-		// 编程性赋值 e.Action == Unknown 必须放行.
 		if (_suppressHookTreeEvents || e.Action == TreeViewAction.Unknown)
 		{
 			return;
@@ -1783,7 +1749,6 @@ public partial class MainForm : Form
 		{
 			if (node.Checked)
 			{
-				// 同游戏下版本互斥, 勾上一个就把同级的清掉.
 				foreach (TreeNode sibling in node.Parent.Nodes)
 				{
 					if (!ReferenceEquals(sibling, node))
@@ -1832,8 +1797,6 @@ public partial class MainForm : Form
 
 	private HookConfig BuildHookConfigFromTree()
 	{
-		// Tree only carries game hook entries. AR_* feature toggles live in _hookConfig already
-		// (managed by SettingsDialog) — preserve them when committing tree edits.
 		HookConfig config = new();
 		foreach (string arHook in _hookConfig.EnabledHooks.Where(h => h.StartsWith("AR_", StringComparison.OrdinalIgnoreCase)))
 		{
@@ -1859,7 +1822,6 @@ public partial class MainForm : Form
 			SetStatus("No files are currently loaded.");
 			return;
 		}
-		// Re-apply with the current persisted hook set. No tree to read from since hooks live in the Settings dialog.
 		await ApplyHookConfigurationAsync(_hookConfig, reloadCurrentPaths: true);
 	}
 

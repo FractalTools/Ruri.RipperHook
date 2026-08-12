@@ -371,8 +371,6 @@ internal static class MaterialSymbolMetadataBuilder
             metadata.ConstantBufferParameters.Add(inputs.MaterialConstantBuffer);
         }
 
-        // Append the resolved `MaterialCollection<i>` cbuffers so the rewriter
-        // recognises them and emits named members instead of `_m0[N]`.
         foreach (ConstantBufferParameter extra in inputs.ExtraConstantBuffers)
         {
             metadata.ConstantBufferParameters.Add(extra);

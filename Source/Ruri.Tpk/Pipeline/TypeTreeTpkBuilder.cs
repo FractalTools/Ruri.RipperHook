@@ -10,19 +10,6 @@ using VersionClassPair = System.Collections.Generic.KeyValuePair<
 
 namespace Ruri.Tpk.Pipeline;
 
-/// <summary>
-/// Packs the external TypeTree dumps into the tpk the hook interprets at runtime.
-///
-/// The tpk container is stock and stays that way. The file is a <c>TpkCollectionBlob</c> holding one
-/// <c>TpkTypeTreeBlob</c> per lineage plus a <c>TpkJsonBlob</c> manifest -- all three are blob kinds
-/// the tpk format already defines, <c>Json</c> explicitly for "custom json data".
-///
-/// A lineage is one game's dump directory. Its blob is a complete chain: the engine snapshots the
-/// game builds on, then the game's own snapshots, keyed by bare ordinals. That is what lets a lookup
-/// stay inside one lineage -- a class the game never redefines still resolves, without the resolver
-/// ever consulting another game. The previous packing put every game on one shared version axis and
-/// depended on stock Unity dumps sorting between them to keep them apart.
-/// </summary>
 internal static class TypeTreeTpkBuilder
 {
     private const string CommonDirectoryName = "Common";
@@ -45,8 +32,6 @@ internal static class TypeTreeTpkBuilder
 
             TpkTypeTreeBlob blob = BuildLineageBlob(chain, lineage.EngineChain.Count);
 
-            // The runtime binds nodes onto AssetRipper's generated fields, so the shipped trees have
-            // to speak AssetRipper's post-rename vocabulary rather than the raw dump's.
             blob = TypeTreeRenamer.ApplyAssetRipperRenaming(blob);
 
             collection.Add(lineage.Key, blob);
@@ -67,19 +52,11 @@ internal static class TypeTreeTpkBuilder
         Console.WriteLine($"[Build] Wrote {Path.GetFileName(outputPath)} from {dumpRoot} to {outputPath}");
     }
 
-    // -----------------------------------------------------------------
-    // sources
-    // -----------------------------------------------------------------
 
-    /// <summary>One dumped type tree snapshot: what to call it, where to read it, which engine it is.</summary>
     private sealed record Snapshot(string VersionKey, string JsonPath, UnityVersion EngineVersion);
 
     private sealed record LineageSource(string Key, List<Snapshot> EngineChain, List<Snapshot> GameChain);
 
-    /// <summary>
-    /// The stock Unity dumps, ordered by engine version. These are genuinely Unity versions, so they
-    /// are ordered as such -- it is only a *game's* build that has no business being a UnityVersion.
-    /// </summary>
     private static List<Snapshot> ReadEngineSnapshots(string dumpRoot)
     {
         string commonDirectory = Path.Combine(dumpRoot, CommonDirectoryName);
@@ -130,8 +107,6 @@ internal static class TypeTreeTpkBuilder
 
             gameChain.Sort(static (left, right) => VersionKey.Compare(left.VersionKey, right.VersionKey));
 
-            // The chain only needs the engine up to the build the game forked from; anything newer
-            // describes a Unity the game never shipped.
             UnityVersion baseEngine = gameChain[^1].EngineVersion;
             List<Snapshot> engineChain = engine.FindAll(snapshot => snapshot.EngineVersion <= baseEngine);
             if (engineChain.Count == 0)
@@ -149,8 +124,6 @@ internal static class TypeTreeTpkBuilder
 
     private static UnityVersion ReadEngineVersion(string infoPath)
     {
-        // The Version field is the first property of the dump; reading the whole 10 MB document just
-        // to learn it would dominate the build.
         using StreamReader reader = new(infoPath);
         char[] window = new char[4096];
         int read = reader.Read(window, 0, window.Length);
@@ -171,17 +144,7 @@ internal static class TypeTreeTpkBuilder
         throw new InvalidDataException($"[Build] {infoPath} has no readable \"Version\" property.");
     }
 
-    // -----------------------------------------------------------------
-    // one lineage's blob
-    // -----------------------------------------------------------------
 
-    /// <summary>
-    /// Builds a lineage's chain into a stock type tree blob. Positions are bare ordinals; the version
-    /// strings they stand for live in the manifest.
-    ///
-    /// Diffing is unchanged from the stock packer: a class only gets an entry where its dump actually
-    /// differs from the previous position, so an unchanged tree inherits the one before it.
-    /// </summary>
     private static TpkTypeTreeBlob BuildLineageBlob(List<Snapshot> chain, int engineCount)
     {
         TpkTypeTreeBlob blob = new();
@@ -201,11 +164,6 @@ internal static class TypeTreeTpkBuilder
             Console.WriteLine($"[Build/Tpk]   [{ordinal}] {snapshot.VersionKey}{(isEngine ? " (engine)" : "")}");
             blob.Versions.Add(key);
 
-            // The common string is an explicit (byte offset, string) table as of tpk 2: Unity 6.6
-            // stopped laying its strings out so that the offsets could be re-derived from a count,
-            // which is exactly what the format bump was for. The dump gives both halves directly --
-            // UnityString.Index is the offset into Unity's blob -- so a version's table is carried
-            // over verbatim, and only recorded when it actually differs from the version before it.
             TpkCommonString.Entry[] commonString = new TpkCommonString.Entry[info.Strings.Count];
             for (int i = 0; i < info.Strings.Count; i++)
             {
@@ -220,10 +178,6 @@ internal static class TypeTreeTpkBuilder
 
             foreach (UnityClass unityClass in info.Classes)
             {
-                // Game dumps sometimes ship a STRIPPED UnityConnectSettings(310) (StarRail 2.1.0+:
-                // 6 fields, no CrashReportingSettings/UnityPurchasingSettings landmark). 310 is
-                // connect/analytics settings, never in game asset bundles, so drop the game's 310 and
-                // let the real full definition carry forward.
                 if (!isEngine && unityClass.TypeID == 310)
                 {
                     continue;
@@ -243,9 +197,6 @@ internal static class TypeTreeTpkBuilder
                 }
             }
 
-            // A game dump is a partial OVERLAY on its engine, not a full snapshot: a class it omits
-            // keeps the engine definition rather than being marked removed. Engine dumps are full
-            // snapshots, so there an omission really is a removal.
             if (isEngine)
             {
                 HashSet<int> present = new(info.Classes.Select(c => c.TypeID));

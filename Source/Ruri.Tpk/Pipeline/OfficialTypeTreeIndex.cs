@@ -8,23 +8,8 @@ using System.Text.Json;
 
 namespace Ruri.Tpk.Pipeline;
 
-/// <summary>
-/// The official Unity type trees, read straight off AssetRipper/TypeTreeDumps over the network and
-/// kept in memory. Nothing is written to disk on purpose: these dumps are upstream's data, a stale
-/// local copy is worse than no copy (it silently diffs a game against the wrong engine), and the
-/// whole point of the drift pass is to be re-runnable against whatever upstream has today.
-///
-/// A custom engine does not report a real Unity build. EndField says <c>2021.3.34f5</c> and
-/// <c>2021.3.34f0</c> -- neither exists; the official release is <c>2021.3.34f1</c>. So the version
-/// a game claims is treated as a COORDINATE to snap to the nearest official dump, never as a key to
-/// look up directly.
-/// </summary>
 internal sealed class OfficialTypeTreeIndex
 {
-    // The git TREES endpoint, not the contents endpoint: contents caps at 1000 entries per
-    // directory and truncates SILENTLY -- upstream publishes 1420+ dumps, so a contents listing
-    // dropped 400+ versions and the nearest-version snap could quietly pick a worse baseline.
-    // The trees response carries an explicit `truncated` flag instead, which is checked below.
     private const string ListUrl = "https://api.github.com/repos/AssetRipper/TypeTreeDumps/git/trees/main:InfoJson";
     private const string RawUrlFormat = "https://raw.githubusercontent.com/AssetRipper/TypeTreeDumps/main/InfoJson/{0}.json";
 
@@ -35,10 +20,7 @@ internal sealed class OfficialTypeTreeIndex
     public OfficialTypeTreeIndex()
     {
         _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        // GitHub rejects API calls without a User-Agent outright.
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Ruri.Tpk", "1.0"));
-        // Unauthenticated is 60 requests/hour, which one drift pass fits inside comfortably (one
-        // listing plus one fetch per distinct engine). A token only matters when re-running often.
         string? token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
         if (!string.IsNullOrWhiteSpace(token))
         {
@@ -46,7 +28,6 @@ internal sealed class OfficialTypeTreeIndex
         }
     }
 
-    /// <summary>Every official version upstream publishes a dump for, ascending. Fetched once.</summary>
     public IReadOnlyList<UnityVersion> Available => _available ??= FetchAvailable();
 
     private List<UnityVersion> FetchAvailable()
@@ -72,8 +53,6 @@ internal sealed class OfficialTypeTreeIndex
             {
                 continue;
             }
-            // A custom-engine suffix means it is not a stock Unity release, so it cannot serve as the
-            // baseline a fork is measured against.
             if (UnityVersion.TryParse(name[..^5], out UnityVersion version, out string? customEngine)
                 && string.IsNullOrEmpty(customEngine))
             {
@@ -92,14 +71,6 @@ internal sealed class OfficialTypeTreeIndex
         return versions;
     }
 
-    /// <summary>
-    /// The official dump closest to what a game claims. Closeness is lexicographic on how much of the
-    /// version has to be given up: an exact hit first, then the same Major.Minor.Build with a
-    /// different release suffix (EndField's whole case), then the nearest Build inside the same
-    /// Major.Minor, and only then the nearest Minor / Major. Snapping is never allowed to cross a
-    /// major version -- a 2021 game diffed against 2019 would report drift that is really just
-    /// engine evolution.
-    /// </summary>
     public UnityVersion ResolveClosest(UnityVersion claimed)
     {
         UnityVersion? best = null;
@@ -119,8 +90,6 @@ internal sealed class OfficialTypeTreeIndex
             }
             else if (candidate.Minor == claimed.Minor && candidate.Build == claimed.Build)
             {
-                // Same build, different release suffix: rank by how far the suffix moved, preferring
-                // a final release (f) since that is what a fork almost always branched from.
                 int typeDistance = Math.Abs(SuffixRank(candidate) - SuffixRank(claimed));
                 rank = (1, typeDistance, candidate.Type == UnityVersionType.Final ? 0 : 1);
             }
@@ -154,7 +123,6 @@ internal sealed class OfficialTypeTreeIndex
             return cmp != 0 ? cmp : left.Tie.CompareTo(right.Tie);
         }
 
-        // Orders release suffixes the way Unity ships them, so "how far apart" is a real distance.
         static int SuffixRank(UnityVersion version) => version.Type switch
         {
             UnityVersionType.Alpha => 0,
@@ -166,7 +134,6 @@ internal sealed class OfficialTypeTreeIndex
         } + version.TypeNumber;
     }
 
-    /// <summary>The parsed dump for an official version, fetched into memory once per process.</summary>
     public UnityInfo Fetch(UnityVersion version)
     {
         if (_fetched.TryGetValue(version, out UnityInfo? cached))

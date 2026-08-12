@@ -5,23 +5,6 @@ using Ruri.Hook.Core;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 050 — Compose the per-library `.assetinfo`/`.stableinfo` payloads
-// (in-memory DTOs only; the actual file writes are Pass 060/070). For
-// each shader-map in the current library:
-//
-//   1. Resolve owning materials via the combined hash -> materials map
-//      (PackageShaderMapHashes + per-material LoadedShaderMaps).
-//      Hash-misses produce no asset-info entry (asset-info is "things we
-//      can name"); the stableinfo side skips them too.
-//
-//   2. Walk the shader-map's `ShaderIndicesOffset` slice to build the
-//      hash + frequency lists, plus per-shader stable records that join
-//      type/VF/permutation truth from the unified metadata graph using
-//      `HashedNamesResolver` to recover symbolic names from hashes.
-//
-// All of the helpers below are consumed by exactly this pass; they were
-// moved out of the old monolithic build pass and inlined per the
-// "no helpers outside passes" rule.
 internal static class Pass050_BuildStableShaderRecords
 {
     private static readonly bool DebugTrace = string.Equals(Environment.GetEnvironmentVariable("RURI_TRUTH_DEBUG"), "1", StringComparison.Ordinal);
@@ -38,15 +21,6 @@ internal static class Pass050_BuildStableShaderRecords
             return;
         }
 
-        // Build a single hash → materials map that combines BOTH data
-        // sources so material→shader-map associations missing from the
-        // IoStore container header still surface here:
-        //   1. PackageShaderMapHashes — IoStore StoreEntries[i].ShaderMapHashes
-        //   2. MaterialInterfaces[*].LoadedShaderMaps[*].CookedShaderMapIdHash
-        // Without source 2, any cooked shader map whose owning material's
-        // package wasn't enumerated by the IoStore reader would have 0
-        // assets and get dropped, leaving the decompiler with no name to
-        // use → mass UnknownShader names.
         Dictionary<string, HashSet<string>> hashToMaterials = BuildHashToMaterialsMap(output);
 
         var assetInfo = new ShaderAssetInfoEquivalent();
@@ -139,9 +113,6 @@ internal static class Pass050_BuildStableShaderRecords
             }
         }
 
-        // Tier 1 bridge (Pass 030): the authoritative shader-map-hash ->
-        // material association built from inline ResourceHash. Dominant source
-        // on this cook — the container header above only covers a fraction.
         foreach (var kvp in output.MaterialResourceHashes)
         {
             if (kvp.Value == null) continue;
@@ -157,16 +128,6 @@ internal static class Pass050_BuildStableShaderRecords
             if (kvp.Value?.LoadedShaderMaps == null) continue;
             foreach (var sm in kvp.Value.LoadedShaderMaps)
             {
-                // ResourceHash is the AUTHORITATIVE inline bridge for IoStore
-                // cooks: it equals the FShaderMapResource library key, which is
-                // exactly the archive's `ShaderMapHashes`. This is what links a
-                // material whose package the container header forgot to
-                // associate (the dominant case on InfinityNikki/X6Game — only
-                // ~3% of shader-maps are in the container header). Previously
-                // omitted here, so the inline bridge contributed nothing: the
-                // two hashes below are DIFFERENT ID spaces that never match an
-                // archive hash, leaving the bulk of shader-maps as
-                // UnknownMaterial despite the owning material being scanned.
                 if (!string.IsNullOrWhiteSpace(sm?.ResourceHash))
                 {
                     AddMaterialToHash(map, sm!.ResourceHash!, kvp.Key);
@@ -185,15 +146,9 @@ internal static class Pass050_BuildStableShaderRecords
         return map;
     }
 
-    // Extract UE shader-platform string (SP_<plat>) from a library's
-    // archive name like `ShaderArchive-PineForestPack_Demo-PCD3D_SM5-PCD3D_SM5`.
-    // This is the join key against `UnifiedShaderMapMetadata.ShaderPlatform`
-    // ("SP_PCD3D_SM5") used to pick the right LoadedShaderMaps entry when
-    // a material has multiple platforms cooked in.
     private static string ExtractShaderPlatform(string libraryName)
     {
         if (string.IsNullOrWhiteSpace(libraryName)) return string.Empty;
-        // ShaderArchive-{Project|Global}-{plat}-{plat}
         int firstDash = libraryName.IndexOf('-');
         if (firstDash < 0) return string.Empty;
         int secondDash = libraryName.IndexOf('-', firstDash + 1);
@@ -231,11 +186,6 @@ internal static class Pass050_BuildStableShaderRecords
                 continue;
             }
 
-            // The unified metadata's `ResourceIndex` is the shader-map-RELATIVE
-            // slot inside this map (0..NumShaders-1) -- the same `i` we use to
-            // walk ShaderIndices[]. The previous lookup used the GLOBAL
-            // `shaderIndex`, which never matched, so every record fell through
-            // to the empty defaults and stripped all type/permutation symbols.
             StableShaderRecord? truth = null;
             if (truthByResourceIndex.TryGetValue((int)i, out List<StableShaderRecord>? exactMatches) && exactMatches.Count > 0)
             {
@@ -293,17 +243,6 @@ internal static class Pass050_BuildStableShaderRecords
         return result;
     }
 
-    // Resolve the right material(s) for an on-disk shader-map hash:
-    //   1. Try the direct hash → material match (CookedShaderMapIdHash /
-    //      ShaderContentHash equals the on-disk hash). Editor / non-IoStore
-    //      cooks tend to use this.
-    //   2. If that misses, fall through to the asset-info bridge: the
-    //      `hashToMaterials` map (built from sidecar + unified package
-    //      hashes) tells us which material(s) own this on-disk hash, and
-    //      we then pick each material's LoadedShaderMaps entry whose
-    //      ShaderPlatform matches the archive being processed. IoStore
-    //      cooks NEED this path because the package-level shader-map
-    //      hash does NOT equal CookedShaderMapIdHash.
     private static List<StableShaderRecord> BuildOrderedTruthRecords(
         UnifiedShaderMetadataRoot output,
         string shaderMapHash,
@@ -312,7 +251,6 @@ internal static class Pass050_BuildStableShaderRecords
     {
         var result = new List<StableShaderRecord>();
 
-        // Direct match first.
         foreach (UnifiedMaterialMetadata material in output.MaterialInterfaces.Values)
         {
             if (material?.LoadedShaderMaps == null) continue;
@@ -326,7 +264,6 @@ internal static class Pass050_BuildStableShaderRecords
         }
         if (result.Count > 0) return result;
 
-        // Asset-info bridge for IoStore cooks.
         bool found = hashToMaterials.TryGetValue(shaderMapHash, out HashSet<string>? materials);
         if (DebugTrace) HookLogger.Log($"[TruthLookup] hash={shaderMapHash} platform={shaderPlatform} bridgeFound={found} materialCount={materials?.Count ?? 0}");
         if (found)
@@ -355,33 +292,16 @@ internal static class Pass050_BuildStableShaderRecords
 
     private static bool MatchesShaderPlatform(UnifiedShaderMapMetadata shaderMap, string shaderPlatform)
     {
-        // Empty platform string disables filtering (used for global archives
-        // and unit tests); otherwise require an exact match against the
-        // material's per-shader-map ShaderPlatform field.
         return string.IsNullOrEmpty(shaderPlatform)
             || string.Equals(shaderMap.ShaderPlatform, shaderPlatform, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Per-map FHashedName -> name dictionary built from the cooked
-    // metadata's TypeDependencies and pointer table. UE strips Names
-    // from the on-disk pointer table (UnifiedHashName.Name is null
-    // for cooked builds) but records the full type-name list in
-    // TypeDependencies. Hashing each TypeDependencies entry with
-    // FHashedName recovers the hash -> name mapping for everything
-    // referenced by THIS shader-map -- no UE source scan needed.
-    //
-    // This is the "non-hardcoded" path: names come from the game's
-    // own cooked data, not from regex-matching IMPLEMENT_SHADER_TYPE
-    // macros in a specific UE version's source tree.
     private static Dictionary<string, string> BuildPerMapNameDictionary(UnifiedShaderMapMetadata shaderMap)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         UnifiedPointerTable? table = shaderMap.ShaderMapPointerTable;
         if (table == null) return result;
 
-        // Hash every TypeDependencies entry's name and index by hash.
-        // The metadata may also include explicit hash-with-name pairs
-        // (older cooks, editor builds) so harvest those too.
         if (table.TypeDependencies != null)
         {
             foreach (UnifiedTypeDependency dep in table.TypeDependencies)
@@ -483,9 +403,6 @@ internal static class Pass050_BuildStableShaderRecords
         }
     }
 
-    // Per-map TypeDependencies dictionary takes precedence — it's
-    // truthful for THIS specific cook, while the UE-source fallback
-    // can lie for forks or version skews. Empty hash returns empty.
     private static string ResolveName(string hash, Dictionary<string, string> nameByHash, Func<string, string> fallback)
     {
         if (string.IsNullOrWhiteSpace(hash)) return string.Empty;

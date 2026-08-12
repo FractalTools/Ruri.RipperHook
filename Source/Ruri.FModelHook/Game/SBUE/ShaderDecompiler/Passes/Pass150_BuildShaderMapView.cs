@@ -5,26 +5,6 @@ using System.Linq;
 
 namespace Ruri.FModelHook.Game.SBUE.ShaderDecompiler;
 
-// Pass 050 — Build the per-shader-map view that drives all downstream
-// emission. This is THE structural axis of the decompiler: each entry
-// in `state.ShaderMaps` becomes one `.shader` file.
-//
-// Inputs: `state.Library` (Pass 010), `state.ShaderMapToAssets`
-//   (Pass 020), `state.ShaderHashToAssetsByFreq` + `.ContainerByShaderIndex`
-//   (Pass 030), `state.HashToMaterialsFromUnified` (Pass 040).
-//
-// Outputs:
-//   - `state.ShaderMaps` — per-shader-map record with assets list,
-//     primary asset/name, and members[] (relative-index ↔ archive-index).
-//   - `state.UsageByShaderIndex[archiveIdx] = {assets...}` — used by the
-//     decompile path to attribute material CB names to shader binaries
-//     even when the binary is shared across maps.
-//   - `state.NameByShaderIndex[archiveIdx] = displayName` — for
-//     log/error messages and the fallback file-naming chain.
-//
-// This pass DOES NOT touch JSON files; it composes inputs already
-// loaded by 020/030/040. Material filter is applied at the shader-map
-// granularity (a map survives if any of its assets matches).
 internal static class Pass150_BuildShaderMapView
 {
     public static void DoPass(PipelineState state)
@@ -38,9 +18,6 @@ internal static class Pass150_BuildShaderMapView
         state.Log($"    Asset index: usage entries={state.UsageByShaderIndex.Count}, named={state.NameByShaderIndex.Count}, shader-maps={state.ShaderMaps.Count}.");
     }
 
-    // Fan out shader-map → assets and shader-hash → assets into the
-    // per-archive-index usage map. Same shader binary can be referenced
-    // by N maps or N materials; the resulting set is the union.
     private static void AddSidecarUsage(PipelineState state)
     {
         ShaderLibrary lib = state.Library!;
@@ -74,11 +51,6 @@ internal static class Pass150_BuildShaderMapView
         }
     }
 
-    // Bridge unified-metadata (CookedShaderMapIdHash + ShaderContentHash)
-    // back to on-disk shader-map hashes via the IoStore PackageShaderMapHashes
-    // bridge, then fan out to per-archive-index usage. Also seeds
-    // `state.NameByShaderIndex` from the first material per map — the
-    // chosen display name is what `.shader` filenames default to.
     private static void AddUnifiedUsage(PipelineState state)
     {
         if (state.HashToMaterialsFromUnified.Count == 0) return;
@@ -107,12 +79,6 @@ internal static class Pass150_BuildShaderMapView
         }
     }
 
-    // Walk the on-disk archive once and build a per-shader-map view that
-    // pairs each map's shader-binary indices with its asset list. Each
-    // map becomes one .shader file downstream. The `Assets` list is the
-    // single-source-of-truth from the asset-info sidecar — same map can
-    // legitimately serve multiple materials (deduplicated cook), and that
-    // many-to-one association IS the file's `UsedMaterials` block.
     private static void BuildView(PipelineState state)
     {
         ShaderLibrary lib = state.Library!;
@@ -125,24 +91,11 @@ internal static class Pass150_BuildShaderMapView
             ShaderMapEntry mapEntry = lib.ShaderMapEntries[mapIndex];
             List<string> assets = ResolveShaderMapAssets(state, mapHash);
 
-            // Material filter applies at the shader-map level: a map
-            // survives iff at least one of its assets matches — OR the filter token IS the
-            // shader-map hash (full or prefix).
-            //
-            // The hash form exists because asset-list matching depends on the hash->material bridge
-            // being available, and that bridge is skipped whenever UnifiedShaderMetadata.json exceeds
-            // the lean-read ceiling (measured: 2.7 GB on X6Game -> per-material inline bridge skipped
-            // -> every asset list empty -> a path filter silently matches ZERO maps). The hash, by
-            // contrast, is read straight from the material package by --find-shader-for-material, so
-            // "look up the hash, then decompile exactly that map" always works.
             if (filterVariants.Count > 0)
             {
                 bool matches = false;
                 foreach (string token in filterVariants)
                 {
-                    // Prefix match in EITHER direction: the caller may hold the full 40-hex hash
-                    // (what --find-shader-for-material prints) while the library stores a shortened
-                    // form, or vice versa.
                     if (token.Length >= 8
                         && (mapHash.StartsWith(token, StringComparison.OrdinalIgnoreCase)
                             || token.StartsWith(mapHash, StringComparison.OrdinalIgnoreCase)))
@@ -221,9 +174,6 @@ internal static class Pass150_BuildShaderMapView
             return assetSet.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        // UnifiedShaderMetadata.json carries a second exact map->materials bridge
-        // (PackageShaderMapHashes / LoadedShaderMaps hashes). Use it as the
-        // per-map fallback before dropping to anonymous material naming.
         if (state.HashToMaterialsFromUnified.TryGetValue(mapHash, out HashSet<string>? materials) && materials.Count > 0)
         {
             return materials.OrderBy(static a => a, StringComparer.OrdinalIgnoreCase).ToList();

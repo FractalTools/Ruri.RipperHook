@@ -9,26 +9,6 @@ using Ruri.RipperHook.Core.TypeTree;
 
 namespace Ruri.RipperHook.Core.Capabilities;
 
-/// <summary>
-/// Resolves and installs every capability declared for a game at a specific engine build. A
-/// capability is a static method tagged <see cref="SinceAttribute"/> plus either a
-/// <c>[RetargetMethod]</c>/<c>[RetargetMethodFunc]</c>/<c>[RetargetMethodCtorFunc]</c> attribute
-/// (a retarget capability, competing by the original method it patches) or a
-/// <see cref="FeedsModuleAttribute"/> (a module capability, competing by its module's static
-/// delegate field). Within each competing slot, the method with the highest build not exceeding
-/// the resolved build wins; every other candidate in that slot is never applied.
-///
-/// This replaces per-version <c>AddMethodHook</c>/<c>RegisterModule</c> call sites entirely for a
-/// migrated game: adding a version that changes nothing needs no new call site at all (its build
-/// number simply resolves to the same set of winners as before); one that changes one thing needs
-/// exactly one new tagged method sharing the slot of what it replaces.
-///
-/// Capability authors must always pass an explicit source method name to
-/// <c>[RetargetMethod]</c>/<c>[RetargetMethodFunc]</c> -- the name-inference convenience those
-/// attributes support (stripping a type-name prefix off the tagged method's own name) is meant for
-/// a single hand-written call site, not for grouping many same-slot capabilities by name, so it is
-/// deliberately not replicated here.
-/// </summary>
 public static class CapabilityResolver
 {
     public static void Apply(GameType game, string version, HookRegistry registry)
@@ -42,12 +22,6 @@ public static class CapabilityResolver
         ApplyTypeTreeCapabilities(capabilityMethods, version);
     }
 
-    /// <summary>
-    /// The third capability kind: overrides for layout facts a Unity type tree cannot state -- a
-    /// conditional node, a value whose stock meaning the fork changed, a payload that needs decoding
-    /// once the asset is read. Competes by (class, node path) / (class, post-read slot) and resolves
-    /// with the same highest-<see cref="SinceAttribute"/>-wins rule as everything else.
-    /// </summary>
     private static void ApplyTypeTreeCapabilities(List<MethodInfo> methods, string version)
     {
         TypeTreeOverrides.Clear();
@@ -157,13 +131,6 @@ public static class CapabilityResolver
 
     private static void ApplyRetargetCapabilities(List<MethodInfo> methods, string version, HookRegistry registry)
     {
-        // Each retarget attribute is its own slot. A method carrying several (one handler for two
-        // AnimationClip type-versions, one version getter answering both DefaultVersion and
-        // TargetVersion) contributes one slot per attribute and, in every case in this codebase,
-        // wins all of them -- nothing else competes for its slots -- so the winning methods, applied
-        // once each via ApplyManualHooks (which installs all of a method's attributes), reproduce the
-        // hand-written set exactly. The last-wins dedup guard in ReflectionExtensions is the backstop
-        // if a future method ever won only some of its slots.
         List<MethodInfo> winners = methods
             .SelectMany(m => RetargetSlots(m).Select(slot => (Slot: slot, Method: m)))
             .GroupBy(static entry => entry.Slot)
@@ -179,9 +146,6 @@ public static class CapabilityResolver
         }
     }
 
-    // The natural competing key for a retarget capability is the original method it patches --
-    // two capabilities only ever compete when they target the exact same source method. A method
-    // with several retarget attributes yields one slot per attribute (it patches several originals).
     private static IEnumerable<(string SourceType, string MethodName)> RetargetSlots(MethodInfo method)
     {
         foreach (RetargetMethodAttribute retarget in method.GetCustomAttributes<RetargetMethodAttribute>())
@@ -226,8 +190,6 @@ public static class CapabilityResolver
             Type moduleType = slot.Key.ModuleType;
             if (trampolineInstalled.Add(moduleType))
             {
-                // The module's own [RetargetMethod] instance method is a fixed shim -- it only
-                // ever needs installing once per resolved game; only the delegate it reads varies.
                 registry.ApplyTypeHooks(moduleType);
             }
 

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Primitives;
@@ -48,10 +48,3 @@ public sealed class SceneHierarchyObject : GameObjectHierarchyObject, INamed
 		yield return (nameof(SceneRoots), AssetToPPtr(SceneRoots));
 	}
 }
-/*
-Potential issue:
-
-Any object referenced must be emitted and it is nontrivial to find all the references.
-Scene objects can only be referenced within the scene,
-but prefab objects can be referenced from anywhere.
-*/

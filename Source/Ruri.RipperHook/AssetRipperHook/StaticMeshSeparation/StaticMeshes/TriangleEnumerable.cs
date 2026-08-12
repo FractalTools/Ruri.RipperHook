@@ -1,4 +1,4 @@
-﻿using AssetRipper.SourceGenerated.Enums;
+using AssetRipper.SourceGenerated.Enums;
 using System.Collections;
 
 namespace Ruri.RipperHook.AR;
@@ -38,20 +38,17 @@ public readonly struct TriangleEnumerable : IEnumerable<(uint, uint, uint)>
 				break;
 			case MeshTopology.TriangleStrip:
 				{
-					// de-stripify :
 					for (int i = 0; i < indexBuffer.Count - 2; i++)
 					{
 						uint a = indexBuffer[i];
 						uint b = indexBuffer[i + 1];
 						uint c = indexBuffer[i + 2];
 
-						// skip degenerates
 						if (a == b || a == c || b == c)
 						{
 							continue;
 						}
 
-						// do the winding flip-flop of strips :
 						if ((i & 1) == 1)
 						{
 							yield return (b, a, c);
