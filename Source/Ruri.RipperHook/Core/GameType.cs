@@ -12,7 +12,7 @@ public enum GameType
     PunishingGrayRaven,
     AzurPromilia,
     ExAstris,
-    Koikatsu,
+    Koikatu,
 
     AR_ShaderDecompiler,
     AR_SkipStreamingAssetsCopy,

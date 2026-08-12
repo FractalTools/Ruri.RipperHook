@@ -56,7 +56,7 @@
 		<!-- MessagePack-CSharp, CURRENT. Illusion's games wrote their tables and character cards
 		     with a 1.x of it; the wire format is the MessagePack spec and has not moved, so the
 		     current release reads those streams while we get its fixes and its security options
-		     (see KoikatsuPack) instead of pinning ourselves to whatever the game shipped in 2018. -->
+		     (see KoikatuPack) instead of pinning ourselves to whatever the game shipped in 2018. -->
 		<PackageReference Include="MessagePack" Version="3.1.8" />
 	</ItemGroup>
 
