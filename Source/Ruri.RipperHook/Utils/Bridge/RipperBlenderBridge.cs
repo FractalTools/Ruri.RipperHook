@@ -283,16 +283,44 @@ public static class RipperBlenderBridge
         };
     }
 
-    public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames, string[] acceptedTextureFormats)
+    public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds,
+        string[]? exportAssetKeys, bool buildGraph, string[] acceptedTextureFormats)
     {
-        return ImportCabsCore(map, seedCabNames, null, acceptedTextureFormats);
+        return ImportCabsCore(map, seedCabNames, new ExportSelection(exportClassIds, exportAssetKeys),
+            buildGraph, acceptedTextureFormats);
     }
 
-    public static ClosureResult ImportCabsFiltered(CabMapHandle map, string[] seedCabNames, int[] exportClassIds,
-        string[] acceptedTextureFormats)
+    private sealed class ExportSelection
     {
-        ArgumentNullException.ThrowIfNull(exportClassIds);
-        return ImportCabsCore(map, seedCabNames, exportClassIds, acceptedTextureFormats);
+        private readonly HashSet<int>? _classIds;
+        private readonly HashSet<string>? _assetKeys;
+        private Dictionary<AssetRipper.Assets.Collections.AssetCollection, string>? _identities;
+
+        public ExportSelection(int[]? classIds, string[]? assetKeys)
+        {
+            _classIds = classIds is null ? null : new HashSet<int>(classIds);
+            _assetKeys = assetKeys is null ? null : new HashSet<string>(assetKeys, StringComparer.Ordinal);
+        }
+
+        public bool IsUnrestricted => _classIds is null && _assetKeys is null;
+
+        public bool MightExportEveryAssetOfClass(int classId) =>
+            _assetKeys is null && (_classIds is null || _classIds.Contains(classId));
+
+        public bool NeedsIdentities => _assetKeys is not null;
+
+        public void BindIdentities(GameData gameData) =>
+            _identities = ClosureGraphBlob.CollectionIdentities(gameData);
+
+        public string KeyOf(IUnityObjectBase asset) =>
+            _identities is null
+                ? string.Empty
+                : string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"{_identities[asset.Collection]}|{asset.PathID}");
+
+        public bool Admits(IUnityObjectBase asset) =>
+            (_classIds is null || _classIds.Contains(asset.ClassID))
+            && (_assetKeys is null || _assetKeys.Contains(KeyOf(asset)));
     }
 
     private static AssetRipper.Export.Configuration.ImageExportFormat[] ParseTextureFormats(string[] extensions)
@@ -312,8 +340,8 @@ public static class RipperBlenderBridge
         return formats;
     }
 
-    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds,
-        string[] acceptedTextureFormats)
+    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, ExportSelection selection,
+        bool buildGraph, string[] acceptedTextureFormats)
     {
         ArgumentNullException.ThrowIfNull(acceptedTextureFormats);
         ArgumentNullException.ThrowIfNull(map);
@@ -335,10 +363,10 @@ public static class RipperBlenderBridge
         settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
         settings.ExportSettings.PreferOriginalTextureExtension = true;
         settings.ExportSettings.ImageExportFormat = AssetRipper.Export.Configuration.ImageExportFormat.Png;
-        ClipCaptureExporter clipCapture = new();
+        ClipCaptureExporter clipCapture = new(selection);
         MeshCaptureExporter meshCapture = new();
         PrewarmedTextureExporter textureExporter = new(settings, ParseTextureFormats(acceptedTextureFormats));
-        BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter, exportClassIds);
+        BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter, selection);
 
         GameData gameData;
         GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0 ? name => loadFilterFileNames.Contains(name) : null;
@@ -361,7 +389,17 @@ public static class RipperBlenderBridge
         long processMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
-        if (exportClassIds is null || exportClassIds.Contains((int)ClassIDType.Texture2D))
+        if (selection.NeedsIdentities)
+        {
+            selection.BindIdentities(gameData);
+        }
+        (string graphMetaJson, byte[] graphPayload) = buildGraph
+            ? ClosureGraphBlob.Build(gameData)
+            : (string.Empty, Array.Empty<byte>());
+        long graphMs = phase.ElapsedMilliseconds;
+
+        phase.Restart();
+        if (selection.MightExportEveryAssetOfClass((int)ClassIDType.Texture2D))
         {
             textureExporter.Prewarm(gameData);
         }
@@ -374,11 +412,11 @@ public static class RipperBlenderBridge
 
         phase.Restart();
         ClosureResult result = Partition(memoryFileSystem.Files, map.Table, seedCabNames,
-            clipCapture.Captured, meshCapture.Captured);
+            clipCapture.Captured, meshCapture.Captured, graphMetaJson, graphPayload);
         Logger.Info(LogCategory.Export,
             $"[ImportCabs] closure={closure.ClosureCount} files={closureFiles.Length} " +
-            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms prewarm={prewarmMs}ms " +
-            $"export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
+            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms graph={graphMs}ms " +
+            $"prewarm={prewarmMs}ms export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
             $"texcache(hit={textureExporter.HitStats.Hits} miss={textureExporter.HitStats.Misses})");
         textureExporter.LogStats();
         LogExportCostByExtension(memoryFileSystem);
@@ -411,16 +449,16 @@ public static class RipperBlenderBridge
         private readonly ClipCaptureExporter _clipCapture;
         private readonly MeshCaptureExporter _meshCapture;
         private readonly PrewarmedTextureExporter _textureExporter;
-        private readonly int[]? _exportClassIds;
+        private readonly ExportSelection _selection;
 
         public BridgeExportHandler(FullConfiguration settings, ClipCaptureExporter clipCapture,
             MeshCaptureExporter meshCapture, PrewarmedTextureExporter textureExporter,
-            int[]? exportClassIds) : base(settings)
+            ExportSelection selection) : base(settings)
         {
             _clipCapture = clipCapture;
             _meshCapture = meshCapture;
             _textureExporter = textureExporter;
-            _exportClassIds = exportClassIds;
+            _selection = selection;
         }
 
         protected override void BeforeExport(ProjectExporter projectExporter)
@@ -432,19 +470,19 @@ public static class RipperBlenderBridge
                 _textureExporter, allowInheritance: true);
             projectExporter.OverrideExporter<AssetRipper.Processing.Textures.SpriteInformationObject>(
                 _textureExporter, allowInheritance: true);
-            if (_exportClassIds is not null)
+            if (!_selection.IsUnrestricted)
             {
                 projectExporter.OverrideExporter<IUnityObjectBase>(
-                    new ClassFilterExporter(_exportClassIds), allowInheritance: true);
+                    new SelectionFilterExporter(_selection), allowInheritance: true);
             }
         }
     }
 
-    private sealed class ClassFilterExporter(int[] allowedClassIds) : IAssetExporter
+    private sealed class SelectionFilterExporter(ExportSelection selection) : IAssetExporter
     {
         public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
         {
-            if (allowedClassIds.Contains(asset.ClassID))
+            if (selection.Admits(asset))
             {
                 exportCollection = null;
                 return false;
@@ -651,11 +689,11 @@ public static class RipperBlenderBridge
                 : base.GetExportExtension(asset);
     }
 
-    private sealed class ClipCaptureExporter : IAssetExporter
+    private sealed class ClipCaptureExporter(ExportSelection selection) : IAssetExporter
     {
         private readonly DefaultYamlExporter _inner = new();
 
-        public List<(string Cab, string Path, string MetaJson, byte[] Curves)> Captured { get; } = new();
+        public List<(string Cab, string Path, string AssetKey, string MetaJson, byte[] Curves)> Captured { get; } = new();
 
         public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
         {
@@ -678,7 +716,7 @@ public static class RipperBlenderBridge
                     Logger.Warning(LogCategory.Export, $"Clip curve blob failed for '{asset.GetBestName()}': {exception.Message} -- the Blender side cannot import this clip's curves (no YAML fallback).");
                 }
             }
-            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, metaJson, curves));
+            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, selection.KeyOf(asset), metaJson, curves));
             return _inner.Export(container, asset, path, fileSystem);
         }
 
@@ -789,8 +827,9 @@ public static class RipperBlenderBridge
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
         CabTable table, string[] seedCabNames,
-        List<(string Cab, string Path, string MetaJson, byte[] Curves)> capturedClips,
-        List<(string Path, string MetaJson, byte[] Payload)> capturedMeshes)
+        List<(string Cab, string Path, string AssetKey, string MetaJson, byte[] Curves)> capturedClips,
+        List<(string Path, string MetaJson, byte[] Payload)> capturedMeshes,
+        string graphMetaJson, byte[] graphPayload)
     {
         Dictionary<string, byte[]> assets = new(StringComparer.Ordinal);
         Dictionary<string, string> assetPaths = new(StringComparer.Ordinal);
@@ -883,18 +922,21 @@ public static class RipperBlenderBridge
             .GroupBy(c => c.Cab, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Guid!).Distinct().ToArray(), StringComparer.Ordinal);
 
+        Dictionary<string, string> clipGuidByAssetKey = new(StringComparer.Ordinal);
         Dictionary<string, string> clipCurveMeta = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> clipCurveData = new(StringComparer.Ordinal);
-        foreach ((string _, string path, string metaJson, byte[] curves) in capturedClips)
+        foreach ((string _, string path, string assetKey, string metaJson, byte[] curves) in capturedClips)
         {
-            if (metaJson.Length == 0)
+            string? clipGuid = pathToGuid.GetValueOrDefault(NormalizeExportPath(path));
+            if (clipGuid is null)
             {
-                continue;            }
-            string? guid = pathToGuid.GetValueOrDefault(NormalizeExportPath(path));
-            if (guid is not null)
+                continue;
+            }
+            clipGuidByAssetKey[assetKey] = clipGuid;
+            if (metaJson.Length > 0)
             {
-                clipCurveMeta[guid] = metaJson;
-                clipCurveData[guid] = curves;
+                clipCurveMeta[clipGuid] = metaJson;
+                clipCurveData[clipGuid] = curves;
             }
         }
 
@@ -912,7 +954,7 @@ public static class RipperBlenderBridge
 
         return new ClosureResult(assets, other, roots.ToArray(), seedRoots, clipGuidsByCab,
             sceneRoots.ToArray(), clipCurveMeta, clipCurveData, meshBlobMeta, meshBlobData, rootCabs,
-            assetPaths);
+            assetPaths, clipGuidByAssetKey, graphMetaJson, graphPayload);
     }
 
     private static Dictionary<string, string> BuildRootCabs(CabTable table,
@@ -1102,7 +1144,10 @@ public sealed record ClosureResult(
     IReadOnlyDictionary<string, string> MeshBlobMeta,
     IReadOnlyDictionary<string, byte[]> MeshBlobData,
     IReadOnlyDictionary<string, string> RootCabs,
-    IReadOnlyDictionary<string, string> AssetPaths)
+    IReadOnlyDictionary<string, string> AssetPaths,
+    IReadOnlyDictionary<string, string> ClipGuidByAssetKey,
+    string GraphMetaJson,
+    byte[] GraphPayload)
 {
     public static ClosureResult Empty { get; } = new(
         new Dictionary<string, byte[]>(),
@@ -1116,5 +1161,8 @@ public sealed record ClosureResult(
         new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
         new Dictionary<string, string>(),
-        new Dictionary<string, string>());
+        new Dictionary<string, string>(),
+        new Dictionary<string, string>(),
+        string.Empty,
+        Array.Empty<byte>());
 }
