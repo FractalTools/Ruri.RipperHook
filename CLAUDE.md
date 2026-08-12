@@ -12,7 +12,7 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 
 ### A·B. 态度（永不降级）+ 1:1 移植纪律
 
-> 永不降级、顶级算法、无损重构、1:1 忠实移植（参考 = ground truth、先读真源码、同义替换不算偏离、忠实移植不写 oracle、汇报「1:1 移植，源 = `file:line`」）等通用铁律已抽进 `ruri-engineering-discipline` skill（§A/§B）——写码 / 移植前先过那条，此处不重复。本仓库的同义替换范例：AssetStudio `AnimationClip` → AssetRipper `IAnimationClip`、native SWIG 调用 → 它的 C# 绑定等价物。
+> 永不降级、顶级算法、无损重构、1:1 忠实移植（参考 = ground truth、先读真源码、同义替换不算偏离、忠实移植不写 oracle、汇报「1:1 移植，源 = `file:line`」）等通用铁律已抽进 `ruri-engineering-discipline` skill——写码 / 移植前先过那条，此处不重复。本仓库的同义替换范例：AssetStudio `AnimationClip` → AssetRipper `IAnimationClip`、native SWIG 调用 → 它的 C# 绑定等价物。
 
 ### C. 可扩展性 —— 设计框架，而非个案
 
@@ -23,7 +23,7 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 
 ### D·E. 代码风格 + 黑洞级性能内核
 
-> 通用代码风格（禁缩写 / 一文件一单元 / 禁单行堆叠 / **禁止一切注释**）与黑洞级性能（span / 0-GC / 全核并行 / 全 SIMD / 测量优化尖峰 / 顺手优化）已抽进 `ruri-engineering-discipline` skill（§C/§D）——写码前先过那条，此处不重复。本仓库特化：**代码 = 英文**；日志走项目 logger 带分类（FRAMEWORK.md §9）；并行化时只对共享非线程安全状态串行（如 FRAMEWORK.md §11 逐次反编译锁）。
+> 通用代码风格（禁缩写 / 一文件一单元 / 禁单行堆叠 / **禁止一切注释**）与黑洞级性能（span / 0-GC / 全核并行 / 全 SIMD / 测量优化尖峰 / 顺手优化）已抽进 `ruri-engineering-discipline` skill——写码前先过那条，此处不重复。本仓库特化：**代码 = 英文**；日志走项目 logger 带分类（FRAMEWORK.md §9）；并行化时只对共享非线程安全状态串行（如 FRAMEWORK.md §11 逐次反编译锁）。
 
 ---
 
