@@ -10,7 +10,7 @@ namespace Ruri.RipperHook.Bridge;
 /// <summary>
 /// Serializes an exported Mesh's SERIALIZED fields -- the exact same data its YAML document
 /// carries -- as one small JSON index plus one raw little-endian payload, consumed host-side as
-/// zero-parse numpy views (ruri_pybridge mesh_decoder.decode_mesh_blob). The channel table, index
+/// zero-parse numpy views (RuriRipperPyBridge mesh_decoder.decode_mesh_blob). The channel table, index
 /// buffer, bind poses and blendshape deltas cross the bridge as the bytes they already are,
 /// instead of round-tripping through megabytes of YAML hex text that CPython then re-parses.
 /// Vertex bytes come from <see cref="MeshExtensions"/>.GetVertexDataBytes(), the same source the
