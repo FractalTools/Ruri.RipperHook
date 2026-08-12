@@ -1,6 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using System.Globalization;
+using Newtonsoft.Json;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.HookUtils.GameBundleHook;
+using Ruri.RipperHook.Data;
+using Ruri.RipperHook.Tables;
 
 namespace Ruri.RipperHook.CLI;
 
@@ -76,26 +78,62 @@ internal static class SceneSeedResolver
 
     private static SceneWindow FromLandmark(string spec, string[] vfsRoots)
     {
-        if (GameBundleHook.SceneLandmarks is not { } read)
-        {
-            throw new InvalidOperationException(
-                "No VFS game hook active — pass --hook with a VFS-game hook id (e.g. EndField_1.4.4).");
-        }
+        ColumnTable places = Read(LandmarksDataset, vfsRoots);
+        Utf8Column levelIds = Text(places, "levelId");
         string[] fields = Fields(spec);
         string levelId = fields[0];
-        var landmark = read(vfsRoots).FirstOrDefault(l =>
-            l.LevelId.Equals(levelId, StringComparison.OrdinalIgnoreCase));
-        if (landmark.LevelId is null)
+        int row = -1;
+        for (int index = 0; index < places.RowCount; index++)
         {
+            if (levelIds.Text(index).Equals(levelId, StringComparison.OrdinalIgnoreCase))
+            {
+                row = index;
+                break;
+            }
+        }
+        if (row < 0)
+        {
+            IEnumerable<string> known = Enumerable.Range(0, places.RowCount).Select(levelIds.Text);
             throw new ArgumentException(
                 $"--scene-landmark '{levelId}' is not a place the game's own map UI lists. " +
-                $"It lists: {string.Join(", ", read(vfsRoots).Select(l => l.LevelId))}");
+                $"It lists: {string.Join(", ", known)}");
         }
         double scale = fields.Length > 1 ? Number(fields[1], spec) : 1.0;
-        SceneWindow window = new(landmark.MinX, landmark.MinZ, landmark.MaxX, landmark.MaxZ,
+        SceneWindow window = new(
+            Real(places, "minX")[row], Real(places, "minZ")[row],
+            Real(places, "maxX")[row], Real(places, "maxZ")[row],
             Integers(fields[2..], spec));
         return scale == 1.0 ? window : window.Scaled(scale);
     }
+
+    // The datasets the active game publishes for its streaming scenes. Ids, not entry points:
+    // the game hook registers what it can answer and this asks by name, so a game that ships no
+    // streaming scenes simply publishes none and --export-scene says so.
+    private const string LandmarksDataset = "endfield.scene.landmarks";
+    private const string PlacementsDataset = "endfield.scene.placements";
+    private const string PlacementMaterialsDataset = "endfield.scene.placement_materials";
+    private const string PlacementCountsDataset = "endfield.scene.placement_counts";
+    private const string SeedPathsDataset = "endfield.scene.seed_paths";
+
+    /// <summary>One dataset read, with the "no game hook" case worded as the action that fixes it
+    /// (the registry's own message only knows that nothing is published).</summary>
+    private static ColumnTable Read(string datasetId, string[] args)
+    {
+        try
+        {
+            return Datasets.Table(datasetId, args, CancellationToken.None).Table;
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException(
+                $"No game hook publishing '{datasetId}' is active — pass --hook with a VFS-game "
+                + $"hook id (e.g. EndField_1.4.4). ({exception.Message})", exception);
+        }
+    }
+
+    private static Utf8Column Text(ColumnTable table, string column) => (Utf8Column)table[column];
+
+    private static double[] Real(ColumnTable table, string column) => ((RealColumn)table[column]).Values;
 
     private static string[] Fields(string spec)
         => spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -135,24 +173,58 @@ internal static class SceneSeedResolver
     internal static (string[] LoadFiles, HashSet<string> LoadFilterFileNames, List<Placement> Placements)
         Resolve(CabTable table, string gameRoot, string mapName, string? landmarkSpec, string? rectSpec)
     {
-        if (GameBundleHook.DiscoverScenePlacements is not { } discover)
-        {
-            throw new InvalidOperationException(
-                "No VFS game hook active — pass --hook with a VFS-game hook id (e.g. EndField_1.4.4).");
-        }
-
         string[] vfsRoots = VfsRoots(gameRoot);
         SceneWindow window = ResolveWindow(landmarkSpec, rectSpec, vfsRoots);
-        // Reduced game-side (EndfieldSceneBridge.Reduce): the rows ARE the importable placements, and
-        // SeedPaths is already the distinct mesh+material container path set an import needs.
-        (int total, int noTransform, int lodFiltered, int _distinct, string[] allPaths, var kept) =
-            discover(vfsRoots, mapName, window.MinX, window.MinZ, window.MaxX, window.MaxZ,
-                     window.SceneStateIds, lod0Only: true);
-        List<Placement> rows = new(kept.Length);
-        foreach (var p in kept)
+        // Reduced game-side: the rows ARE the importable placements, and seed_paths is already the
+        // distinct mesh+material container path set an import needs. The four reads share one
+        // argument list, which is also the producer's discovery cache key -- so the window is
+        // discovered once and projected four ways.
+        string[] args = [mapName,
+            window.MinX.ToString(CultureInfo.InvariantCulture),
+            window.MinZ.ToString(CultureInfo.InvariantCulture),
+            window.MaxX.ToString(CultureInfo.InvariantCulture),
+            window.MaxZ.ToString(CultureInfo.InvariantCulture),
+            string.Join(',', window.SceneStateIds), "1", .. vfsRoots];
+
+        ColumnTable placements = Read(PlacementsDataset, args);
+        ColumnTable materials = Read(PlacementMaterialsDataset, args);
+        ColumnTable counts = Read(PlacementCountsDataset, args);
+
+        // Materials are normalized as a child table keyed by the parent's row index.
+        List<string>[] materialsByPlacement = new List<string>[placements.RowCount];
+        double[] owner = Real(materials, "placement");
+        Utf8Column materialPath = Text(materials, "path");
+        for (int index = 0; index < materials.RowCount; index++)
         {
-            rows.Add(new Placement(p.AssetPath, p.EntityName, p.SourceChunk,
-                p.Px, p.Py, p.Pz, p.Qx, p.Qy, p.Qz, p.Qw, p.Sx, p.Sy, p.Sz, p.MaterialAssetPaths));
+            int placement = (int)owner[index];
+            (materialsByPlacement[placement] ??= new List<string>()).Add(materialPath.Text(index));
+        }
+
+        Utf8Column assetPath = Text(placements, "assetPath");
+        Utf8Column entityName = Text(placements, "entityName");
+        Utf8Column sourceChunk = Text(placements, "sourceChunk");
+        double[] px = Real(placements, "px"), py = Real(placements, "py"), pz = Real(placements, "pz");
+        double[] qx = Real(placements, "qx"), qy = Real(placements, "qy");
+        double[] qz = Real(placements, "qz"), qw = Real(placements, "qw");
+        double[] sx = Real(placements, "sx"), sy = Real(placements, "sy"), sz = Real(placements, "sz");
+        List<Placement> rows = new(placements.RowCount);
+        for (int index = 0; index < placements.RowCount; index++)
+        {
+            rows.Add(new Placement(assetPath.Text(index), entityName.Text(index), sourceChunk.Text(index),
+                (float)px[index], (float)py[index], (float)pz[index],
+                (float)qx[index], (float)qy[index], (float)qz[index], (float)qw[index],
+                (float)sx[index], (float)sy[index], (float)sz[index],
+                materialsByPlacement[index]?.ToArray() ?? []));
+        }
+
+        int total = (int)Real(counts, "total")[0];
+        int noTransform = (int)Real(counts, "noTransform")[0];
+        ColumnTable seedPaths = Read(SeedPathsDataset, args);
+        Utf8Column seedPath = Text(seedPaths, "path");
+        string[] allPaths = new string[seedPaths.RowCount];
+        for (int index = 0; index < allPaths.Length; index++)
+        {
+            allPaths[index] = seedPath.Text(index);
         }
 
         Console.Error.WriteLine(
