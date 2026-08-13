@@ -26,16 +26,23 @@ internal static class MeshRawBlob
         List<ShapeChannelEntry> shapeChannels, List<ShapeFrameEntry> shapeFrames,
         long shapeVertexCount, Dictionary<string, SectionEntry> sections);
 
-    public static (string MetaJson, byte[] Payload)? Build(IMesh mesh)
+    public static MeshRawBlobResult Build(IMesh mesh)
     {
-        if (mesh.CompressedMesh.Vertices.NumItems > 0 || !mesh.VertexData.Has_Channels())
+        if (mesh.CompressedMesh.Vertices.NumItems > 0)
         {
-            return null;
+            return MeshRawBlobResult.Skipped(
+                "compressed mesh -- the geometry lives bit-packed in m_CompressedMesh, which no decode path reads");
+        }
+        if (!mesh.VertexData.Has_Channels())
+        {
+            return MeshRawBlobResult.Skipped(
+                "vertex data carries no channel table (pre-5.0 m_CurrentChannels layout)");
         }
         byte[] vertexBytes = mesh.GetVertexDataBytes();
         if (vertexBytes.Length == 0 && mesh.VertexData.VertexCount > 0)
         {
-            return null;
+            return MeshRawBlobResult.Skipped(
+                $"vertex buffer is empty for {mesh.VertexData.VertexCount} vertices -- the external stream resource did not resolve");
         }
 
         List<ChannelEntry> channels = new();
@@ -54,23 +61,27 @@ internal static class MeshRawBlob
 
         byte[] indexBytes = mesh.IndexBuffer;
         int bindPoseCount = mesh.BindPose.Count;
-        int boneHashCount = mesh.BoneNameHashes.Count;
+        int boneHashCount = mesh.Has_BoneNameHashes() ? mesh.BoneNameHashes.Count : 0;
 
         List<float> fullWeights = new();
         List<ShapeChannelEntry> shapeChannels = new();
         List<ShapeFrameEntry> shapeFrames = new();
-        long shapeVertexCount = mesh.Shapes.Vertices.Count;
-        foreach (float weight in mesh.Shapes.FullWeights)
+        long shapeVertexCount = 0;
+        if (mesh.Has_Shapes())
         {
-            fullWeights.Add(weight);
-        }
-        foreach (var channel in mesh.Shapes.Channels)
-        {
-            shapeChannels.Add(new ShapeChannelEntry(channel.Name_R.String, channel.FrameIndex, channel.FrameCount));
-        }
-        foreach (var frame in mesh.Shapes.Shapes)
-        {
-            shapeFrames.Add(new ShapeFrameEntry(frame.FirstVertex, frame.VertexCount, frame.HasNormals));
+            shapeVertexCount = mesh.Shapes.Vertices.Count;
+            foreach (float weight in mesh.Shapes.FullWeights)
+            {
+                fullWeights.Add(weight);
+            }
+            foreach (var channel in mesh.Shapes.Channels)
+            {
+                shapeChannels.Add(new ShapeChannelEntry(channel.Name_R.String, channel.FrameIndex, channel.FrameCount));
+            }
+            foreach (var frame in mesh.Shapes.Shapes)
+            {
+                shapeFrames.Add(new ShapeFrameEntry(frame.FirstVertex, frame.VertexCount, frame.HasNormals));
+            }
         }
 
         const int ShapeVertexStride = sizeof(uint) + 6 * sizeof(float);
@@ -78,7 +89,7 @@ internal static class MeshRawBlob
         long bindPoseBytes = bindPoseCount * 16L * sizeof(float);
         long boneHashBytes = boneHashCount * (long)sizeof(uint);
         long shapeVertexBytes = shapeVertexCount * ShapeVertexStride;
-        long skinCount = mesh.Skin.Count;
+        long skinCount = mesh.Has_Skin() ? mesh.Skin.Count : 0;
         long skinBytes = skinCount * SkinStride;
         byte[] payload = new byte[vertexBytes.Length + indexBytes.Length + bindPoseBytes
             + boneHashBytes + shapeVertexBytes + skinBytes];
@@ -108,32 +119,41 @@ internal static class MeshRawBlob
         Section("boneNameHashes", boneHashBytes);
         Span<byte> hashSpan = payload.AsSpan((int)sections["boneNameHashes"].off, (int)boneHashBytes);
         int hashCursor = 0;
-        foreach (uint hash in mesh.BoneNameHashes)
+        if (boneHashCount > 0)
         {
-            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(hashSpan.Slice(hashCursor, 4), hash);
-            hashCursor += 4;
+            foreach (uint hash in mesh.BoneNameHashes)
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(hashSpan.Slice(hashCursor, 4), hash);
+                hashCursor += 4;
+            }
         }
 
         Section("shapeVertices", shapeVertexBytes);
         Span<byte> shapeSpan = payload.AsSpan((int)sections["shapeVertices"].off, (int)shapeVertexBytes);
         int shapeCursor = 0;
-        foreach (var vertex in mesh.Shapes.Vertices)
+        if (shapeVertexCount > 0)
         {
-            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(shapeSpan.Slice(shapeCursor, 4), vertex.Index);
-            shapeCursor += 4;
-            WriteVector3(vertex.Vertex.X, vertex.Vertex.Y, vertex.Vertex.Z, shapeSpan, ref shapeCursor);
-            WriteVector3(vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z, shapeSpan, ref shapeCursor);
+            foreach (var vertex in mesh.Shapes.Vertices)
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(shapeSpan.Slice(shapeCursor, 4), vertex.Index);
+                shapeCursor += 4;
+                WriteVector3(vertex.Vertex.X, vertex.Vertex.Y, vertex.Vertex.Z, shapeSpan, ref shapeCursor);
+                WriteVector3(vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z, shapeSpan, ref shapeCursor);
+            }
         }
 
         Section("skin", skinBytes);
         Span<byte> skinSpan = payload.AsSpan((int)sections["skin"].off, (int)skinBytes);
         int skinCursor = 0;
-        foreach (var weights in mesh.Skin)
+        if (skinCount > 0)
         {
-            WriteFloats(skinSpan, ref skinCursor,
-                weights.Weight_0_, weights.Weight_1_, weights.Weight_2_, weights.Weight_3_);
-            WriteInts(skinSpan, ref skinCursor,
-                weights.BoneIndex_0_, weights.BoneIndex_1_, weights.BoneIndex_2_, weights.BoneIndex_3_);
+            foreach (var weights in mesh.Skin)
+            {
+                WriteFloats(skinSpan, ref skinCursor,
+                    weights.Weight_0_, weights.Weight_1_, weights.Weight_2_, weights.Weight_3_);
+                WriteInts(skinSpan, ref skinCursor,
+                    weights.BoneIndex_0_, weights.BoneIndex_1_, weights.BoneIndex_2_, weights.BoneIndex_3_);
+            }
         }
 
         MeshIndex meta = new(
@@ -147,7 +167,7 @@ internal static class MeshRawBlob
             shapeFrames,
             shapeVertexCount,
             sections);
-        return (JsonSerializer.Serialize(meta), payload);
+        return MeshRawBlobResult.Built(JsonSerializer.Serialize(meta), payload);
     }
 
     private static void WriteMatrixRowMajor(Matrix4x4f matrix, Span<byte> span, ref int cursor)

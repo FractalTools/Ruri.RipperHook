@@ -420,6 +420,7 @@ public static class RipperBlenderBridge
             $"[ImportCabs] closure={closure.ClosureCount} files={closureFiles.Length} " +
             $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms graph={graphMs}ms " +
             $"prewarm={prewarmMs}ms export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
+            $"meshblobs={result.MeshBlobMeta.Count}/{meshCapture.MeshCount} " +
             $"texcache(hit={textureExporter.HitStats.Hits} miss={textureExporter.HitStats.Misses})");
         textureExporter.LogStats();
         LogExportCostByExtension(memoryFileSystem);
@@ -746,6 +747,8 @@ public static class RipperBlenderBridge
 
         public List<(string Path, string MetaJson, byte[] Payload)> Captured { get; } = new();
 
+        public int MeshCount { get; private set; }
+
         public bool TryCreateCollection(IUnityObjectBase asset, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IExportCollection? exportCollection)
         {
             exportCollection = new YamlStreamedAssetExportCollection(this, asset);
@@ -756,17 +759,16 @@ public static class RipperBlenderBridge
         {
             if (asset is AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh mesh)
             {
-                try
+                MeshCount++;
+                MeshRawBlobResult blob = MeshRawBlob.Build(mesh);
+                if (blob.HasBlob)
                 {
-                    (string MetaJson, byte[] Payload)? blob = MeshRawBlob.Build(mesh);
-                    if (blob is not null)
-                    {
-                        Captured.Add((path, blob.Value.MetaJson, blob.Value.Payload));
-                    }
+                    Captured.Add((path, blob.MetaJson, blob.Payload));
                 }
-                catch (Exception exception)
+                else
                 {
-                    Logger.Warning(LogCategory.Export, $"Mesh raw blob failed for '{asset.GetBestName()}': {exception.Message} -- host side falls back to YAML parsing.");
+                    Logger.Warning(LogCategory.Export,
+                        $"No mesh raw blob for '{asset.GetBestName()}': {blob.SkipReason} -- host side falls back to YAML parsing.");
                 }
             }
             return _inner.Export(container, asset, path, fileSystem);
