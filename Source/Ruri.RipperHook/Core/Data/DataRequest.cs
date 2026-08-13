@@ -1,20 +1,21 @@
+using System.Globalization;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Tables;
 
 namespace Ruri.RipperHook.Data;
 
 public readonly struct DataRequest
 {
     private readonly Datasets.Dataset _dataset;
+    private readonly Dictionary<string, string[]> _values;
     private readonly CabTable? _map;
 
-    public string[] Args { get; }
     public CancellationToken Cancellation { get; }
 
-    internal DataRequest(Datasets.Dataset dataset, string[] args, CancellationToken cancellation, CabTable? map)
+    internal DataRequest(Datasets.Dataset dataset, Dictionary<string, string[]> values,
+        CancellationToken cancellation, CabTable? map)
     {
         _dataset = dataset;
-        Args = args ?? [];
+        _values = values;
         Cancellation = cancellation;
         _map = map;
     }
@@ -24,134 +25,80 @@ public readonly struct DataRequest
 
     public bool HasMap => _map is not null;
 
-    public string Text(int index)
+    public string GameRoot => Session.GameRoot;
+
+    public string[] Roots => Session.RootsOrThrow(_dataset.Id);
+
+    public string Text(string name)
     {
-        if (index < 0 || index >= Args.Length)
-        {
-            string name = index >= 0 && index < _dataset.Parameters.Length
-                ? _dataset.Parameters[index]
-                : $"#{index}";
-            throw new ArgumentException($"dataset '{_dataset.Id}' needs argument '{name}'.");
-        }
-        return Args[index];
+        string[] values = Values(name, ParamKind.Text);
+        return values.Length == 0 ? string.Empty : values[0];
     }
 
-    public int Integer(int index) =>
-        int.TryParse(Text(index), out int value)
+    public int Integer(string name)
+    {
+        string[] values = Values(name, ParamKind.Integer);
+        if (values.Length == 0)
+        {
+            return 0;
+        }
+        return int.TryParse(values[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
             ? value
             : throw new ArgumentException(
-                $"dataset '{_dataset.Id}' argument '{Name(index)}' must be a whole number; got '{Text(index)}'.");
+                $"dataset '{_dataset.Id}' argument '{name}' must be a whole number; got '{values[0]}'.");
+    }
 
-    public bool Flag(int index) => Text(index) is "1" or "true" or "True";
-
-    public double Real(int index) =>
-        double.TryParse(Text(index), System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out double value)
+    public double Real(string name)
+    {
+        string[] values = Values(name, ParamKind.Real);
+        if (values.Length == 0)
+        {
+            return 0d;
+        }
+        return double.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
             ? value
             : throw new ArgumentException(
-                $"dataset '{_dataset.Id}' argument '{Name(index)}' must be a number; got '{Text(index)}'.");
+                $"dataset '{_dataset.Id}' argument '{name}' must be a number; got '{values[0]}'.");
+    }
 
-    public string[] Rest(int from) => from >= Args.Length ? [] : Args[from..];
-
-    private string Name(int index) =>
-        index < _dataset.Parameters.Length ? _dataset.Parameters[index] : $"#{index}";
-}
-
-public sealed class TableBuilder
-{
-    private readonly string _name;
-    private readonly string[] _columns;
-    private readonly bool[] _numeric;
-    private readonly Utf8ColumnBuilder?[] _text;
-    private readonly List<double>[] _numbers;
-    private int _cursor;
-    private int _rows;
-
-    public TableBuilder(string name, params string[] columns)
+    public bool Flag(string name)
     {
-        _name = name;
-        _columns = columns.Select(column => column.TrimEnd('#')).ToArray();
-        _numeric = columns.Select(column => column.EndsWith('#')).ToArray();
-        _text = new Utf8ColumnBuilder?[columns.Length];
-        _numbers = new List<double>[columns.Length];
-        for (int index = 0; index < columns.Length; index++)
+        string[] values = Values(name, ParamKind.Flag);
+        return values.Length != 0 && values[0] is "1" or "true" or "True";
+    }
+
+    public string[] List(string name) => Values(name, ParamKind.TextList);
+
+    public int[] Integers(string name)
+    {
+        string[] values = List(name);
+        int[] parsed = new int[values.Length];
+        for (int index = 0; index < values.Length; index++)
         {
-            if (_numeric[index])
-            {
-                _numbers[index] = [];
-            }
-            else
-            {
-                _text[index] = new Utf8ColumnBuilder(0);
-            }
+            parsed[index] = int.TryParse(values[index], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out int value)
+                ? value
+                : throw new ArgumentException(
+                    $"dataset '{_dataset.Id}' argument '{name}' takes whole numbers; got '{values[index]}'.");
         }
+        return parsed;
     }
 
-    public int RowCount => _rows;
-
-    public TableBuilder Add(string? value)
+    private string[] Values(string name, ParamKind kind)
     {
-        Slot(out int index);
-        _text[index]!.Add(value ?? string.Empty);
-        return this;
-    }
-
-    public TableBuilder Add(double value)
-    {
-        Slot(out int index);
-        _numbers[index].Add(value);
-        return this;
-    }
-
-    public TableBuilder Add(long value) => Add((double)value);
-
-    public TableBuilder Add(bool value) => _numeric[_cursor] ? Add(value ? 1d : 0d) : Add(value ? "1" : "0");
-
-    public TableBuilder Row(params object?[] values)
-    {
-        foreach (object? value in values)
-        {
-            switch (value)
-            {
-                case null: Add(string.Empty); break;
-                case string text: Add(text); break;
-                case bool flag: Add(flag); break;
-                case double real: Add(real); break;
-                case float real: Add(real); break;
-                case long integer: Add(integer); break;
-                case int integer: Add(integer); break;
-                default: Add(value.ToString()); break;
-            }
-        }
-        return this;
-    }
-
-    private void Slot(out int index)
-    {
-        index = _cursor;
-        _cursor++;
-        if (_cursor != _columns.Length)
-        {
-            return;
-        }
-        _cursor = 0;
-        _rows++;
-    }
-
-    public ColumnTable Build()
-    {
-        if (_cursor != 0)
+        DataParam? declared = _dataset.Parameters.FirstOrDefault(
+            parameter => string.Equals(parameter.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (declared is null)
         {
             throw new InvalidOperationException(
-                $"table '{_name}' has a half-written row: {_cursor} of {_columns.Length} column(s) pushed.");
+                $"dataset '{_dataset.Id}' reads an argument '{name}' it never declared; it declares: "
+                + $"{string.Join(", ", _dataset.Parameters.Select(parameter => parameter.ToString()))}.");
         }
-        Column[] columns = new Column[_columns.Length];
-        for (int index = 0; index < _columns.Length; index++)
+        if (declared.Kind != kind)
         {
-            columns[index] = _numeric[index]
-                ? new RealColumn { Name = _columns[index], Values = _numbers[index].ToArray() }
-                : _text[index]!.Build(_columns[index]);
+            throw new InvalidOperationException(
+                $"dataset '{_dataset.Id}' declares '{name}' as {declared.Kind} but reads it as {kind}.");
         }
-        return new ColumnTable { Name = _name, RowCount = _rows, Columns = columns };
+        return _values.TryGetValue(name, out string[]? values) ? values : [];
     }
 }

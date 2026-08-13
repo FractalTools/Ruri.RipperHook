@@ -20,6 +20,16 @@ public sealed class Utf8Column : Column
     public string Text(int row) => Encoding.UTF8.GetString(Blob, Offsets[row], Offsets[row + 1] - Offsets[row]);
 }
 
+public sealed class BlobColumn : Column
+{
+    public required byte[] Payload { get; init; }
+    public required int[] Offsets { get; init; }
+
+    public override int RowCount => Offsets.Length - 1;
+
+    public ReadOnlySpan<byte> Bytes(int row) => Payload.AsSpan(Offsets[row], Offsets[row + 1] - Offsets[row]);
+}
+
 public sealed class IntegerColumn : Column
 {
     public required long[] Values { get; init; }
@@ -56,6 +66,7 @@ public sealed class ColumnTable
                     Name = reals.Name,
                     Values = rows.Select(row => reals.Values[row]).ToArray(),
                 },
+                BlobColumn payload => Take(payload, rows),
                 Column other => throw new InvalidOperationException($"cannot subset {other.GetType().Name}"),
             };
         }
@@ -68,6 +79,16 @@ public sealed class ColumnTable
         foreach (int row in rows)
         {
             builder.Add(column.Utf8(row));
+        }
+        return builder.Build(column.Name);
+    }
+
+    private static BlobColumn Take(BlobColumn column, int[] rows)
+    {
+        BlobColumnBuilder builder = new(rows.Length);
+        foreach (int row in rows)
+        {
+            builder.Add(column.Bytes(row));
         }
         return builder.Build(column.Name);
     }
@@ -156,5 +177,47 @@ public sealed class Utf8ColumnBuilder
             Array.Copy(_offsets, offsets, _rows + 1);
         }
         return new Utf8Column { Name = name, Blob = blob, Offsets = offsets };
+    }
+}
+
+public sealed class BlobColumnBuilder
+{
+    private byte[] _payload;
+    private int _length;
+    private int[] _offsets;
+    private int _rows;
+
+    public BlobColumnBuilder(int rowCount, int expectedBytesPerRow = 256)
+    {
+        _payload = new byte[Math.Max(64, rowCount * expectedBytesPerRow)];
+        _offsets = new int[Math.Max(1, rowCount) + 1];
+    }
+
+    public void Add(ReadOnlySpan<byte> bytes)
+    {
+        if (_length + bytes.Length > _payload.Length)
+        {
+            Array.Resize(ref _payload, Math.Max(_payload.Length * 2, _length + bytes.Length));
+        }
+        if (_rows + 1 >= _offsets.Length)
+        {
+            Array.Resize(ref _offsets, _offsets.Length * 2);
+        }
+        bytes.CopyTo(_payload.AsSpan(_length));
+        _length += bytes.Length;
+        _offsets[++_rows] = _length;
+    }
+
+    public BlobColumn Build(string name)
+    {
+        byte[] payload = new byte[_length];
+        Array.Copy(_payload, payload, _length);
+        int[] offsets = _offsets;
+        if (offsets.Length != _rows + 1)
+        {
+            offsets = new int[_rows + 1];
+            Array.Copy(_offsets, offsets, _rows + 1);
+        }
+        return new BlobColumn { Name = name, Payload = payload, Offsets = offsets };
     }
 }

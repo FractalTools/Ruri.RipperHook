@@ -62,7 +62,7 @@ internal static class HeadlessRunner
             {
                 Directory.CreateDirectory(dumpVfsPath);
                 (int matched, SortedDictionary<string, int> blockTypes) =
-                    VfsDumper.Dump(options.LoadPaths[0], dumpVfsPath, options.Names,
+                    VfsDumper.Dump(dumpVfsPath, options.Names,
                         options.VfsTypes.Length > 0 ? options.VfsTypes : null);
                 Console.WriteLine($"VFS 文件类型直方图({blockTypes.Count} 种):");
                 foreach ((string blockType, int count) in blockTypes)
@@ -101,7 +101,7 @@ internal static class HeadlessRunner
             {
                 CabTable table = CabMap.LoadTable(sceneCabMapPath);
                 (paths, loadFilterFileNames, scenePlacements) = SceneSeedResolver.Resolve(
-                    table, options.LoadPaths[0], sceneMapName, options.SceneLandmark, options.SceneWindow);
+                    table, sceneMapName, options.SceneLandmark, options.SceneWindow);
             }
             catch (Exception ex)
             {

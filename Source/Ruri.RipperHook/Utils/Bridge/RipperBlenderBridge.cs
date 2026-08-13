@@ -59,7 +59,7 @@ public static class RipperBlenderBridge
         return id;
     }
 
-    public static void Initialize(IEnumerable<string> enabledHookIds)
+    public static void Initialize(IEnumerable<string> enabledHookIds, string gameRoot)
     {
         Bootstrap.InstallAssemblyResolver();
 
@@ -70,12 +70,15 @@ public static class RipperBlenderBridge
             Logger.Add(new BridgeLogger { MinLevel = LogType.Info });
         }
 
+        Data.CoreDatasets.Register();
+
         HookConfig config = new();
         foreach (string id in enabledHookIds)
         {
             config.EnabledHooks.Add(NormalizeHookId(id));
         }
         Bootstrap.ApplyHooks(config);
+        Data.Session.Open(gameRoot ?? string.Empty, config.EnabledHooks);
     }
 
     public static int BuildCabMap(string gameRoot, string outPath) => CabMap.Build(gameRoot, outPath);
@@ -787,19 +790,6 @@ public static class RipperBlenderBridge
     }
 
 
-
-    public static string[] ListGameData()
-    {
-        List<string> flat = [];
-        foreach (Data.Datasets.Dataset dataset in Data.Datasets.Available())
-        {
-            flat.Add(dataset.Id);
-            flat.Add(string.Join(",", dataset.Parameters));
-            flat.Add(dataset.Table is not null ? "table" : "blob");
-            flat.Add(dataset.Description);
-        }
-        return flat.ToArray();
-    }
 
     public static ColumnTableDto GameDataTable(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation)
     {

@@ -32,7 +32,7 @@ internal static class SceneSeedResolver
         }
     }
 
-    internal static SceneWindow ResolveWindow(string? landmarkSpec, string? rectSpec, string[] vfsRoots)
+    internal static SceneWindow ResolveWindow(string? landmarkSpec, string? rectSpec)
     {
         if (landmarkSpec is { Length: > 0 } && rectSpec is { Length: > 0 })
         {
@@ -40,7 +40,7 @@ internal static class SceneSeedResolver
         }
         if (landmarkSpec is { Length: > 0 })
         {
-            return FromLandmark(landmarkSpec, vfsRoots);
+            return FromLandmark(landmarkSpec);
         }
         if (rectSpec is not { Length: > 0 })
         {
@@ -56,9 +56,9 @@ internal static class SceneSeedResolver
             Number(fields[2], rectSpec), Number(fields[3], rectSpec), Integers(fields[4..], rectSpec));
     }
 
-    private static SceneWindow FromLandmark(string spec, string[] vfsRoots)
+    private static SceneWindow FromLandmark(string spec)
     {
-        ColumnTable places = Read(LandmarksDataset, vfsRoots);
+        ColumnTable places = Read(LandmarksDataset, []);
         Utf8Column levelIds = Text(places, "levelId");
         string[] fields = Fields(spec);
         string levelId = fields[0];
@@ -130,27 +130,28 @@ internal static class SceneSeedResolver
         return values;
     }
 
-    private static string[] VfsRoots(string gameRoot) =>
-    [
-        Path.Combine(gameRoot, "Endfield_Data", "Persistent", "VFS"),
-        Path.Combine(gameRoot, "Endfield_Data", "StreamingAssets", "VFS"),
-    ];
-
     internal static (string[] LoadFiles, HashSet<string> LoadFilterFileNames, List<Placement> Placements)
-        Resolve(CabTable table, string gameRoot, string mapName, string? landmarkSpec, string? rectSpec)
+        Resolve(CabTable table, string mapName, string? landmarkSpec, string? rectSpec)
     {
-        string[] vfsRoots = VfsRoots(gameRoot);
-        SceneWindow window = ResolveWindow(landmarkSpec, rectSpec, vfsRoots);
-        string[] args = [mapName,
-            window.MinX.ToString(CultureInfo.InvariantCulture),
-            window.MinZ.ToString(CultureInfo.InvariantCulture),
-            window.MaxX.ToString(CultureInfo.InvariantCulture),
-            window.MaxZ.ToString(CultureInfo.InvariantCulture),
-            string.Join(',', window.SceneStateIds), "1", .. vfsRoots];
+        SceneWindow window = ResolveWindow(landmarkSpec, rectSpec);
+        List<string> args =
+        [
+            "map", mapName,
+            "minX", window.MinX.ToString(CultureInfo.InvariantCulture),
+            "minZ", window.MinZ.ToString(CultureInfo.InvariantCulture),
+            "maxX", window.MaxX.ToString(CultureInfo.InvariantCulture),
+            "maxZ", window.MaxZ.ToString(CultureInfo.InvariantCulture),
+            "lod0Only", "1",
+        ];
+        foreach (int sceneState in window.SceneStateIds)
+        {
+            args.Add("sceneState");
+            args.Add(sceneState.ToString(CultureInfo.InvariantCulture));
+        }
 
-        ColumnTable placements = Read(PlacementsDataset, args);
-        ColumnTable materials = Read(PlacementMaterialsDataset, args);
-        ColumnTable counts = Read(PlacementCountsDataset, args);
+        ColumnTable placements = Read(PlacementsDataset, [.. args]);
+        ColumnTable materials = Read(PlacementMaterialsDataset, [.. args]);
+        ColumnTable counts = Read(PlacementCountsDataset, [.. args]);
 
         List<string>[] materialsByPlacement = new List<string>[placements.RowCount];
         double[] owner = Real(materials, "placement");
@@ -180,7 +181,7 @@ internal static class SceneSeedResolver
 
         int total = (int)Real(counts, "total")[0];
         int noTransform = (int)Real(counts, "noTransform")[0];
-        ColumnTable seedPaths = Read(SeedPathsDataset, args);
+        ColumnTable seedPaths = Read(SeedPathsDataset, [.. args]);
         Utf8Column seedPath = Text(seedPaths, "path");
         string[] allPaths = new string[seedPaths.RowCount];
         for (int index = 0; index < allPaths.Length; index++)

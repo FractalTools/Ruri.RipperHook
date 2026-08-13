@@ -1,24 +1,19 @@
 using System.Text.RegularExpressions;
+using Ruri.RipperHook.Data;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.CLI;
 
 internal static class VfsDumper
 {
-    private static string[] VfsRoots(string gameRoot) =>
-    [
-        Path.Combine(gameRoot, "Endfield_Data", "Persistent", "VFS"),
-        Path.Combine(gameRoot, "Endfield_Data", "StreamingAssets", "VFS"),
-    ];
-
     internal static (int Matched, SortedDictionary<string, int> BlockTypes) Dump(
-        string gameRoot, string outputDirectory, Regex[] filters, string[]? blockTypeFilter)
+        string outputDirectory, Regex[] filters, string[]? blockTypeFilter)
     {
         if (GameBundleHook.EnumerateVfsFiles is not { } enumerate)
         {
             throw new InvalidOperationException("当前 --hook 没有提供 VFS 访问(需要 EndField 这类 VFS 游戏)。");
         }
-        string[] roots = VfsRoots(gameRoot);
+        string[] roots = Session.RootsOrThrow("--dump-vfs");
         if (GameBundleHook.ExtractVfsFile is not { } extract)
         {
             throw new InvalidOperationException("当前 --hook 没有提供 VFS 提取。");

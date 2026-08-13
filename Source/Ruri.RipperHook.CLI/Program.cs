@@ -79,7 +79,9 @@ internal static class Program
             config.EnabledHooks.Add("AR_GlbExporter_");
         }
         Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
+        Data.CoreDatasets.Register();
         Bootstrap.ApplyHooks(config);
+        Data.Session.Open(opts.LoadPaths.Length > 0 ? opts.LoadPaths[0] : string.Empty, config.EnabledHooks);
     }
 
     private static string NormalizeHookId(string id)

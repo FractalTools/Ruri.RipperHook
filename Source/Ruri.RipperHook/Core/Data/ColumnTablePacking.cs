@@ -8,6 +8,7 @@ public static class ColumnTablePacking
     public const string TextKind = "text";
     public const string IntegerKind = "int";
     public const string RealKind = "real";
+    public const string BlobKind = "blob";
 
     public static (string Name, int RowCount, string[] Columns, string[] Kinds, byte[][] Blobs, byte[][] Offsets)
         Pack(ColumnTable table)
@@ -27,6 +28,11 @@ public static class ColumnTablePacking
                     kinds[index] = TextKind;
                     blobs[index] = text.Blob;
                     offsets[index] = MemoryMarshal.AsBytes(text.Offsets.AsSpan()).ToArray();
+                    break;
+                case BlobColumn payload:
+                    kinds[index] = BlobKind;
+                    blobs[index] = payload.Payload;
+                    offsets[index] = MemoryMarshal.AsBytes(payload.Offsets.AsSpan()).ToArray();
                     break;
                 case IntegerColumn integers:
                     kinds[index] = IntegerKind;
