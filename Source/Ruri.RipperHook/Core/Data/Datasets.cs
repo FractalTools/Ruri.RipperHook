@@ -98,7 +98,7 @@ public static class Datasets
         (Dataset dataset, Dictionary<string, string[]> values) = Resolve(id, namedArgs);
         if (dataset.Blob is null)
         {
-            throw new InvalidOperationException($"dataset '{id}' is a table, not a blob -- ask for it with Blob().");
+            throw new InvalidOperationException($"dataset '{id}' is a table, not a blob -- ask for it with Table().");
         }
         return dataset.Blob(new DataRequest(dataset, values, cancellation, map));
     }
