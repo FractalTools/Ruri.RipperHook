@@ -41,6 +41,21 @@ internal static class Program
 
         ApplyHooks(opts);
 
+        if (opts.DatasetList)
+        {
+            return CabQuery.RunDatasetList(HeadlessRunner.JsonStdout);
+        }
+
+        if (opts.CabQuery is not null)
+        {
+            return CabQuery.RunPaths(opts, HeadlessRunner.JsonStdout);
+        }
+
+        if (opts.DatasetId is { Length: > 0 })
+        {
+            return CabQuery.RunDataset(opts, HeadlessRunner.JsonStdout);
+        }
+
         if (opts.BuildCabMapPath is { Length: > 0 } buildOut)
         {
             if (opts.LoadPaths.Length == 0)

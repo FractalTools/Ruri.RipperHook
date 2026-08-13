@@ -40,6 +40,20 @@ internal sealed class CliOptions
     public string? DumpVfsPath { get; init; }
 
     public string[] VfsTypes { get; init; } = [];
+
+    public string? CabQuery { get; init; }
+
+    public string[] CabRules { get; init; } = [];
+
+    public string[] QueryFields { get; init; } = [];
+
+    public int QueryLimit { get; init; }
+
+    public string? DatasetId { get; init; }
+
+    public string[] DatasetArgs { get; init; } = [];
+
+    public bool DatasetList { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -69,6 +83,21 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string?> DumpVfs { get; }
 
     public Option<string[]> VfsTypesOption { get; }
+
+    public Option<string?> CabQueryOption { get; }
+
+    public Option<string[]> CabRuleOption { get; }
+
+    public Option<string[]> QueryFieldsOption { get; }
+
+    public Option<int> QueryLimitOption { get; }
+
+    public Option<string?> DataOption { get; }
+
+    public Option<string[]> DataArgOption { get; }
+
+    public Option<bool> DataListOption { get; }
+
     public Argument<string[]> Passthrough { get; }
 
     public CliOptionsBinder()
@@ -137,6 +166,34 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         {
             AllowMultipleArgumentsPerToken = true,
         };
+        CabQueryOption = new Option<string?>("--cab-query",
+            "Search a CABMap and print the matching container paths as TSV -- map only, nothing is "
+            + "decrypted, loaded or exported. Empty text lists everything the rules keep. "
+            + "Needs --cab-map <file>.");
+        CabRuleOption = new Option<string[]>("--cab-rule",
+            "Narrow --cab-query with the browser's own rule grammar: field|relation|value[|exclude], "
+            + "repeatable (e.g. extension|is|fbx type_names|contains|AnimationClip).")
+        {
+            AllowMultipleArgumentsPerToken = true,
+        };
+        QueryFieldsOption = new Option<string[]>("--query-fields",
+            "Columns to print, comma-separated. --cab-query takes cab/container/folder/leaf/stem/"
+            + "extension/type_names/source/deps; --data takes that dataset's own columns.")
+        {
+            AllowMultipleArgumentsPerToken = true,
+        };
+        QueryLimitOption = new Option<int>("--query-limit", () => 200,
+            "Cap the printed rows of --cab-query / --data (0 = all). The reported total is always the real one.");
+        DataOption = new Option<string?>("--data",
+            "Run a published dataset over --cab-map and print it as TSV -- the same read the Blender "
+            + "panels do, with no bundle load. Arguments go through --data-arg.");
+        DataArgOption = new Option<string[]>("--data-arg",
+            "One dataset argument as name=value, repeatable (e.g. --data-arg channel=cutscene).")
+        {
+            AllowMultipleArgumentsPerToken = true,
+        };
+        DataListOption = new Option<bool>("--data-list",
+            "List every dataset the enabled --hook publishes, with its role, arguments and description.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -165,6 +222,13 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             NoScriptsOption,
             DumpVfs,
             VfsTypesOption,
+            CabQueryOption,
+            CabRuleOption,
+            QueryFieldsOption,
+            QueryLimitOption,
+            DataOption,
+            DataArgOption,
+            DataListOption,
             Passthrough,
         };
         return root;
@@ -195,6 +259,13 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             NoScripts = pr.GetValueForOption(NoScriptsOption),
             DumpVfsPath = pr.GetValueForOption(DumpVfs),
             VfsTypes = pr.GetValueForOption(VfsTypesOption) ?? [],
+            CabQuery = pr.GetValueForOption(CabQueryOption),
+            CabRules = pr.GetValueForOption(CabRuleOption) ?? [],
+            QueryFields = pr.GetValueForOption(QueryFieldsOption) ?? [],
+            QueryLimit = pr.GetValueForOption(QueryLimitOption),
+            DatasetId = pr.GetValueForOption(DataOption),
+            DatasetArgs = pr.GetValueForOption(DataArgOption) ?? [],
+            DatasetList = pr.GetValueForOption(DataListOption),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };
     }
