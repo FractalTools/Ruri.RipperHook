@@ -12,9 +12,13 @@ public static class CabPathQuery
     public const string LeafField = "leaf";
     public const string StemField = "stem";
     public const string ExtensionField = "extension";
+    public const string TypeNamesField = "type_names";
+    public const string SourceField = "source";
+    public const string DependencyCountField = "deps";
 
     public static readonly string[] Fields =
-        [CabField, ContainerField, FolderField, LeafField, StemField, ExtensionField, "types", "source", "deps"];
+        [CabField, ContainerField, FolderField, LeafField, StemField, ExtensionField,
+         TypeNamesField, SourceField, DependencyCountField];
 
     public static CabPathRow[] Rows(CabTable table, string query, IReadOnlyList<FilterRule>? rules)
     {
@@ -132,6 +136,11 @@ public static class CabPathQuery
             {
                 throw new ArgumentException(
                     $"rule '{entry}' must be field|relation|value[|exclude].");
+            }
+            if (!Fields.Contains(fields[0], StringComparer.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    $"rule '{entry}' selects on unknown field '{fields[0]}'; known fields are {string.Join(", ", Fields)}.");
             }
             bool include = fields.Length < 4 || !string.Equals(fields[3], "exclude", StringComparison.OrdinalIgnoreCase);
             rules.Add(new FilterRule(fields[0], fields[1], fields[2], include, true));

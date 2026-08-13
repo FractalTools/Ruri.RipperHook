@@ -34,14 +34,16 @@ public static class CoreDatasets
             [DataParam.Text(Query, required: false), DataParam.List(Rule)],
             "Addressable paths of the loaded map matching every rule, one row per (cab, path). "
             + "A rule is field|relation|value[|exclude] over "
-            + "cab, container, folder, leaf, stem, extension, types, source, deps.",
+            + string.Join(", ", CabPathQuery.Fields) + ".",
             Select);
     }
 
     private static ColumnTable Select(DataRequest request)
     {
         CabTable map = request.Map;
-        TableBuilder table = new(SelectId, "cab", "container", "folder", "leaf", "stem", "extension", "types");
+        TableBuilder table = new(SelectId, CabPathQuery.CabField, CabPathQuery.ContainerField,
+            CabPathQuery.FolderField, CabPathQuery.LeafField, CabPathQuery.StemField,
+            CabPathQuery.ExtensionField, CabPathQuery.TypeNamesField);
         foreach (CabPathRow row in CabPathQuery.Rows(map, request.Text(Query),
                      CabPathQuery.ParseRules(request.List(Rule))))
         {
@@ -50,7 +52,7 @@ public static class CoreDatasets
                 CabPathQuery.Field(map, row, CabPathQuery.LeafField),
                 CabPathQuery.Field(map, row, CabPathQuery.StemField),
                 CabPathQuery.Field(map, row, CabPathQuery.ExtensionField),
-                CabPathQuery.Field(map, row, "types"));
+                CabPathQuery.Field(map, row, CabPathQuery.TypeNamesField));
         }
         return table.Build();
     }
