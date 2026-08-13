@@ -10,6 +10,7 @@ using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Extensions;
+using AssetRipper.SourceGenerated.Extensions.Enums.AnimationClip.Bones;
 using Ruri.Hook.Config;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
@@ -234,6 +235,56 @@ public static class RipperBlenderBridge
         public required byte[] Curves { get; init; }
         public required string[] ConsumedAttributes { get; init; }
         public required int SolvedCurveCount { get; init; }
+    }
+
+    /// <summary>
+    /// Flat (bone name, human slot name) pairs an avatar's human rig states, or an empty
+    /// array when it has none. The slot vocabulary is Unity's own humanoid enum, and the
+    /// index chain that resolves a slot to a real bone (HumanBoneIndex -> node -> id ->
+    /// TOS path) already lives here, so a consumer that wants to classify a skeleton's
+    /// bones asks rather than restating either. A generic avatar is silent by
+    /// construction: it has no human rig to describe.
+    /// </summary>
+    public static string[] DescribeHumanoidBones(string avatarDocumentJson)
+    {
+        Humanoid.AvatarRigInput? input = Humanoid.AvatarRigInput.FromDocumentJson(avatarDocumentJson);
+        if (input is null || input.HumanBoneIndex.Length == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        List<string> pairs = new();
+        void Add(int node, string slot)
+        {
+            if ((uint)node >= (uint)input.NodeId.Length)
+            {
+                return;
+            }
+            if (!input.Tos.TryGetValue(input.NodeId[node], out string? path) || path.Length == 0)
+            {
+                return;
+            }
+            int cut = path.LastIndexOf('/');
+            pairs.Add(cut < 0 ? path : path[(cut + 1)..]);
+            pairs.Add(slot);
+        }
+
+        for (int slot = 0; slot < input.HumanBoneIndex.Length; slot++)
+        {
+            Add(input.HumanBoneIndex[slot],
+                Enum.IsDefined(typeof(BoneType), slot)
+                    ? ((BoneType)slot).ToString()
+                    : "Body" + slot.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        foreach ((int[] hand, string side) in
+                 new[] { (input.LeftHandBoneIndex, "Left"), (input.RightHandBoneIndex, "Right") })
+        {
+            foreach (int node in hand)
+            {
+                Add(node, side + "Finger");
+            }
+        }
+        return pairs.ToArray();
     }
 
     public static SolvedHumanoidClipDto? SolveHumanoidClip(string avatarDocumentJson,
