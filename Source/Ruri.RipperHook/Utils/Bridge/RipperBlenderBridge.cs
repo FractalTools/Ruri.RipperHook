@@ -757,21 +757,40 @@ public static class RipperBlenderBridge
 
         public bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
         {
-            if (asset is AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh mesh)
+            if (asset is not AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh mesh)
             {
-                MeshCount++;
-                MeshRawBlobResult blob = MeshRawBlob.Build(mesh);
-                if (blob.HasBlob)
-                {
-                    Captured.Add((path, blob.MetaJson, blob.Payload));
-                }
-                else
-                {
-                    Logger.Warning(LogCategory.Export,
-                        $"No mesh raw blob for '{asset.GetBestName()}': {blob.SkipReason} -- host side falls back to YAML parsing.");
-                }
+                return _inner.Export(container, asset, path, fileSystem);
             }
-            return _inner.Export(container, asset, path, fileSystem);
+
+            MeshCount++;
+            MeshRawBlobResult blob = MeshRawBlob.Build(mesh);
+            if (!blob.HasBlob)
+            {
+                Logger.Warning(LogCategory.Export,
+                    $"No mesh raw blob for '{asset.GetBestName()}': {blob.SkipReason} -- host side falls back to YAML parsing.");
+                return _inner.Export(container, asset, path, fileSystem);
+            }
+
+            Captured.Add((path, blob.MetaJson, blob.Payload));
+            return ExportWithoutGeometry(container, mesh, path, fileSystem);
+        }
+
+        private bool ExportWithoutGeometry(IExportContainer container,
+            AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh mesh, string path, FileSystem fileSystem)
+        {
+            byte[] vertexData = mesh.VertexData.Data;
+            byte[] indexBuffer = mesh.IndexBuffer;
+            mesh.VertexData.Data = [];
+            mesh.IndexBuffer = [];
+            try
+            {
+                return _inner.Export(container, mesh, path, fileSystem);
+            }
+            finally
+            {
+                mesh.VertexData.Data = vertexData;
+                mesh.IndexBuffer = indexBuffer;
+            }
         }
 
         public void Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem, Action<IExportContainer, IUnityObjectBase, string, FileSystem>? callback)
