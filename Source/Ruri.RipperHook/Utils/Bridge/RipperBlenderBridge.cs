@@ -1082,7 +1082,7 @@ public sealed class CabMapHandle
     public CabTable Table { get; }
     public string BaseFolder => Table.BaseFolder;
 
-    public CabTableSearch Search => _search ??= new CabTableSearch(Table);
+    public CabTableSearch Search => _search ??= CabTableSearch.For(Table);
 
     internal CabMapHandle(string cabMapPath, CabTable table)
     {

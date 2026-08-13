@@ -22,6 +22,14 @@ public sealed class CabTableSearch
 
     private readonly ConcurrentDictionary<string, int[]> _columnRanks = new(StringComparer.Ordinal);
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CabTable, CabTableSearch> Sessions = new();
+
+    public static CabTableSearch For(CabTable table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return Sessions.GetValue(table, static loaded => new CabTableSearch(loaded));
+    }
+
     public CabTableSearch(CabTable table)
     {
         ArgumentNullException.ThrowIfNull(table);

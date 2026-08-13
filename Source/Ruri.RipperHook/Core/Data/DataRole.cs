@@ -5,6 +5,7 @@ public enum DataRole
     Internal,
     Introspection,
     Session,
+    Selection,
     CharacterRoster,
     CharacterModels,
     NpcManifest,
