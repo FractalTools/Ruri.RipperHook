@@ -1,4 +1,6 @@
 using AssetRipper.Assets;
+using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Metadata;
 using Ruri.RipperHook.Tables;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
@@ -340,15 +342,77 @@ public static class RipperBlenderBridge
     public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds,
         string[]? exportAssetKeys, bool buildGraph, string[] acceptedTextureFormats)
     {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(seedCabNames);
         return ImportCabsCore(map, seedCabNames, new ExportSelection(exportClassIds, exportAssetKeys),
-            buildGraph, acceptedTextureFormats);
+            buildGraph, acceptedTextureFormats, null, null);
+    }
+
+    /// <summary>
+    /// The massed-placement primitive: resolve seed CONTAINER PATHS (a scene window's distinct
+    /// mesh/prefab/material paths, "##sub" sub-asset suffixes included) to their CABs, load and
+    /// process that dependency closure IN FULL, but serialize ONLY the assets reachable from the
+    /// seeds over real PPtr edges (renderer -> material -> texture, prefab -> hierarchy), minus
+    /// the excluded classes. A streaming closure's shared CABs co-host an order of magnitude more
+    /// assets than a window actually places; full-closure export priced every one of them in YAML
+    /// text and PNG encode. ClosureResult.SeedAssetGuids maps every resolved seed
+    /// path to its exported asset guid ("a.fbx##sub" to that named sub-mesh), which is the whole
+    /// join a host needs -- no name-index scan over the closure on the other side.
+    /// </summary>
+    public static ClosureResult ImportReachable(CabMapHandle map, string[] seedContainerPaths,
+        string[]? excludedClassNames, string[] acceptedTextureFormats)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(seedContainerPaths);
+        HashSet<int> excluded = new();
+        foreach (string name in excludedClassNames ?? Array.Empty<string>())
+        {
+            excluded.UnionWith(ResolveClassIds(name));
+        }
+        string[] seedCabs = CabMap.ResolveCabsForPaths(map.Table, seedContainerPaths);
+        return ImportCabsCore(map, seedCabs, null, false, acceptedTextureFormats,
+            seedContainerPaths, excluded);
+    }
+
+    /// <summary>
+    /// Every class id a UNITY class name covers. One Unity class can occupy several ids across
+    /// versions, which this enum disambiguates by suffixing the number ("VideoClip" is stored as
+    /// VideoClip_327 and VideoClip_329) -- an artifact of how the enum is generated, not a fact
+    /// about Unity, so a caller states the Unity name and this resolves the spread. An unknown
+    /// name throws with the near misses rather than silently excluding nothing.
+    /// </summary>
+    private static List<int> ResolveClassIds(string className)
+    {
+        List<int> ids = new();
+        foreach (string candidate in Enum.GetNames<ClassIDType>())
+        {
+            int underscore = candidate.LastIndexOf('_');
+            bool suffixed = underscore > 0
+                && candidate.AsSpan(underscore + 1).ToString() is { Length: > 0 } tail
+                && tail.All(char.IsAsciiDigit);
+            string bare = suffixed ? candidate[..underscore] : candidate;
+            if (string.Equals(bare, className, StringComparison.OrdinalIgnoreCase))
+            {
+                ids.Add((int)Enum.Parse<ClassIDType>(candidate));
+            }
+        }
+        if (ids.Count == 0)
+        {
+            throw new ArgumentException(
+                $"'{className}' is not a Unity class name (ClassIDType). Nearest: " +
+                string.Join(", ", Enum.GetNames<ClassIDType>()
+                    .Where(name => name.Contains(className, StringComparison.OrdinalIgnoreCase))
+                    .Take(5)));
+        }
+        return ids;
     }
 
     private sealed class ExportSelection
     {
         private readonly HashSet<int>? _classIds;
         private readonly HashSet<string>? _assetKeys;
-        private Dictionary<AssetRipper.Assets.Collections.AssetCollection, string>? _identities;
+        private readonly HashSet<IUnityObjectBase>? _admittedObjects;
+        private Dictionary<AssetCollection, string>? _identities;
 
         public ExportSelection(int[]? classIds, string[]? assetKeys)
         {
@@ -356,10 +420,17 @@ public static class RipperBlenderBridge
             _assetKeys = assetKeys is null ? null : new HashSet<string>(assetKeys, StringComparer.Ordinal);
         }
 
-        public bool IsUnrestricted => _classIds is null && _assetKeys is null;
+        public ExportSelection(HashSet<IUnityObjectBase> admittedObjects)
+        {
+            _admittedObjects = admittedObjects;
+        }
+
+        public bool HasObjectSet => _admittedObjects is not null;
+
+        public bool IsUnrestricted => _admittedObjects is null && _classIds is null && _assetKeys is null;
 
         public bool MightExportEveryAssetOfClass(int classId) =>
-            _assetKeys is null && (_classIds is null || _classIds.Contains(classId));
+            _admittedObjects is null && _assetKeys is null && (_classIds is null || _classIds.Contains(classId));
 
         public bool NeedsIdentities => _assetKeys is not null;
 
@@ -372,9 +443,117 @@ public static class RipperBlenderBridge
                 : string.Create(System.Globalization.CultureInfo.InvariantCulture,
                     $"{_identities[asset.Collection]}|{asset.PathID}");
 
-        public bool Admits(IUnityObjectBase asset) =>
-            (_classIds is null || _classIds.Contains(asset.ClassID))
-            && (_assetKeys is null || _assetKeys.Contains(KeyOf(asset)));
+        public bool Admits(IUnityObjectBase asset)
+        {
+            if (_admittedObjects is not null)
+            {
+                if (_admittedObjects.Contains(asset))
+                {
+                    return true;
+                }
+                // An export collection routes some assets through a wrapper (a texture's
+                // SpriteInformationObject MainAsset); admit each side whenever the other is in.
+                if (asset.MainAsset is { } main && !ReferenceEquals(main, asset)
+                    && _admittedObjects.Contains(main))
+                {
+                    return true;
+                }
+                return asset is AssetRipper.Processing.Textures.SpriteInformationObject sprite
+                    && sprite.Texture is { } texture && _admittedObjects.Contains(texture);
+            }
+            return (_classIds is null || _classIds.Contains(asset.ClassID))
+                && (_assetKeys is null || _assetKeys.Contains(KeyOf(asset)));
+        }
+    }
+
+    private static HashSet<IUnityObjectBase> CollectReachable(GameData gameData,
+        string[] seedContainerPaths, HashSet<int> excludedClassIds, out int unresolvedSeeds)
+    {
+        // Three keyings of the same assets, because a seed states the path the GAME files an
+        // asset under and OriginalPath states the path this export believes in, and the two
+        // disagree in two measured ways: the extension (a ".mesh" container is written as
+        // ".asset") and the whole folder ("Packages/com.hg.../M_x.mat" against an Assets-rooted
+        // export path). Full path, then path-without-extension, then the bare leaf name --
+        // each strictly weaker, and the leaf is only trusted when it names exactly one asset,
+        // since admitting the wrong asset is worse than reporting the seed.
+        Dictionary<string, List<IUnityObjectBase>> byPath = new(StringComparer.Ordinal);
+        Dictionary<string, List<IUnityObjectBase>> byLeaf = new(StringComparer.Ordinal);
+        static void Index(Dictionary<string, List<IUnityObjectBase>> index, string key,
+            IUnityObjectBase asset)
+        {
+            if (!index.TryGetValue(key, out List<IUnityObjectBase>? list))
+            {
+                index[key] = list = new List<IUnityObjectBase>();
+            }
+            list.Add(asset);
+        }
+        foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
+        {
+            foreach (IUnityObjectBase asset in collection)
+            {
+                string? original = asset.OriginalPath;
+                if (string.IsNullOrEmpty(original))
+                {
+                    continue;
+                }
+                string normalized = NormalizeExportPath(original);
+                Index(byPath, normalized, asset);
+                string stem = StripExtension(normalized);
+                if (!string.Equals(stem, normalized, StringComparison.Ordinal))
+                {
+                    Index(byPath, stem, asset);
+                }
+                Index(byLeaf, LeafOf(stem), asset);
+            }
+        }
+
+        HashSet<IUnityObjectBase> admitted = new(ReferenceEqualityComparer.Instance);
+        Queue<IUnityObjectBase> frontier = new();
+        unresolvedSeeds = 0;
+        foreach (string seed in seedContainerPaths)
+        {
+            string normalized = NormalizeExportPath(seed);
+            if (!byPath.TryGetValue(normalized, out List<IUnityObjectBase>? assets)
+                && !byPath.TryGetValue(StripExtension(normalized), out assets))
+            {
+                byLeaf.TryGetValue(LeafOf(StripExtension(normalized)), out List<IUnityObjectBase>? byName);
+                if (byName is not { Count: 1 })
+                {
+                    unresolvedSeeds++;
+                    continue;
+                }
+                assets = byName;
+            }
+            foreach (IUnityObjectBase asset in assets)
+            {
+                if (!excludedClassIds.Contains(asset.ClassID) && admitted.Add(asset))
+                {
+                    frontier.Enqueue(asset);
+                }
+            }
+        }
+
+        while (frontier.Count > 0)
+        {
+            IUnityObjectBase asset = frontier.Dequeue();
+            foreach ((string _, PPtr pointer) in asset.FetchDependencies())
+            {
+                if (pointer.PathID == 0)
+                {
+                    continue;
+                }
+                IUnityObjectBase? target = asset.Collection.TryGetAsset(pointer);
+                if (target is null || excludedClassIds.Contains(target.ClassID))
+                {
+                    continue;
+                }
+                if (admitted.Add(target))
+                {
+                    frontier.Enqueue(target);
+                }
+            }
+        }
+        return admitted;
     }
 
     private static AssetRipper.Export.Configuration.ImageExportFormat[] ParseTextureFormats(string[] extensions)
@@ -394,12 +573,11 @@ public static class RipperBlenderBridge
         return formats;
     }
 
-    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, ExportSelection selection,
-        bool buildGraph, string[] acceptedTextureFormats)
+    private static ClosureResult ImportCabsCore(CabMapHandle map, string[] seedCabNames, ExportSelection? selection,
+        bool buildGraph, string[] acceptedTextureFormats,
+        string[]? seedContainerPaths, HashSet<int>? reachableExcludedClassIds)
     {
         ArgumentNullException.ThrowIfNull(acceptedTextureFormats);
-        ArgumentNullException.ThrowIfNull(map);
-        ArgumentNullException.ThrowIfNull(seedCabNames);
 
         System.Diagnostics.Stopwatch phase = System.Diagnostics.Stopwatch.StartNew();
         CabClosure closure = new CabSelection { SeedCabNames = seedCabNames }.Resolve(map.Table);
@@ -413,14 +591,18 @@ public static class RipperBlenderBridge
 
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
-        settings.ExportSettings.ShaderExportMode = ShaderExportMode.Decompile;
+        // Dummy, always: no host on this bridge can USE a shader (Blender rebuilds the game's
+        // shading as its own node graphs), and a material only ever reads the shader's NAME --
+        // which the dummy exporter still writes as its `Shader "<name>"` head line. Decompiling
+        // HLSL was pure cost with no consumer.
+        settings.ExportSettings.ShaderExportMode = ShaderExportMode.Dummy;
         settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
         settings.ExportSettings.PreferOriginalTextureExtension = true;
         settings.ExportSettings.ImageExportFormat = AssetRipper.Export.Configuration.ImageExportFormat.Png;
-        ClipCaptureExporter clipCapture = new(selection);
+        ClipCaptureExporter clipCapture = new();
         MeshCaptureExporter meshCapture = new();
         PrewarmedTextureExporter textureExporter = new(settings, ParseTextureFormats(acceptedTextureFormats));
-        BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter, selection);
+        BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter);
 
         GameData gameData;
         GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0 ? name => loadFilterFileNames.Contains(name) : null;
@@ -442,8 +624,21 @@ public static class RipperBlenderBridge
         }
         long processMs = phase.ElapsedMilliseconds;
 
+        // Reachable mode: the admitted set only exists once the closure is loaded and
+        // processed (OriginalPath assignment happens there), so the selection is built here.
         phase.Restart();
-        if (selection.NeedsIdentities)
+        int unresolvedSeeds = 0;
+        if (seedContainerPaths is not null)
+        {
+            selection = new ExportSelection(CollectReachable(gameData, seedContainerPaths,
+                reachableExcludedClassIds ?? new HashSet<int>(), out unresolvedSeeds));
+        }
+        long reachMs = phase.ElapsedMilliseconds;
+        handler.Selection = selection!;
+        clipCapture.Selection = selection;
+
+        phase.Restart();
+        if (selection!.NeedsIdentities)
         {
             selection.BindIdentities(gameData);
         }
@@ -453,9 +648,13 @@ public static class RipperBlenderBridge
         long graphMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
-        if (selection.MightExportEveryAssetOfClass((int)ClassIDType.Texture2D))
+        if (selection.HasObjectSet)
         {
-            textureExporter.Prewarm(gameData);
+            textureExporter.Prewarm(gameData, selection.Admits);
+        }
+        else if (selection.MightExportEveryAssetOfClass((int)ClassIDType.Texture2D))
+        {
+            textureExporter.Prewarm(gameData, null);
         }
         long prewarmMs = phase.ElapsedMilliseconds;
 
@@ -466,11 +665,12 @@ public static class RipperBlenderBridge
 
         phase.Restart();
         ClosureResult result = Partition(memoryFileSystem.Files, map.Table, seedCabNames,
-            clipCapture.Captured, meshCapture.Captured, graphMetaJson, graphPayload);
+            clipCapture.Captured, meshCapture.Captured, graphMetaJson, graphPayload, seedContainerPaths);
         Logger.Info(LogCategory.Export,
             $"[ImportCabs] closure={closure.ClosureCount} files={closureFiles.Length} " +
-            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms graph={graphMs}ms " +
+            $"resolve={resolveMs}ms load={loadMs}ms process={processMs}ms reach={reachMs}ms graph={graphMs}ms " +
             $"prewarm={prewarmMs}ms export={exportMs}ms partition={phase.ElapsedMilliseconds}ms " +
+            $"seeds={(seedContainerPaths is null ? "-" : $"{seedContainerPaths.Length}(unresolved {unresolvedSeeds})")} " +
             $"meshblobs={result.MeshBlobMeta.Count}/{meshCapture.MeshCount} " +
             $"texcache(hit={textureExporter.HitStats.Hits} miss={textureExporter.HitStats.Misses})");
         textureExporter.LogStats();
@@ -504,20 +704,23 @@ public static class RipperBlenderBridge
         private readonly ClipCaptureExporter _clipCapture;
         private readonly MeshCaptureExporter _meshCapture;
         private readonly PrewarmedTextureExporter _textureExporter;
-        private readonly ExportSelection _selection;
+
+        // Assigned between Process and Export: reachable mode can only compute its admitted
+        // set from the LOADED closure, and this handler has to exist before Load runs.
+        public ExportSelection? Selection { get; set; }
 
         public BridgeExportHandler(FullConfiguration settings, ClipCaptureExporter clipCapture,
-            MeshCaptureExporter meshCapture, PrewarmedTextureExporter textureExporter,
-            ExportSelection selection) : base(settings)
+            MeshCaptureExporter meshCapture, PrewarmedTextureExporter textureExporter) : base(settings)
         {
             _clipCapture = clipCapture;
             _meshCapture = meshCapture;
             _textureExporter = textureExporter;
-            _selection = selection;
         }
 
         protected override void BeforeExport(ProjectExporter projectExporter)
         {
+            ExportSelection selection = Selection
+                ?? throw new InvalidOperationException("Selection must be assigned before Export.");
             projectExporter.OverrideExporter<IAnimationClip>(_clipCapture, allowInheritance: true);
             projectExporter.OverrideExporter<AssetRipper.SourceGenerated.Classes.ClassID_43.IMesh>(
                 _meshCapture, allowInheritance: true);
@@ -525,10 +728,10 @@ public static class RipperBlenderBridge
                 _textureExporter, allowInheritance: true);
             projectExporter.OverrideExporter<AssetRipper.Processing.Textures.SpriteInformationObject>(
                 _textureExporter, allowInheritance: true);
-            if (!_selection.IsUnrestricted)
+            if (!selection.IsUnrestricted)
             {
                 projectExporter.OverrideExporter<IUnityObjectBase>(
-                    new SelectionFilterExporter(_selection), allowInheritance: true);
+                    new SelectionFilterExporter(selection), allowInheritance: true);
             }
         }
     }
@@ -621,13 +824,14 @@ public static class RipperBlenderBridge
             return false;
         }
 
-        public void Prewarm(GameData gameData)
+        public void Prewarm(GameData gameData, Func<IUnityObjectBase, bool>? admit)
         {
             List<AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D> targets = new();
             foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
             {
                 if (asset is AssetRipper.SourceGenerated.Classes.ClassID_28.ITexture2D texture
                     && asset.MainAsset is AssetRipper.Processing.Textures.SpriteInformationObject
+                    && (admit is null || admit(asset))
                     && texture.CheckAssetIntegrity())
                 {
                     targets.Add(texture);
@@ -744,9 +948,11 @@ public static class RipperBlenderBridge
                 : base.GetExportExtension(asset);
     }
 
-    private sealed class ClipCaptureExporter(ExportSelection selection) : IAssetExporter
+    private sealed class ClipCaptureExporter : IAssetExporter
     {
         private readonly DefaultYamlExporter _inner = new();
+
+        public ExportSelection? Selection { get; set; }
 
         public List<(string Cab, string Path, string AssetKey, string MetaJson, byte[] Curves)> Captured { get; } = new();
 
@@ -771,7 +977,8 @@ public static class RipperBlenderBridge
                     Logger.Warning(LogCategory.Export, $"Clip curve blob failed for '{asset.GetBestName()}': {exception.Message} -- the Blender side cannot import this clip's curves (no YAML fallback).");
                 }
             }
-            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path, selection.KeyOf(asset), metaJson, curves));
+            Captured.Add((asset.Collection.Name.ToLowerInvariant(), path,
+                Selection?.KeyOf(asset) ?? string.Empty, metaJson, curves));
             return _inner.Export(container, asset, path, fileSystem);
         }
 
@@ -796,7 +1003,7 @@ public static class RipperBlenderBridge
     {
         private readonly YamlStreamedAssetExporter _inner = new();
 
-        public List<(string Path, string MetaJson, byte[] Payload)> Captured { get; } = new();
+        public List<(string Path, string Name, string MetaJson, byte[] Payload)> Captured { get; } = new();
 
         public int MeshCount { get; private set; }
 
@@ -822,7 +1029,7 @@ public static class RipperBlenderBridge
                 return _inner.Export(container, asset, path, fileSystem);
             }
 
-            Captured.Add((path, blob.MetaJson, blob.Payload));
+            Captured.Add((path, mesh.Name.String, blob.MetaJson, blob.Payload));
             return ExportWithoutGeometry(container, mesh, path, fileSystem);
         }
 
@@ -890,8 +1097,8 @@ public static class RipperBlenderBridge
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
         CabTable table, string[] seedCabNames,
         List<(string Cab, string Path, string AssetKey, string MetaJson, byte[] Curves)> capturedClips,
-        List<(string Path, string MetaJson, byte[] Payload)> capturedMeshes,
-        string graphMetaJson, byte[] graphPayload)
+        List<(string Path, string Name, string MetaJson, byte[] Payload)> capturedMeshes,
+        string graphMetaJson, byte[] graphPayload, string[]? seedContainerPaths)
     {
         Dictionary<string, byte[]> assets = new(StringComparer.Ordinal);
         Dictionary<string, string> assetPaths = new(StringComparer.Ordinal);
@@ -899,6 +1106,12 @@ public static class RipperBlenderBridge
         List<string> roots = new();
         List<string> sceneRoots = new();
         Dictionary<string, string> pathToGuid = new(StringComparer.OrdinalIgnoreCase);
+        // The same exported paths keyed more weakly, for the seed join below: without
+        // their extension, and by bare leaf name. See CollectReachable for why both
+        // exist -- the game's container path and the export path disagree on the
+        // extension AND, for package assets, on the whole folder.
+        Dictionary<string, List<string>> guidsByStem = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<string>> guidsByLeaf = new(StringComparer.OrdinalIgnoreCase);
         UTF8Encoding utf8 = new(false);
 
         List<(string Guid, string NormalizedPath)> rootPaths = new();
@@ -919,7 +1132,20 @@ public static class RipperBlenderBridge
                 other[path] = bytes;
                 continue;
             }
-            pathToGuid[NormalizeExportPath(path)] = guid;
+            string normalizedPath = NormalizeExportPath(path);
+            pathToGuid[normalizedPath] = guid;
+            string pathStem = StripExtension(normalizedPath);
+            if (!guidsByStem.TryGetValue(pathStem, out List<string>? stemGuids))
+            {
+                guidsByStem[pathStem] = stemGuids = new List<string>();
+            }
+            stemGuids.Add(guid);
+            string leaf = LeafOf(pathStem);
+            if (!guidsByLeaf.TryGetValue(leaf, out List<string>? leafGuids))
+            {
+                guidsByLeaf[leaf] = leafGuids = new List<string>();
+            }
+            leafGuids.Add(guid);
 
             assets[guid] = bytes;
             assetPaths[guid] = path;
@@ -1004,19 +1230,74 @@ public static class RipperBlenderBridge
 
         Dictionary<string, string> meshBlobMeta = new(StringComparer.Ordinal);
         Dictionary<string, byte[]> meshBlobData = new(StringComparer.Ordinal);
-        foreach ((string path, string metaJson, byte[] payload) in capturedMeshes)
+        Dictionary<string, string> meshGuidByName = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string path, string name, string metaJson, byte[] payload) in capturedMeshes)
         {
             string? guid = pathToGuid.GetValueOrDefault(NormalizeExportPath(path));
             if (guid is not null)
             {
                 meshBlobMeta[guid] = metaJson;
                 meshBlobData[guid] = payload;
+                if (name.Length > 0)
+                {
+                    meshGuidByName[name] = guid;
+                }
+            }
+        }
+
+        // Every seed container path -> the exported guid it names. "container##sub" names a
+        // mesh SUB-ASSET, joined by the mesh's own m_Name (the ranked mesh-name convention the
+        // placement data states); a plain path is the container itself. No name-index scan is
+        // ever needed on the consuming side, and a seed that resolves to nothing stays absent
+        // -- the host counts it as unresolved instead of guessing.
+        //
+        // Three spellings, tried in order, because the seed states the path the GAME files an
+        // asset under and the export states the path AssetRipper wrote:
+        //   1. the exact path (the overwhelmingly common case);
+        //   2. the path without its extension -- a ".mesh" container exports as ".asset", and
+        //      matching only on the full path silently dropped every foliage imposter card;
+        //   3. the leaf name as a Mesh's own m_Name, for a container whose export landed
+        //      somewhere else entirely.
+        // A stem shared by several exported assets is NOT guessed at: placing the wrong asset
+        // is worse than reporting the seed, so it falls through to the name match.
+        Dictionary<string, string> seedAssetGuids = new(StringComparer.Ordinal);
+        foreach (string seed in seedContainerPaths ?? Array.Empty<string>())
+        {
+            int hashIdx = seed.IndexOf("##", StringComparison.Ordinal);
+            string? guid;
+            if (hashIdx >= 0)
+            {
+                guid = meshGuidByName.GetValueOrDefault(seed[(hashIdx + 2)..]);
+            }
+            else
+            {
+                string normalized = NormalizeExportPath(seed);
+                guid = pathToGuid.GetValueOrDefault(normalized);
+                if (guid is null)
+                {
+                    string stem = StripExtension(normalized);
+                    if (guidsByStem.TryGetValue(stem, out List<string>? byStem)
+                        && byStem.Count == 1)
+                    {
+                        guid = byStem[0];
+                    }
+                    else if (guidsByLeaf.TryGetValue(LeafOf(stem), out List<string>? byLeafName)
+                        && byLeafName.Count == 1)
+                    {
+                        guid = byLeafName[0];
+                    }
+                    guid ??= meshGuidByName.GetValueOrDefault(LeafOf(stem));
+                }
+            }
+            if (guid is not null)
+            {
+                seedAssetGuids[seed] = guid;
             }
         }
 
         return new ClosureResult(assets, other, roots.ToArray(), seedRoots, clipGuidsByCab,
             sceneRoots.ToArray(), clipCurveMeta, clipCurveData, meshBlobMeta, meshBlobData, rootCabs,
-            assetPaths, clipGuidByAssetKey, graphMetaJson, graphPayload);
+            assetPaths, clipGuidByAssetKey, seedAssetGuids, graphMetaJson, graphPayload);
     }
 
     private static Dictionary<string, string> BuildRootCabs(CabTable table,
@@ -1123,6 +1404,15 @@ public static class RipperBlenderBridge
         return extMatch ?? (stemMatches == 1 ? stemMatch : null);
     }
 
+    private static string StripExtension(string normalizedPath)
+    {
+        int dot = normalizedPath.LastIndexOf('.');
+        return dot > normalizedPath.LastIndexOf('/') ? normalizedPath[..dot] : normalizedPath;
+    }
+
+    private static string LeafOf(string normalizedPath) =>
+        normalizedPath[(normalizedPath.LastIndexOf('/') + 1)..];
+
     private static string NormalizeExportPath(string path)
     {
         string slashed = path.Replace('\\', '/');
@@ -1208,6 +1498,7 @@ public sealed record ClosureResult(
     IReadOnlyDictionary<string, string> RootCabs,
     IReadOnlyDictionary<string, string> AssetPaths,
     IReadOnlyDictionary<string, string> ClipGuidByAssetKey,
+    IReadOnlyDictionary<string, string> SeedAssetGuids,
     string GraphMetaJson,
     byte[] GraphPayload)
 {
@@ -1222,6 +1513,7 @@ public sealed record ClosureResult(
         new Dictionary<string, byte[]>(),
         new Dictionary<string, string>(),
         new Dictionary<string, byte[]>(),
+        new Dictionary<string, string>(),
         new Dictionary<string, string>(),
         new Dictionary<string, string>(),
         new Dictionary<string, string>(),
