@@ -97,7 +97,7 @@ pair.Value.Asset.SetAsset(bundle.Collection, asset as IObject);  // SetAsset 需
 
 ## 6. 自定义 IAssetProcessor 注入（被 AR_PrefabOutlining、AR_StaticMeshSeparation 使用）
 
-`Source/Ruri.RipperHook/Utils/Hook/ExportHandlerHook.cs` 是一个 module，它 hook `ExportHandler.Process`，用 `GetProcessors()` 的一份重新实现替换掉整条流水线，并在 `EditorFormatProcessor` 和 `LightingDataProcessor` 之间提供一个自定义插入点：
+`Source/Ruri.RipperHook/Utils/Hook/ExportHandlerHook.cs` 是一个 module，它 hook `ExportHandler.Process`，**反射调用上游自己的 `ExportHandler.GetProcessors()` 拿到流水线**，再把自定义 processor 插进 `LightingDataProcessor` 之前（= 上游 `//Static mesh separation goes here` 那个位置）：
 
 ```csharp
 public delegate IEnumerable<IAssetProcessor> AssetProcessorDelegate(FullConfiguration Settings);
@@ -112,7 +112,8 @@ ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
 其中 `MyDelegate(FullConfiguration s) => /* yield return */`。
 
 **注意事项**：
-- `ExportHandlerHook.GetProcessors()` 是 AR `ExportHandler.GetProcessors()` 的一份手工镜像拷贝。**当前缺少 `OriginalPathProcessor`** —— 如果你的 hook 需要 OriginalPath 被填充，要么把它加回镜像里，要么在这些 hook 下别依赖它。
+- **绝不要把上游那张 processor 表再抄一份进来。** 这里曾经是一份手工镜像拷贝，漏掉了 `OriginalPathProcessor`，于是只要有任何 hook 注册了本 module（`AR_HumanoidToGeneric_` / `AR_PrefabOutlining_` / `AR_StaticMeshSeparation_`），全闭包资产的 `OriginalPath` 就全是 null —— `ImportReachable` 完全靠 `OriginalPath` 建 seed→guid 的 join，于是整场景静默导入为空（实测 base01_lv001：1619 个 placement 全报 UNRESOLVED、0 source，而去掉那个 hook 就一切正常）。镜像 = 第二真源，上游一改就静默偏离；现在直接问上游要。
+- 插入点锚在 `LightingDataProcessor` 上（上游注释写明 `Needs to be after static mesh separation`）。上游哪天不再产出它，`GetProcessors` 会**抛异常**而不是悄悄把自定义 processor 丢掉。
 - 多个 Ruri hook 注册 `ExportHandlerHook` 是没问题的（module 的 `OnApply` 是幂等的，因为它是同一个静态委托列表）。
 
 ---

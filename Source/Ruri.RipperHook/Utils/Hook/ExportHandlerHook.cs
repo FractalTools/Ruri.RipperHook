@@ -3,17 +3,10 @@ using System.Collections.Generic;
 using System.Reflection;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Export.Configuration;
-using AssetRipper.Export.UnityProjects;using AssetRipper.Export.UnityProjects.Configuration;using AssetRipper.Import.Configuration;
+using AssetRipper.Export.UnityProjects;
+using AssetRipper.Export.UnityProjects.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Processing;
-using AssetRipper.Processing.AnimatorControllers;
-using AssetRipper.Processing.Assemblies;
-using AssetRipper.Processing.AudioMixers;
-using AssetRipper.Processing.Editor;
-using AssetRipper.Processing.Prefabs;
-using AssetRipper.Processing.Scenes;
-using AssetRipper.Processing.ScriptableObject;
-using AssetRipper.Processing.Textures;
 
 using Ruri.RipperHook.Core;
 
@@ -25,9 +18,20 @@ public class ExportHandlerHook : CommonHook, IHookModule
     {
         Registry.ApplyTypeHooks(GetType());
     }
+
     public delegate IEnumerable<IAssetProcessor> AssetProcessorDelegate(FullConfiguration Settings);
 
     public static List<AssetProcessorDelegate> CustomAssetProcessors = new List<AssetProcessorDelegate>();
+
+    private static readonly PropertyInfo SettingsProperty =
+        typeof(ExportHandler).GetProperty("Settings",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+        ?? throw new MissingMemberException(nameof(ExportHandler), "Settings");
+
+    private static readonly MethodInfo UpstreamGetProcessors =
+        typeof(ExportHandler).GetMethod("GetProcessors",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+        ?? throw new MissingMemberException(nameof(ExportHandler), "GetProcessors");
 
     [RetargetMethod(typeof(ExportHandler), nameof(Process))]
     private void Process(GameData gameData)
@@ -42,50 +46,29 @@ public class ExportHandlerHook : CommonHook, IHookModule
 
     private IEnumerable<IAssetProcessor> GetProcessors()
     {
-        var settingsProp = typeof(ExportHandler).GetProperty("Settings", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        var Settings = (FullConfiguration)settingsProp.GetValue(this);
-
-
-        yield return new AttributePolyfillGenerator();
-        yield return new MonoExplicitPropertyRepairProcessor();
-        yield return new ObfuscationRepairProcessor();
-        yield return new ForwardingAssemblyGenerator();
-
-        if (Settings.ImportSettings.ScriptContentLevel == ScriptContentLevel.Level1)
+        List<IAssetProcessor> processors =
+            new((IEnumerable<IAssetProcessor>)UpstreamGetProcessors.Invoke(this, null)!);
+        if (CustomAssetProcessors.Count == 0)
         {
-            yield return new MethodStubbingProcessor();
+            return processors;
         }
 
-        yield return new NullRefReturnProcessor(Settings.ImportSettings.ScriptContentLevel);
-        yield return new UnmanagedConstraintRecoveryProcessor();
-
-        if (Settings.ProcessingSettings.RemoveNullableAttributes)
+        FullConfiguration settings = (FullConfiguration)SettingsProperty.GetValue(this)!;
+        List<IAssetProcessor> custom = new();
+        foreach (AssetProcessorDelegate factory in CustomAssetProcessors)
         {
-            yield return new NullableRemovalProcessor();
-        }
-        if (Settings.ProcessingSettings.PublicizeAssemblies)
-        {
-            yield return new SafeAssemblyPublicizingProcessor();
+            custom.AddRange(factory(settings));
         }
 
-        yield return new RemoveAssemblyKeyFileAttributeProcessor();
-        yield return new InternalsVisibileToPublicKeyRemover();
-
-        yield return new SceneDefinitionProcessor();
-        yield return new MainAssetProcessor();
-        yield return new AnimatorControllerProcessor();
-        yield return new AudioMixerProcessor();
-        yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
-
-        foreach (var CustomAssetProcessor in CustomAssetProcessors)
+        int anchor = processors.FindIndex(static processor => processor is LightingDataProcessor);
+        if (anchor < 0)
         {
-            foreach (var processor in CustomAssetProcessor(Settings))
-            {
-                yield return processor;
-            }
+            throw new InvalidOperationException(
+                $"{nameof(ExportHandler)}.GetProcessors no longer yields {nameof(LightingDataProcessor)}, "
+                + $"so the {nameof(CustomAssetProcessors)} insertion point is gone. Re-anchor "
+                + $"{nameof(ExportHandlerHook)} against the current upstream pipeline.");
         }
-
-        yield return new LightingDataProcessor();        yield return new AssetRipper.Processing.Prefabs.PrefabProcessor();
-        yield return new SpriteProcessor();
-        yield return new ScriptableObjectProcessor();    }
+        processors.InsertRange(anchor, custom);
+        return processors;
+    }
 }
