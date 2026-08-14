@@ -16,7 +16,11 @@ public partial class AR_HumanoidToGeneric_Hook : RipperHookCommon
     protected override void InitAttributeHook()
     {
         RegisterModule(new ExportHandlerHook());
-        ExportHandlerHook.CustomAssetProcessors.Add(HumanoidProcessor);
+        ExportHandlerHook.Register(new AssetProcessorRegistration
+        {
+            InsertBefore = typeof(LightingDataProcessor),
+            Factory = HumanoidProcessor,
+        });
         base.InitAttributeHook();
     }
 

@@ -95,26 +95,37 @@ pair.Value.Asset.SetAsset(bundle.Collection, asset as IObject);  // SetAsset 需
 
 ---
 
-## 6. 自定义 IAssetProcessor 注入（被 AR_PrefabOutlining、AR_StaticMeshSeparation 使用）
+## 6. 自定义 IAssetProcessor 注入（被 AR_HumanoidToGeneric、AR_PrefabOutlining、AR_StaticMeshSeparation 使用）
 
-`Source/Ruri.RipperHook/Utils/Hook/ExportHandlerHook.cs` 是一个 module，它 hook `ExportHandler.Process`，**反射调用上游自己的 `ExportHandler.GetProcessors()` 拿到流水线**，再把自定义 processor 插进 `LightingDataProcessor` 之前（= 上游 `//Static mesh separation goes here` 那个位置）：
+`Source/Ruri.RipperHook/Utils/Hook/ExportHandlerHook.cs` 是一个 module。它对 `ExportHandler.GetProcessors` 下 **ILHook**（`[RetargetMethodFunc]`，见 §2 的 `RetargetCallFunc`），在原方法每个 `ret` 处 `EmitDelegate` 接管返回值 —— **上游那条流水线原封不动地跑，本仓库一行都不复制**，只在返回的序列上做插入。`ExportHandler.Process` 完全不碰。
+
+注册项自带位置，是纯数据：
 
 ```csharp
-public delegate IEnumerable<IAssetProcessor> AssetProcessorDelegate(FullConfiguration Settings);
-public static List<AssetProcessorDelegate> CustomAssetProcessors = new();
+public sealed class AssetProcessorRegistration
+{
+    public required Type InsertBefore { get; init; }
+    public required ExportHandlerHook.AssetProcessorDelegate Factory { get; init; }
+}
 ```
 
 要加一个 processor：在你的 `[RipperHook]` 类的 `InitAttributeHook` 里：
 ```csharp
 RegisterModule(new ExportHandlerHook());
-ExportHandlerHook.CustomAssetProcessors.Add(MyDelegate);
+ExportHandlerHook.Register(new AssetProcessorRegistration
+{
+    InsertBefore = typeof(LightingDataProcessor),
+    Factory = MyDelegate,
+});
 ```
-其中 `MyDelegate(FullConfiguration s) => /* yield return */`。
+其中 `MyDelegate(FullConfiguration s) => /* yield return */`。加 processor = 加一条注册，**永远不改本 module**。
 
 **注意事项**：
-- **绝不要把上游那张 processor 表再抄一份进来。** 这里曾经是一份手工镜像拷贝，漏掉了 `OriginalPathProcessor`，于是只要有任何 hook 注册了本 module（`AR_HumanoidToGeneric_` / `AR_PrefabOutlining_` / `AR_StaticMeshSeparation_`），全闭包资产的 `OriginalPath` 就全是 null —— `ImportReachable` 完全靠 `OriginalPath` 建 seed→guid 的 join，于是整场景静默导入为空（实测 base01_lv001：1619 个 placement 全报 UNRESOLVED、0 source，而去掉那个 hook 就一切正常）。镜像 = 第二真源，上游一改就静默偏离；现在直接问上游要。
-- 插入点锚在 `LightingDataProcessor` 上（上游注释写明 `Needs to be after static mesh separation`）。上游哪天不再产出它，`GetProcessors` 会**抛异常**而不是悄悄把自定义 processor 丢掉。
-- 多个 Ruri hook 注册 `ExportHandlerHook` 是没问题的（module 的 `OnApply` 是幂等的，因为它是同一个静态委托列表）。
+- **绝不要把上游那张 processor 表抄进来。** 这里曾经是 `GetProcessors()` 的一份手工镜像拷贝，漏掉了 `OriginalPathProcessor`；于是只要有任何 hook 注册了本 module，全闭包资产的 `OriginalPath` 就全是 null —— `ImportReachable` 完全靠 `OriginalPath` 建 seed→guid 的 join，整场景遂静默导入为空（实测 base01_lv001：1619 个 placement 全报 UNRESOLVED、0 source；摘掉那个 hook 就一切正常）。镜像 = 第二真源，上游一改就静默偏离。
+- **位置是注册方的事实，不是本 module 的常量。** `InsertBefore` 由注册方自己声明，共享代码里 grep 不出任何具体 processor 类型。目前三个 hook 都锚 `LightingDataProcessor`（上游注释写明 `Needs to be after static mesh separation`，那正是上游 `//Static mesh separation goes here` 的位置）。
+- 锚点在上游消失时 `Splice` **抛异常并点名是哪个注册方**，绝不悄悄把自定义 processor 丢掉。
+- `Settings` 按**类型**（唯一那个 `FullConfiguration` 属性）反查，不用属性名字符串。
+- `Register` 幂等（按 `Factory` 委托去重）。hook 被停用后重新启用会再跑一遍 `InitAttributeHook`（Blender 面板切游戏 tab 就会），旧的 `CustomAssetProcessors.Add` 会让同一个 processor 越堆越多，每次导出重复跑。
 
 ---
 

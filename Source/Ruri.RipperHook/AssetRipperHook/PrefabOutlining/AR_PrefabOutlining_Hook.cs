@@ -1,3 +1,4 @@
+using AssetRipper.Processing;
 using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 namespace Ruri.RipperHook.AR_PrefabOutlining;
@@ -12,7 +13,11 @@ public partial class AR_PrefabOutlining_Hook : RipperHookCommon
     protected override void InitAttributeHook()
     {
         RegisterModule(new ExportHandlerHook());
-        ExportHandlerHook.CustomAssetProcessors.Add(PrefabOutliningProcessor);
+        ExportHandlerHook.Register(new AssetProcessorRegistration
+        {
+            InsertBefore = typeof(LightingDataProcessor),
+            Factory = PrefabOutliningProcessor,
+        });
         base.InitAttributeHook();
     }
 }

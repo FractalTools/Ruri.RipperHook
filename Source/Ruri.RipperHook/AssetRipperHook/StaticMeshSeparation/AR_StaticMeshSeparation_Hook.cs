@@ -1,3 +1,4 @@
+using AssetRipper.Processing;
 using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
@@ -13,7 +14,11 @@ public partial class AR_StaticMeshSeparation_Hook : RipperHookCommon
     protected override void InitAttributeHook()
     {
         RegisterModule(new ExportHandlerHook());
-        ExportHandlerHook.CustomAssetProcessors.Add(StaticMeshProcessor);
+        ExportHandlerHook.Register(new AssetProcessorRegistration
+        {
+            InsertBefore = typeof(LightingDataProcessor),
+            Factory = StaticMeshProcessor,
+        });
         base.InitAttributeHook();
     }
 }

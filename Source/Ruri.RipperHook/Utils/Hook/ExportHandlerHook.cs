@@ -1,74 +1,80 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
-using AssetRipper.Assets.Bundles;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
-using AssetRipper.Export.UnityProjects.Configuration;
-using AssetRipper.Import.Logging;
 using AssetRipper.Processing;
-
+using Mono.Cecil.Cil;
+using MonoMod.Cil;
+using Ruri.Hook.Attributes;
 using Ruri.RipperHook.Core;
 
 namespace Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 public class ExportHandlerHook : CommonHook, IHookModule
 {
+    public delegate IEnumerable<IAssetProcessor> AssetProcessorDelegate(FullConfiguration settings);
+
+    private static readonly List<AssetProcessorRegistration> Registrations = new();
+
+    private static readonly PropertyInfo HandlerSettings = typeof(ExportHandler)
+        .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+        .Single(property => property.PropertyType == typeof(FullConfiguration));
+
     public void OnApply()
     {
         Registry.ApplyTypeHooks(GetType());
     }
 
-    public delegate IEnumerable<IAssetProcessor> AssetProcessorDelegate(FullConfiguration Settings);
-
-    public static List<AssetProcessorDelegate> CustomAssetProcessors = new List<AssetProcessorDelegate>();
-
-    private static readonly PropertyInfo SettingsProperty =
-        typeof(ExportHandler).GetProperty("Settings",
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
-        ?? throw new MissingMemberException(nameof(ExportHandler), "Settings");
-
-    private static readonly MethodInfo UpstreamGetProcessors =
-        typeof(ExportHandler).GetMethod("GetProcessors",
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
-        ?? throw new MissingMemberException(nameof(ExportHandler), "GetProcessors");
-
-    [RetargetMethod(typeof(ExportHandler), nameof(Process))]
-    private void Process(GameData gameData)
+    public static void Register(AssetProcessorRegistration registration)
     {
-        Logger.Info(LogCategory.Processing, "Processing loaded assets...");
-        foreach (IAssetProcessor processor in GetProcessors())
+        ArgumentNullException.ThrowIfNull(registration);
+        if (Registrations.Any(existing => existing.Factory.Equals(registration.Factory)))
         {
-            processor.Process(gameData);
+            return;
         }
-        Logger.Info(LogCategory.Processing, "Finished processing assets");
+        Registrations.Add(registration);
     }
 
-    private IEnumerable<IAssetProcessor> GetProcessors()
+    [RetargetMethodFunc(typeof(ExportHandler))]
+    public static bool ExportHandler_GetProcessors(ILContext il)
     {
-        List<IAssetProcessor> processors =
-            new((IEnumerable<IAssetProcessor>)UpstreamGetProcessors.Invoke(this, null)!);
-        if (CustomAssetProcessors.Count == 0)
+        ILCursor cursor = new(il);
+
+        int injected = 0;
+        while (cursor.TryGotoNext(MoveType.Before, instruction => instruction.OpCode == OpCodes.Ret))
         {
-            return processors;
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.EmitDelegate<Func<IEnumerable<IAssetProcessor>, ExportHandler, IEnumerable<IAssetProcessor>>>(Splice);
+            cursor.Index++;
+            injected++;
         }
 
-        FullConfiguration settings = (FullConfiguration)SettingsProperty.GetValue(this)!;
-        List<IAssetProcessor> custom = new();
-        foreach (AssetProcessorDelegate factory in CustomAssetProcessors)
+        return injected > 0;
+    }
+
+    private static IEnumerable<IAssetProcessor> Splice(IEnumerable<IAssetProcessor> pipeline, ExportHandler handler)
+    {
+        if (Registrations.Count == 0)
         {
-            custom.AddRange(factory(settings));
+            return pipeline;
         }
 
-        int anchor = processors.FindIndex(static processor => processor is LightingDataProcessor);
-        if (anchor < 0)
+        FullConfiguration settings = (FullConfiguration)HandlerSettings.GetValue(handler)!;
+        List<IAssetProcessor> processors = new(pipeline);
+        foreach (AssetProcessorRegistration registration in Registrations)
         {
-            throw new InvalidOperationException(
-                $"{nameof(ExportHandler)}.GetProcessors no longer yields {nameof(LightingDataProcessor)}, "
-                + $"so the {nameof(CustomAssetProcessors)} insertion point is gone. Re-anchor "
-                + $"{nameof(ExportHandlerHook)} against the current upstream pipeline.");
+            int anchor = processors.FindIndex(processor => registration.InsertBefore.IsInstanceOfType(processor));
+            if (anchor < 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(ExportHandler)}.GetProcessors yields no {registration.InsertBefore.Name}, so the "
+                    + $"asset processor registered by {registration.Factory.Method.DeclaringType?.Name} has no "
+                    + "insertion point. Re-anchor that registration against the current upstream pipeline.");
+            }
+            processors.InsertRange(anchor, registration.Factory(settings));
         }
-        processors.InsertRange(anchor, custom);
         return processors;
     }
 }
