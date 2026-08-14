@@ -107,6 +107,7 @@ public abstract class RipperHookCommon : RuriHook
         TypeTreeDatabase.ActiveVersion = targetVersion;
         RegisterModule(new HookUtils.TypeTreeFallbackHook.TypeTreeFallbackHook());
         RegisterModule(new AR.EngineAssetsTpkHook());
+        RegisterModule(new AR.ForkClassGuidHook());
 
         var universalDestMethod = typeof(HookDispatcher).GetMethod(nameof(HookDispatcher.Universal_ReadRelease), BindingFlags.Public | BindingFlags.Static);
         if (universalDestMethod == null) throw new Exception("Universal_ReadRelease missing");
