@@ -54,6 +54,8 @@ internal sealed class CliOptions
     public string[] DatasetArgs { get; init; } = [];
 
     public bool DatasetList { get; init; }
+
+    public string? DatasetOut { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -97,6 +99,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string[]> DataArgOption { get; }
 
     public Option<bool> DataListOption { get; }
+
+    public Option<string?> DataOutOption { get; }
 
     public Argument<string[]> Passthrough { get; }
 
@@ -178,7 +182,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         QueryFieldsOption = new Option<string[]>("--query-fields",
             "Columns to print, comma-separated. --cab-query takes cab/container/folder/leaf/stem/"
-            + "extension/type_names/source/deps; --data takes that dataset's own columns.")
+            + "extension/type_names/source/bundle/deps; --data takes that dataset's own columns.")
         {
             AllowMultipleArgumentsPerToken = true,
         };
@@ -194,6 +198,9 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         DataListOption = new Option<bool>("--data-list",
             "List every dataset the enabled --hook publishes, with its role, arguments and description.");
+        DataOutOption = new Option<string?>("--data-out",
+            "Write a blob dataset's bytes to this file instead of printing a table "
+            + "(e.g. --data core.bundle.standard --data-arg bundle=<path> --data-out out.ab).");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -229,6 +236,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             DataOption,
             DataArgOption,
             DataListOption,
+            DataOutOption,
             Passthrough,
         };
         return root;
@@ -265,6 +273,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             QueryLimit = pr.GetValueForOption(QueryLimitOption),
             DatasetId = pr.GetValueForOption(DataOption),
             DatasetArgs = pr.GetValueForOption(DataArgOption) ?? [],
+            DatasetOut = pr.GetValueForOption(DataOutOption),
             DatasetList = pr.GetValueForOption(DataListOption),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };

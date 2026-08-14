@@ -281,6 +281,7 @@ public sealed class CabTableSearch
         "container" => DeriveContainer(id),
         "type_names" => DeriveTypeNames(id),
         "source" => _table.RelativePath(id),
+        "bundle" => _table.EntryFileName(id),
         "cab" => _table.CabName(id),
         "deps" => _table.DependencyCount(id).ToString(),
         _ => string.Empty,

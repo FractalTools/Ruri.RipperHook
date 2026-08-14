@@ -76,23 +76,15 @@ internal static class CabQuery
             return failure;
         }
 
-        List<string> namedArgs = [];
-        foreach (string entry in options.DatasetArgs)
+        if (!TryNamedArgs(options, out string[] namedArgs))
         {
-            int split = entry.IndexOf('=');
-            if (split < 1)
-            {
-                Console.Error.WriteLine($"[Ruri.CLI] --data-arg '{entry}' must be name=value.");
-                return 1;
-            }
-            namedArgs.Add(entry[..split]);
-            namedArgs.Add(entry[(split + 1)..]);
+            return 1;
         }
 
         ColumnTable produced;
         try
         {
-            (_, produced) = Datasets.Table(id, namedArgs.ToArray(), CancellationToken.None, table);
+            (_, produced) = Datasets.Table(id, namedArgs, CancellationToken.None, table);
         }
         catch (Exception failed)
         {
@@ -135,6 +127,63 @@ internal static class CabQuery
         Console.Error.WriteLine($"[Ruri.CLI] dataset {id}: {produced.RowCount} row(s)"
             + $"{(limit < produced.RowCount ? $", printed {limit} (raise --query-limit, 0 = all)" : string.Empty)}");
         return 0;
+    }
+
+    internal static int RunDatasetBlob(CliOptions options, string target)
+    {
+        if (options.DatasetId is not { Length: > 0 } id)
+        {
+            Console.Error.WriteLine("[Ruri.CLI] --data-out needs --data <id> (see --data-list).");
+            return 1;
+        }
+        CabTable? table = null;
+        if (options.CabMapPath is { Length: > 0 } && !Load(options, out table, out int failure))
+        {
+            return failure;
+        }
+        if (!TryNamedArgs(options, out string[] namedArgs))
+        {
+            return 1;
+        }
+
+        byte[] payload;
+        try
+        {
+            payload = Datasets.Blob(id, namedArgs, CancellationToken.None, table);
+        }
+        catch (Exception failed)
+        {
+            Console.Error.WriteLine($"[Ruri.CLI] dataset '{id}' failed: {failed.GetType().Name}: {failed.Message}");
+            return 1;
+        }
+
+        string full = Path.GetFullPath(target);
+        if (Path.GetDirectoryName(full) is { Length: > 0 } folder)
+        {
+            Directory.CreateDirectory(folder);
+        }
+        File.WriteAllBytes(full, payload);
+        Console.Error.WriteLine($"[Ruri.CLI] dataset {id}: wrote {payload.Length} byte(s) -> {full}");
+        return 0;
+    }
+
+    private static bool TryNamedArgs(CliOptions options, out string[] namedArgs)
+    {
+        List<string> collected = [];
+        foreach (string entry in options.DatasetArgs)
+        {
+            int split = entry.IndexOf('=');
+            if (split < 1)
+            {
+                Console.Error.WriteLine($"[Ruri.CLI] --data-arg '{entry}' must be name=value.");
+                namedArgs = [];
+                return false;
+            }
+            collected.Add(entry[..split]);
+            collected.Add(entry[(split + 1)..]);
+        }
+        namedArgs = collected.ToArray();
+        return true;
     }
 
     internal static int RunDatasetList(TextWriter output)

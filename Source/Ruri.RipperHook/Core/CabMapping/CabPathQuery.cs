@@ -14,11 +14,12 @@ public static class CabPathQuery
     public const string ExtensionField = "extension";
     public const string TypeNamesField = "type_names";
     public const string SourceField = "source";
+    public const string BundleField = "bundle";
     public const string DependencyCountField = "deps";
 
     public static readonly string[] Fields =
         [CabField, ContainerField, FolderField, LeafField, StemField, ExtensionField,
-         TypeNamesField, SourceField, DependencyCountField];
+         TypeNamesField, SourceField, BundleField, DependencyCountField];
 
     public static CabPathRow[] Rows(CabTable table, string query, IReadOnlyList<FilterRule>? rules)
     {

@@ -53,7 +53,9 @@ internal static class Program
 
         if (opts.DatasetId is { Length: > 0 })
         {
-            return CabQuery.RunDataset(opts, HeadlessRunner.JsonStdout);
+            return opts.DatasetOut is { Length: > 0 } datasetOut
+                ? CabQuery.RunDatasetBlob(opts, datasetOut)
+                : CabQuery.RunDataset(opts, HeadlessRunner.JsonStdout);
         }
 
         if (opts.BuildCabMapPath is { Length: > 0 } buildOut)
