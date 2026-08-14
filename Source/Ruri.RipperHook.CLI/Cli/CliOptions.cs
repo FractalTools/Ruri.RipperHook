@@ -56,6 +56,8 @@ internal sealed class CliOptions
     public bool DatasetList { get; init; }
 
     public string? DatasetOut { get; init; }
+
+    public string? ExportStandardBundlePath { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -101,6 +103,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<bool> DataListOption { get; }
 
     public Option<string?> DataOutOption { get; }
+
+    public Option<string?> ExportStandardBundleOption { get; }
 
     public Argument<string[]> Passthrough { get; }
 
@@ -198,6 +202,10 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         };
         DataListOption = new Option<bool>("--data-list",
             "List every dataset the enabled --hook publishes, with its role, arguments and description.");
+        ExportStandardBundleOption = new Option<string?>("--export-standard-bundle",
+            "Rewrite what --load opened as a stock uncompressed UnityFS AssetBundle at this path. "
+            + "Assets are re-serialized from the hook's type tree into the official layout, so vanilla "
+            + "readers accept them. Narrow it with --types.");
         DataOutOption = new Option<string?>("--data-out",
             "Write a blob dataset's bytes to this file instead of printing a table "
             + "(e.g. --data core.bundle.standard --data-arg bundle=<path> --data-out out.ab).");
@@ -237,6 +245,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             DataArgOption,
             DataListOption,
             DataOutOption,
+            ExportStandardBundleOption,
             Passthrough,
         };
         return root;
@@ -274,6 +283,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             DatasetId = pr.GetValueForOption(DataOption),
             DatasetArgs = pr.GetValueForOption(DataArgOption) ?? [],
             DatasetOut = pr.GetValueForOption(DataOutOption),
+            ExportStandardBundlePath = pr.GetValueForOption(ExportStandardBundleOption),
             DatasetList = pr.GetValueForOption(DataListOption),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };

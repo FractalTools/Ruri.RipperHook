@@ -10,6 +10,7 @@ using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using Newtonsoft.Json;
+using Ruri.RipperHook.BundleExport;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
@@ -211,6 +212,36 @@ internal static class HeadlessRunner
                 EmitJson(SummaryStatus.Error, options, totalAssets, byType, 0, [], null,
                     $"No assets matched --types after load (loaded class ids: {string.Join(",", byType.Keys)})");
                 return 4;
+            }
+
+            if (options.ExportStandardBundlePath is { Length: > 0 } standardBundlePath)
+            {
+                string sourcePath = paths[0];
+                if (!File.Exists(sourcePath))
+                {
+                    EmitJson(SummaryStatus.Error, options, totalAssets, byType, 0, [], null,
+                        $"--export-standard-bundle rewrites one bundle file, but --load points at '{sourcePath}'.");
+                    return 4;
+                }
+                BundleConvertResult rewritten = StandardBundleConverter.Convert(
+                    File.ReadAllBytes(sourcePath), Path.GetFileName(sourcePath),
+                    gameData.GameBundle.FetchAssetCollections(), allowedClassIds);
+                if (Path.GetDirectoryName(Path.GetFullPath(standardBundlePath)) is { Length: > 0 } folder)
+                {
+                    Directory.CreateDirectory(folder);
+                }
+                File.WriteAllBytes(standardBundlePath, rewritten.Data);
+                Console.Error.WriteLine($"[Ruri.CLI] standard bundle: converted {rewritten.Converted} asset(s), "
+                    + $"skipped {rewritten.Skipped}, {rewritten.Data.Length} byte(s) -> {standardBundlePath}");
+                foreach (string failure in rewritten.Failures)
+                {
+                    Console.Error.WriteLine($"[Ruri.CLI]   {failure}");
+                }
+                SummaryStatus bundleStatus = rewritten.Converted == 0 ? SummaryStatus.Error
+                    : rewritten.Failures.Length == 0 ? SummaryStatus.Ok : SummaryStatus.Partial;
+                EmitJson(bundleStatus, options, totalAssets, byType, rewritten.Converted, [], standardBundlePath,
+                    rewritten.Converted == 0 ? "No asset could be re-serialized into the official layout." : null);
+                return bundleStatus == SummaryStatus.Ok ? 0 : (rewritten.Converted > 0 ? 2 : 4);
             }
 
             if (options.ExportGlbPath is { Length: > 0 } glbPath)
