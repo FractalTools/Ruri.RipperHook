@@ -13,6 +13,9 @@ public enum GameType
     AzurPromilia,
     ExAstris,
     Koikatu,
+    KoikatsuSunshine,
+    HoneyCome,
+    SamabakeScramble,
 
     AR_ShaderDecompiler,
     AR_SkipStreamingAssetsCopy,
