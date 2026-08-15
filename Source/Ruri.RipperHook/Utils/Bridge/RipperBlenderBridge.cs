@@ -339,6 +339,51 @@ public static class RipperBlenderBridge
         };
     }
 
+    /// <summary>
+    /// What a facial retarget answers with: the JSON diagnosis, and the posed bones as raw
+    /// float32 (frame-major [frame][bone][10] -- position xyz, rotation xyzw, scale xyz).
+    /// Neutral on purpose: a game states what a face IS, this layer only carries the answer.
+    /// </summary>
+    public sealed record SolvedFaceDto(string Json, byte[] Poses);
+
+    /// <summary>
+    /// The game that knows what a face is, or null in a build with none.
+    ///
+    /// A facial system is a GAME's own vocabulary -- ctrl-driven bone deltas, avatar tables,
+    /// a shared expression library -- so the solver lives with that game's hook and registers
+    /// itself here (see Endfield.EndfieldFaceRetarget). This file must not name it: the pure
+    /// release compiles with every game hook removed, and a direct reference would take the
+    /// generic bridge down with them.
+    /// </summary>
+    private static Func<CabTable, string, byte[], SolvedFaceDto>? _faceRetargetSolver;
+
+    public static void RegisterFaceRetargetSolver(Func<CabTable, string, byte[], SolvedFaceDto> solver)
+    {
+        _faceRetargetSolver = solver;
+    }
+
+    /// <summary>
+    /// Play one character's baked facial performance on another character's face, in the
+    /// destination's own ctrl vocabulary.
+    ///
+    /// The caller states only what it alone knows -- the bones its rig has, with their rest
+    /// transforms, and the sampled clip. Which face tables exist, which one the clip was
+    /// authored on, which Euler convention they are written in and which named expressions
+    /// the performance IS are all measured by whichever game registered itself above,
+    /// against that game's own data read straight out of the cabmap.
+    /// </summary>
+    public static SolvedFaceDto SolveFaceRetarget(CabMapHandle map, string requestJson,
+        byte[] performance)
+    {
+        if (_faceRetargetSolver is null)
+        {
+            throw new InvalidOperationException(
+                "no game in this build states what a face is, so a facial performance cannot "
+                + "be restated on another character");
+        }
+        return _faceRetargetSolver(map.Table, requestJson, performance);
+    }
+
     public static ClosureResult ImportCabs(CabMapHandle map, string[] seedCabNames, int[]? exportClassIds,
         string[]? exportAssetKeys, bool buildGraph, string[] acceptedTextureFormats)
     {
