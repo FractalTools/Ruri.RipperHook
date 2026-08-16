@@ -153,27 +153,30 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 
 ## 8. 一个安装是谁：身份探测与解码器解析
 
-真源是**游戏自己发布的两个小文件**，别的一律不算数（整合包目录名、cabmap 文件名、用户勾选的复选框）：
+真源是**游戏自己发布的那一个文件**，别的一律不算数（整合包目录名、cabmap 文件名、用户勾选的复选框）：
 
-| 字段 | 来自 | 备注 |
-|---|---|---|
-| `Company` / `Product` | `<Product>_Data/app.info` 两行 | 引擎自己写的身份文件，**永远明文**（连资产整体加密的 EXILIUM 也有） |
-| `GameVersion` | `globalgamemanagers` 的**数据区**里的 `PlayerSettings.bundleVersion` | 见下「怎么跳过元数据读到它」 |
-| `EngineVersion` | `globalgamemanagers` 序列化头 → `data.unity3d` bundle 头 → 该游戏自己声明的读法 | 读头不读游戏；三条都答不出就 `""`，那是**事实不是错误** |
+| 字段 | 来自 |
+|---|---|
+| `Company` / `Product` / `GameVersion` | `globalgamemanagers` 里 **ClassID 129 (PlayerSettings)** 那个对象的自有字节 |
+| `EngineVersion` | 同一个文件的序列化头 |
+
+**一个文件、一次解析、每个字段恰好一个来源。** `app.info` 不再参与身份（它是引擎写的**副本**，而且实测会改写真值：`illusion\Koikatu` 在那里变成 `illusion__Koikatu`，Endfield 的公司在那里是 `Gryphline` 而 PlayerSettings 写的是 `Hypergryph`）。
 
 `Ruri.RipperHook.Core.Install.InstallProbe`：`Read(root)` 给出每个 player 一行，`Project(root)` 挑出「这个安装到底是哪个 player」——规则只用安装自己的字段（companyName 以哪个 product 结尾；哪个 product 被其他 product 当前缀扩展），**不查已知游戏名单**。一个安装常常带好几个 player（本体 + VR + Studio）。
 
-**怎么跳过元数据读到 bundleVersion**：`PlayerSettings` 是 `globalgamemanagers` 的**第一个对象**，就躺在 dataOffset 上，而一个 build 就算加密也只加密它前面那段元数据（EXILIUM 正是如此：前 ~1000 字节密文，`dataOffset=0x1000` 起全明文）。所以这里**不假设偏移、不假设字段布局**：拿同一个安装在 app.info 里发布的 productName 当锚点，按它自己的长度前缀字节精确搜索——命中即证明 PlayerSettings 的字符串区在哪；bundleVersion 就是其后一个有界窗口内第一个版本形状的字符串。实测 Unity 5.6 / 2019.4 / 2021.3 三代 10 个 player 全中，含元数据被加密的那个。build 不写版本、或写了个非版本形状的，答 `""`（不约束任何下游）。
+**怎么定位 PlayerSettings**：交给 AssetRipper 自己的 `SchemeReader`/`SerializedFile` 解析头、类型表、对象表，然后取 `ClassID == 129` 那个对象的 `ObjectData`——**精确字节，不是在文件里搜**。AssetRipper 不生成 ClassID 129 的类（反射查实：只有 Unity 6000 的 `BuildProfilePlayerSettings`），所以对象内部按它自己写的顺序读长度前缀字符串：第一个是 companyName、第二个是 productName、再往后第一个版本形状的是 bundleVersion。实测 Unity 5.6.2 / 5.6.3 / 2019.4.9 / 2019.4.40 / 2021.3.x 共 10 个 player 全中。**这是本节唯一一处按顺序取值**；要做到完全结构化需要给 class 129 备一份类型树（stock tpk 里有，`Ruri.Tpk` 打进 `RuriTypeTree.tpk` 即可），尚未做。
+
+**自己文件被变换过的 build**：给类打 `[RipperEngineFile]` 并暴露 `public static bool TryDecrypt(byte[] data)`——认自己的 magic、原地还原、返回 true。由**已有的那次 `HookCatalog` 扫描**顺带收集，**不按游戏索引**（读这个文件本来就是为了知道是哪个游戏，按游戏索引会成环），generic 解析失败时逐个问过去。探测发生在任何 hook 应用之前，所以它是纯静态方法，与 hook 生命周期无关。打了属性却没那个方法 = 第一次探测就抛。
 
 `HookCatalog.Resolve(product, gameVersion, engineVersion)`：该 product 的解码器里，**最新的、且 `Version` ≤ 这个 build 自己的游戏版本**的那个，再排除掉声明了别的引擎版本的。解码器的 `Version` 是它**从哪个游戏版本起适用**——所以一个补丁没改坏东西就不用加类，改坏了才加一个新版本类。任一侧未知就不构成约束。手动指定永远压过解析结果。
 
 桥出口：`ReadInstall(root)` / `ListDecoders()` / `ResolveDecoder(product, gameVersion, engineVersion)`，都只要 CLR 起来，不要 session、不要 cabmap、不要任何 hook。
 
-**声明自己版本的读法**：一个 build 把它发布的东西都变换过时（EXILIUM 就是），给它的类打 `[RipperInstallVersion(GameType.X)]` 并暴露 `public static string ReadEngineVersion(string dataFolder)`。由**已有的那次 `HookCatalog` 扫描**顺带收集（`VersionReaderFor(product)`），不多一遍反射；探测发生在任何 hook 应用之前，所以它是按属性发现的静态方法，与 hook 生命周期完全解耦。打了属性却没这个方法 = 第一次探测就抛，不是静默缺失。
+**EXILIUM 的变换已经解开并 1:1 移植**（`EXILIUMCommon_EngineFileDecryptor`，`[RipperEngineFile]`）。形态：**只变换开头 0x3EA (1002) 字节**（头 + 引擎版本串 + 类型表 + 对象表），其后（外部表、填充、整个数据区）在磁盘上本来就是明文——所以从前能裸读到 `SunBorn`/`EXILIUM`/`2.7`，却连文件头都解析不了。算法：认 magic（`4E 50` 或 `3D A?`，它盖掉的正是恒为 0 的 metadataSize 高两字节）→ 按首个 body dword 的低 2 位四选一算 seed → **改造版 RC4**（每个密钥字节先 `ror8(K,2)` 再 `+0x3A`）→ 自定义 CRC（步进 `(c^0x09823D6E)>>1`）从尾 8 字节推出 key，前 5 个 32 字节块按 `blk%3` 走三种变换，每块拿上一块第 0x1C 字节当下一块的 key。
 
-EXILIUM 的实现（`EXILIUMCommon_InstallVersion`）：走 `<Data>/LocalCache` 的 bundle，复用它自己 hook 里那把 `XorKey` 解头，读 `FileStreamBundleHeader.UnityWebMinimumRevision` ⇒ **2019.4.29f1**（实测三个 bundle 一致，与 hook 声明一致）。StreamingAssets 里的 bundle 本来就是明文但 revision 被抹成 `0.0.0`，跳过。**注意播放器 exe 的版本资源写的是 2019.4.40，那是播放器不是资产，两者本就不同，别拿它当引擎版本。**
+**怎么拿到的**（别重走弯路）：入口不在导出表里——`NEP2.dll` 唯一导出 `NEP_Unknown` 是 `ret` 桩,游戏是靠它在 **stock `UnityPlayer.dll` RVA `0x822280`（`FileStream::Read`）** 上打 inline jmp 进去的；解密函数在 **NEP2 RVA `0x4B0880`**，它和它的被调用者是**未混淆的静态代码**（磁盘映像 == 运行时映像），所以拿到入口之后是纯静态反汇编。静态搜常量永远搜不到（那些 AES/SM4/MD5 表是静态链接的 OpenSSL 1.1.1 + Lua VM，属 FairGuard 的授权层，与文件密码无关）。移植结果与 DLL 自身输出**全文件逐字节一致**。
 
-**EXILIUM 引擎文件本身仍然解不开**（2026-08-16 实测，别重查）：只有**元数据区被加密**，`globalgamemanagers` 从 `dataOffset=0x1000` 起就是明文（`SunBorn` @0x1028、`EXILIUM` @0x1034 肉眼可见），但头 + 类型表 + 对象表那约 1000 字节是密文，AssetRipper 连头都读不了。特征：`NP`(`4e 50`) 是**字面 magic 前缀**不是密文（三个内容不同的小文件前两字节完全相同），偏移 8 起逐文件不同 ⇒ 文件相关密钥；周期 1..512 全测无常量列 ⇒ 不是重复 XOR；不是 AnimeStudio 的 FairGuard CB1/CB2 变体，也不是简单种子 RC4。真身在 `NEP2.dll`（40MB 加壳保护器，EXE 按序数 1 导入，运行时挂 stock UnityPlayer 的文件读取），常量全被拆散，静态提不出来。要推进只能动态：跑起来对接收 `globalgamemanagers` 的缓冲下硬件写断点，dump 一份明文当 ground truth。
+**这个游戏引擎文件与 bundle 是两个编辑器版本打的**：引擎文件说 `2019.4.40f1`（与播放器 exe 的版本资源一致），LocalCache 的 bundle 说 `2019.4.29f1`（StreamingAssets 里的 bundle revision 被抹成 `0.0.0`）。身份取前者；hook 内部拿来解析 bundle 的 `ImportSettings` 版本仍是后者，两者是不同的事实，别互相覆盖。
 
 ---
 
