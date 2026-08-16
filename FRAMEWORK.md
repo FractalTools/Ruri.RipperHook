@@ -166,6 +166,8 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 
 桥出口：`ReadInstall(root)` / `ListDecoders()` / `ResolveDecoder(product, engineVersion)`，都只要 CLR 起来，不要 session、不要 cabmap、不要任何 hook。
 
+**EXILIUM 为什么报不出引擎版本**（2026-08-16 实测，别重查）：它的引擎文件只有**元数据区被加密**，`globalgamemanagers` 从 `dataOffset=0x1000` 起就是明文（`SunBorn` @0x1028、`EXILIUM` @0x1034 肉眼可见），但头 + 类型表 + 对象表那约 1000 字节是密文，所以 AssetRipper 连头都读不了。特征：`NP`(`4e 50`) 是**字面 magic 前缀**不是密文（三个内容不同的小文件前两字节完全相同），偏移 8 起逐文件不同 ⇒ 文件相关密钥；周期 1..512 全测无常量列 ⇒ 不是重复 XOR；不是 AnimeStudio 的 FairGuard CB1/CB2 变体，也不是简单种子 RC4。真身在 `NEP2.dll`（40MB 加壳保护器，EXE 按序数 1 导入，运行时挂 stock UnityPlayer 的文件读取），常量全被拆散，静态提不出来。**bundle 那条已解**（16 字节 `UnityFS` 头 XOR，现有 hook 就是对的）。要推进只能动态：跑起来对接收 `globalgamemanagers` 的缓冲下硬件写断点，dump 一份明文当 ground truth。
+
 ---
 
 ## 9. 从旧 AR 恢复的代码危险清单
