@@ -158,13 +158,16 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 | 字段 | 来自 | 备注 |
 |---|---|---|
 | `Company` / `Product` | `<Product>_Data/app.info` 两行 | 引擎自己写的身份文件，**永远明文**（连资产整体加密的 EXILIUM 也有） |
-| `EngineVersion` | `<Product>_Data/globalgamemanagers` 的序列化头 | 读头不读游戏；引擎资产被变换过的 build 报 `""`，那是**事实不是错误** |
+| `GameVersion` | `globalgamemanagers` 的**数据区**里的 `PlayerSettings.bundleVersion` | 见下「怎么跳过元数据读到它」 |
+| `EngineVersion` | `globalgamemanagers` 序列化头 → `data.unity3d` bundle 头 → 该游戏自己声明的读法 | 读头不读游戏；三条都答不出就 `""`，那是**事实不是错误** |
 
 `Ruri.RipperHook.Core.Install.InstallProbe`：`Read(root)` 给出每个 player 一行，`Project(root)` 挑出「这个安装到底是哪个 player」——规则只用安装自己的字段（companyName 以哪个 product 结尾；哪个 product 被其他 product 当前缀扩展），**不查已知游戏名单**。一个安装常常带好几个 player（本体 + VR + Studio）。
 
-`HookCatalog.Resolve(product, engineVersion)`：该 product 最新的解码器，排除掉声明了别的引擎版本的。解码器自己的 `Version` 是它对着哪个游戏补丁写的 —— **没有任何 build 在任何地方声明自己的游戏版本**（`PlayerSettings.bundleVersion` 在 `globalgamemanagers` 里，但 AssetRipper 不生成 ClassID 129，读不出来），所以它只用来排序候选，不参与筛选。手动指定永远压过解析结果。
+**怎么跳过元数据读到 bundleVersion**：`PlayerSettings` 是 `globalgamemanagers` 的**第一个对象**，就躺在 dataOffset 上，而一个 build 就算加密也只加密它前面那段元数据（EXILIUM 正是如此：前 ~1000 字节密文，`dataOffset=0x1000` 起全明文）。所以这里**不假设偏移、不假设字段布局**：拿同一个安装在 app.info 里发布的 productName 当锚点，按它自己的长度前缀字节精确搜索——命中即证明 PlayerSettings 的字符串区在哪；bundleVersion 就是其后一个有界窗口内第一个版本形状的字符串。实测 Unity 5.6 / 2019.4 / 2021.3 三代 10 个 player 全中，含元数据被加密的那个。build 不写版本、或写了个非版本形状的，答 `""`（不约束任何下游）。
 
-桥出口：`ReadInstall(root)` / `ListDecoders()` / `ResolveDecoder(product, engineVersion)`，都只要 CLR 起来，不要 session、不要 cabmap、不要任何 hook。
+`HookCatalog.Resolve(product, gameVersion, engineVersion)`：该 product 的解码器里，**最新的、且 `Version` ≤ 这个 build 自己的游戏版本**的那个，再排除掉声明了别的引擎版本的。解码器的 `Version` 是它**从哪个游戏版本起适用**——所以一个补丁没改坏东西就不用加类，改坏了才加一个新版本类。任一侧未知就不构成约束。手动指定永远压过解析结果。
+
+桥出口：`ReadInstall(root)` / `ListDecoders()` / `ResolveDecoder(product, gameVersion, engineVersion)`，都只要 CLR 起来，不要 session、不要 cabmap、不要任何 hook。
 
 **声明自己版本的读法**：一个 build 把它发布的东西都变换过时（EXILIUM 就是），给它的类打 `[RipperInstallVersion(GameType.X)]` 并暴露 `public static string ReadEngineVersion(string dataFolder)`。由**已有的那次 `HookCatalog` 扫描**顺带收集（`VersionReaderFor(product)`），不多一遍反射；探测发生在任何 hook 应用之前，所以它是按属性发现的静态方法，与 hook 生命周期完全解耦。打了属性却没这个方法 = 第一次探测就抛，不是静默缺失。
 
