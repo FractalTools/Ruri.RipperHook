@@ -59,20 +59,21 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>
-    /// What the players under <paramref name="gameRoot"/> say they are, as flat quintuples
-    /// (dataFolder, company, product, engineVersion, isProject). Reads two small files per player
-    /// and nothing else -- see <see cref="InstallProbe"/>.
+    /// What the players under <paramref name="gameRoot"/> say they are, as flat sextuples
+    /// (dataFolder, company, product, gameVersion, engineVersion, isProject). Reads two small
+    /// files per player and nothing else -- see <see cref="InstallProbe"/>.
     /// </summary>
     public static string[] ReadInstall(string gameRoot)
     {
         List<PlayerIdentity> players = InstallProbe.Read(gameRoot);
         PlayerIdentity? project = InstallProbe.Project(gameRoot);
-        List<string> flat = new(players.Count * 5);
+        List<string> flat = new(players.Count * 6);
         foreach (PlayerIdentity player in players)
         {
             flat.Add(player.DataFolder);
             flat.Add(player.Company);
             flat.Add(player.Product);
+            flat.Add(player.GameVersion);
             flat.Add(player.EngineVersion);
             flat.Add(project is not null && player.DataFolder == project.DataFolder ? "1" : "0");
         }
@@ -80,11 +81,11 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>
-    /// The decoder id an install of this product and engine version is read through, or "" when
-    /// none applies (a plain Unity build needs no decoder). See <see cref="HookCatalog.Resolve"/>.
+    /// The decoder id this install is read through, or "" when none applies (a plain Unity build
+    /// needs no decoder). See <see cref="HookCatalog.Resolve"/>.
     /// </summary>
-    public static string ResolveDecoder(string product, string engineVersion) =>
-        HookCatalog.Resolve(product, engineVersion)?.Id ?? string.Empty;
+    public static string ResolveDecoder(string product, string gameVersion, string engineVersion) =>
+        HookCatalog.Resolve(product, gameVersion, engineVersion)?.Id ?? string.Empty;
 
     /// <summary>
     /// Open the session on ONE install through ONE decoder. The host states which install and

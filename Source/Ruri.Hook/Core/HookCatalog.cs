@@ -105,28 +105,34 @@ public static class HookCatalog
     }
 
     /// <summary>
-    /// The decoder that reads an install of <paramref name="product"/> built on
-    /// <paramref name="engineVersion"/>: its newest one, minus any whose declared engine version
-    /// says it reads a different build generation. Null when the product ships no decoder at all
-    /// (a plain Unity build needs none) or when none of them is for this engine.
+    /// The decoder that reads this install: of <paramref name="product"/>'s decoders, the newest
+    /// one that applies at or below the build's own <paramref name="gameVersion"/>, minus any
+    /// whose declared engine version says it reads a different build generation. Null when the
+    /// product ships no decoder at all (a plain Unity build needs none) or when every one of
+    /// them is newer than this build.
     ///
-    /// The engine version is what an install actually publishes about itself (its serialized
-    /// files' own header); a decoder's own Version is the game patch it was written against,
-    /// which no build states anywhere, so it orders the candidates rather than filtering them.
-    /// An unknown on either side constrains nothing: an install whose engine assets are not
-    /// plain reports no version, and a decoder that has not been checked against a real install
-    /// declares none.
+    /// Both versions are what the install itself published (PlayerSettings.bundleVersion and its
+    /// serialized header), and a decoder's own Version is the game version it applies FROM. An
+    /// unknown on either side constrains nothing -- a build that states no version is read by the
+    /// newest decoder, and a decoder not yet checked against a real install declares no engine.
     /// </summary>
-    public static DecoderHook? Resolve(string product, string engineVersion)
+    public static DecoderHook? Resolve(string product, string gameVersion, string engineVersion)
     {
-        string wanted = engineVersion ?? string.Empty;
+        string wantedGame = gameVersion ?? string.Empty;
+        string wantedEngine = engineVersion ?? string.Empty;
         foreach (DecoderHook decoder in VersionsOf(product))
         {
-            if (wanted.Length == 0 || decoder.EngineVersion.Length == 0 ||
-                string.Equals(decoder.EngineVersion, wanted, StringComparison.OrdinalIgnoreCase))
+            if (wantedEngine.Length > 0 && decoder.EngineVersion.Length > 0 &&
+                !string.Equals(decoder.EngineVersion, wantedEngine, StringComparison.OrdinalIgnoreCase))
             {
-                return decoder;
+                continue;
             }
+            if (wantedGame.Length > 0 && decoder.Version.Length > 0 &&
+                VersionKey.Compare(decoder.Version, wantedGame) > 0)
+            {
+                continue;
+            }
+            return decoder;
         }
         return null;
     }
