@@ -4,7 +4,7 @@ using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 namespace Ruri.RipperHook.AR;
 
-[RipperHook(GameType.AR_StaticMeshSeparation)]
+[RipperFeature("StaticMeshSeparation")]
 public partial class AR_StaticMeshSeparation_Hook : RipperHookCommon
 {
     protected AR_StaticMeshSeparation_Hook()

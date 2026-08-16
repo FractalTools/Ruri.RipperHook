@@ -1,4 +1,5 @@
 using AssetRipper.Import.Logging;
+using Ruri.Hook.Core;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_2;
 using AssetRipper.SourceGenerated.Classes.ClassID_25;
@@ -35,7 +36,7 @@ public partial class MainForm : Form
 
 	private readonly string _configPath;
 	private HookConfig _hookConfig;
-	private List<(Type Type, GameHookAttribute Attribute)> _availableHooks = [];
+	private IReadOnlyList<DecoderHook> _availableDecoders = [];
 	private readonly RuriAssetRipperAdapter _adapter = new();
 	private List<RipperAssetEntry> _filteredAssets = [];
 	private CabMapping.CabTableSearch? _cabSearch;
@@ -669,12 +670,11 @@ public partial class MainForm : Form
 			return GameType.Unknown;
 		}
 
-		foreach ((Type _, GameHookAttribute attribute) in _availableHooks)
+		foreach (DecoderHook decoder in _availableDecoders)
 		{
-			if (attribute is RipperHookAttribute ripperAttribute
-				&& Hook.RuriHook.BuildHookIds(attribute).Any(enabled.Contains))
+			if (enabled.Contains(decoder.Id) && Enum.TryParse(decoder.Product, out GameType game))
 			{
-				return ripperAttribute.GameType;
+				return game;
 			}
 		}
 
@@ -1629,35 +1629,24 @@ public partial class MainForm : Form
 
 	private void InitializeHookMenu()
 	{
-		_availableHooks = Hook.RuriHook.GetAvailableHooks();
-		Dictionary<string, List<(Type Type, GameHookAttribute Attribute)>> grouped = _availableHooks
-			.Where(static h => !h.Attribute.GameName.StartsWith("AR_", StringComparison.OrdinalIgnoreCase))
-			.GroupBy(static h => h.Attribute.GameName)
-			.OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
-			.ToDictionary(static g => g.Key, static g => g.OrderBy(h => h.Attribute.Version, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+		_availableDecoders = HookCatalog.Decoders;
 
 		_ = hookTreeView.Handle;
 
 		hookTreeView.BeginUpdate();
 		hookTreeView.Nodes.Clear();
-		foreach ((string gameName, List<(Type Type, GameHookAttribute Attribute)> hooks) in grouped)
+		foreach (string product in HookCatalog.Products)
 		{
-			TreeNode gameNode = new(gameName);
-			foreach ((Type _, GameHookAttribute attr) in hooks)
+			TreeNode gameNode = new(product);
+			foreach (DecoderHook decoder in HookCatalog.VersionsOf(product))
 			{
-				foreach (string hookId in Hook.RuriHook.BuildHookIds(attr))
+				string versionText = string.IsNullOrWhiteSpace(decoder.Version) ? "Default" : decoder.Version;
+				if (!string.IsNullOrWhiteSpace(decoder.EngineVersion))
 				{
-					string version = hookId.Length > attr.GameName.Length + 1
-						? hookId[(attr.GameName.Length + 1)..]
-						: attr.Version;
-					string versionText = string.IsNullOrWhiteSpace(version) ? "Default" : version;
-					if (!string.IsNullOrWhiteSpace(attr.BaseEngineVersion))
-					{
-						versionText += $" [Based on {attr.BaseEngineVersion}]";
-					}
-					TreeNode versionNode = new(versionText) { Tag = hookId };
-					gameNode.Nodes.Add(versionNode);
+					versionText += $" [Unity {decoder.EngineVersion}]";
 				}
+				TreeNode versionNode = new(versionText) { Tag = decoder.Id };
+				gameNode.Nodes.Add(versionNode);
 			}
 			hookTreeView.Nodes.Add(gameNode);
 			HideRootCheckBox(gameNode);
@@ -1798,9 +1787,9 @@ public partial class MainForm : Form
 	private HookConfig BuildHookConfigFromTree()
 	{
 		HookConfig config = new();
-		foreach (string arHook in _hookConfig.EnabledHooks.Where(h => h.StartsWith("AR_", StringComparison.OrdinalIgnoreCase)))
+		foreach (string feature in _hookConfig.EnabledHooks.Where(HookCatalog.IsFeature))
 		{
-			config.EnabledHooks.Add(arHook);
+			config.EnabledHooks.Add(feature);
 		}
 		foreach (TreeNode gameNode in hookTreeView.Nodes)
 		{

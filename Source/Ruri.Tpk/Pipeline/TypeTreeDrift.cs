@@ -1,5 +1,6 @@
 using AssetRipper.Primitives;
 using AssetRipper.Tpk.TypeTrees.Json;
+using Ruri.Hook.Core;
 using Ruri.RipperHook;
 using Ruri.RipperHook.Core;
 using Ruri.RipperHook.Core.TypeTree;

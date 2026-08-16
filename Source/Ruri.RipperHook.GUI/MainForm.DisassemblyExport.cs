@@ -5,7 +5,7 @@ namespace Ruri.RipperHook.GUI;
 
 public partial class MainForm
 {
-	private static readonly string[] DisassemblyExportHooks = { "AR_DisassemblyExporter_", "AR_Il2CppMethodDump_" };
+	private static readonly string[] DisassemblyExportHooks = { "DisassemblyExporter", "Il2CppMethodDump" };
 
 	private async void disassemblyExportFromFolderToolStripMenuItem_Click(object? sender, EventArgs e)
 	{

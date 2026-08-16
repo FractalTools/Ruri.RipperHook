@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Ruri.Hook.Core;
 using AssetRipper.Export.Configuration;
 using AssetRipper.GUI.Localizations;
 using AssetRipper.GUI.Web;
@@ -28,20 +29,18 @@ internal sealed class SettingsDialog : Form
 
     private static readonly (string HookId, string Label, string Hint)[] ArFeatureHooks =
     [
-        ("AR_SkipStreamingAssetsCopy_", "Don't copy StreamingAssets into export",
+        ("SkipStreamingAssetsCopy", "Don't copy StreamingAssets into export",
             "Skip the post-export pass that mirrors the original StreamingAssets tree next to your converted output. Independent of \"Skip StreamingAssets at load\" — that one prevents loading them in the first place."),
-        ("AR_SkipProcessingAnimation_", "Skip AnimationClip path restoration",
+        ("SkipProcessingAnimation", "Skip AnimationClip path restoration",
             "Skip AnimationClipConverter.Process. Unity hashes the target-object paths on AnimationClips; brute-forcing them back is expensive. Turn off only when you actually need anim retargeting."),
-        ("AR_PrefabOutlining_", "Recreate prefabs (Prefab Outlining)",
+        ("PrefabOutlining", "Recreate prefabs (Prefab Outlining)",
             "Deduplicate identical GameObject structures into shared prefabs. Subsumes AR's native EnablePrefabOutlining setting — that bool alone does nothing in current AR; this hook ships the actual processor."),
-        ("AR_StaticMeshSeparation_", "Separate static-batched meshes",
+        ("StaticMeshSeparation", "Separate static-batched meshes",
             "Reverse Unity's static-batch combine so each instance gets its own mesh. Useful on baked/VRChat scenes. Subsumes AR's native EnableStaticMeshSeparation (same situation — bool only, no processor)."),
-        ("AR_Il2CppMethodDump_", "Inline IL2CPP native method disassembly into scripts",
+        ("Il2CppMethodDump", "Inline IL2CPP native method disassembly into scripts",
             "For IL2CPP games only: parse each method's GameAssembly function pointer (via the Cpp2IL library AssetRipper depends on) and disassemble its native body, then inject that assembly as // comments inside the matching method body of the decompiled C# scripts (Assets/Scripts/.../*.cs). No effect on Mono games."),
-        ("AR_DisassemblyExporter_", "Export disassembly only (all code, skip all assets)",
+        ("DisassemblyExporter", "Export disassembly only (all code, skip all assets)",
             "Filter the project export down to the script-decompilation collections only, and force every game assembly to be decompiled (nothing left as a DLL in Plugins/) — the whole IL2CPP/Mono codebase becomes Assets/Scripts/.../*.cs, while every asset (textures, meshes, materials, audio, MonoBehaviour YAML, scenes, project settings) is skipped. The GUI's \"Export Disassembly\" menu turns this on automatically; enabling it here makes every export code-only."),
-        ("AR_ShaderOnlyExport_", "Export shaders only (skip everything else)",
-            "Filter the project export down to Shader / ComputeShader collections only; every other asset and all scripts are skipped. Pair with the shader decompiler for readable shader code. The GUI's \"Export All Shaders\" menu turns this on automatically."),
     ];
 
     public SettingsDialog(HookConfig config, string configPath)
@@ -124,12 +123,12 @@ internal sealed class SettingsDialog : Form
         AddCheckBox(table, Localization.SkipStreamingAssets,
             cfg.ImportSettings.IgnoreStreamingAssets,
             v => cfg.ImportSettings.IgnoreStreamingAssets = v);
-        AddArHookCheckbox(table, "AR_SkipStreamingAssetsCopy_");
+        AddArHookCheckbox(table, "SkipStreamingAssetsCopy");
 
         AddSectionHeader(table, "Asset processors (hook-driven)");
-        AddArHookCheckbox(table, "AR_SkipProcessingAnimation_");
-        AddArHookCheckbox(table, "AR_PrefabOutlining_");
-        AddArHookCheckbox(table, "AR_StaticMeshSeparation_");
+        AddArHookCheckbox(table, "SkipProcessingAnimation");
+        AddArHookCheckbox(table, "PrefabOutlining");
+        AddArHookCheckbox(table, "StaticMeshSeparation");
 
         AddSectionHeader(table, "Assemblies");
         AddCheckBox(table, Localization.RemoveNullableAttributes,
@@ -141,7 +140,7 @@ internal sealed class SettingsDialog : Form
         AddDropDown(table, ScriptContentLevelDropDownSetting.Instance,
             cfg.ImportSettings.ScriptContentLevel,
             v => cfg.ImportSettings.ScriptContentLevel = v);
-        AddArHookCheckbox(table, "AR_Il2CppMethodDump_");
+        AddArHookCheckbox(table, "Il2CppMethodDump");
 
         AddSectionHeader(table, "Project");
         AddDropDown(table, BundledAssetsExportModeDropDownSetting.Instance,
@@ -186,7 +185,7 @@ internal sealed class SettingsDialog : Form
         {
             Text = "Use RuriShaderDecompiler (overrides AR's Dummy text exporter)",
             AutoSize = true,
-            Checked = _stagedHooks.Contains("AR_ShaderDecompiler_"),
+            Checked = _stagedHooks.Contains("ShaderDecompiler"),
             Margin = new Padding(0, 6, 0, 0),
         };
         new ToolTip().SetToolTip(ruriShaderHook,
@@ -214,8 +213,8 @@ internal sealed class SettingsDialog : Form
         ruriShaderHook.CheckedChanged += (_, _) =>
         {
             subOptions.Visible = ruriShaderHook.Checked;
-            if (ruriShaderHook.Checked) _stagedHooks.Add("AR_ShaderDecompiler_");
-            else _stagedHooks.Remove("AR_ShaderDecompiler_");
+            if (ruriShaderHook.Checked) _stagedHooks.Add("ShaderDecompiler");
+            else _stagedHooks.Remove("ShaderDecompiler");
         };
         _applyActions.Add(() => _shaderDraft.SplitVariantsToHlslFiles = splitVariants.Checked);
 
@@ -289,10 +288,7 @@ internal sealed class SettingsDialog : Form
 
     private void AddArHookCheckbox(TableLayoutPanel table, string hookId)
     {
-        HashSet<string> availableIds = new(
-            RuriHook.GetAvailableHooks().Select(h => $"{h.Attribute.GameName}_{h.Attribute.Version}"),
-            StringComparer.OrdinalIgnoreCase);
-        if (!availableIds.Contains(hookId)) return;
+        if (!HookCatalog.IsFeature(hookId)) return;
 
         (string id, string label, string hint) = ArFeatureHooks.First(t => t.HookId == hookId);
         CheckBox cb = new()

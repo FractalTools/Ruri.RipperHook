@@ -313,12 +313,9 @@ internal static class HeadlessRunner
 
     public static int RunListHooks()
     {
-        var hooks = Ruri.Hook.RuriHook.GetAvailableHooks();
-        var list = new List<string>(hooks.Count);
-        foreach (var (_, attr) in hooks)
-        {
-            list.AddRange(Ruri.Hook.RuriHook.BuildHookIds(attr));
-        }
+        var list = new List<string>();
+        list.AddRange(Ruri.Hook.Core.HookCatalog.Decoders.Select(static decoder => decoder.Id));
+        list.AddRange(Ruri.Hook.Core.HookCatalog.Features.Select(static feature => feature.Name));
 
         var summary = new
         {

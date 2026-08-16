@@ -5,7 +5,7 @@ using Ruri.RipperHook.Attributes;
 using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 ﻿namespace Ruri.RipperHook.AR;
 
-[RipperHook(GameType.AR_ShaderDecompiler)]
+[RipperFeature("ShaderDecompiler")]
 public partial class AR_ShaderDecompiler_Hook : RipperHookCommon
 {
     protected override void InitAttributeHook()

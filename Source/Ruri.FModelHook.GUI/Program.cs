@@ -55,9 +55,9 @@ public static class Program
 
         if (config.EnabledHooks.Count == 0)
         {
-            foreach (var (_, attr) in RuriHook.GetAvailableHooks())
+            foreach (var decoder in Ruri.Hook.Core.HookCatalog.Decoders)
             {
-                config.EnabledHooks.Add($"{attr.GameName}_{attr.Version}");
+                config.EnabledHooks.Add(decoder.Id);
             }
             config.Save(configPath);
             HookLogger.Log($"[Ruri.FModelHook] No persisted config — auto-enabled {config.EnabledHooks.Count} hooks. Toggle via Hooks menu in FModel.");
@@ -86,7 +86,7 @@ public static class Program
 
         TryLoad("Ruri.FModelHook");
 
-        int hookCount = RuriHook.GetAvailableHooks().Count;
+        int hookCount = Ruri.Hook.Core.HookCatalog.Decoders.Count;
         HookLogger.Log($"[Ruri.FModelHook.GUI] Hook assemblies loaded — discovered {hookCount} [GameHookAttribute] type(s).");
         if (hookCount == 0)
         {

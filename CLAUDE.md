@@ -23,7 +23,7 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 
 ### D·E. 代码风格 + 黑洞级性能内核
 
-> 通用代码风格（禁缩写 / 一文件一单元 / 禁单行堆叠 / **禁止一切注释**）与黑洞级性能（span / 0-GC / 全核并行 / 全 SIMD / 测量优化尖峰 / 顺手优化）已抽进 `ruri-engineering-discipline` skill——写码前先过那条，此处不重复。本仓库特化：**代码 = 英文**；日志走项目 logger 带分类（FRAMEWORK.md §9）；并行化时只对共享非线程安全状态串行（如 FRAMEWORK.md §11 逐次反编译锁）。
+> 通用代码风格（禁缩写 / 一文件一单元 / 禁单行堆叠 / **禁止一切注释**）与黑洞级性能（span / 0-GC / 全核并行 / 全 SIMD / 测量优化尖峰 / 顺手优化）已抽进 `ruri-engineering-discipline` skill——写码前先过那条，此处不重复。本仓库特化：**代码 = 英文**；日志走项目 logger 带分类（FRAMEWORK.md §10）；并行化时只对共享非线程安全状态串行（如 FRAMEWORK.md §12 逐次反编译锁）。
 
 ---
 
@@ -35,11 +35,11 @@ Ruri 优化契约的通用内核（态度 / 1:1 移植 / 代码风格 / 黑洞�
 | **不许新建 assembly** | **绝不为某个特性新建 `.csproj` / 项目 / assembly —— 哪怕是 `Ruri.*` 命名的也不行。** 每个特性都落在**现有 `Source/Ruri.*` 项目内部**（默认：`Ruri.RipperHook` 核心），形式是 Ruri.Hook 的 attribute hook 加上它们的支撑代码。新的 NuGet 依赖 —— 即便是重型 / 原生的（例如某个 USD 绑定）—— 也加到那个现有 csproj 上。如果你发现自己在为「隔离」一个依赖、一个导出器、或者为了「可扩展性」而搭一个新项目，**停下** —— 那个本能（泛化的 §0.C）在这里是错的；往核心里加一个 hook。 |
 | 冻结区 | `AssetRipper/**` 以及所有子模块。 |
 | 临时探查 | 为了确认「哪个方法才是正确的 hook 目标」，可以临时改一个子模块，**然后 `git checkout` 还原回上游**。最终实现必须以 Ruri.Hook attribute hook 的形式住在 `Source/Ruri.*/**` 里。 |
-| 只用 AOP | 游戏特定行为通过 `[RipperHook(GameType.X, version)]` 类（或非游戏工具的等价物）来添加，由它们安装方法 hook。**不要**在子模块里子类化 / monkey-patch 基类型，**不要**在共享代码里嵌 `if (game == X)` 分支，**不要** ProjectReference 上游再去改它。 |
+| 只用 AOP | 游戏特定行为通过 `[RipperHook(GameType.X, "<游戏版本>", "<引擎版本>")]` 类、宿主能力通过 `[RipperFeature("Name")]` 类（两者正交，见 FRAMEWORK.md §7）来添加，由它们安装方法 hook。**不要**在子模块里子类化 / monkey-patch 基类型，**不要**在共享代码里嵌 `if (game == X)` 分支，**不要** ProjectReference 上游再去改它。 |
 | **hook 只走 Ruri.Hook** | 每个 `Source/Ruri.*` 项目都必须通过 `Ruri.Hook` 框架来安装方法 hook —— 在派生自 `RuriHook` 的类上用 `[RetargetMethod]`、`[RetargetMethodFunc]`、`[RetargetMethodCtorFunc]` attribute，并在启动时调用 `Initialize()`。**不要**直接 `new MonoMod.RuntimeDetour.Hook(target, detour)` / `new ILHook(target, manipulator)` —— 走 Ruri.Hook，这样基于 attribute 的发现、hook 注册和清理才保持一致。唯一可以裸用 MonoMod 的地方是 `Ruri.Hook` 自身内部（`ReflectionExtensions.RetargetCall*`）。 |
 | **导出看到的是纯净 Unity 数据** | 游戏解密、ACL 解码、自定义容器格式都由上游的**读路径** hook 变得透明 —— 等到任何处理 / 导出代码运行时，AR 已经持有**纯净、原汁原味的 Unity 数据**（标准 source-gen 类型；clip 曲线已解码；mesh 已 de-stream）。**绝不要**在导出阶段重新处理解密 / ACL / 自定义格式。一个新的导出格式（例如 USD）是通过**用 hook 替换或增强一个 AR 导出方法**、直接消费 AR 已经干净的模型来添加的 —— 而不是用一个并行服务去重新推导数据。 |
 | 参考范例 | `Source\Ruri.RipperHook\AssetRipperHook`（游戏 hook）和 `Source\Ruri.Tpk\Pipeline\ArAssemblyDumperHook.cs`（构建期 hook）展示了标准的 Ruri.Hook attribute 模式（`AddMethodHook`、`[RetargetMethod]`、`[RetargetMethodCtorFunc]`）。 |
-| 引擎级 hook 安装 | 每个引擎的跨版本设置放在 *Common* hook 类的 `InitAttributeHook` 里，而不是每个版本各放一份。EndField 在 `EndFieldCommon_Hook.InitAttributeHook` 里安装它的 shader 绑定后处理器；`EndFieldShaderBindingHook.Install()` 是幂等的，所以跨 5 个版本重入也无害。 |
+| 引擎级 hook 安装 | 每个引擎的跨版本设置放在 *Common* hook 类的 `InitAttributeHook` 里，而不是每个版本各放一份。Endfield 在 `EndfieldCommon_Hook.InitAttributeHook` 里安装它的 shader 绑定后处理器；`EndfieldShaderBindingHook.Install()` 是幂等的，所以跨 5 个版本重入也无害。 |
 | 测试循环输出 | 永远导出到 D:\Ruri\Temp\AntiGravity\AssetRipperHookOutput和FModelHookOutput CLI 每次运行都会自动清空那个目录 —— 不要往里塞额外的文件夹。启动新的运行前，先杀掉任何残留的 `Ruri.RipperHook.CLI.exe`。 |
 | 迭代超时 | 长时间运行走 `run_in_background` + `Monitor` until-loop。不要用一串短 sleep 去绕过死锁守卫；选一个预算，超了就让运行循环大声失败。 |
 | **类型树是数据，不是生成的代码** | 游戏的 Unity 类型模型来自 `Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`（内嵌资源，0.15 MB），由 `Ruri.RipperHook.Core.TypeTree` 在运行时解释直接读进 stock AssetRipper 对象。重打 tpk：`dotnet build Source/Ruri.Tpk/Ruri.Tpk.csproj -c Debug` 再跑它的 exe。tpk 表达不了的偏差（条件节点 / 值改写 / 读后解码）走 `[TypeTreeNodeGate]` / `[TypeTreeValueFix]` / `[TypeTreePostRead]` 三个 capability attribute，不许在共享代码里加分支。 |
@@ -67,12 +67,12 @@ Hook、AR 流水线、路径处理、source-generated 查找、自定义处理�
 
 ---
 
-## 4. IL2CPP 原生方法反汇编 + 符号恢复（`AR_Il2CppMethodDump`）
+## 4. IL2CPP 原生方法反汇编 + 符号恢复（`Il2CppMethodDump`）
 
-`Source/Ruri.RipperHook/AssetRipperHook/Il2CppMethodDump/`：对 IL2CPP 游戏（丢了源码的 `GameAssembly.dll`），搭 AssetRipper 依赖的 `AssetRipper.Cpp2IL.Core` 分析的车，把每个方法的**原生 x86/ARM 方法体**反汇编出来，注入到 ILSpy 反编译出的空桩 `.cs` 方法体里。**完整架构 / hook 点 / 坑 → [FRAMEWORK.md](FRAMEWORK.md) §11**；本节只讲纲要。
+`Source/Ruri.RipperHook/AssetRipperHook/Il2CppMethodDump/`：对 IL2CPP 游戏（丢了源码的 `GameAssembly.dll`），搭 AssetRipper 依赖的 `AssetRipper.Cpp2IL.Core` 分析的车，把每个方法的**原生 x86/ARM 方法体**反汇编出来，注入到 ILSpy 反编译出的空桩 `.cs` 方法体里。**完整架构 / hook 点 / 坑 → [FRAMEWORK.md](FRAMEWORK.md) §12**；本节只讲纲要。
 
 - **目标 = 对 AI「完整汇编 ≈ 源码」。** 所以尽一切办法把裸地址/裸偏移**全部还原成符号**，消除未知指针。IL2CPP 元数据里字段偏移、静态类、返回类型**本就已知**，就必须还原，不许留 `[rcx+18h]`。
 - **三条互补的符号层**（x86；ARM 走纯文本回退，只解全局）：① **`Il2CppSymbolResolver`（Iced `ISymbolResolver`）** 就地把**分支/调用目标**（托管方法名 / PE 导出 / `il2cpp_codegen_*` 关键函数 / `sub_`/`loc_`）和**绝对数据全局**（字符串字面量 / `TypeInfo` / method / field / 常量池实际值 / **PE 镜像基址 `lea reg,[image_base]` 单列**（RIP 相对寻址的模基址，不再误标 `g_<base>`）/ `g_` 兜底）替换成符号；**立即数与寄存器相对位移一律不碰**（这修掉了旧纯文本正则把 `add eax,5E593F7Ah` 立即数误标成 `sub_` 的 bug —— 指令感知后不可能再发生）。② **`Il2CppRegisterFlow` 寄存器数据流** 把 `this.field`、链式 `this.a.b`、静态字段 `Type.staticField`、数组 `.Length`/`[i]`（元素类型传播，`arr[i].field` 链得下去）、直接+虚调用返回类型、**虚/接口调用**（`call [klass+N] → -> Type::VirtualMethod`，用该类型自己的 vtable；**一致性回撤**：元数据 VTable 槽与运行期分派不符时会串名，故若命名槽的**返回种类**（`GetVirtualReturnKind`：void/标量/结构/引用/指针）与其结果 `rax` 的下游用法**自相矛盾**——void/标量却被解引用或整宽存储、引用却在偏移 0 读浮点——就**撤名降级** `T::class[0xNN]`，绝不硬留假名；结构/IntPtr 返回 rax 本就是合法指针、不动，故真结构 getter 名保留）、**对象分配**（`call il2cpp_codegen_object_new → rax = new T()`）、**泛型实例字段**（unwrap 到 `GenericType`）、**Il2CppClass 结构读**（`test [klass+12Fh] → T::class[0x12F]` 类初始化守卫）、**icall 惰性缓存槽**（`[icall<UnityEngine.Time::get_time()>]`）恢复成尾注释 —— 按调用约定播种参数寄存器（镜像 Cpp2IL `X64CallingConventionResolver`）、基本块 meet 传播类型（`ManagedRef`/`TypeInfo`/`StaticBase`/`Klass`）、Iced `InstructionInfoFactory` 精确失效（**错标比漏标更糟，宁缺毋滥**）。`Il2CppTypeModel` 缓存 `FieldAnalysisContext.Offset` 反查表 + `offsetof(Il2CppClass,static_fields)`（=`0xB8`）与 `offsetof(Il2CppClass,vtable)`（=`0x150`，已对 `Object.Equals`=slot0 核对）**自动发现**（非硬编码）。③ **`Il2CppHelperNamer` 编译器助手命名**：把 il2cpp 生成、**不在 global-metadata 里**（无托管身份，本会永远留 `sub_`）的**异常抛出小助手**从其自身字节识别真名 —— 助手内嵌异常类型名 C 字符串（`IndexOutOfRangeException` 等 bare `*Exception`/`*Error` 标识符），且 body 确实走 il2cpp `object_new`/raise 或尾调用共享构造器时，命名 `il2cpp_throw_<Type>`（**有据、绝不猜**；泛型/共享助手因类型来自运行期数据、无内嵌串，正确留 `sub_`）。反汇编目标一趟、结果按地址缓存；`IsAllocOrRaiseFunction` 按关键函数**语义名子串**判 object_new/raise（对 il2cpp 版本稳健）。Raot 全库扫：4973 个 `sub_` 助手，恰 3 个内嵌类型名（IndexOutOfRange/ArrayTypeMismatch/MissingMethod）**全部命中，0 误报 0 漏报**。
-- **两个 GameType**：`AR_Il2CppMethodDump`（把 asm 注释注入反编译脚本）；`AR_DisassemblyExporter`（只出代码、跳过一切资产、全程序集强制反编译）。二者可叠加。
-- **跑 / 自测**：`Ruri.RipperHook.CLI.exe --hook AR_Il2CppMethodDump --hook AR_DisassemblyExporter --load <游戏根> --export D:\Ruri\Temp\AntiGravity\AssetRipperHookOutput`。**打磨符号恢复的主循环**不需要跑完整 AR/ILSpy —— 这五个文件只依赖 Cpp2IL 模型，用一个 `<Compile Include>` 真源 + `InitializeLibCpp2Il` 后直接 `Il2CppX86Listing.Render(app, method)` 的隔离探针秒级迭代（FRAMEWORK.md §11 末）。
+- **两个 GameType**：`Il2CppMethodDump`（把 asm 注释注入反编译脚本）；`DisassemblyExporter`（只出代码、跳过一切资产、全程序集强制反编译）。二者可叠加。
+- **跑 / 自测**：`Ruri.RipperHook.CLI.exe --hook Il2CppMethodDump --hook DisassemblyExporter --load <游戏根> --export D:\Ruri\Temp\AntiGravity\AssetRipperHookOutput`。**打磨符号恢复的主循环**不需要跑完整 AR/ILSpy —— 这五个文件只依赖 Cpp2IL 模型，用一个 `<Compile Include>` 真源 + `InitializeLibCpp2Il` 后直接 `Il2CppX86Listing.Render(app, method)` 的隔离探针秒级迭代（FRAMEWORK.md §12 末）。
 - **别在导出/哑 DLL 保存阶段 dump**（那不是用户读的 C#）；模型来自加载期 `Cpp2IlApi.CurrentAppContext`，贯穿 export 存活。仅 IL2CPP（`CurrentAppContext != null` 守卫）、opt-in。

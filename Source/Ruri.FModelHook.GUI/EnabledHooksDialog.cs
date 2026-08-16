@@ -57,12 +57,8 @@ internal sealed class EnabledHooksDialog : AdonisWindow
 
     private void PopulateList()
     {
-        var grouped = RuriHook.GetAvailableHooks()
-            .GroupBy(h => h.Attribute.GameName, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
-
         bool first = true;
-        foreach (var group in grouped)
+        foreach (string product in Ruri.Hook.Core.HookCatalog.Products)
         {
             if (!first)
             {
@@ -70,35 +66,35 @@ internal sealed class EnabledHooksDialog : AdonisWindow
             }
             first = false;
 
-            var versions = group.OrderBy(h => h.Attribute.Version, StringComparer.OrdinalIgnoreCase).ToList();
+            var versions = Ruri.Hook.Core.HookCatalog.VersionsOf(product);
             if (versions.Count == 1)
             {
-                _list.Children.Add(BuildRow(versions[0].Attribute, contentOverride: group.Key, indent: 0));
+                _list.Children.Add(BuildRow(versions[0], contentOverride: product, indent: 0));
             }
             else
             {
                 TextBlock header = new()
                 {
-                    Text = group.Key,
+                    Text = product,
                     FontWeight = FontWeights.SemiBold,
                     Margin = new Thickness(0, 4, 0, 2),
                 };
                 _list.Children.Add(header);
-                foreach (var (_, attr) in versions)
+                foreach (var decoder in versions)
                 {
-                    _list.Children.Add(BuildRow(attr, contentOverride: null, indent: 16));
+                    _list.Children.Add(BuildRow(decoder, contentOverride: null, indent: 16));
                 }
             }
         }
     }
 
-    private CheckBox BuildRow(GameHookAttribute attr, string? contentOverride, double indent)
+    private CheckBox BuildRow(Ruri.Hook.Core.DecoderHook decoder, string? contentOverride, double indent)
     {
-        string id = $"{attr.GameName}_{attr.Version}";
-        string label = contentOverride ?? (string.IsNullOrEmpty(attr.Version) ? "Default" : attr.Version);
-        if (!string.IsNullOrEmpty(attr.BaseEngineVersion))
+        string id = decoder.Id;
+        string label = contentOverride ?? (string.IsNullOrEmpty(decoder.Version) ? "Default" : decoder.Version);
+        if (!string.IsNullOrEmpty(decoder.EngineVersion))
         {
-            label += $"  [{attr.BaseEngineVersion}]";
+            label += $"  [{decoder.EngineVersion}]";
         }
 
         CheckBox cb = new()

@@ -84,16 +84,16 @@ internal static class Program
         var config = new HookConfig();
         foreach (string id in opts.Hooks)
         {
-            config.EnabledHooks.Add(NormalizeHookId(id));
+            config.EnabledHooks.Add(id);
         }
-        config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
+        config.EnabledHooks.Add("SkipStreamingAssetsCopy");
         if (opts.LoadTypes.Length > 0)
         {
-            config.EnabledHooks.Add("AR_TypeFilterExport_");
+            config.EnabledHooks.Add("TypeFilterExport");
         }
         if (opts.ExportGlbPath is { Length: > 0 })
         {
-            config.EnabledHooks.Add("AR_GlbExporter_");
+            config.EnabledHooks.Add("GlbExporter");
         }
         Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
         Data.CoreDatasets.Register();
@@ -101,24 +101,4 @@ internal static class Program
         Data.Session.Open(opts.LoadPaths.Length > 0 ? opts.LoadPaths[0] : string.Empty, config.EnabledHooks);
     }
 
-    private static string NormalizeHookId(string id)
-    {
-        if (string.IsNullOrEmpty(id)) return id;
-
-        string Canonicalize(string s) => s.Replace('.', '_');
-
-        string target = Canonicalize(id);
-        var allHooks = Hook.RuriHook.GetAvailableHooks();
-        foreach (var (_, attr) in allHooks)
-        {
-            foreach (string candidate in Hook.RuriHook.BuildHookIds(attr))
-            {
-                if (string.Equals(Canonicalize(candidate), target, StringComparison.OrdinalIgnoreCase))
-                    return candidate;
-            }
-            if (string.Equals(attr.GameName, id, StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(attr.Version))
-                return $"{attr.GameName}_{attr.Version}";
-        }
-        return id;
-    }
 }

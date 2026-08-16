@@ -10,7 +10,7 @@ using Ruri.RipperHook.Attributes;
 
 namespace Ruri.RipperHook.AR;
 
-[RipperHook(GameType.AR_DisassemblyExporter)]
+[RipperFeature("DisassemblyExporter")]
 public partial class AR_DisassemblyExporter_Hook : RipperHookCommon
 {
     [RetargetMethodFunc(typeof(ProjectExporter), "CreateCollections")]

@@ -30,7 +30,7 @@ internal static class Program
 
         if (isFirstRun)
         {
-            config.EnabledHooks.Add("AR_SkipStreamingAssetsCopy_");
+            config.EnabledHooks.Add("SkipStreamingAssetsCopy");
             config.Save(configPath);
         }
         WireModuleSettings(config, configPath);

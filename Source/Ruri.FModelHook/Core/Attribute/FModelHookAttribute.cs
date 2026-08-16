@@ -8,12 +8,12 @@ public sealed class FModelHookAttribute : GameHookAttribute
     public GameType GameType { get; }
     public override string GameName { get => GameType.ToString(); }
     public override string Version { get; }
-    public override string BaseEngineVersion { get; }
+    public override string EngineVersion { get; }
 
-    public FModelHookAttribute(GameType gameType, string version = "", string baseEngineVersion = "")
+    public FModelHookAttribute(GameType gameType, string version = "", string engineVersion = "")
     {
         GameType = gameType;
         Version = version;
-        BaseEngineVersion = baseEngineVersion;
+        EngineVersion = engineVersion;
     }
 }

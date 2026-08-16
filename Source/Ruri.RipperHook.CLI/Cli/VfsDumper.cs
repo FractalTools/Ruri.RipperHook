@@ -11,7 +11,7 @@ internal static class VfsDumper
     {
         if (GameBundleHook.EnumerateVfsFiles is not { } enumerate)
         {
-            throw new InvalidOperationException("当前 --hook 没有提供 VFS 访问(需要 EndField 这类 VFS 游戏)。");
+            throw new InvalidOperationException("当前 --hook 没有提供 VFS 访问(需要 Endfield 这类 VFS 游戏)。");
         }
         string[] roots = Session.RootsOrThrow("--dump-vfs");
         if (GameBundleHook.ExtractVfsFile is not { } extract)

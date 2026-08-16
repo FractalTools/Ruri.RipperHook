@@ -102,7 +102,7 @@ internal static class SceneSeedResolver
         {
             throw new InvalidOperationException(
                 $"No game hook publishing '{datasetId}' is active — pass --hook with a VFS-game "
-                + $"hook id (e.g. EndField_1.4.4). ({exception.Message})", exception);
+                + $"hook id (e.g. Endfield_1.4.4). ({exception.Message})", exception);
         }
     }
 

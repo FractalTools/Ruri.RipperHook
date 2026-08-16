@@ -2,6 +2,7 @@ using AssetRipper.Primitives;
 using AssetRipper.Tpk;
 using AssetRipper.Tpk.TypeTrees;
 using AssetRipper.Tpk.TypeTrees.Json;
+using Ruri.Hook.Core;
 using Ruri.RipperHook.Core;
 using Ruri.RipperHook.Core.TypeTree;
 using VersionClassPair = System.Collections.Generic.KeyValuePair<

@@ -3,7 +3,7 @@ using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 namespace Ruri.RipperHook.AR_PrefabOutlining;
 
-[RipperHook(GameType.AR_PrefabOutlining)]
+[RipperFeature("PrefabOutlining")]
 public partial class AR_PrefabOutlining_Hook : RipperHookCommon
 {
     protected AR_PrefabOutlining_Hook()

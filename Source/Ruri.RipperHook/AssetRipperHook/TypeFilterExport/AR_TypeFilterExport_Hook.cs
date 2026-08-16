@@ -8,7 +8,7 @@ using Ruri.RipperHook.Attributes;
 
 namespace Ruri.RipperHook.AR;
 
-[RipperHook(GameType.AR_TypeFilterExport)]
+[RipperFeature("TypeFilterExport")]
 public partial class AR_TypeFilterExport_Hook : RipperHookCommon
 {
     public static readonly HashSet<int> TargetClassIds = new();

@@ -418,15 +418,15 @@ public static class Program
 
     private static int RunListHooks()
     {
-        var hooks = RuriHook.GetAvailableHooks();
-        if (hooks.Count == 0)
+        var decoders = Ruri.Hook.Core.HookCatalog.Decoders;
+        if (decoders.Count == 0)
         {
             Console.WriteLine("(no hooks discovered)");
             return 1;
         }
-        foreach (var (type, attr) in hooks)
+        foreach (var decoder in decoders)
         {
-            Console.WriteLine($"{attr.GameName}_{attr.Version,-12} [{type.Name}]");
+            Console.WriteLine($"{decoder.Id,-24} [{decoder.Type.Name}]");
         }
         return 0;
     }
@@ -437,7 +437,7 @@ public static class Program
         _ = typeof(Ruri.FModelHook.Game.SBUE.ShaderDecompiler.UE_ShaderDecompiler_Hook);
         try { Assembly.Load("Ruri.FModelHook"); } catch {}
 
-        int hookCount = RuriHook.GetAvailableHooks().Count;
+        int hookCount = Ruri.Hook.Core.HookCatalog.Decoders.Count;
         HookLogger.Log($"[Ruri.FModelHook.CLI] Hook assemblies loaded — discovered {hookCount} [GameHookAttribute] type(s).");
         if (hookCount == 0)
         {

@@ -6,7 +6,7 @@ using Ruri.RipperHook.HookUtils.ExportHandlerHook;
 
 namespace Ruri.RipperHook.AR;
 
-[RipperHook(GameType.AR_HumanoidToGeneric)]
+[RipperFeature("HumanoidToGeneric")]
 public partial class AR_HumanoidToGeneric_Hook : RipperHookCommon
 {
     protected AR_HumanoidToGeneric_Hook()

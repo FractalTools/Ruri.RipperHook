@@ -21,7 +21,7 @@
 | 列出 hook | `Ruri.RipperHook.CLI.exe --list-hooks`（返回 JSON，退出码 3） |
 | 无头导出 | `--hook <Id> --load <path> --export <dir> [--fail-fast false] [--log-level Info]`（CLI 在写入前删除 `--export` 目录） |
 | GUI 锁住 DLL | `Get-Process Ruri.RipperHook.GUI -EA SilentlyContinue \| Stop-Process -Force` —— 仅当拷贝失败时，绝不投机执行 |
-| GameType 定义 | `Source/Ruri.RipperHook/Core/GameType.cs` —— 新的 AR_/game hook 需要在这里加一条 |
+| GameType 定义 | `Source/Ruri.RipperHook/Core/GameType.cs` —— 新游戏在这里加一条，成员名 = 该游戏 player 的 Unity productName（§7）。特性不进这个枚举 |
 
 ---
 
@@ -95,7 +95,7 @@ pair.Value.Asset.SetAsset(bundle.Collection, asset as IObject);  // SetAsset 需
 
 ---
 
-## 6. 自定义 IAssetProcessor 注入（被 AR_HumanoidToGeneric、AR_PrefabOutlining、AR_StaticMeshSeparation 使用）
+## 6. 自定义 IAssetProcessor 注入（被 HumanoidToGeneric、PrefabOutlining、StaticMeshSeparation 使用）
 
 `Source/Ruri.RipperHook/Utils/Hook/ExportHandlerHook.cs` 是一个 module。它对 `ExportHandler.GetProcessors` 下 **ILHook**（`[RetargetMethodFunc]`，见 §2 的 `RetargetCallFunc`），在原方法每个 `ret` 处 `EmitDelegate` 接管返回值 —— **上游那条流水线原封不动地跑，本仓库一行都不复制**，只在返回的序列上做插入。`ExportHandler.Process` 完全不碰。
 
@@ -129,23 +129,46 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 
 ---
 
-## 7. AR_* hook 与原生设置的取舍策略
+## 7. 解码器与特性：两个正交概念
 
-**规则**：AR_* hook ID 保留给*对 AR 原生支持之上的扩展*。如果某个特性已经作为一个原生 `ProcessingSettings` / `ExportSettings` / `ImportSettings` 属性存在、且有合理的默认值，**就别再发一个并行的 AR_* hook** —— 这种重复只会把配置搞乱。
+**解码器（decoder）= 一个游戏。** `[RipperHook(GameType.X, "<游戏版本>", "<引擎版本>")]`。`GameType` 成员名 **就是**该游戏 player 的 Unity productName（`<Product>_Data/app.info` 第二行），逐字符照抄；hook id = `产品名_版本`。游戏改名就改这个成员，绝不把游戏的写法迁就我们的。一个进程同时只活一个解码器（`RuriHook.ApplyHooks` 保证）。
 
-- 作为 hook 实现存活下来的 AR_* hook：`AR_SkipStreamingAssetsCopy`、`AR_SkipProcessingAnimation`、`AR_ShaderDecompiler`（自定义反编译器）、`AR_PrefabOutlining`（恢复了被删的处理器）、`AR_StaticMeshSeparation`（恢复了被删的处理器）、`AR_Il2CppMethodDump`（IL2CPP 原生方法体反汇编 —— AR 根本没有原生 asm 导出；见 §11）。
-- 因为**原生设置 + 默认值已经够了**而被删的 AR_* hook：`AR_BundledAssetsExportMode`（`ProcessingSettings.BundledAssetsExportMode` 已经默认 `DirectExport`）。
+**特性（feature）= 宿主能力。** `[RipperFeature("Name")]`，无游戏、无版本、互不排斥，**永远不是让某个游戏可读的前提**。id 就是那个名字（不带 `AR_` 前缀，不带空版本留下的尾下划线）。
 
-**GUI 呈现**：
-- 游戏 hook（Arknights、EndField、GirlsFrontline2、…）→ Hooks 树（每个游戏互斥，选一个版本）。
-- AR_* hook → Settings 对话框「Features」组。用复选框开关，存在同一个 `HookConfig.EnabledHooks` 集合里，只是从树里隐藏。
-- 首次运行默认值（例如 `AR_SkipStreamingAssetsCopy_` 开）：在 `Ruri.RipperHook.GUI/Program.cs:Main` 里种下，门控在 `!File.Exists(configPath)`。用户通过 Settings 保存一次之后，选择就永远归他们了。
+两者的区别是 **attribute 的类型**，不是一个 flag 加一个字符串前缀 —— 所以没有哪个宿主再去 `StartsWith("AR_")`。唯一的反射目录是 `Ruri.Hook.Core.HookCatalog`（一次扫描，`AssemblyLoad` 时失效重建），`GetAvailableHooks()` 之类的全域重扫已删除。
 
-**新增一个 AR_* hook 时**：写代码之前，grep `AssetRipper.Processing.Configuration.ProcessingSettings` / `AssetRipper.Export.Configuration.ExportSettings` / `AssetRipper.Import.Configuration.ImportSettings`，找等价属性。如果存在一个带所需默认值的，就用 `[RetargetMethodCtorFunc]` 在设置类上翻一下默认值（看 `BundledAssetsExportMode` *以前*是怎么做的）—— 或者更好，把它作为一个 Settings 对话框控件暴露出来就收工。只为 AR 没有原生旋钮的行为保留一个新 hook ID。
+**规则**：特性保留给*对 AR 原生支持之上的扩展*。如果某个特性已经作为一个原生 `ProcessingSettings` / `ExportSettings` / `ImportSettings` 属性存在、且有合理的默认值，**就别再发一个并行的特性** —— 这种重复只会把配置搞乱。
+
+- 作为 hook 实现存活下来的特性：`SkipStreamingAssetsCopy`、`SkipProcessingAnimation`、`ShaderDecompiler`（自定义反编译器）、`PrefabOutlining`（恢复了被删的处理器）、`StaticMeshSeparation`（恢复了被删的处理器）、`Il2CppMethodDump`（IL2CPP 原生方法体反汇编 —— AR 根本没有原生 asm 导出；见 §12）。
+- 因为**原生设置 + 默认值已经够了**而被删的：`BundledAssetsExportMode`（`ProcessingSettings.BundledAssetsExportMode` 已经默认 `DirectExport`）。
+
+**各宿主怎么呈现**：
+- WinForms GUI：解码器 → Hooks 树（每个游戏互斥，选一个版本）；特性 → Settings 对话框「Features」组，同一个 `HookConfig.EnabledHooks` 集合，只是从树里隐藏。首次运行默认值在 `Ruri.RipperHook.GUI/Program.cs:Main` 种下，门控 `!File.Exists(configPath)`。
+- Blender 插件：**特性不出现在 UI 里**。它这条内存路径需要哪些，由 `RipperBlenderBridge.HostFeatures` 一处常量声明并无条件启用（当前只有 `HumanoidToGeneric`：Blender 根本没有 Unity humanoid 这个概念）；解码器由安装自己的身份自动解析（§8），每个浏览器 tab 各一个。
+- 名字写错就是启动即抛，不是静默不生效。
+
+**新增一个特性时**：写代码之前，grep `AssetRipper.Processing.Configuration.ProcessingSettings` / `AssetRipper.Export.Configuration.ExportSettings` / `AssetRipper.Import.Configuration.ImportSettings`，找等价属性。如果存在一个带所需默认值的，就用 `[RetargetMethodCtorFunc]` 在设置类上翻一下默认值（看 `BundledAssetsExportMode` *以前*是怎么做的）—— 或者更好，把它作为一个 Settings 对话框控件暴露出来就收工。只为 AR 没有原生旋钮的行为保留一个新特性。
 
 ---
 
-## 8. 从旧 AR 恢复的代码危险清单
+## 8. 一个安装是谁：身份探测与解码器解析
+
+真源是**游戏自己发布的两个小文件**，别的一律不算数（整合包目录名、cabmap 文件名、用户勾选的复选框）：
+
+| 字段 | 来自 | 备注 |
+|---|---|---|
+| `Company` / `Product` | `<Product>_Data/app.info` 两行 | 引擎自己写的身份文件，**永远明文**（连资产整体加密的 EXILIUM 也有） |
+| `EngineVersion` | `<Product>_Data/globalgamemanagers` 的序列化头 | 读头不读游戏；引擎资产被变换过的 build 报 `""`，那是**事实不是错误** |
+
+`Ruri.RipperHook.Core.Install.InstallProbe`：`Read(root)` 给出每个 player 一行，`Project(root)` 挑出「这个安装到底是哪个 player」——规则只用安装自己的字段（companyName 以哪个 product 结尾；哪个 product 被其他 product 当前缀扩展），**不查已知游戏名单**。一个安装常常带好几个 player（本体 + VR + Studio）。
+
+`HookCatalog.Resolve(product, engineVersion)`：该 product 最新的解码器，排除掉声明了别的引擎版本的。解码器自己的 `Version` 是它对着哪个游戏补丁写的 —— **没有任何 build 在任何地方声明自己的游戏版本**（`PlayerSettings.bundleVersion` 在 `globalgamemanagers` 里，但 AssetRipper 不生成 ClassID 129，读不出来），所以它只用来排序候选，不参与筛选。手动指定永远压过解析结果。
+
+桥出口：`ReadInstall(root)` / `ListDecoders()` / `ResolveDecoder(product, engineVersion)`，都只要 CLR 起来，不要 session、不要 cabmap、不要任何 hook。
+
+---
+
+## 9. 从旧 AR 恢复的代码危险清单
 
 当用户恢复被删的 AR API（例如 PrefabOutlining）：
 - 需要替换的被移除扩展方法：
@@ -153,11 +176,11 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 - 需要完全限定的类型名冲突：
   - `AssetRipper.Processing.PrefabProcessor`（用户恢复的）vs `AssetRipper.Processing.Prefabs.PrefabProcessor`（当前 AR 内置的）—— 在 `ExportHandlerHook` 镜像里用 FQN。
 - 配置类改名：`LibraryConfiguration` → `FullConfiguration`。
-- Hook 基类：旧代码用 `: RipperHook`（一个*命名空间*，不是类型）+ `AddExtraHook(...)`（当前 Ruri.Hook 里不存在）。移植到 `: RipperHookCommon` + `[RipperHook(GameType.X)]` + `RegisterModule(new ExportHandlerHook())`（镜像 `AR_StaticMeshSeparation_Hook`）。
+- Hook 基类：旧代码用 `: RipperHook`（一个*命名空间*，不是类型）+ `AddExtraHook(...)`（当前 Ruri.Hook 里不存在）。移植到 `: RipperHookCommon` + `[RipperHook(GameType.X)]` + `RegisterModule(new ExportHandlerHook())`（镜像 `StaticMeshSeparationHook`）。
 
 ---
 
-## 9. Logger sink
+## 10. Logger sink
 
 `AssetRipper.Import.Logging.Logger` 是一个全局静态、带 `List<ILogger>` sink —— 如果没有 sink 被 `Logger.Add`，它**什么都不做**。
 - `Ruri.RipperHook.CLI/Cli/HeadlessRunner.cs:165` 接上了 `StderrLogger` + `FileLogger`。可用。
@@ -166,7 +189,7 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 
 ---
 
-## 10. 运行时类型树（`RuriTypeTree.tpk` 是怎么构建和消费的）
+## 11. 运行时类型树（`RuriTypeTree.tpk` 是怎么构建和消费的）
 
 游戏的 Unity 类型模型不再是生成的 assembly，而是 **数据**：`Source/Ruri.RipperHook/Libraries/RuriTypeTree.tpk`（0.15 MB，`EmbeddedResource`），由 `Ruri.RipperHook.Core.TypeTree` 在运行时解释、直接读进 stock `AssetRipper.SourceGenerated` 对象。此前这里是一条 codegen 流水线：跑 AR AssemblyDumper 的 60+ 个 pass 生成一整套 `Ruri.SourceGenerated` 孪生类（53 MB DLL），每个资产先读一个 dummy 再按字段名 deep-copy 回真对象。
 
@@ -183,8 +206,8 @@ ExportHandlerHook.Register(new AssetProcessorRegistration
 
 | attribute | 用途 | 例子 |
 |---|---|---|
-| `[TypeTreeNodeGate(classID, nodePath, Captures = [...])]` | 条件节点 | EndField Mesh 的 `m_CompressedMesh` 仅在 `m_CollisionMeshBaked` 为假时写入 |
-| `[TypeTreeValueFix(classID, nodePath)]` | 值改写 | EndField 的 `m_MeshCompression == 4` 归一成 0 |
+| `[TypeTreeNodeGate(classID, nodePath, Captures = [...])]` | 条件节点 | Endfield Mesh 的 `m_CompressedMesh` 仅在 `m_CollisionMeshBaked` 为假时写入 |
+| `[TypeTreeValueFix(classID, nodePath)]` | 值改写 | Endfield 的 `m_MeshCompression == 4` 归一成 0 |
 | `[TypeTreePostRead(classID, Slot, Captures = [...])]` | 读后解码 | ACL 动画缓冲解压、`m_TOSData` → CRC32 → `m_TOS`、shader blob 上提 |
 
 stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕获成 `TypeTreeValue` 结构值（标量 / 字节数组 / 序列 / 结构），由 gate 和 post-read hook 通过 `TypeTreeReadContext` 取用；没声明的只消费字节。路径是从类根起、用消毒后节点名以 `/` 连接（`m_MuscleClip/m_Clip/m_Data/m_DenseClip/m_ACLArray`）。
@@ -194,7 +217,7 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 
 **输入**
 - `D:\Ruri\Git\FractalTools\TypeTreeDumps` —— 官方 Unity dump，**1384 个版本**，`InfoJson/<ver>.json` = `{Version, Strings[], Classes[]}`（每个类：`TypeID, Name, Base, IsAbstract, EditorRootNode, ReleaseRootNode`）。规范的真实 Unity 来源。
-- `D:\Ruri\Git\FractalTools\TypeTree` —— 自定义的分叉引擎树。文件夹以 `CustomEngineType` id 命名（`1`=Houkai, `2`=StarRail, `5`=EndField）；每个 `<gamever>/info.json`。`RazTreeConverter.py` → 扁平的 `output/` 文件 `{maj}.{min}.{build}x{id}`（`x` ⇒ `UnityVersionType.Experimental`，`TypeNumber`=引擎 id）+ 拷贝 `Common/*.json`（真实 Unity 锚点）。**`output/` 是 dumper 输入且被 gitignore；`Common/` + `1,2,5/` 是 source-of-truth —— 所以「补全数据集」意味着填充 `Common/`。**
+- `D:\Ruri\Git\FractalTools\TypeTree` —— 自定义的分叉引擎树。文件夹以 `CustomEngineType` id 命名（`1`=Houkai, `2`=StarRail, `5`=Endfield）；每个 `<gamever>/info.json`。`RazTreeConverter.py` → 扁平的 `output/` 文件 `{maj}.{min}.{build}x{id}`（`x` ⇒ `UnityVersionType.Experimental`，`TypeNumber`=引擎 id）+ 拷贝 `Common/*.json`（真实 Unity 锚点）。**`output/` 是 dumper 输入且被 gitignore；`Common/` + `1,2,5/` 是 source-of-truth —— 所以「补全数据集」意味着填充 `Common/`。**
 - `CustomEngineType`（`Source/Ruri.RipperHook/Core/CustomEngineType.cs`）—— 引擎→id，作为版本 `TypeNumber` 存储（byte，≤255）。
 
 **版本模型 / 关键 API**
@@ -203,23 +226,23 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 - `TypeTreeTpkBuilder.Create`：版本按排序顺序；`CommonString` = 只追加、前缀一致的并集（索引不匹配就抛）；一个类只在它的 dump 变化时才 emit（奇点压缩）；一个类**在某版本中缺席 = 被 null 标记 = 「在此处被移除」**。
 - `SharedState`：`SourceVersions[]`、`Min/MaxVersion`、`ClassInformation`（id→`VersionedList<UniversalClass>`）、`ClassGroups`（id→`ClassGroup`；`GeneratedClassInstance.VersionRange`）、`NameToTypeID`、`HistoryFile`（= `consolidated.json`，enum/member/doc 历史，PDB 派生，**版本无关**）。`GetGeneratedInstanceForObjectType` / `ClassGroupBase.GetInstanceForVersion`/`GetTypeForVersion` 做**精确**的版本范围匹配，没有覆盖该版本就抛。
 
-**自定义引擎是覆盖层（OVERLAY），不是快照** —— 一个分叉游戏在某个基础 Unity 版本之上发布一棵*部分*树（只有它用到的类）。EndField（id 5，基础 2021.3）是 ECS：发布叶子组件 + `MonoBehaviour(114)` 但**丢掉整条抽象链**（`GameObject(1)`,`Transform(4)`,`Component(2)`,`Behaviour(8)`,`Renderer`,`Collider`,`Joint`,`Effector2D`,…；~15 个基类，被 100+ 叶子类引用）。StarRail（id 2）在 2019.4.210+ 发布一个**精简的 `UnityConnectSettings(310)`**（6 个字段）。
+**自定义引擎是覆盖层（OVERLAY），不是快照** —— 一个分叉游戏在某个基础 Unity 版本之上发布一棵*部分*树（只有它用到的类）。Endfield（id 5，基础 2021.3）是 ECS：发布叶子组件 + `MonoBehaviour(114)` 但**丢掉整条抽象链**（`GameObject(1)`,`Transform(4)`,`Component(2)`,`Behaviour(8)`,`Renderer`,`Collider`,`Joint`,`Effector2D`,…；~15 个基类，被 100+ 叶子类引用）。StarRail（id 2）在 2019.4.210+ 发布一个**精简的 `UnityConnectSettings(310)`**（6 个字段）。
 
 **`ArAssemblyDumperHook` —— 对旧的 6-hook / 9-site diff 的根因分析：**
-- *移除 —— 被覆盖层规则修复*：`Pass005.GetClass` 最近版本回退之所以存在，只是因为 EndField 丢掉的祖先链让 `Pass005.AssignInheritance` 的基类解析落空。有了 `TypeTreeTpkBuilder` 里的覆盖层规则（Experimental 版本不对省略的类做 null 标记），祖先会前向携带，每个基类都精确解析。⇒ 删掉。
+- *移除 —— 被覆盖层规则修复*：`Pass005.GetClass` 最近版本回退之所以存在，只是因为 Endfield 丢掉的祖先链让 `Pass005.AssignInheritance` 的基类解析落空。有了 `TypeTreeTpkBuilder` 里的覆盖层规则（Experimental 版本不对省略的类做 null 标记），祖先会前向携带，每个基类都精确解析。⇒ 删掉。
 - *移除 —— 被数据修复*：`Pass555` 期望 **113** 个 common string；数据集顶到 **112**（最新 dump `6000.4.0f1`）。加入 `6000.5.0a8`（全部 1384 个 dump 里第一个有 113 个 string 的）直接满足它。⇒ 删掉。
-- *保留 —— 多覆盖层数据集的内在属性*：`SharedState.GetGeneratedInstanceForObjectType` + `ClassGroupBase.GetTypeForVersion` 上的最近版本回退。自定义**子类**（例如 VFX 入口结构体）是按引擎不相交地定义的 —— StarRail `[2019.4.100,2020.0)` 和 EndField `[2021.3.527,2022.0)` —— 中间隔着一段真实 Unity 的空隙。在中间边界解析字段类型的 pass（`Pass015`→`GenericTypeResolver.ResolveNode`→`GetTypeForVersion`；还有 `Pass100/101`、`UniqueNameFactory`）会撞进空隙并抛 `No instance found`；回退吸附到最近的覆盖实例。**没有任何一组真实「奇点」版本能填上这些 —— 它们是自定义数据本身的洞。**
+- *保留 —— 多覆盖层数据集的内在属性*：`SharedState.GetGeneratedInstanceForObjectType` + `ClassGroupBase.GetTypeForVersion` 上的最近版本回退。自定义**子类**（例如 VFX 入口结构体）是按引擎不相交地定义的 —— StarRail `[2019.4.100,2020.0)` 和 Endfield `[2021.3.527,2022.0)` —— 中间隔着一段真实 Unity 的空隙。在中间边界解析字段类型的 pass（`Pass015`→`GenericTypeResolver.ResolveNode`→`GetTypeForVersion`；还有 `Pass100/101`、`UniqueNameFactory`）会撞进空隙并抛 `No instance found`；回退吸附到最近的覆盖实例。**没有任何一组真实「奇点」版本能填上这些 —— 它们是自定义数据本身的洞。**
 - *保留 —— 自定义数据适配器*：`Pass506` no-op（StarRail 精简过的 310 没有 `m_CrashReportingSettings`/`m_UnityPurchasingSettings` 插入地标；AR *确实*给生成字段加 `m_` 前缀，所以完整变体本来能用 —— 是游戏的精简树破坏了它）；`Pass039` prune（doc 注入引用了不完整 dump 里缺失的 enum 成员；doc 与代码生成无关）。
 
-**净结果**：6 个 hook → **4** 个。移除了 `Pass005.GetClass`（EndField 继承阻塞器 —— 现在在 tpk builder 里被正确修复）和 `Pass555`。这个文件**不能**删：最近版本回退是不相交的逐引擎覆盖层的正确通用机制，而 Pass506/Pass039 适配特定的自定义 dump。用户「拷贝所有奇点版本 ⇒ 删掉 hook」的前提只对 `Pass555`（一个真正缺失最新 dump 的情况）和 `Pass005`（被覆盖层模型修复，不是靠加版本）成立；其余都不是稀疏性 bug。
+**净结果**：6 个 hook → **4** 个。移除了 `Pass005.GetClass`（Endfield 继承阻塞器 —— 现在在 tpk builder 里被正确修复）和 `Pass555`。这个文件**不能**删：最近版本回退是不相交的逐引擎覆盖层的正确通用机制，而 Pass506/Pass039 适配特定的自定义 dump。用户「拷贝所有奇点版本 ⇒ 删掉 hook」的前提只对 `Pass555`（一个真正缺失最新 dump 的情况）和 `Pass005`（被覆盖层模型修复，不是靠加版本）成立；其余都不是稀疏性 bug。
 
-**最小 Common（奇点）集 —— 保持它小。** `Common/` 故意不是每一个 Unity minor（那会让 tpk 构建 + 整个生成膨胀，并撑大被跟踪的仓库）。因为最近版本回退容忍空隙，唯一*必需*的真实版本是：每个自定义引擎的**基础**（`2017.4.0f1` Houkai、`2019.4.0f1` StarRail、`2021.3.0f1` EndField —— 引擎的 `Experimental` 版本所坐落其上的覆盖层前向携带源）、**113-string 上限**（`6000.5.0a8`，给 Pass555）、以及一个**下限 + 早期锚点**（`3.5.7`、`4.1.0`、`5.0.0f4`、`5.6.0b5` —— `MinVersion`=3.5.0 + diff 稳定性）。**8 个文件，~75 MB。** **不要**重新加入中间的 minor（2018.x/2020.x/2022.x/6000.1-4 …）—— 在回退下它们是冗余的，只会拖慢生成。只有当某个*非自定义*游戏需要精确建模那个确切的 Unity 类型树时，才加一个真实版本。`RazTreeConverter.py` 重新生成 `output/`（gitignore）= `Common/*.json` 原样 + 转换后的 `1,2,5/` 覆盖层。
+**最小 Common（奇点）集 —— 保持它小。** `Common/` 故意不是每一个 Unity minor（那会让 tpk 构建 + 整个生成膨胀，并撑大被跟踪的仓库）。因为最近版本回退容忍空隙，唯一*必需*的真实版本是：每个自定义引擎的**基础**（`2017.4.0f1` Houkai、`2019.4.0f1` StarRail、`2021.3.0f1` Endfield —— 引擎的 `Experimental` 版本所坐落其上的覆盖层前向携带源）、**113-string 上限**（`6000.5.0a8`，给 Pass555）、以及一个**下限 + 早期锚点**（`3.5.7`、`4.1.0`、`5.0.0f4`、`5.6.0b5` —— `MinVersion`=3.5.0 + diff 稳定性）。**8 个文件，~75 MB。** **不要**重新加入中间的 minor（2018.x/2020.x/2022.x/6000.1-4 …）—— 在回退下它们是冗余的，只会拖慢生成。只有当某个*非自定义*游戏需要精确建模那个确切的 Unity 类型树时，才加一个真实版本。`RazTreeConverter.py` 重新生成 `output/`（gitignore）= `Common/*.json` 原样 + 转换后的 `1,2,5/` 覆盖层。
 
 ---
 
-## 11. IL2CPP 原生方法反汇编（`AR_Il2CppMethodDump`）
+## 12. IL2CPP 原生方法反汇编（`Il2CppMethodDump`）
 
-对 IL2CPP 游戏，AssetRipper 经 `AssetRipper.Cpp2IL.Core` 包（SamboyCoding/Cpp2IL 的一个分叉）把 `GameAssembly.dll` 变成**哑（dummy）** .NET assembly（桩方法体），然后 ILSpy 把这些哑 assembly 反编译成 `ExportedProject/Assets/Scripts/.../*.cs`。`AR_Il2CppMethodDump` 搭同一趟 Cpp2IL 分析的车，把每个方法的**原生**（x86/ARM）方法体反汇编出来，并把它**作为 `//` 注释注入到那些反编译 C# 脚本中匹配的方法体里** —— AR 否则只导出空桩。源：`Source/Ruri.RipperHook/AssetRipperHook/Il2CppMethodDump/`。
+对 IL2CPP 游戏，AssetRipper 经 `AssetRipper.Cpp2IL.Core` 包（SamboyCoding/Cpp2IL 的一个分叉）把 `GameAssembly.dll` 变成**哑（dummy）** .NET assembly（桩方法体），然后 ILSpy 把这些哑 assembly 反编译成 `ExportedProject/Assets/Scripts/.../*.cs`。`Il2CppMethodDump` 搭同一趟 Cpp2IL 分析的车，把每个方法的**原生**（x86/ARM）方法体反汇编出来，并把它**作为 `//` 注释注入到那些反编译 C# 脚本中匹配的方法体里** —— AR 否则只导出空桩。源：`Source/Ruri.RipperHook/AssetRipperHook/Il2CppMethodDump/`。
 
 **模型从哪来**：`IL2CppManager.Initialize`（`AssetRipper.Import`，冻结）在*加载*期间运行：`Cpp2IlApi.InitializeLibCpp2Il(...)` 解析 metadata+binary；之后静态的 `Cpp2IL.Core.Cpp2IlApi.CurrentAppContext`（`ApplicationAnalysisContext`）持有完整模型，并**贯穿 export 一直存活**（它的 `Il2CppBinary` 就是原始字节被重新读取的来源）。GUI 每次加载经 `IL2CppManager.ClearStaticState` + 一次新的 `InitializeLibCpp2Il` 重置它。**别在 DllPostExporter / 哑 DLL 保存阶段 dump** —— 那会把原始 DLL 写到 `AuxiliaryFiles/GameAssemblies/`，不是用户读的 C#。C# 是之后由 ILSpy 产出的。
 
@@ -230,7 +253,7 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 **关联 ILSpy `IMethod` ↔ Cpp2IL `MethodAnalysisContext`**（`Il2CppAsmLookup`）：从 `CurrentAppContext` 构建一个 `Dictionary<key, List<MethodAnalysisContext>>`；key = `CleanAssemblyName | Normalize(Type.FullName) :: Name / paramCount`。`Normalize` 把嵌套分隔符 `+ / \` → `.` **并剥掉泛型 arity** `` `\d+ ``（`CyclicalList`1` → `CyclicalList`）—— ILSpy 的 `FullName` 既不带分隔符也不带 arity，Cpp2IL 带。key 里有 assembly + arity，匹配就精确：在测试游戏上 **Assembly-CSharp 里 3832/3832 个方法，0 漏**。ILSpy `method.ParentModule.Name` == Cpp2IL `CleanAssemblyName`（"Assembly-CSharp"）。查找是**非消耗 + 幂等的**（重新导出安全），当 `CurrentAppContext` 变化时重建。
 
 **反汇编**：两条路。**x86（32/64）** → `Il2CppX86Listing.Render` 用 **Iced** 自己解码 `method.RawBytes`（所以它有每条指令的 `IP`），收集方法内近跳转目标，在每个目标处 emit 一行 `loc_<IP>:` 标签 —— 一份真正的汇编 listing，你能看到每个跳转落在哪。每条指令用一个本地 `MasmFormatter` 格式化，但格式化器现在挂了一个**指令感知的 `Il2CppSymbolResolver`（Iced `ISymbolResolver`）** —— 分支/调用目标与绝对数据全局**就地**替换成符号，立即数/寄存器相对位移**保持原值**；并叠一层 `Il2CppRegisterFlow` 数据流恢复出的**符号注释**（`; this.field` 等，见下）。**其它一切（ARM/Disarm、WASM）** → 扁平的 `appContext.InstructionSet.PrintAssembly(method)` + `Il2CppAsmAnnotator.Annotate`（纯文本正则回退，无标签、无字段恢复；x86 已不再走 `AnnotateLine`）。经 `app.InstructionSet is X86InstructionSet` 分支。当 `UnderlyingPointer == 0`（抽象/extern）时逐方法跳过。
-> **双 Iced 坑**：Ruri.RipperHook 引用了**两个**暴露 `Iced.Intel` 的 assembly —— 真 `Iced`（经 `AssetRipper.Cpp2IL.Core` 传递）和 `MonoMod.Iced`（经 `MonoMod.RuntimeDetour` 传递）。所以 `using Iced.Intel;` 会 `CS0433` 歧义。修法：显式 `<PackageReference Include="Iced" Version="1.21.0" Aliases="icedreal" />` + 在 `Il2CppX86Listing.cs` 里 `extern alias icedreal; using icedreal::Iced.Intel;`，并且那里别 `using System.Text`（它的 `Decoder`/`StringBuilder` 会再次冲突）—— 完全限定 `System.Text.StringBuilder`。**`X86InstructionSet.PrintAssembly` 用一个 `static MasmFormatter`/`StringOutput` → 非线程安全，而 `WholeProjectDecompiler` 并行反编译文件** → 把每次 `PrintAssembly` 串行化在一把锁下（持于 `Il2CppAsmLookup.GetDisassembly`）。只有 AR 实际*反编译*的 assembly（预定义的、Hybrid 下如 `Assembly-CSharp`；`Decompiled` 下的一切）才拿到 asm；`Save` 模式的 assembly 原样 emit 成 DLL。仅 IL2CPP（由 `CurrentAppContext != null` 守卫），opt-in，Settings→Features 复选框 `AR_Il2CppMethodDump_`。
+> **双 Iced 坑**：Ruri.RipperHook 引用了**两个**暴露 `Iced.Intel` 的 assembly —— 真 `Iced`（经 `AssetRipper.Cpp2IL.Core` 传递）和 `MonoMod.Iced`（经 `MonoMod.RuntimeDetour` 传递）。所以 `using Iced.Intel;` 会 `CS0433` 歧义。修法：显式 `<PackageReference Include="Iced" Version="1.21.0" Aliases="icedreal" />` + 在 `Il2CppX86Listing.cs` 里 `extern alias icedreal; using icedreal::Iced.Intel;`，并且那里别 `using System.Text`（它的 `Decoder`/`StringBuilder` 会再次冲突）—— 完全限定 `System.Text.StringBuilder`。**`X86InstructionSet.PrintAssembly` 用一个 `static MasmFormatter`/`StringOutput` → 非线程安全，而 `WholeProjectDecompiler` 并行反编译文件** → 把每次 `PrintAssembly` 串行化在一把锁下（持于 `Il2CppAsmLookup.GetDisassembly`）。只有 AR 实际*反编译*的 assembly（预定义的、Hybrid 下如 `Assembly-CSharp`；`Decompiled` 下的一切）才拿到 asm；`Save` 模式的 assembly 原样 emit 成 DLL。仅 IL2CPP（由 `CurrentAppContext != null` 守卫），opt-in，Settings→Features 复选框 `Il2CppMethodDump`。
 
 **符号解析核心**（`Il2CppAsmAnnotator.ResolveAddress`，被 x86 的指令感知 `Il2CppSymbolResolver` 与 ARM 回退的文本 `Annotate` 共用）：原始地址毫无意义（`call 10278DB0h`），所以每个**地址操作数**就地替换成符号（不保留裸地址；用户要纯符号、省 token）。x86 侧由 Iced 告知精确操作数种类：只解析**分支/调用目标**（`inBrackets=false`）和**绝对数据全局**（RIP 相对或裸 `[disp]`，`inBrackets=true`）；**立即数一律不碰**（修掉旧纯文本正则把 `add eax,5E593F7Ah` 误标成 `sub_5E593F7A` 代码标签的 bug），**寄存器相对位移**留给下方寄存器数据流恢复成字段。解析器，按顺序：① `appContext.MethodsByAddress[addr]`（精确起始）→ 托管方法（`call Cloth__base::checkRequirements`）；② **PE 导出表**（权威）—— 反射 `LibCpp2IlMain.Binary.LoadPeExportTable()` + `GetExportedFunctions()`（返回 `KeyValuePair<string,ulong>` name→VA；测试游戏上 **242 条**）成一张 addr→name 表；③ 关键函数 —— 反射 `appContext.GetOrCreateKeyFunctionAddresses()` 的 `ulong` 成员成一张 addr→name 表（`il2cpp_codegen_initialize_method`、`il2cpp_runtime_class_init_export`、…；这些 `il2cpp_codegen_*` wrapper **不**在导出表里 —— 已验证 —— 所以这个 Cpp2IL 启发式是它们唯一的来源）；③ `LibCpp2IlMain.GetLiteralByAddress(addr)` → 字符串字面量（实际的游戏文本），然后 `GetAnyGlobalByAddress(addr)` → `MetadataUsage`（`.Type`/`.Value`）拿 TypeInfo（`ds:[UnityEngine.Debug_TypeInfo]`）/ method / field global。对于没命中任何 metadata 的地址：先由 **PE 段表**（`ParsePeSections` —— 从 `GetByteAtRawAddress` 读头部解析各段 VA 范围 + 可执行/可写/是否已落盘）归类后决定标签：① **寄存器相对位移**（`[rcx+18h]`、`[r14+r8*8+46AF0h]` 里的位移）是字段/结构偏移、不是全局地址 —— x86 侧 Iced 直接按操作数种类判定（base 是 GPR），**要么被下方寄存器数据流恢复成 `; this.field` 注释、要么保留原样**，绝不误标 `g_`（ARM 文本回退路用 `IsRegisterRelativeDisplacement`：同一 `[...]` 内含 `+`/`*` 的同义识别）；② **常量池解引用**：X86 列表层（`Il2CppX86Listing.CollectDataConstants`）用 Iced 解出直接寻址内存操作数的元素类型+大小（浮点标量、向量、**及标量整数**），注解层经 `ConstantAddressAllowed` 仅放行落在**只读且已落盘段**（`.rdata`）的地址——`TryMapVirtualAddressToRaw`+`GetByteAtRawAddress` 把文件字节读成**实际值**（`movss xmm0,[360f]`、`mulsd [1.5d]`、整数 `[5h]`、`andps [{7FFFFFFFh x4}]` 位掩码），作为**最低优先级**的 `dataConstants` 传入（任何元数据命中一律优先）；③ 落在**可执行段**的括号地址（`lea` / 以数据形式引用的代码指针、跳转表项）→ `loc_`（方法体内）/ `sub_`（区域外），而非数据全局；④ **只读且已落盘段里的 C 字符串常量**（`TryReadCString`：NUL 结尾、全可打印 ASCII、长度≥2）→ 引号字符串 —— 把 il2cpp 存的 icall 签名（`lea rcx,["UnityEngine.Time::get_time()"]`）、版本串（`"Unity IL2CPP (Oct 23 …)"`）、调试串救回来（**非托管字面量，`GetLiteralByAddress` 命不中**，只能直读文件字节）；⑤ **已落盘数据槽里存着指向可执行段的指针**（`TryResolveCodePointer`：il2cpp 运行时 API 的函数指针表项 / vtable）→ `->目标符号`（`call qword ptr [->sub_1802178D0]`）；⑥ 其余（**运行期才填充、文件里无值**的 `.data`/`.bss` 槽 —— icall 缓存 / 元数据 once-flag / TypeInfo 缓存）→ `g_XXXX`（匿名 codegen global；**已实测**：其值不在文件、`GetAnyGlobalByAddress` 也命不中，是可用元数据的真实边界，绝不臆造）。④⑤ 均以 `ClassifyAddress` 段分类 + `TryMapVirtualAddressToRaw` 真实字节为据，结果按地址缓存（`_dataCache`）。非括号的代码目标照旧 `loc_`/`sub_`（例如 `1016BFE0` —— 被 ~46% 的方法引用，未命名的 il2cpp 运行时 helper，甚至不在 PE 导出表里）。两个**最常见**的匿名数据 global 被 `Il2CppX86Listing.DetectMetadataInitIdiom` 升级为语义名：逐方法 metadata-init 守卫 `cmp byte ptr [X],0 … mov byte ptr [X],1` → `method_init_flag`，以及 `call il2cpp_codegen_initialize_method` 之前压入的 token → `method_init_token`（作为逐方法 `overrides` 传给 `AnnotateLine`）。识别用的 `IsDirectMemoryOperand` 同时接受 32 位绝对 `[disp]` 与 64 位 RIP 相对两种直接寻址（64 位 il2cpp 实际用 RIP 相对；两者都以 Iced `MemoryDisplacement64` 解析出的绝对地址为键，与格式化器打印的绝对地址、常量池解引用一致）。对照 LibCpp2IL 确认过：它的 `Get*GlobalByAddress` 解析器**没有一个**能命名这些（它们不是 metadata usage），所以惯用法识别是唯一的把手。守卫 `addr < 0x10000` 跳过寄存器相对偏移和 8 位寄存器名（`ah`/`bh`）。注意 PE 导出表只携带公开的 `il2cpp_*` C API —— 内部 codegen helper（即便是 key-function 那些）**不**被导出，所以 `IsExportedFunction` 没法命名它们；这就是为什么 `sub_` 是诚实的标签。
 
@@ -240,7 +263,7 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 
 ---
 
-## 12. CAB 虚拟文件 —— 名字索引 + bundle-granular 加载（按名导出资源+全依赖）
+## 13. CAB 虚拟文件 —— 名字索引 + bundle-granular 加载（按名导出资源+全依赖）
 
 把整个游戏当作一张 **CAB 依赖图**来按需取用，而不是一次性把 21 GB 全载进内存。**一件自包含磁盘产物、一套读写器**：核心 `Ruri.RipperHook/Core/CabMapping/{CabMap,CabTable,CabSelection}.cs` 是唯一实现，CLI / GUI（`Services/ExportCabMap.cs` 只是薄门面）/ Blender pythonnet 桥全部消费它——不存在第二条解析路径。
 
@@ -250,17 +273,17 @@ stock 类无处安放的游戏私有节点，在 `Captures` 里声明后被捕�
 
 cabmap 是**可重建缓存**：格式一变即 bump magic 整体重建，绝不写多格式兼容 reader（旧 RCM2/3/4 及 `.names`/`--build-name-index` sidecar 机制已全部删除）。
 
-**为什么名字要进 map**：CAB map 全按内容 hash 索引，可读名（`assets/beyond/…/chr_0004_pelica/…`）只活在每个 bundle 的 **AssetBundle(142) 对象的 Container** 里——必须实际加载、解析 bundle 才看得到。EndField 每个 CAB 100% 含一个 142 对象。合并扫描单趟把名字并进 map 本体，一次拿全。
+**为什么名字要进 map**：CAB map 全按内容 hash 索引，可读名（`assets/beyond/…/chr_0004_pelica/…`）只活在每个 bundle 的 **AssetBundle(142) 对象的 Container** 里——必须实际加载、解析 bundle 才看得到。Endfield 每个 CAB 100% 含一个 142 对象。合并扫描单趟把名字并进 map 本体，一次拿全。
 
-**合并扫描（廉价、有界内存）**：`GameBundleHook.AssetBundleOnlyFactory` 是个只物化 ClassID 142、其它类一律返 `null` 的 `AssetFactoryBase`，于是 `SerializedAssetCollection.FromSerializedFile`（反射调）只读那一个小对象，跳过 Mesh/AnimationClip/Texture 重负载。`GameBundleHook.ReadFullMetadata(sf, fileName)` = `ReadSerializedMetadata`（deps+ClassID）+ `ReadContainerNames`（条目名+Container 路径）单趟双投影，需要 `GameBundleHook.NameScanVersion`（EndField hook 设为 `endFieldClassVersion`）解析 142 的 source-gen 布局。`VirtualFileSystem.ScanChunk<T>(chkPath, project)` 是**单一**有界并行流式扫描器（逐 bundle 解密+解析+投影+即弃），`ScanChunkMetadata`/`ScanChunkNames`/`ScanChunkFull` 都是它的薄包装；EndField hook 接 `GameBundleHook.ScanChunk/ScanChunkNames/ScanChunkFull`。258k CAB 全扫峰值内存 ~3.5 GB。
+**合并扫描（廉价、有界内存）**：`GameBundleHook.AssetBundleOnlyFactory` 是个只物化 ClassID 142、其它类一律返 `null` 的 `AssetFactoryBase`，于是 `SerializedAssetCollection.FromSerializedFile`（反射调）只读那一个小对象，跳过 Mesh/AnimationClip/Texture 重负载。`GameBundleHook.ReadFullMetadata(sf, fileName)` = `ReadSerializedMetadata`（deps+ClassID）+ `ReadContainerNames`（条目名+Container 路径）单趟双投影，需要 `GameBundleHook.NameScanVersion`（Endfield hook 设为 `endFieldClassVersion`）解析 142 的 source-gen 布局。`VirtualFileSystem.ScanChunk<T>(chkPath, project)` 是**单一**有界并行流式扫描器（逐 bundle 解密+解析+投影+即弃），`ScanChunkMetadata`/`ScanChunkNames`/`ScanChunkFull` 都是它的薄包装；Endfield hook 接 `GameBundleHook.ScanChunk/ScanChunkNames/ScanChunkFull`。258k CAB 全扫峰值内存 ~3.5 GB。
 
 **★最关键的坑：chunk 条目文件名 ≠ CAB 名，无法互转。** chunk 条目名 `fileInfo.fileName` = bundle 归档路径 `Data/Bundles/Windows/<initial|main>/<24位hex>.ab`；CAB 名 = `cab-<32位hex>`，来自 bundle **内部目录**里那个 SerializedFile 的 `NameFixed`（= `SpecialFileNames.FixFileIdentifier(内部名)`，小写）。二者是两套独立标识，`FixFileIdentifier(条目名)` 得到的是 `.ab` 路径不是 CAB。**所以名字索引必须给每个 CAB 记录它的 chunk 条目文件名**（连 Container 为空的 CAB 也记，否则 load 过滤拿不到它的条目名）——这是 RNM2 相比早期只存路径的关键加项。
 
-**bundle-granular 加载（EndField 必须，否则 OOM）**：AR 加载一个 `.chk` 会经 `VirtualFileSystem.TryLoadChunkFiles → ExtractChunkFiles` 解出**该 chunk 里所有 bundle**——而 EndField 把 161k bundle 塞进单个 `.chk`（68B3B9B8…，1.8 GB）。一个角色的依赖闭包只要几千 bundle，整块加载必爆内存（13 GB 空闲下 24 GB+）。解法 = `GameBundleHook.LoadIncludeFile`（`Func<string,bool>?`，`null`=全载、不影响常规加载）；`ExtractChunkFiles` 用它在**解密前**按 chunk 条目名过滤，只解出闭包里那几千个。调用方：把闭包每个 CAB 经名字索引映射回 chunk 条目名，组成集合，`LoadIncludeFile = name => set.Contains(name)`，load 前置、`finally` 清。EndField 用例实测：pelica 闭包 4240 CAB 跨 20 chunk，big chunk 只取 ~2297/161113。
+**bundle-granular 加载（Endfield 必须，否则 OOM）**：AR 加载一个 `.chk` 会经 `VirtualFileSystem.TryLoadChunkFiles → ExtractChunkFiles` 解出**该 chunk 里所有 bundle**——而 Endfield 把 161k bundle 塞进单个 `.chk`（68B3B9B8…，1.8 GB）。一个角色的依赖闭包只要几千 bundle，整块加载必爆内存（13 GB 空闲下 24 GB+）。解法 = `GameBundleHook.LoadIncludeFile`（`Func<string,bool>?`，`null`=全载、不影响常规加载）；`ExtractChunkFiles` 用它在**解密前**按 chunk 条目名过滤，只解出闭包里那几千个。调用方：把闭包每个 CAB 经名字索引映射回 chunk 条目名，组成集合，`LoadIncludeFile = name => set.Contains(name)`，load 前置、`finally` 清。Endfield 用例实测：pelica 闭包 4240 CAB 跨 20 chunk，big chunk 只取 ~2297/161113。
 
 **解析层（`CabSelection`，唯一入口）**：谓词（`NamePatterns`/`ClassIds`/`FileScopes`/`SeedCabNames`）**AND 组合选种子** → 一次 `ClosureIds` 走 int 图 → `CabClosure` 同时给出待载 chunk 文件与 bundle 粒度过滤器。**谓词只约束种子、永不约束闭包**（种子的依赖可以合法跨目录，砍掉 = 导出断引用）。谓词扫描全核并行且零物化：容器路径按 UTF-8 直接解码进池化 buffer 上 span 正则（**每分区克隆一份解释型 Regex**——.NET Regex 内部只缓存一个 matcher，共享实例并发 IsMatch 会退化成逐调用分配风暴），文件 scope 折叠成 per-distinct-file 的 bool[]，`SeedCabNames` 走排序列二分。实测 237k CAB：单正则解析 200ms/144MB → **14ms/0.4MB**。`ResolveCabsForPaths`（场景/桥按寻址路径找 CAB）反转成"查询集 HashSet + span AlternateLookup、全表并行探测"，374ms/140MB → **~15ms/0MB**。
 
-**CLI 流水**（`HeadlessRunner`）：`--cab-map <map> --names <regex>`（叠 `--hook EndField_1.4.4`）→ 载 map → `CabSelection.Resolve` → 设 `LoadIncludeFile` → `handler.Load`（bundle-granular）→ 导出**整个闭包**。**`--names`/`--load-types` 驱动时 `--load` 是范围（scope）**：只约束谁能当种子，绝不约束种子需要什么。**名字驱动时导出侧不再叠 `--names` 的逐资产名过滤**（否则会把没带 pelica 名的依赖贴图/材质/网格丢掉）——要的是"pelica + 它的全部依赖"。`--names` 不配 `--cab-map` 时保持老语义（导出按 collection 名过滤）。**回归口径**：`--names chr_0004_pelica_postmodel` 必须仍是 `2 seed → 66 CAB / 66 bundle → 12 chunk`，`loaded 3635 / exported 183`。
+**CLI 流水**（`HeadlessRunner`）：`--cab-map <map> --names <regex>`（叠 `--hook Endfield_1.4.4`）→ 载 map → `CabSelection.Resolve` → 设 `LoadIncludeFile` → `handler.Load`（bundle-granular）→ 导出**整个闭包**。**`--names`/`--load-types` 驱动时 `--load` 是范围（scope）**：只约束谁能当种子，绝不约束种子需要什么。**名字驱动时导出侧不再叠 `--names` 的逐资产名过滤**（否则会把没带 pelica 名的依赖贴图/材质/网格丢掉）——要的是"pelica + 它的全部依赖"。`--names` 不配 `--cab-map` 时保持老语义（导出按 collection 名过滤）。**回归口径**：`--names chr_0004_pelica_postmodel` 必须仍是 `2 seed → 66 CAB / 66 bundle → 12 chunk`，`loaded 3635 / exported 183`。
 
 **GUI 虚拟文件预览（合并进单一 Asset List，不开新窗口）**：**虚拟文件 = Asset List 的另一种行，与已载实体资产等价**——别再起独立窗口（旧 `CabFileBrowser` + AssetMap `AssetBrowser` 已删）。MainForm 的 `assetListView` 是**单个虚拟模式 ListView，两种 backing**：`_listMode` ∈ {Assets, CabMap}，`assetListView_RetrieveVirtualItem` 按模式渲染。列 = Name/Container/Type/PathID/Source/Deps（**Size 列删**——CAB 无 size 读取，顺手省掉每资产 YAML 序列化估算）。同一个搜索框/类型过滤/排序/多选(ctrl/shift/跨行 + **Ctrl+A 走 native `LVM_SETITEMSTATE` iItem=-1**，虚拟模式无托管全选)/右键菜单服务两种模式（`assetListContextMenuStrip_Opening` 按模式切可见项）。`MainForm「Load CABMap」` → 载 map（名字内联，无 sidecar）→ `_allCabRows` 缓存 + `EnterCabMapMode()`（直接在主窗口 Asset List 显示全部 CAB，焦点切 Asset List tab）。CabMap 模式：单选在 Preview 面板显示 CAB 信息（hash/source/deps/容器路径，无 3D 预览）；右键「Load selected」=`LoadCabsScopedAsync`（bundle-granular 载闭包→切 Assets 模式，实体资产可 3D 预览/YAML；清搜索框显示全部已载；append 跨多次累积 `_scopedLoadFilter`）、「Export with dependencies」=`ExportCabsWithDepsAsync`（`ResolveScopedClosure`→设 `LoadIncludeFile`→复用 `RunFilteredExportAsync` 真导出→导出完 `EnterCabMapMode()` 回到浏览）。Assets 模式：右键「Export selected」(Converted/YAML) + 「Export with dependencies」(选中资产的源 CAB→闭包)。Scene tree 经 `_assetIndexByObjectKey`/`_nodeByObjectKey`(objectKey→index/node) 双向联动(虚拟模式无持久 AssetItem)。GUI 侧 `ExportCabMap`(Services) 提供 `EnumerateCabRows`/`ResolveScopedClosure`/`ResolveFilesByTypes`，CAB-mode 逻辑在 `MainForm.AssetList.cs`。**名字缺失则做不了 bundle-granular**（闭包条目名为空→`LoadIncludeFile` 留 null→整块加载），大游戏会 OOM——map 天生带每 CAB 的 chunk 条目名，没这个问题。
 
@@ -268,9 +291,9 @@ cabmap 是**可重建缓存**：格式一变即 bump magic 整体重建，绝不
 
 ---
 
-## 13. GlbExporter —— prefab/Animator 完整模型 GLB 导出（骨架/蒙皮/材质/morph/动画 + humanoid 烘焙）
+## 14. GlbExporter —— prefab/Animator 完整模型 GLB 导出（骨架/蒙皮/材质/morph/动画 + humanoid 烘焙）
 
-`Source/Ruri.RipperHook/AssetRipperHook/GlbExporter/`（GameType `AR_GlbExporter`，hook id `AR_GlbExporter_`）：
+`Source/Ruri.RipperHook/AssetRipperHook/GlbExporter/`（GameType `GlbExporter`，hook id `GlbExporter`）：
 替换 `GlbModelExporter.ExportModel`（PrimaryContent 路径）为 `RuriGlbSceneBuilder.Build` —— AR 原生 GLB 只有静态刚体网格，这里补全套。入口 = 选中的 prefab 或 Animator（GUI「Export selected (Converted)」经 `RipperPrimaryAssetExportService`；CLI `--export-glb <dir>` 自动启用本 hook）。**单 anim 不可用**：脱离 prefab/Avatar 无法还原 path_hash。
 
 - **数据来源全是 AR 处理后的纯净模型**：曲线路径已被 `PathChecksumCache`（Avatar TOS + 层级 CRC32 反查，`AssetRipper.Processing/AnimationClips/`）在 EditorFormatProcessor 阶段还原；muscle 曲线已被 AR 的 `AnimationClipConverter` 命名成标准属性串（与 VibeStudio MuscleHelper 同源同串）。导出端零重新解码。
@@ -302,5 +325,5 @@ cabmap 是**可重建缓存**：格式一变即 bump magic 整体重建，绝不
     - **★遗留未解之谜（截至本次修复，尚未查明，如实记录，不下结论）**：即便上述三个真 bug（swing 合成公式、四肢 twist 缩放、TwistSolve 父子再分配）都已修复并逐一用真实 Unity 数据验证到位，CLI 自循环对参考 `.blend` 的整体对比数字仍几乎没有变化（`UpperArm_L`/`UpperLeg_L` 仍 ~85°/37°——这两根骨骼在 TwistSolve 的 8 对里**永远只当 parent、从不当 child**，所以这轮修复对它们完全没有增量，这与观测到的"数字不变"完全吻合，不是修复无效）。已排除的解释：① "固定的每骨骼旋转偏移量"——同一根骨骼在 9 个不同帧各自求解出的"参考↔我们"偏移量本身相差可达 40°+，不是常数；② "两份动画只是循环相位没对齐"——把我们任意一帧和参考任意一帧两两比对（9×9 网格）没有任何一组降到接近 0°，误差始终在 75°~94° 波动；③ Unity 原生 retarget 解码侧遗漏第三个机制——已反编译 `EvaluateAvatarEnd` 结构性排除。剩余最可信、但未经证实的假设：参考 `.blend`（内嵌 `AutoSaveAnimUnity.py` 自动导出脚本，证实它是流向 Unity 的 FBX 导出源头而非 Unity clip 的下游产物，且用的是 Rigify 骨架）当前保存的动画数据，可能并非这条 Unity clip 的逐帧精确对应版本（该文件还留有"删除烘焙导致的隐藏帧""无法导出全部动画修复"等历史 pipeline 补丁脚本，说明这条导出链路本身有过手工介入的历史）——即问题可能出在"FBX 导出/Unity 首次编码这条 clip"的一次性正向过程，而不是本项目任何一次导出时的解码代码。
 
 Python (`RuriRipperImporter/humanoid_retarget.py`) 与 C# (`AvatarMuscleReferential.LocalRotation`) 两份实现已同步四轮肌肉公式修复与根运动修复。**教训（五轮事故共同指向同一件事）：数值自洽（对称性/连续性/无 NaN）、单一测试骨骼吻合、甚至"扩大到 15/18 根骨骼验证通过"都不能证明 humanoid 解算全局正确——取真值的脚本本身、公式接入真实调用点之后的实际效果、以及公式背后的真实引擎语义（靠 IDA 反编译 Unity 自己的 native 实现确认，而不是经验拟合/候选公式试错），都要跟结果本身一样被怀疑、被复核；而且"验证覆盖率"本身要重新审视——只测单轴永远测不出多轴耦合的 bug，多关节、多帧、多轴组合对 Unity 真值核对没有捷径。**
-- **EndField 事实**：全部角色 avatar 是 generic（名字带 `_genericAvatar`，无 Human）——身体动画=逐骨骼 generic 曲线，muscle 空间只有 Root/Motion 14 通道；humanoid 烘焙对 EndField 正确休眠，将在真 Mecanim humanoid 游戏数据上首次生效（届时顺手核对 `HandBoneIndex[15]` finger-major 假设——对抗审计置信 medium-high 的唯一遗留）。角色模型入口 = `…/prefabs/uimodels/chr_XXXX_<name>_uimodel.prefab`（1.3.3 共 29 个）。
-- **CLI**：`--export-glb <dir>`（配 `--cab-map`+`--names` 闭包加载；`--names` 同时过滤要写的 prefab；**绝不删目标目录**，只加文件）。`GlbBatchExporter` 遍历 `MainAsset is PrefabHierarchyObject`（注意 FQN：现行 AR 的 `Processing.Prefabs` 版，别撞恢复版旧类，FRAMEWORK §8）。
+- **Endfield 事实**：全部角色 avatar 是 generic（名字带 `_genericAvatar`，无 Human）——身体动画=逐骨骼 generic 曲线，muscle 空间只有 Root/Motion 14 通道；humanoid 烘焙对 Endfield 正确休眠，将在真 Mecanim humanoid 游戏数据上首次生效（届时顺手核对 `HandBoneIndex[15]` finger-major 假设——对抗审计置信 medium-high 的唯一遗留）。角色模型入口 = `…/prefabs/uimodels/chr_XXXX_<name>_uimodel.prefab`（1.3.3 共 29 个）。
+- **CLI**：`--export-glb <dir>`（配 `--cab-map`+`--names` 闭包加载；`--names` 同时过滤要写的 prefab；**绝不删目标目录**，只加文件）。`GlbBatchExporter` 遍历 `MainAsset is PrefabHierarchyObject`（注意 FQN：现行 AR 的 `Processing.Prefabs` 版，别撞恢复版旧类，FRAMEWORK §9）。

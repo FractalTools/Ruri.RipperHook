@@ -1,10 +1,15 @@
 using System;
 
-namespace Ruri.RipperHook.Core;
+namespace Ruri.Hook.Core;
 
+/// <summary>
+/// The one ordering for every version string in this codebase -- a game's bundleVersion, a
+/// capability's Since, a type tree snapshot's key. Segment-wise, numbers numerically, so
+/// "1.10" outranks "1.9" and a shorter prefix outranks its own extensions.
+/// </summary>
 public static class VersionKey
 {
-    private static readonly char[] Separators = ['.', '-', '_', '+'];
+    private static readonly char[] Separators = { '.', '-', '_', '+' };
 
     public static int Compare(string left, string right)
     {

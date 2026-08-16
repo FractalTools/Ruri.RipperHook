@@ -14,7 +14,9 @@ using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Extensions.Enums.AnimationClip.Bones;
 using Ruri.Hook.Config;
+using Ruri.Hook.Core;
 using Ruri.RipperHook.CabMapping;
+using Ruri.RipperHook.Core.Install;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Linq;
 using System.Text;
@@ -26,43 +28,71 @@ public static class RipperBlenderBridge
 {
     private static bool _loggingConfigured;
 
-    public static string[] ListAvailableHooks() =>
-        Ruri.Hook.RuriHook.GetAvailableHooks()
-            .SelectMany(h => Ruri.Hook.RuriHook.BuildHookIds(h.Attribute))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+    /// <summary>
+    /// The features THIS host runs with, always. They are not a user choice: Blender takes the
+    /// add-on's own in-memory path, where a Unity humanoid rig has no equivalent at all and must
+    /// arrive as a generic one. Everything else an AssetRipper feature does (shader decompilation,
+    /// method dumps, file-tree exports) is about writing a project to disk, which this path never
+    /// does. A name that no feature claims is a build error at the first Initialize, not a silent
+    /// no-op.
+    /// </summary>
+    public static readonly string[] HostFeatures = { "HumanoidToGeneric" };
 
-    public static string[] ListGameHooks() =>
-        Ruri.Hook.RuriHook.GetAvailableHooks()
-            .Where(h => h.Attribute.IsGameSpecific)
-            .SelectMany(h => Ruri.Hook.RuriHook.BuildHookIds(h.Attribute))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-    private static string NormalizeHookId(string id)
+    /// <summary>
+    /// Every decoder compiled in, as flat triples (product, version, engineVersion) -- what a
+    /// host's decoder picker lists. Ordered by product then version, newest version first within
+    /// a product.
+    /// </summary>
+    public static string[] ListDecoders()
     {
-        if (string.IsNullOrEmpty(id))
+        List<string> flat = new();
+        foreach (string product in HookCatalog.Products)
         {
-            return id;
-        }
-        static string Canonicalize(string s) => s.Replace('.', '_');
-        string target = Canonicalize(id);
-        foreach ((_, Ruri.Hook.Attributes.GameHookAttribute attribute) in Ruri.Hook.RuriHook.GetAvailableHooks())
-        {
-            foreach (string candidate in Ruri.Hook.RuriHook.BuildHookIds(attribute))
+            foreach (DecoderHook decoder in HookCatalog.VersionsOf(product))
             {
-                if (string.Equals(Canonicalize(candidate), target, StringComparison.OrdinalIgnoreCase))
-                {
-                    return candidate;
-                }
+                flat.Add(decoder.Product);
+                flat.Add(decoder.Version);
+                flat.Add(decoder.EngineVersion);
             }
         }
-        return id;
+        return flat.ToArray();
     }
 
-    public static void Initialize(IEnumerable<string> enabledHookIds, string gameRoot)
+    /// <summary>
+    /// What the players under <paramref name="gameRoot"/> say they are, as flat quintuples
+    /// (dataFolder, company, product, engineVersion, isProject). Reads two small files per player
+    /// and nothing else -- see <see cref="InstallProbe"/>.
+    /// </summary>
+    public static string[] ReadInstall(string gameRoot)
+    {
+        List<PlayerIdentity> players = InstallProbe.Read(gameRoot);
+        PlayerIdentity? project = InstallProbe.Project(gameRoot);
+        List<string> flat = new(players.Count * 5);
+        foreach (PlayerIdentity player in players)
+        {
+            flat.Add(player.DataFolder);
+            flat.Add(player.Company);
+            flat.Add(player.Product);
+            flat.Add(player.EngineVersion);
+            flat.Add(project is not null && player.DataFolder == project.DataFolder ? "1" : "0");
+        }
+        return flat.ToArray();
+    }
+
+    /// <summary>
+    /// The decoder id an install of this product and engine version is read through, or "" when
+    /// none applies (a plain Unity build needs no decoder). See <see cref="HookCatalog.Resolve"/>.
+    /// </summary>
+    public static string ResolveDecoder(string product, string engineVersion) =>
+        HookCatalog.Resolve(product, engineVersion)?.Id ?? string.Empty;
+
+    /// <summary>
+    /// Open the session on ONE install through ONE decoder. The host states which install and
+    /// which decoder; which features run is this host's own fact (<see cref="HostFeatures"/>),
+    /// never part of that statement. An empty decoder id is a valid configuration: a plain
+    /// un-bundled Unity build is read by the generic path.
+    /// </summary>
+    public static void Initialize(string decoderId, string gameRoot)
     {
         Bootstrap.InstallAssemblyResolver();
 
@@ -76,9 +106,24 @@ public static class RipperBlenderBridge
         Data.CoreDatasets.Register();
 
         HookConfig config = new();
-        foreach (string id in enabledHookIds)
+        foreach (string feature in HostFeatures)
         {
-            config.EnabledHooks.Add(NormalizeHookId(id));
+            if (HookCatalog.FeatureByName(feature) is null)
+            {
+                throw new InvalidOperationException(
+                    $"[RipperBlenderBridge] Host feature '{feature}' names no RipperFeature in this build.");
+            }
+            config.EnabledHooks.Add(feature);
+        }
+        if (!string.IsNullOrEmpty(decoderId))
+        {
+            if (HookCatalog.DecoderById(decoderId) is null)
+            {
+                throw new InvalidOperationException(
+                    $"[RipperBlenderBridge] '{decoderId}' names no decoder in this build. "
+                    + $"Known: {string.Join(", ", HookCatalog.Decoders.Select(static decoder => decoder.Id))}.");
+            }
+            config.EnabledHooks.Add(decoderId);
         }
         Bootstrap.ApplyHooks(config);
         Data.Session.Open(gameRoot ?? string.Empty, config.EnabledHooks);
@@ -1137,7 +1182,7 @@ public static class RipperBlenderBridge
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(
-            "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"EndField_1.3.3\") first.");
+            "No VFS game hook active -- call Initialize(...) with a VFS-game hook id (e.g. \"Endfield_1.3.3\") first.");
 
     private static ClosureResult Partition(IReadOnlyDictionary<string, byte[]> files,
         CabTable table, string[] seedCabNames,

@@ -5,7 +5,6 @@ using Ruri.Hook.Utils;
 using System;
 using Ruri.Hook.Config;
 using System.Linq;
-using Ruri.Hook.Attributes;
 
 namespace Ruri.Hook
 {
@@ -15,7 +14,7 @@ namespace Ruri.Hook
         protected List<MethodInfo> methodHooks = new();
         private static readonly object LifecycleSyncRoot = new();
         private static readonly HashSet<string> ActiveHookIds = new(StringComparer.OrdinalIgnoreCase);
-        
+
         public virtual void Initialize()
         {
             InitAttributeHook();
@@ -24,7 +23,7 @@ namespace Ruri.Hook
         protected virtual void InitAttributeHook()
         {
             Registry.ApplyTypeHooks(GetType());
-            
+
             if (methodHooks.Count > 0)
             {
                  Registry.ApplyManualHooks(methodHooks);
@@ -50,242 +49,76 @@ namespace Ruri.Hook
             return type.GetField(name, ReflectionExtensions.PrivateInstanceBindFlag())?.GetValue(this);
         }
 
-        public static List<(Type Type, GameHookAttribute Attribute)> GetAvailableHooks()
-        {
-            var hooks = new List<(Type Type, GameHookAttribute Attribute)>();
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-
-            foreach (var assembly in assemblies)
-            {
-                string? name = assembly.GetName().Name;
-                if (name is null) continue;
-                if (name.StartsWith("System.", StringComparison.Ordinal) ||
-                    name.StartsWith("Microsoft.", StringComparison.Ordinal) ||
-                    name.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase) ||
-                    name.Equals("mscorlib", StringComparison.OrdinalIgnoreCase) ||
-                    name.Equals("WindowsBase", StringComparison.Ordinal) ||
-                    name.Equals("PresentationCore", StringComparison.Ordinal) ||
-                    name.Equals("PresentationFramework", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                Type[] types;
-                try
-                {
-                    types = assembly.GetTypes();
-                }
-                catch (ReflectionTypeLoadException tle)
-                {
-                    types = tle.Types.Where(t => t != null).ToArray()!;
-                }
-                catch
-                {
-                    continue;
-                }
-
-                foreach (var type in types)
-                {
-                    if (type == null) continue;
-
-                    object[] attrs;
-                    try
-                    {
-                        attrs = type.GetCustomAttributes(inherit: false);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    foreach (object a in attrs)
-                    {
-                        if (a is GameHookAttribute gha)
-                        {
-                            hooks.Add((type, gha));
-                            break;
-                        }
-                    }
-                }
-            }
-
-            List<(Type Type, GameHookAttribute Attribute)> ordered = hooks.OrderBy(x => x.Attribute.GameName).ThenBy(x => x.Attribute.Version).ToList();
-            ValidateNoIdCollisions(ordered);
-            return ordered;
-        }
-
-        private static void ValidateNoIdCollisions(List<(Type Type, GameHookAttribute Attribute)> hooks)
-        {
-            var collisions = hooks
-                .SelectMany(hook => BuildHookIds(hook.Attribute).Select(id => (Id: id, hook.Type)))
-                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Select(x => x.Type).Distinct().Count() > 1);
-
-            foreach (var collision in collisions)
-            {
-                string offenders = string.Join(", ", collision.Select(x => x.Type.FullName).Distinct());
-                throw new InvalidOperationException($"[RuriHook] hook id '{collision.Key}' is claimed by more than one implementation: {offenders}. A hook id must resolve to exactly one class.");
-            }
-        }
-
-        public static string BuildHookId(GameHookAttribute attribute)
-        {
-            ArgumentNullException.ThrowIfNull(attribute);
-            return $"{attribute.GameName}_{attribute.Version}";
-        }
-
-        public static IEnumerable<string> BuildHookIds(GameHookAttribute attribute)
-        {
-            ArgumentNullException.ThrowIfNull(attribute);
-            yield return BuildHookId(attribute);
-
-            foreach (string alsoCoversVersion in attribute.AlsoCoversVersions)
-            {
-                yield return $"{attribute.GameName}_{alsoCoversVersion}";
-            }
-        }
-
         /// <summary>
-        /// Raised when a game-specific hook leaves the active set, before the newly
-        /// desired hooks are applied. A game hook installs more than MonoMod detours --
-        /// it also assigns plain statics (decoders, VFS readers) that tearing the
-        /// detours down cannot unset. Subscribers clear those, so switching games in a
-        /// live process is equivalent to starting fresh. The kernel deliberately does
-        /// not know what any of that state is; whoever owns it registers here.
+        /// Raised when a game decoder leaves the active set, before the newly desired hooks are
+        /// applied. A decoder installs more than MonoMod detours -- it also assigns plain statics
+        /// (decoders, VFS readers) that tearing the detours down cannot unset. Subscribers clear
+        /// those, so switching games in a live process is equivalent to starting fresh. The kernel
+        /// deliberately does not know what any of that state is; whoever owns it registers here.
         /// </summary>
         public static event Action? GameHookRemoved;
 
+        /// <summary>
+        /// Make exactly <paramref name="config"/>'s hook set active, enabling and disabling only
+        /// the delta -- safe to call as often as a host likes. An id naming nothing is dropped
+        /// loudly, and at most one DECODER survives (a process reads one game at a time; two
+        /// decoders patch the same methods with different layouts): the last one listed wins,
+        /// which is the one a host just selected. Features are applied first and the decoder
+        /// last, so the game's own reading of a method sits closest to it.
+        /// </summary>
         public static void ApplyHooks(HookConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);
 
             lock (LifecycleSyncRoot)
             {
-                List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
-                HashSet<string> availableHookIds = new(availableHooks.SelectMany(static hook => BuildHookIds(hook.Attribute)), StringComparer.OrdinalIgnoreCase);
+                List<string> features = new();
+                string? decoder = null;
 
-                foreach (string ghostHookId in config.EnabledHooks.Where(id => !availableHookIds.Contains(id)).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
+                foreach (string hookId in config.EnabledHooks.ToArray())
                 {
-                    config.EnabledHooks.Remove(ghostHookId);
-                    Console.WriteLine($"[RuriHook] Dropping unknown hook '{ghostHookId}' from config: no matching hook implementation was found.");
+                    if (HookCatalog.FeatureByName(hookId) is not null)
+                    {
+                        features.Add(hookId);
+                        continue;
+                    }
+                    if (HookCatalog.DecoderById(hookId) is not null)
+                    {
+                        if (decoder is not null)
+                        {
+                            config.EnabledHooks.Remove(decoder);
+                            Console.WriteLine($"[RuriHook] Dropping decoder '{decoder}': one game is read at a time, and '{hookId}' is the one selected.");
+                        }
+                        decoder = hookId;
+                        continue;
+                    }
+                    config.EnabledHooks.Remove(hookId);
+                    Console.WriteLine($"[RuriHook] Dropping unknown hook '{hookId}' from config: no matching hook implementation was found.");
                 }
 
-                HashSet<string> desiredHookIds = new(config.EnabledHooks, StringComparer.OrdinalIgnoreCase);
-                DropExtraGames(config, availableHooks, desiredHookIds);
-
-                HashSet<string> gameHookIds = new(
-                    availableHooks.Where(static hook => hook.Attribute.IsGameSpecific)
-                        .SelectMany(static hook => BuildHookIds(hook.Attribute)),
-                    StringComparer.OrdinalIgnoreCase);
-                bool droppedGameHook = false;
-                foreach (string hookId in ActiveHookIds.Except(desiredHookIds, StringComparer.OrdinalIgnoreCase).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
+                features.Sort(StringComparer.OrdinalIgnoreCase);
+                List<string> desired = new(features);
+                if (decoder is not null)
                 {
-                    droppedGameHook |= gameHookIds.Contains(hookId);
+                    desired.Add(decoder);
+                }
+
+                bool droppedDecoder = false;
+                foreach (string hookId in ActiveHookIds.Except(desired, StringComparer.OrdinalIgnoreCase)
+                             .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray())
+                {
+                    droppedDecoder |= HookCatalog.DecoderById(hookId) is not null;
                     RemoveHookCore(hookId);
                 }
-                if (droppedGameHook)
+                if (droppedDecoder)
                 {
                     GameHookRemoved?.Invoke();
                 }
 
-                foreach (var (type, attr) in availableHooks)
+                foreach (string hookId in desired)
                 {
-                    foreach (string hookId in BuildHookIds(attr))
-                    {
-                        if (desiredHookIds.Contains(hookId))
-                        {
-                            ApplyHookCore(hookId, type);
-                        }
-                    }
+                    ApplyHookCore(hookId, HookCatalog.TypeOf(hookId)!);
                 }
-            }
-        }
-
-        private static void DropExtraGames(HookConfig config,
-            List<(Type Type, GameHookAttribute Attribute)> availableHooks,
-            HashSet<string> desiredHookIds)
-        {
-            Dictionary<string, string> gameOfId = new(StringComparer.OrdinalIgnoreCase);
-            foreach (var (_, attribute) in availableHooks)
-            {
-                if (!attribute.IsGameSpecific) continue;
-                foreach (string id in BuildHookIds(attribute))
-                {
-                    gameOfId[id] = attribute.GameName;
-                }
-            }
-
-            List<string> games = config.EnabledHooks
-                .Where(id => desiredHookIds.Contains(id) && gameOfId.ContainsKey(id))
-                .ToList();
-            if (games.Count <= 1)
-            {
-                return;
-            }
-
-            string keptGame = gameOfId[games[^1]];
-            foreach (string hookId in games.Where(id => !string.Equals(gameOfId[id], keptGame, StringComparison.OrdinalIgnoreCase)).ToArray())
-            {
-                desiredHookIds.Remove(hookId);
-                config.EnabledHooks.Remove(hookId);
-                Console.WriteLine($"[RuriHook] Dropping game hook '{hookId}': only one game can be active at a time, and '{keptGame}' is the one selected.");
-            }
-        }
-
-        public static bool ApplyHook(string hookId)
-        {
-            if (string.IsNullOrWhiteSpace(hookId))
-            {
-                return false;
-            }
-
-            lock (LifecycleSyncRoot)
-            {
-                List<(Type Type, GameHookAttribute Attribute)> availableHooks = GetAvailableHooks();
-                foreach (var (type, attr) in availableHooks)
-                {
-                    if (BuildHookIds(attr).Any(id => string.Equals(id, hookId, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        if (attr.IsGameSpecific)
-                        {
-                            RemoveOtherGames(availableHooks, attr.GameName);
-                        }
-                        return ApplyHookCore(hookId, type);
-                    }
-                }
-
-                Console.WriteLine($"[RuriHook] Failed to enable hook {hookId}: no matching hook implementation was found.");
-                return false;
-            }
-        }
-
-        private static void RemoveOtherGames(List<(Type Type, GameHookAttribute Attribute)> availableHooks, string keptGame)
-        {
-            foreach (var (_, attribute) in availableHooks)
-            {
-                if (!attribute.IsGameSpecific ||
-                    string.Equals(attribute.GameName, keptGame, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                foreach (string hookId in BuildHookIds(attribute).Where(ActiveHookIds.Contains).ToArray())
-                {
-                    Console.WriteLine($"[RuriHook] Switching game: '{hookId}' makes way for '{keptGame}'.");
-                    RemoveHookCore(hookId);
-                }
-            }
-        }
-
-        public static bool RemoveHook(string hookId)
-        {
-            if (string.IsNullOrWhiteSpace(hookId))
-            {
-                return false;
-            }
-
-            lock (LifecycleSyncRoot)
-            {
-                return RemoveHookCore(hookId);
             }
         }
 

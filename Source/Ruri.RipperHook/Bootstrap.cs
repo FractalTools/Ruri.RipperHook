@@ -24,7 +24,7 @@ public static class Bootstrap
         };
     }
 
-    public static readonly string[] AlwaysOnHookIds = new[] { "AR_SerializeReference_" };
+    public static readonly string[] AlwaysOnHookIds = new[] { "SerializeReference" };
 
     public static void ApplyHooks(HookConfig config)
     {

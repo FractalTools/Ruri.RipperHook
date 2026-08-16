@@ -5,7 +5,7 @@ public enum CustomEngineType : byte
     ZenlessZoneZero = 3,
 
     ExAstris = 4,
-    EndField = 5,
+    Endfield = 5,
 
     Max = 255,
 }

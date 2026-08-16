@@ -287,8 +287,8 @@ public partial class MainForm
 		}
 
 		string[] extraHooks = decompileShaders
-			? new[] { "AR_TypeFilterExport_", "AR_ShaderDecompiler_" }
-			: new[] { "AR_TypeFilterExport_" };
+			? new[] { "TypeFilterExport", "ShaderDecompiler" }
+			: new[] { "TypeFilterExport" };
 
 		ShaderExportMode savedShaderMode = GameFileLoader.Settings.ExportSettings.ShaderExportMode;
 
