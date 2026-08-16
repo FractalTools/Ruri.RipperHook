@@ -2,24 +2,23 @@ using System.Buffers.Binary;
 using System.Reflection;
 using System.Text;
 using AssetRipper.IO.Files;
-using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.SerializedFiles;
-using AssetRipper.Primitives;
+using AssetRipper.IO.Files.SerializedFiles.Parser;
 using Ruri.Hook.Attributes;
 using Ruri.Hook.Core;
 
 namespace Ruri.RipperHook.Core.Install;
 
 /// <summary>
-/// What ONE Unity player says it is, read off the player itself. Every field here is the
-/// engine's own published value, so a decoder joins to an install by string equality with
-/// nothing translating in between.
+/// What ONE Unity player says it is, read off the player itself. Every field here comes from
+/// that player's own PlayerSettings or its serialized header, so a decoder joins to an install
+/// by string equality with nothing translating in between.
 /// </summary>
 public sealed class PlayerIdentity
 {
     public required string DataFolder { get; init; }
 
-    /// <summary>PlayerSettings.companyName, as app.info publishes it.</summary>
+    /// <summary>PlayerSettings.companyName, exactly as the build spells it.</summary>
     public required string Company { get; init; }
 
     /// <summary>PlayerSettings.productName -- the game's own word for itself, and a decoder's GameName.</summary>
@@ -28,34 +27,30 @@ public sealed class PlayerIdentity
     /// <summary>PlayerSettings.bundleVersion -- the game's own version, "" when it states none.</summary>
     public required string GameVersion { get; init; }
 
-    /// <summary>The Unity version this player's serialized files carry, "" when they are not plain.</summary>
+    /// <summary>The Unity version this player's serialized files state.</summary>
     public required string EngineVersion { get; init; }
 }
 
 /// <summary>
-/// Which game a folder holds, read from the two files every Unity player publishes about
-/// itself and nothing else: no bundle scan, no cabmap, no decoder, no guessing from folder
-/// names a repacker chose.
+/// Which game a folder holds, read from the ONE file every Unity player publishes about
+/// itself: <c>&lt;Product&gt;_Data/globalgamemanagers</c>. Its serialized header states the
+/// engine version and its first object IS PlayerSettings, which states the company, the
+/// product and the game's own version. No bundle scan, no cabmap, no decoder, no guessing
+/// from folder names a repacker chose, and no second copy of these fields anywhere.
 ///
-/// <c>&lt;Product&gt;_Data/app.info</c> is the engine's own identity file -- companyName then
-/// productName, exactly as the editor had them -- and it stays plain in every build, including
-/// ones whose assets are encrypted. <c>&lt;Product&gt;_Data/globalgamemanagers</c> is the engine
-/// settings asset, and its serialized header states the Unity version; reading it costs the
-/// header, not the game.
+/// A build that transforms what it publishes (EXILIUM does) is undone first by whichever
+/// game declared that transform (<see cref="InstallVersionReaderAttribute"/>) -- asked without
+/// any game being selected, because reading this file is what selects the game.
 ///
 /// One install routinely ships several players (a game, its VR build, its studio), so this
-/// answers with all of them and <see cref="Project"/> picks the one the install IS -- by the
-/// install's own fields, never by a list of known games.
+/// answers with all of them and <see cref="Project"/> picks the one the install IS.
 /// </summary>
 public static class InstallProbe
 {
     private const string DataSuffix = "_Data";
-    private const string AppInfoName = "app.info";
     private const string EngineSettingsName = "globalgamemanagers";
-    private const string DataBundleName = "data.unity3d";
-    private const string ReadEngineVersionMethod = "ReadEngineVersion";
-    private const int SearchWindow = 0x10000;
-    private const int VersionWindow = 0x200;
+    private const string TryDecryptMethod = "TryDecrypt";
+    private const int PlayerSettingsClassID = 129;
     private const int MaxStringLength = 128;
 
     public static List<PlayerIdentity> Read(string gameRoot)
@@ -66,34 +61,15 @@ public static class InstallProbe
             return players;
         }
 
-        foreach (string dataFolder in Directory.EnumerateDirectories(gameRoot, "*" + DataSuffix).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (string dataFolder in Directory.EnumerateDirectories(gameRoot, "*" + DataSuffix)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
         {
-            string stem = Path.GetFileName(dataFolder);
-            stem = stem.Substring(0, stem.Length - DataSuffix.Length);
-
-            string company = string.Empty;
-            string product = stem;
-            string appInfo = Path.Combine(dataFolder, AppInfoName);
-            if (File.Exists(appInfo))
+            PlayerIdentity? identity = ReadPlayer(dataFolder);
+            if (identity is not null)
             {
-                string[] lines = File.ReadAllLines(appInfo);
-                company = lines.Length > 0 ? lines[0].Trim() : string.Empty;
-                if (lines.Length > 1 && lines[1].Trim().Length > 0)
-                {
-                    product = lines[1].Trim();
-                }
+                players.Add(identity);
             }
-
-            players.Add(new PlayerIdentity
-            {
-                DataFolder = dataFolder,
-                Company = company,
-                Product = product,
-                GameVersion = ReadGameVersion(Path.Combine(dataFolder, EngineSettingsName), product),
-                EngineVersion = ReadEngineVersion(dataFolder, product),
-            });
         }
-
         return players;
     }
 
@@ -112,83 +88,125 @@ public static class InstallProbe
         return NamedByCompany(players) ?? PrefixOwner(players);
     }
 
-    /// <summary>
-    /// PlayerSettings.bundleVersion, read out of the engine settings asset's DATA section.
-    ///
-    /// PlayerSettings is that file's first object, so its bytes start at the data offset -- past
-    /// everything a build might encipher (EXILIUM enciphers exactly the metadata in front of it
-    /// and nothing else). Nothing here assumes an offset or a field layout: the anchor is the
-    /// productName the SAME install published in app.info, matched as its own length-prefixed
-    /// bytes, so a hit proves where PlayerSettings' strings are. bundleVersion is then the first
-    /// version-shaped string after it, within a bounded window.
-    ///
-    /// Measured on 10 players across Unity 5.6 / 2019.4 / 2021.3, including a build whose
-    /// metadata is enciphered. A build that states no version, or states one that is not
-    /// version-shaped, answers "" -- which constrains nothing downstream.
-    /// </summary>
-    private static string ReadGameVersion(string engineSettingsPath, string product)
+    private static PlayerIdentity? ReadPlayer(string dataFolder)
     {
-        if (!File.Exists(engineSettingsPath) || product.Length == 0)
+        string path = Path.Combine(dataFolder, EngineSettingsName);
+        if (!File.Exists(path))
         {
-            return string.Empty;
+            return null;
         }
 
-        byte[] blob;
+        byte[] data;
         try
         {
-            using FileStream file = File.OpenRead(engineSettingsPath);
-            blob = new byte[Math.Min(SearchWindow, file.Length)];
-            int read = file.Read(blob, 0, blob.Length);
-            if (read < blob.Length)
-            {
-                Array.Resize(ref blob, read);
-            }
+            data = File.ReadAllBytes(path);
         }
         catch
         {
-            return string.Empty;
+            return null;
         }
 
-        int anchor = IndexOfString(blob, product);
-        if (anchor < 0)
+        SerializedFile? file = Parse(data, path);
+        if (file is null)
         {
-            return string.Empty;
+            foreach (Type reader in HookCatalog.EngineFileReaders)
+            {
+                if (Undo(reader, data))
+                {
+                    file = Parse(data, path);
+                    break;
+                }
+            }
+        }
+        if (file is null)
+        {
+            return null;
         }
 
-        int cursor = anchor + 4 + product.Length;
-        cursor += (4 - (cursor & 3)) & 3;
-        int limit = Math.Min(blob.Length, cursor + VersionWindow);
-        while (cursor + 4 < limit)
+        ObjectInfo settings = default;
+        bool found = false;
+        foreach (ObjectInfo candidate in file.Objects)
         {
-            int length = BinaryPrimitives.ReadInt32LittleEndian(blob.AsSpan(cursor));
-            if (length <= 0 || length > MaxStringLength || cursor + 4 + length > blob.Length)
+            if (candidate.ClassID == PlayerSettingsClassID)
             {
-                cursor += 4;
-                continue;
+                settings = candidate;
+                found = true;
+                break;
             }
-            ReadOnlySpan<byte> text = blob.AsSpan(cursor + 4, length);
-            if (!IsPrintable(text))
-            {
-                cursor += 4;
-                continue;
-            }
-            string candidate = Encoding.ASCII.GetString(text);
-            if (IsVersionShaped(candidate))
-            {
-                return candidate;
-            }
-            cursor += 4 + length;
-            cursor += (4 - (cursor & 3)) & 3;
         }
-        return string.Empty;
+        if (!found)
+        {
+            return null;
+        }
+
+        List<string> texts = ReadStrings(settings.ObjectData);
+        if (texts.Count < 2)
+        {
+            return null;
+        }
+
+        return new PlayerIdentity
+        {
+            DataFolder = dataFolder,
+            Company = texts[0],
+            Product = texts[1],
+            GameVersion = texts.Skip(2).FirstOrDefault(IsVersionShaped) ?? string.Empty,
+            EngineVersion = file.Version.ToString(),
+        };
     }
 
-    private static int IndexOfString(byte[] blob, string value)
+    private static SerializedFile? Parse(byte[] data, string path)
     {
-        byte[] needle = new byte[4 + value.Length];
-        BinaryPrimitives.WriteInt32LittleEndian(needle, value.Length);
-        Encoding.ASCII.GetBytes(value, 0, value.Length, needle, 4);
-        return blob.AsSpan().IndexOf(needle);
+        try
+        {
+            return SchemeReader.ReadFile(data, path, Path.GetFileName(path)) as SerializedFile;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool Undo(Type reader, byte[] data)
+    {
+        MethodInfo method = reader.GetMethod(TryDecryptMethod, BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException(
+                $"[InstallProbe] {reader.FullName} declares [InstallVersionReader] but has no "
+                + $"public static bool {TryDecryptMethod}(byte[] data).");
+        try
+        {
+            return method.Invoke(null, new object[] { data }) is true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The length-prefixed strings inside ONE object, in the order it wrote them. PlayerSettings
+    /// opens with companyName then productName, and states bundleVersion a little further on;
+    /// everything between is fixed-size, so walking the object's own bytes needs no offset and no
+    /// layout. Bounded by the object -- this is not a search through the file.
+    /// </summary>
+    private static List<string> ReadStrings(byte[] data)
+    {
+        List<string> found = new();
+        int at = 0;
+        while (at + 4 < data.Length && found.Count < 8)
+        {
+            int length = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(at));
+            if (length > 0 && length <= MaxStringLength && at + 4 + length <= data.Length &&
+                IsPrintable(data.AsSpan(at + 4, length)))
+            {
+                found.Add(Encoding.ASCII.GetString(data, at + 4, length));
+                at += 4 + length;
+                at += (4 - (at & 3)) & 3;
+                continue;
+            }
+            at += 4;
+        }
+        return found;
     }
 
     private static bool IsPrintable(ReadOnlySpan<byte> text)
@@ -205,7 +223,7 @@ public static class InstallProbe
 
     private static bool IsVersionShaped(string text)
     {
-        if (text.Length == 0 || !char.IsDigit(text[0]))
+        if (text.Length == 0 || !char.IsDigit(text[0]) || !text.Contains('.'))
         {
             return false;
         }
@@ -216,62 +234,7 @@ public static class InstallProbe
                 return false;
             }
         }
-        return text.Contains('.');
-    }
-
-    /// <summary>
-    /// The Unity version this player's own files state, in the order a Unity build publishes
-    /// it: the engine settings asset's serialized header, then the data bundle's header for a
-    /// build that ships one instead. A build that transforms both answers only through its own
-    /// game's code, which that game declares (<see cref="InstallVersionReaderAttribute"/>);
-    /// "" means nothing readable said, which is a fact about the install, not an error.
-    /// </summary>
-    private static string ReadEngineVersion(string dataFolder, string product)
-    {
-        string engineSettings = Path.Combine(dataFolder, EngineSettingsName);
-        if (File.Exists(engineSettings))
-        {
-            try
-            {
-                return SerializedFile.FromFile(engineSettings, LocalFileSystem.Instance).Version.ToString();
-            }
-            catch
-            {
-            }
-        }
-
-        string dataBundle = Path.Combine(dataFolder, DataBundleName);
-        if (File.Exists(dataBundle))
-        {
-            try
-            {
-                using Stream stream = File.OpenRead(dataBundle);
-                FileStreamBundleHeader header = new();
-                header.Read(stream);
-                return UnityVersion.Parse(header.UnityWebMinimumRevision).ToString();
-            }
-            catch
-            {
-            }
-        }
-
-        return ReadDeclaredEngineVersion(dataFolder, product);
-    }
-
-    private static string ReadDeclaredEngineVersion(string dataFolder, string product)
-    {
-        Type? reader = HookCatalog.VersionReaderFor(product);
-        if (reader is null)
-        {
-            return string.Empty;
-        }
-
-        MethodInfo method = reader.GetMethod(ReadEngineVersionMethod, BindingFlags.Public | BindingFlags.Static)
-            ?? throw new InvalidOperationException(
-                $"[InstallProbe] {reader.FullName} declares [InstallVersionReader] but has no "
-                + $"public static string {ReadEngineVersionMethod}(string dataFolder).");
-
-        return method.Invoke(null, new object[] { dataFolder }) as string ?? string.Empty;
+        return true;
     }
 
     private static PlayerIdentity? NamedByCompany(List<PlayerIdentity> players)
@@ -302,10 +265,6 @@ public static class InstallProbe
             .FirstOrDefault();
     }
 
-    /// <summary>
-    /// Alphanumerics only: one install spells the same separator "\" in PlayerSettings and "_"
-    /// in app.info, so a comparison that keeps them compares the spelling, not the identity.
-    /// </summary>
     private static string Squashed(string text)
     {
         return new string(text.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
