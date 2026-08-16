@@ -69,6 +69,7 @@ public static class HookCatalog
         public Dictionary<string, DecoderHook> DecoderById = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, FeatureHook> FeatureByName = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, List<DecoderHook>> ByProduct = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Type> VersionReaderByProduct = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private static Snapshot? _snapshot;
@@ -144,6 +145,17 @@ public static class HookCatalog
 
     public static bool IsFeature(string hookId) => FeatureByName(hookId) is not null;
 
+    /// <summary>
+    /// The class that states the engine version of an install of <paramref name="product"/>
+    /// whose published files the generic reader cannot parse, or null when none is declared.
+    /// See <see cref="InstallVersionReaderAttribute"/>.
+    /// </summary>
+    public static Type? VersionReaderFor(string product)
+    {
+        Current().VersionReaderByProduct.TryGetValue(product ?? string.Empty, out Type? found);
+        return found;
+    }
+
     /// <summary>The implementation behind a hook id, decoder or feature alike.</summary>
     public static Type? TypeOf(string hookId)
     {
@@ -191,6 +203,11 @@ public static class HookCatalog
                 if (attribute is FeatureHookAttribute feature)
                 {
                     snapshot.Features.Add(new FeatureHook(type, feature));
+                    break;
+                }
+                if (attribute is InstallVersionReaderAttribute reader)
+                {
+                    snapshot.VersionReaderByProduct[reader.Product] = type;
                     break;
                 }
             }

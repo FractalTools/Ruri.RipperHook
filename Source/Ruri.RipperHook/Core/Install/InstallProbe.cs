@@ -1,5 +1,10 @@
+using System.Reflection;
 using AssetRipper.IO.Files;
+using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.SerializedFiles;
+using AssetRipper.Primitives;
+using Ruri.Hook.Attributes;
+using Ruri.Hook.Core;
 
 namespace Ruri.RipperHook.Core.Install;
 
@@ -42,6 +47,8 @@ public static class InstallProbe
     private const string DataSuffix = "_Data";
     private const string AppInfoName = "app.info";
     private const string EngineSettingsName = "globalgamemanagers";
+    private const string DataBundleName = "data.unity3d";
+    private const string ReadEngineVersionMethod = "ReadEngineVersion";
 
     public static List<PlayerIdentity> Read(string gameRoot)
     {
@@ -74,7 +81,7 @@ public static class InstallProbe
                 DataFolder = dataFolder,
                 Company = company,
                 Product = product,
-                EngineVersion = ReadEngineVersion(Path.Combine(dataFolder, EngineSettingsName)),
+                EngineVersion = ReadEngineVersion(dataFolder, product),
             });
         }
 
@@ -97,24 +104,58 @@ public static class InstallProbe
     }
 
     /// <summary>
-    /// The Unity version the engine settings asset states, or "" when it is not a plain
-    /// serialized file -- a build that transforms its engine assets states no version to
-    /// anyone but its own decoder, which is a fact about the install, not an error.
+    /// The Unity version this player's own files state, in the order a Unity build publishes
+    /// it: the engine settings asset's serialized header, then the data bundle's header for a
+    /// build that ships one instead. A build that transforms both answers only through its own
+    /// game's code, which that game declares (<see cref="InstallVersionReaderAttribute"/>);
+    /// "" means nothing readable said, which is a fact about the install, not an error.
     /// </summary>
-    private static string ReadEngineVersion(string engineSettingsPath)
+    private static string ReadEngineVersion(string dataFolder, string product)
     {
-        if (!File.Exists(engineSettingsPath))
+        string engineSettings = Path.Combine(dataFolder, EngineSettingsName);
+        if (File.Exists(engineSettings))
+        {
+            try
+            {
+                return SerializedFile.FromFile(engineSettings, LocalFileSystem.Instance).Version.ToString();
+            }
+            catch
+            {
+            }
+        }
+
+        string dataBundle = Path.Combine(dataFolder, DataBundleName);
+        if (File.Exists(dataBundle))
+        {
+            try
+            {
+                using Stream stream = File.OpenRead(dataBundle);
+                FileStreamBundleHeader header = new();
+                header.Read(stream);
+                return UnityVersion.Parse(header.UnityWebMinimumRevision).ToString();
+            }
+            catch
+            {
+            }
+        }
+
+        return ReadDeclaredEngineVersion(dataFolder, product);
+    }
+
+    private static string ReadDeclaredEngineVersion(string dataFolder, string product)
+    {
+        Type? reader = HookCatalog.VersionReaderFor(product);
+        if (reader is null)
         {
             return string.Empty;
         }
-        try
-        {
-            return SerializedFile.FromFile(engineSettingsPath, LocalFileSystem.Instance).Version.ToString();
-        }
-        catch
-        {
-            return string.Empty;
-        }
+
+        MethodInfo method = reader.GetMethod(ReadEngineVersionMethod, BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException(
+                $"[InstallProbe] {reader.FullName} declares [InstallVersionReader] but has no "
+                + $"public static string {ReadEngineVersionMethod}(string dataFolder).");
+
+        return method.Invoke(null, new object[] { dataFolder }) as string ?? string.Empty;
     }
 
     private static PlayerIdentity? NamedByCompany(List<PlayerIdentity> players)
