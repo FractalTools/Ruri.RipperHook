@@ -85,9 +85,6 @@ Hot Reload 状态下偶发的 Hook 失效一般来自增量残留,重新触发�
 ## Todo
 
 - 把 UE / FModel 侧的 Prefab / Model / Material / Shader 等主要数据转换为 Unity YAML 数据导出
-- 进一步缩小 `Ruri.Tpk` 生成的 DLL 体积 —— 当前生成内容超出实际所需,只需要类型定义与 Read 路径(目标 < 1 MB)
-- `Ruri.Tpk` 的生成工作流简化
-- 实现cpp2il hook 使其导出汇编代码体
 
 ## Special Thanks
 
