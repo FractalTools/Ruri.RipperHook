@@ -16,7 +16,8 @@ internal static class MeshRawBlob
 
     private sealed record ShapeChannelEntry(string name, int frameIndex, int frameCount);
 
-    private sealed record ShapeFrameEntry(long firstVertex, long vertexCount, bool hasNormals);
+    private sealed record ShapeFrameEntry(
+        long firstVertex, long vertexCount, bool hasNormals, bool hasTangents);
 
     private sealed record SectionEntry(long off, long len);
 
@@ -24,7 +25,8 @@ internal static class MeshRawBlob
         string name, long vertexCount, List<ChannelEntry> channels, int indexSize,
         List<SubMeshEntry> subMeshes, List<float> fullWeights,
         List<ShapeChannelEntry> shapeChannels, List<ShapeFrameEntry> shapeFrames,
-        long shapeVertexCount, Dictionary<string, SectionEntry> sections);
+        long shapeVertexCount, long variableBoneCountWeights,
+        Dictionary<string, SectionEntry> sections);
 
     public static MeshRawBlobResult Build(IMesh mesh)
     {
@@ -80,11 +82,14 @@ internal static class MeshRawBlob
             }
             foreach (var frame in mesh.Shapes.Shapes)
             {
-                shapeFrames.Add(new ShapeFrameEntry(frame.FirstVertex, frame.VertexCount, frame.HasNormals));
+                shapeFrames.Add(new ShapeFrameEntry(frame.FirstVertex, frame.VertexCount,
+                    frame.HasNormals, frame.HasTangents));
             }
         }
 
-        const int ShapeVertexStride = sizeof(uint) + 6 * sizeof(float);
+        // A blend shape vertex IS index + vertex + normal + tangent; packing only the
+        // first two deltas silently dropped a third of every entry.
+        const int ShapeVertexStride = sizeof(uint) + 9 * sizeof(float);
         const int SkinStride = 4 * sizeof(float) + 4 * sizeof(int);
         long bindPoseBytes = bindPoseCount * 16L * sizeof(float);
         long boneHashBytes = boneHashCount * (long)sizeof(uint);
@@ -139,6 +144,7 @@ internal static class MeshRawBlob
                 shapeCursor += 4;
                 WriteVector3(vertex.Vertex.X, vertex.Vertex.Y, vertex.Vertex.Z, shapeSpan, ref shapeCursor);
                 WriteVector3(vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z, shapeSpan, ref shapeCursor);
+                WriteVector3(vertex.Tangent.X, vertex.Tangent.Y, vertex.Tangent.Z, shapeSpan, ref shapeCursor);
             }
         }
 
@@ -156,6 +162,13 @@ internal static class MeshRawBlob
             }
         }
 
+        // Influences past the fixed four live here in a packing no reader in this
+        // tree decodes. Carrying the count across is what lets the host say so
+        // instead of quietly presenting a four-influence skin as the whole truth.
+        long variableBoneCountWeights = mesh.Has_VariableBoneCountWeights()
+            ? mesh.VariableBoneCountWeights.Data.Count
+            : 0;
+
         MeshIndex meta = new(
             mesh.Name.String,
             mesh.VertexData.VertexCount,
@@ -166,6 +179,7 @@ internal static class MeshRawBlob
             shapeChannels,
             shapeFrames,
             shapeVertexCount,
+            variableBoneCountWeights,
             sections);
         return MeshRawBlobResult.Built(JsonSerializer.Serialize(meta), payload);
     }
