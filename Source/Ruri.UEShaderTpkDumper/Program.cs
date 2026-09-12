@@ -34,7 +34,7 @@ public static class Program
 
         if (outRoot is null)
         {
-            outRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ruri.FModelHook", "EngineUbMetadata"));
+            outRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Ruri.FModelHook", "EngineUbMetadata"));
         }
 
         Console.WriteLine($"[tpk] ue-root  = {ueRoot}");
@@ -145,6 +145,34 @@ public static class Program
             + "Populates PipelineTypeName at decompile time when the cooked stableinfo.json left it empty.",
             pipelineNames);
         Console.WriteLine($"[tpk] hash-to-name: ShaderType={stCount}, VertexFactoryType={vfCount}, ShaderPipelineType={pipeCount}");
+
+        MaterialBufferRecipe? recipe = MaterialUniformBufferScanner.Scan(engine.RootDir);
+        if (recipe is null)
+        {
+            Console.Error.WriteLine("[tpk] material uniform buffer: CreateBufferStruct not found in this tree.");
+        }
+        else
+        {
+            int memberCount = MaterialUniformBufferEmitter.Emit(outDir, recipe, engine.Version.ToString());
+            Console.WriteLine($"[tpk] material uniform buffer: {memberCount} member(s), "
+                              + $"{recipe.TextureParameterTypes.Count} texture kind(s)"
+                              + (recipe.Unresolved.Count > 0 ? $", {recipe.Unresolved.Count} UNRESOLVED" : ""));
+            foreach (string line in recipe.Unresolved.Take(5))
+            {
+                Console.Error.WriteLine("  [unresolved] " + line.Trim());
+            }
+        }
+
+        PreshaderOpcodeSet? opcodes = PreshaderOpcodeScanner.Scan(engine.RootDir);
+        if (opcodes is null)
+        {
+            Console.Error.WriteLine("[tpk] preshader opcodes: no opcode enum found in this tree.");
+        }
+        else
+        {
+            int opcodeCount = PreshaderOpcodeEmitter.Emit(outDir, opcodes, engine.Version.ToString());
+            Console.WriteLine($"[tpk] preshader opcodes: {opcodeCount} from {opcodes.EnumName}");
+        }
     }
 
     private const string HelpText = """
