@@ -125,8 +125,13 @@ public sealed class MaterialSubject : IShaderMapSubject
 }
 
 /// <summary>
-/// Every material one package's meshes name -- the same set an import of that package builds --
-/// each answered for as its own material.
+/// Whatever ONE package compiled to, whichever kind of asset it is: a material answers for
+/// itself, a mesh or an actor answers for every material it names -- the same set an import of
+/// it builds -- and an effect answers for its own scripts.
+///
+/// Stated as one subject because that is the question a caller with an asset in front of it
+/// actually has. Which of those a package turns out to be is read off the package, never
+/// guessed from its name or its folder.
 /// </summary>
 public sealed class PackageSubject : IShaderMapSubject
 {
@@ -146,28 +151,46 @@ public sealed class PackageSubject : IShaderMapSubject
         {
             throw new FileNotFoundException($"[ShaderSource] the mount holds no package '{packagePath}'.", packagePath);
         }
-        HashSet<string> named = new(StringComparer.OrdinalIgnoreCase);
+
+        HashSet<string> materials = new(StringComparer.OrdinalIgnoreCase);
+        bool isMaterial = false;
+        bool isEffect = false;
         foreach (UObject export in provider.LoadPackage(file).GetExports())
         {
+            isMaterial |= export is UMaterialInterface;
+            isEffect |= export is UNiagaraScript;
             foreach (string path in UnrealComponents.MaterialPaths(export, []))
             {
                 if (path.Length > 0)
                 {
-                    named.Add(UnrealDataTables.Key(provider, path));
+                    materials.Add(UnrealDataTables.Key(provider, path));
                 }
             }
         }
-        if (named.Count == 0)
+        if (isMaterial)
         {
-            log($"[ShaderSource] '{packagePath}' names no material, so it compiled no shader.");
+            materials.Add(key);
+        }
+        if (materials.Count == 0 && !isEffect)
+        {
+            log($"[ShaderSource] '{packagePath}' is neither a material, nor names one, nor carries a script, so it compiled no shader.");
             yield break;
         }
-        foreach (string material in named.OrderBy(static one => one, StringComparer.OrdinalIgnoreCase))
+
+        foreach (string material in materials.OrderBy(static one => one, StringComparer.OrdinalIgnoreCase))
         {
             foreach (ShaderMapTarget target in new MaterialSubject(material).Resolve(provider, log, logError))
             {
                 yield return target;
             }
+        }
+        if (!isEffect)
+        {
+            yield break;
+        }
+        foreach (ShaderMapTarget target in new NiagaraSubject(key).Resolve(provider, log, logError))
+        {
+            yield return target;
         }
     }
 }

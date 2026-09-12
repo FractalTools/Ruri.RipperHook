@@ -58,7 +58,7 @@ namespace Ruri.FModelHook.ShaderDecompiler
             if (entry == null) return;
 
             if (self.Provider is not AbstractVfsFileProvider mount || !entry.Extension.Equals("uasset", StringComparison.OrdinalIgnoreCase)) return;
-            if (!Materials(mount, entry, out List<IShaderMapSubject> subjects) || subjects.Count == 0) return;
+            List<IShaderMapSubject> subjects = [new PackageSubject(entry.PathWithoutExtension)];
 
             if (!ConfirmMappingsOrAbort(self))
             {
@@ -89,29 +89,6 @@ namespace Ruri.FModelHook.ShaderDecompiler
             {
                 HookLogger.LogFailure($"[UE_ShaderDecompiler] Shader source failed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
             }
-        }
-
-        /// <summary>The materials this package IS, or the ones its meshes name; nothing else compiles a shader.</summary>
-        private static bool Materials(AbstractVfsFileProvider mount, GameFile entry, out List<IShaderMapSubject> subjects)
-        {
-            subjects = new List<IShaderMapSubject>();
-            try
-            {
-                foreach (CUE4Parse.UE4.Assets.Exports.UObject export in mount.LoadPackage(entry).GetExports())
-                {
-                    if (export is CUE4Parse.UE4.Assets.Exports.Material.UMaterialInterface)
-                    {
-                        subjects.Add(new MaterialSubject(entry.PathWithoutExtension));
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                HookLogger.LogFailure($"[UE_ShaderDecompiler] {entry.Path}: {ex.GetType().Name}: {ex.Message}");
-                return false;
-            }
-            return false;
         }
 
         private static bool ConfirmMappingsOrAbort(CUE4ParseViewModel vm)

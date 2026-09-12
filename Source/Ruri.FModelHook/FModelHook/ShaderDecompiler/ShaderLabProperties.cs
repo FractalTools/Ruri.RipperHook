@@ -65,16 +65,15 @@ internal static class ShaderLabProperties
             if (line != null) lines.Add(line);
         }
 
-        int typeIndex = 0;
-        foreach (FMaterialTextureParameterInfo[]? bucket in uniformExpressions.UniformTextureParameters ?? [])
+        // Every texture the material's uniform buffer holds, under the name its shaders bind
+        // it by -- the SAME list the emitted source is named from. Registering only the ones
+        // the material happens to expose as parameters left a shaderlab whose Properties named
+        // one texture while its passes sampled eight, which is not a material anyone can use.
+        List<string> textures = MaterialTextureOrder.Extract(uniformExpressions, out List<int> buckets);
+        for (int i = 0; i < textures.Count; i++)
         {
-            if (bucket is null) { typeIndex++; continue; }
-            foreach (FMaterialTextureParameterInfo parameter in bucket)
-            {
-                string? line = TryBuildTexture(parameter, typeIndex, emittedIds);
-                if (line != null) lines.Add(line);
-            }
-            typeIndex++;
+            string? line = TryBuildTexture(textures[i], buckets[i], emittedIds);
+            if (line != null) lines.Add(line);
         }
 
         if (lines.Count == 0) return string.Empty;
@@ -121,30 +120,29 @@ internal static class ShaderLabProperties
         }
     }
 
-    private static string? TryBuildTexture(FMaterialTextureParameterInfo parameter, int typeIndex, HashSet<string> emittedIds)
+    private static string? TryBuildTexture(string rawName, int bucket, HashSet<string> emittedIds)
     {
-        string? rawName = PreshaderInputs.NameOf(parameter);
         if (string.IsNullOrWhiteSpace(rawName)) return null;
 
-        string identifier = ToIdentifier(rawName!);
+        string identifier = ToIdentifier(rawName);
         if (!emittedIds.Add(identifier)) return null;
 
-        string shaderlabType = typeIndex switch
+        string shaderlabType = bucket switch
         {
-            0 => "2D",
-            1 => "Cube",
-            2 => "2DArray",
-            3 => "CubeArray",
-            4 => "3D",
-            5 => "2D",
+            MaterialTextureOrder.Standard2DBucket => "2D",
+            MaterialTextureOrder.CubeBucket => "Cube",
+            MaterialTextureOrder.Array2DBucket => "2DArray",
+            MaterialTextureOrder.ArrayCubeBucket => "CubeArray",
+            MaterialTextureOrder.VolumeBucket => "3D",
+            MaterialTextureOrder.VirtualBucket => "2D",
             _ => "2D",
         };
-        string defaultLiteral = typeIndex switch
+        string defaultLiteral = bucket switch
         {
-            0 or 5 => "\"white\" {}",
+            MaterialTextureOrder.Standard2DBucket or MaterialTextureOrder.VirtualBucket => "\"white\" {}",
             _ => "\"\" {}",
         };
-        string display = EscapeDisplayName(rawName!);
+        string display = EscapeDisplayName(rawName);
         return $"{identifier} (\"{display}\", {shaderlabType}) = {defaultLiteral}";
     }
 
