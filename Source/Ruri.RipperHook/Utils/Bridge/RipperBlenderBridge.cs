@@ -182,6 +182,108 @@ public static class RipperBlenderBridge
         return new CabMapHandle(cabMapPath, CabMap.LoadTable(cabMapPath));
     }
 
+    /// <summary>The dependency closure of a set of seed CABs -- one statement of what "everything
+    /// this reaches" means, so the importer and every other reader of a closure agree.</summary>
+    private static CabClosure Closure(CabMapHandle map, string[] seedCabNames) =>
+        new CabSelection { SeedCabNames = seedCabNames, ReachThroughDependents = true }.Resolve(map.Table);
+
+    /// <summary>Load one closure's files, gated to the closure itself. The gate is process-wide
+    /// state on the bundle hook, so it is set and cleared in ONE place rather than by each caller
+    /// remembering to.</summary>
+    private static GameData LoadClosure(CabClosure closure, ExportHandler handler)
+    {
+        HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
+        HashSet<string> seedFileNames = closure.SeedFileNames;
+        GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0
+            ? name => loadFilterFileNames.Contains(name)
+            : null;
+        GameBundleHook.LoadSeedFile = seedFileNames.Count > 0 ? name => seedFileNames.Contains(name) : null;
+        try
+        {
+            return handler.Load(closure.Files, LocalFileSystem.Instance);
+        }
+        finally
+        {
+            GameBundleHook.LoadIncludeFile = null;
+            GameBundleHook.LoadSeedFile = null;
+        }
+    }
+
+    /// <summary>Every shader the given seeds reach, written out as source.
+    ///
+    /// Not a switch on the import path: importing sets ShaderExportMode.Dummy on purpose, because
+    /// no host here can USE a compiled shader (each rebuilds the game's shading as its own node
+    /// graphs) and decompiling every material's program during every import was pure cost. Reading
+    /// the shaders is a DIFFERENT question, asked on its own, and it loads the same closure the
+    /// importer would.
+    ///
+    /// One row per shader: what the game calls it, where it landed, and how big it came out.</summary>
+    public static Data.PinnedTable ExportShaders(CabMapHandle map, string[] seedCabNames, string outputDir)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(seedCabNames);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDir);
+        TableBuilder table = new(ShaderExportId, "name|Shader", "file|File", "bytes#|Size",
+            "cab|Cab");
+        CabClosure closure = Closure(map, seedCabNames);
+        if (closure.Files.Length == 0)
+        {
+            return Data.ColumnTablePacking.Pin(ShaderExportId, table.Build());
+        }
+
+        FullConfiguration settings = new();
+        settings.LoadFromDefaultPath();
+        settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
+        GameData gameData = LoadClosure(closure, new ExportHandler(settings));
+        Directory.CreateDirectory(outputDir);
+        HashSet<string> written = new(StringComparer.OrdinalIgnoreCase);
+        foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
+        {
+            if (asset is not AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader)
+            {
+                continue;
+            }
+            // A shader's own name is the one ShaderLab states ("Hidden/Foo/Bar"), which is
+            // what a person recognises it by. The asset's m_Name is empty in a stripped
+            // build, and GetBestName then falls back to the CLASS name -- which would file
+            // every shader in the closure as "Shader".
+            string name = shader.ParsedForm?.Name_R.String is { Length: > 0 } stated
+                ? stated
+                : shader.GetBestName();
+            string file = Path.Combine(outputDir, Readable(name) + ".shader");
+            for (int copy = 2; !written.Add(file); copy++)
+            {
+                file = Path.Combine(outputDir, Readable(name) + "_" + copy + ".shader");
+            }
+            if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
+            {
+                continue;
+            }
+            table.Row(name, file, new FileInfo(file).Length, shader.Collection.Name);
+        }
+        return Data.ColumnTablePacking.Pin(ShaderExportId, table.Build());
+    }
+
+    public const string ShaderExportId = "unity.shaders";
+
+    /// <summary>A shader's own name as a file name. Unity names shaders by path
+    /// ("Hidden/Foo/Bar"), which is most of what makes them readable, so the separators
+    /// become one rather than being dropped.</summary>
+    private static string Readable(string name)
+    {
+        char[] made = name.ToCharArray();
+        char[] bad = Path.GetInvalidFileNameChars();
+        for (int index = 0; index < made.Length; index++)
+        {
+            if (Array.IndexOf(bad, made[index]) >= 0)
+            {
+                made[index] = '_';
+            }
+        }
+        string readable = new string(made).Trim();
+        return readable.Length == 0 ? "shader" : readable;
+    }
+
     private static byte[] IntsToBytes(int[] values, int count)
     {
         byte[] bytes = new byte[count * sizeof(int)];
@@ -691,9 +793,8 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(acceptedTextureFormats);
 
         System.Diagnostics.Stopwatch phase = System.Diagnostics.Stopwatch.StartNew();
-        CabClosure closure = new CabSelection { SeedCabNames = seedCabNames, ReachThroughDependents = true }.Resolve(map.Table);
+        CabClosure closure = Closure(map, seedCabNames);
         string[] closureFiles = closure.Files;
-        HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
         long resolveMs = phase.ElapsedMilliseconds;
         if (closureFiles.Length == 0)
         {
@@ -720,20 +821,8 @@ public static class RipperBlenderBridge
         PrewarmedTextureExporter textureExporter = new(settings, ParseTextureFormats(acceptedTextureFormats));
         BridgeExportHandler handler = new(settings, clipCapture, meshCapture, textureExporter);
 
-        GameData gameData;
-        GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0 ? name => loadFilterFileNames.Contains(name) : null;
-        HashSet<string> seedFileNames = closure.SeedFileNames;
-        GameBundleHook.LoadSeedFile = seedFileNames.Count > 0 ? name => seedFileNames.Contains(name) : null;
         phase.Restart();
-        try
-        {
-            gameData = handler.Load(closureFiles, LocalFileSystem.Instance);
-        }
-        finally
-        {
-            GameBundleHook.LoadIncludeFile = null;
-            GameBundleHook.LoadSeedFile = null;
-        }
+        GameData gameData = LoadClosure(closure, handler);
         long loadMs = phase.ElapsedMilliseconds;
 
         phase.Restart();
