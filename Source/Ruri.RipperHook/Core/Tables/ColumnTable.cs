@@ -113,6 +113,72 @@ public sealed class ColumnTable
         return builder.Build(column.Name, column.Role, column.Title);
     }
 
+    /// <summary>Several tables as ONE, with a column saying which one each row came from.
+    ///
+    /// What a facet switch is made of. Two projections of the same cast -- the playable
+    /// characters and the npcs, the units and their outfits -- are two tables because they
+    /// are read differently, but they are ONE list to a person, and a list narrowed by a
+    /// switch is a list. Columns are the union of every part's: a row from a part that has
+    /// no such column reads blank there, which is the truth about it.</summary>
+    public static ColumnTable Stack(string name, string kindColumn, ColumnRole kindRole,
+        params (string Kind, ColumnTable Table)[] parts)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kindColumn);
+        List<Column> shape = [];
+        foreach ((_, ColumnTable table) in parts)
+        {
+            foreach (Column column in table.Columns)
+            {
+                if (!shape.Exists(seen => string.Equals(seen.Name, column.Name,
+                        StringComparison.OrdinalIgnoreCase)))
+                {
+                    shape.Add(column);
+                }
+            }
+        }
+        ColumnBuilder kinds = new(ColumnKind.Text, parts.Sum(part => part.Table.RowCount));
+        List<ColumnBuilder> builders = shape.Select(column =>
+            new ColumnBuilder(column.Kind, parts.Sum(part => part.Table.RowCount))).ToList();
+        int rows = 0;
+        foreach ((string kind, ColumnTable table) in parts)
+        {
+            for (int row = 0; row < table.RowCount; row++)
+            {
+                kinds.Add(kind);
+                for (int index = 0; index < shape.Count; index++)
+                {
+                    Column? found = table.Find(shape[index].Name);
+                    if (found is null)
+                    {
+                        builders[index].AddBlank();
+                    }
+                    else if (found.Kind == shape[index].Kind)
+                    {
+                        builders[index].Add(found.Bytes(row));
+                    }
+                    else if (shape[index].Sliced)
+                    {
+                        // Two parts spelling one column differently (a count as text here, a
+                        // number there) is the game's own inconsistency, not a reason to write
+                        // one part's bytes into the other's shape and read garbage after it.
+                        builders[index].Add(found.Text(row));
+                    }
+                    else
+                    {
+                        builders[index].Add(found.Real(row));
+                    }
+                }
+                rows++;
+            }
+        }
+        List<Column> built = [kinds.Build(kindColumn, kindRole, "Kind")];
+        for (int index = 0; index < shape.Count; index++)
+        {
+            built.Add(builders[index].Build(shape[index].Name, shape[index].Role, shape[index].Title));
+        }
+        return new ColumnTable { Name = name, RowCount = rows, Columns = built.ToArray() };
+    }
+
     public ColumnTable DistinctBy(string distinctColumn, string preferColumn)
     {
         Column key = this[distinctColumn];
