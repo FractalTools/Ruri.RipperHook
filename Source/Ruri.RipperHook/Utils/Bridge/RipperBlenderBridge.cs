@@ -182,66 +182,64 @@ public static class RipperBlenderBridge
         return new CabMapHandle(cabMapPath, CabMap.LoadTable(cabMapPath));
     }
 
-    public static PackedTableDto EnumerateTablePacked(CabMapHandle map)
-    {
-        ArgumentNullException.ThrowIfNull(map);
-        CabTable table = map.Table;
-        int count = table.Count;
-
-        byte[] cabBlob = new byte[table.CabOffsets[count]];
-        Buffer.BlockCopy(table.CabBlob, 0, cabBlob, 0, cabBlob.Length);
-
-        int[] sourceOffsets = new int[count + 1];
-        for (int id = 0; id < count; id++)
-        {
-            sourceOffsets[id + 1] = sourceOffsets[id] + table.DistinctFileUtf8(table.FileIndex[id]).Length;
-        }
-        byte[] sourceBlob = new byte[sourceOffsets[count]];
-        for (int id = 0; id < count; id++)
-        {
-            table.DistinctFileUtf8(table.FileIndex[id]).CopyTo(sourceBlob.AsSpan(sourceOffsets[id]));
-        }
-
-        int[] dependencyCounts = new int[count];
-        for (int id = 0; id < count; id++)
-        {
-            dependencyCounts[id] = table.DependencyCount(id);
-        }
-
-        HashSet<int> distinctClassIds = new();
-        foreach (int classId in table.ClassIdsFlat)
-        {
-            distinctClassIds.Add(classId);
-        }
-        StringBuilder classNames = new();
-        foreach (int classId in distinctClassIds)
-        {
-            classNames.Append(classId).Append('=')
-                .Append(Enum.IsDefined(typeof(ClassIDType), classId)
-                    ? ((ClassIDType)classId).ToString() : classId.ToString())
-                .Append('\n');
-        }
-
-        return new PackedTableDto(
-            Count: count,
-            CabBlob: cabBlob,
-            CabOffsets: IntsToBytes(table.CabOffsets, count + 1),
-            SourceBlob: sourceBlob,
-            SourceOffsets: IntsToBytes(sourceOffsets, count + 1),
-            PathBlob: table.ContainerPathBlob,
-            PathOffsets: IntsToBytes(table.ContainerPathOffsets, table.ContainerPathOffsets.Length),
-            PathStarts: IntsToBytes(table.ContainerPathStarts, count + 1),
-            ClassFlat: IntsToBytes(table.ClassIdsFlat, table.ClassIdsFlat.Length),
-            ClassStarts: IntsToBytes(table.ClassIdStarts, count + 1),
-            DependencyCounts: IntsToBytes(dependencyCounts, count),
-            ClassIdNames: classNames.ToString());
-    }
-
     private static byte[] IntsToBytes(int[] values, int count)
     {
         byte[] bytes = new byte[count * sizeof(int)];
         Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
         return bytes;
+    }
+
+    /// <summary>The loaded cabmap as the ordinary column table every other list is, with its
+    /// display words already decided (CabRows). A host that worded them itself would be a
+    /// second statement of the same thing.</summary>
+    public static Data.PinnedTable EnumerateTable(CabMapHandle map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return Data.ColumnTablePacking.Pin(CabRows.Id, CabRows.Table(map.Table));
+    }
+
+    /// <summary>One virtual folder's child folders, with how many rows live at or below each.</summary>
+    public static Data.PinnedTable CabFolderChildren(CabMapHandle map, string folder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        (string[] names, int[] counts) = CabFolders.Of(map.Table).Children(CabFolders.Segments(folder));
+        TableBuilder table = new("cab.folders", "name|Folder", "count#|Rows");
+        table.Role(ColumnRole.Label | ColumnRole.Key, "name").Role(ColumnRole.Detail, "count");
+        for (int index = 0; index < names.Length; index++)
+        {
+            table.Row(names[index], counts[index]);
+        }
+        return Data.ColumnTablePacking.Pin("cab.folders", table.Build());
+    }
+
+    /// <summary>The rows listed IN one virtual folder.</summary>
+    public static byte[] CabFolderFiles(CabMapHandle map, string folder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        int[] files = CabFolders.Of(map.Table).Files(CabFolders.Segments(folder));
+        return IntsToBytes(files, files.Length);
+    }
+
+    /// <summary>Whether a remembered folder still exists in THIS map.</summary>
+    public static bool CabFolderExists(CabMapHandle map, string folder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return CabFolders.Of(map.Table).Has(CabFolders.Segments(folder));
+    }
+
+    /// <summary>The folder one row is shown under, and what it is called there -- the two
+    /// questions "jump to this row's folder" asks, answered together so they cannot disagree
+    /// about which of a multi-path row's names is meant.</summary>
+    public static string[] CabFolderOf(CabMapHandle map, int id, string query, string folder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        string[] currentDir = CabFolders.Segments(folder);
+        int path = CabFolders.BestPathIndex(map.Table, id, query, currentDir);
+        return
+        [
+            CabFolders.Joined(CabFolders.FolderOf(map.Table, id, path)),
+            CabFolders.LeafName(map.Table, id, currentDir),
+        ];
     }
 
     public static byte[] SearchTable(CabMapHandle map, string query, string[]? flatRules,
@@ -1689,15 +1687,6 @@ public sealed class CabMapHandle
         Table = table;
     }
 }
-
-public sealed record PackedTableDto(
-    int Count,
-    byte[] CabBlob, byte[] CabOffsets,
-    byte[] SourceBlob, byte[] SourceOffsets,
-    byte[] PathBlob, byte[] PathOffsets, byte[] PathStarts,
-    byte[] ClassFlat, byte[] ClassStarts,
-    byte[] DependencyCounts,
-    string ClassIdNames);
 
 public sealed record VfsFileDto(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath);
 
