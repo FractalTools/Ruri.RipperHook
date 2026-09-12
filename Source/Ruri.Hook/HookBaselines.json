@@ -40,6 +40,7 @@
     "AssetRipper.SourceGenerated.Extensions.TagManagerExtensions::TagIDToName(ITagManager,Int32)": "83f551bca71ac912",
     "AssetRipper.SourceGenerated.Subclasses.DenseClip.DenseClip::ReadRelease(EndianSpanReader\u0026)": "34f030b7e6d4a34e",
     "AssetRipper.SourceGenerated.Subclasses.GLTextureSettings.GLTextureSettings_2017::ReadRelease(EndianSpanReader\u0026)": "e8e216d9260dd815",
+    "CUE4Parse.UE4.Assets.Exports.SkeletalMesh.FSkelMeshSection::SerializeRenderItem(FAssetArchive)": "0dac40f055e36afe",
     "ICSharpCode.Decompiler.CSharp.ProjectDecompiler.WholeProjectDecompiler::CreateDecompiler(DecompilerTypeSystem)": "b8718fd7483f4ece",
     "LibCpp2IL.Metadata.Il2CppTypeDefinition::Read(ClassReadingBinaryReader)": "f2b090d41c0d90ed"
   },
