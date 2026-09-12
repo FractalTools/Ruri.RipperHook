@@ -223,8 +223,10 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDir);
-        TableBuilder table = new(ShaderExportId, "name|Shader", "file|File", "bytes#|Size",
-            "cab|Cab");
+        TableBuilder table = new(ShaderExportId, "material|Material", "name|Shader",
+            "keywords|Variant", "file|File", "bytes#|Size", "cab|Cab");
+        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Detail, "keywords")
+            .Role(ColumnRole.Group, "material");
         CabClosure closure = Closure(map, seedCabNames);
         if (closure.Files.Length == 0)
         {
@@ -236,10 +238,17 @@ public static class RipperBlenderBridge
         settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
         GameData gameData = LoadClosure(closure, new ExportHandler(settings));
         Directory.CreateDirectory(outputDir);
-        HashSet<string> written = new(StringComparer.OrdinalIgnoreCase);
+        // What the row actually SHADES WITH, not everything its archives happen to carry:
+        // a character's closure co-hosts shaders nothing on that character references. So
+        // the MATERIALS are walked, and each states its own shader plus the keywords it
+        // enables -- which is the variant that shader is compiled for on this row.
+        Dictionary<AssetRipper.SourceGenerated.Classes.ClassID_48.IShader, string> written = [];
+        HashSet<string> taken = new(StringComparer.OrdinalIgnoreCase);
         foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
         {
-            if (asset is not AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader)
+            if (asset is not AssetRipper.SourceGenerated.Classes.ClassID_21.IMaterial material
+                || material.Shader_C21.TryGetAsset(material.Collection) is not
+                    AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader)
             {
                 continue;
             }
@@ -250,18 +259,39 @@ public static class RipperBlenderBridge
             string name = shader.ParsedForm?.Name_R.String is { Length: > 0 } stated
                 ? stated
                 : shader.GetBestName();
-            string file = Path.Combine(outputDir, Readable(name) + ".shader");
-            for (int copy = 2; !written.Add(file); copy++)
+            if (!written.TryGetValue(shader, out string? file))
             {
-                file = Path.Combine(outputDir, Readable(name) + "_" + copy + ".shader");
+                file = Path.Combine(outputDir, Readable(name) + ".shader");
+                for (int copy = 2; !taken.Add(file); copy++)
+                {
+                    file = Path.Combine(outputDir, Readable(name) + "_" + copy + ".shader");
+                }
+                if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
+                {
+                    continue;
+                }
+                written[shader] = file;
             }
-            if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
-            {
-                continue;
-            }
-            table.Row(name, file, new FileInfo(file).Length, shader.Collection.Name);
+            table.Row(material.GetBestName(), name, Keywords(material), file,
+                new FileInfo(file).Length, shader.Collection.Name);
         }
         return Data.ColumnTablePacking.Pin(ShaderExportId, table.Build());
+    }
+
+    /// <summary>The variant one material asks its shader for: the keywords it enables, which
+    /// is what picks which compiled program of that shader actually runs.</summary>
+    private static string Keywords(AssetRipper.SourceGenerated.Classes.ClassID_21.IMaterial material)
+    {
+        List<string> enabled = [];
+        foreach (AssetRipper.Primitives.Utf8String keyword in material.ValidKeywords_C21)
+        {
+            if (keyword.String.Length > 0)
+            {
+                enabled.Add(keyword.String);
+            }
+        }
+        enabled.Sort(StringComparer.Ordinal);
+        return string.Join(' ', enabled);
     }
 
     public const string ShaderExportId = "unity.shaders";
