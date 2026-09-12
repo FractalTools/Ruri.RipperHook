@@ -13,6 +13,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The prune job deletes this repo's older workflow runs; nothing else writes.
+  actions: write
 
 env:
   DOTNET_VERSION: 10.0.x
@@ -148,3 +150,26 @@ jobs:
           name: RipperHook-PureRelease
           path: Source/0Bins/Release/**
           if-no-files-found: error
+
+  prune-runs:
+    name: Prune older runs
+    needs: [build-fmodelhook, build-pure-ripperhook]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      # Only the run that is happening now survives. A run carries the commit
+      # message it was triggered by, so an old run keeps publishing text the
+      # repository itself no longer contains; keeping one is enough to see
+      # whether the build is green. Ids are collected before anything is
+      # deleted -- deleting while paging shifts the pages under the listing.
+      - name: Delete every run but this one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$GH_REPO/actions/runs?per_page=100" --paginate --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | .id" > ids.txt
+          echo "runs to delete: $(wc -l < ids.txt)"
+          while read -r id; do
+            gh api -X DELETE "repos/$GH_REPO/actions/runs/$id" >/dev/null 2>&1 || echo "skipped $id (still running or already gone)"
+          done < ids.txt
