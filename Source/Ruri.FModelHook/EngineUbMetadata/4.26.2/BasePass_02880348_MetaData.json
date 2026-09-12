@@ -1,0 +1,554 @@
+{
+  "Name": "BasePass",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/BasePassRendering.h",
+  "LayoutHash": "0x02880348",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "BasePass",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "PlanarReflection_InverseTransposeMirrorMatrix",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "PlanarReflection_ProjectionWithExtraFOV",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "Reflection_SkyLightParameters",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Reflection_SkyLightCubemapBrightness",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_ReflectionPlane",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionOrigin",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionXAxis",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionYAxis",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionParameters",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_PlanarReflectionScreenScaleBias",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PlanarReflection_bIsStereo",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters",
+        "NameIndex": -1,
+        "Index": 336,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters2",
+        "NameIndex": -1,
+        "Index": 352,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogColorParameter",
+        "NameIndex": -1,
+        "Index": 368,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ExponentialFogParameters3",
+        "NameIndex": -1,
+        "Index": 384,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_InscatteringLightDirection",
+        "NameIndex": -1,
+        "Index": 400,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_DirectionalInscatteringColor",
+        "NameIndex": -1,
+        "Index": 416,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_FogInscatteringTextureParameters",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Fog_ApplyVolumetricFog",
+        "NameIndex": -1,
+        "Index": 444,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_ExponentialFogParameters",
+        "NameIndex": -1,
+        "Index": 480,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_ExponentialFogParameters2",
+        "NameIndex": -1,
+        "Index": 496,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_ExponentialFogColorParameter",
+        "NameIndex": -1,
+        "Index": 512,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_ExponentialFogParameters3",
+        "NameIndex": -1,
+        "Index": 528,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_InscatteringLightDirection",
+        "NameIndex": -1,
+        "Index": 544,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_DirectionalInscatteringColor",
+        "NameIndex": -1,
+        "Index": 560,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_FogInscatteringTextureParameters",
+        "NameIndex": -1,
+        "Index": 576,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "FogISR_ApplyVolumetricFog",
+        "NameIndex": -1,
+        "Index": 588,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 640,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Reflection_SkyLightCubemap",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Reflection_SkyLightBlendDestinationCubemap",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Reflection_ReflectionCubemap",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Reflection_PreIntegratedGF",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "PlanarReflection_PlanarReflectionTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Fog_FogInscatteringColorCubemap",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "Fog_IntegratedLightScattering",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "FogISR_FogInscatteringColorCubemap",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "FogISR_IntegratedLightScattering",
+      "NameIndex": -1,
+      "Index": 16,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SSProfilesTexture",
+      "NameIndex": -1,
+      "Index": 18,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "Reflection_SkyLightCubemapSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    },
+    {
+      "Name": "Reflection_SkyLightBlendDestinationCubemapSampler",
+      "Sampler": 3,
+      "BindPoint": 3
+    },
+    {
+      "Name": "Reflection_ReflectionCubemapSampler",
+      "Sampler": 5,
+      "BindPoint": 5
+    },
+    {
+      "Name": "Reflection_PreIntegratedGFSampler",
+      "Sampler": 7,
+      "BindPoint": 7
+    },
+    {
+      "Name": "PlanarReflection_PlanarReflectionSampler",
+      "Sampler": 9,
+      "BindPoint": 9
+    },
+    {
+      "Name": "Fog_FogInscatteringColorSampler",
+      "Sampler": 11,
+      "BindPoint": 11
+    },
+    {
+      "Name": "Fog_IntegratedLightScatteringSampler",
+      "Sampler": 13,
+      "BindPoint": 13
+    },
+    {
+      "Name": "FogISR_FogInscatteringColorSampler",
+      "Sampler": 15,
+      "BindPoint": 15
+    },
+    {
+      "Name": "FogISR_IntegratedLightScatteringSampler",
+      "Sampler": 17,
+      "BindPoint": 17
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 24,
+      "Name": "Reflection_SkyLightCubemap",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
+    },
+    {
+      "Index": 1,
+      "Offset": 32,
+      "Name": "Reflection_SkyLightCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 2,
+      "Offset": 40,
+      "Name": "Reflection_SkyLightBlendDestinationCubemap",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
+    },
+    {
+      "Index": 3,
+      "Offset": 48,
+      "Name": "Reflection_SkyLightBlendDestinationCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 4,
+      "Offset": 56,
+      "Name": "Reflection_ReflectionCubemap",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCubeArray"
+    },
+    {
+      "Index": 5,
+      "Offset": 64,
+      "Name": "Reflection_ReflectionCubemapSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 6,
+      "Offset": 72,
+      "Name": "Reflection_PreIntegratedGF",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 7,
+      "Offset": 80,
+      "Name": "Reflection_PreIntegratedGFSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 8,
+      "Offset": 312,
+      "Name": "PlanarReflection_PlanarReflectionTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 9,
+      "Offset": 320,
+      "Name": "PlanarReflection_PlanarReflectionSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 10,
+      "Offset": 448,
+      "Name": "Fog_FogInscatteringColorCubemap",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
+    },
+    {
+      "Index": 11,
+      "Offset": 456,
+      "Name": "Fog_FogInscatteringColorSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 12,
+      "Offset": 464,
+      "Name": "Fog_IntegratedLightScattering",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
+    },
+    {
+      "Index": 13,
+      "Offset": 472,
+      "Name": "Fog_IntegratedLightScatteringSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 14,
+      "Offset": 592,
+      "Name": "FogISR_FogInscatteringColorCubemap",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
+    },
+    {
+      "Index": 15,
+      "Offset": 600,
+      "Name": "FogISR_FogInscatteringColorSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 16,
+      "Offset": 608,
+      "Name": "FogISR_IntegratedLightScattering",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture3D"
+    },
+    {
+      "Index": 17,
+      "Offset": 616,
+      "Name": "FogISR_IntegratedLightScatteringSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 18,
+      "Offset": 624,
+      "Name": "SSProfilesTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D"
+    }
+  ]
+}

@@ -1,0 +1,337 @@
+{
+  "Name": "SkyLight",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingSkyLight.h",
+  "LayoutHash": "0x06DE07BD",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "SkyLight",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SamplesPerPixel",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SamplingStopLevel",
+        "NameIndex": -1,
+        "Index": 4,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxRayDistance",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Color",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MipDimensions",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxNormalBias",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MaxShadowThickness",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bTransmission",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TextureDimensions",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 208,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "Texture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePosX",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreeNegX",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePosY",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreeNegY",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePosZ",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreeNegZ",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfPosX",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfNegX",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfPosY",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfNegY",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfPosZ",
+      "NameIndex": -1,
+      "Index": 12,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "MipTreePdfNegZ",
+      "NameIndex": -1,
+      "Index": 13,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SolidAnglePdf",
+      "NameIndex": -1,
+      "Index": 14,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "TextureSampler",
+      "Sampler": 1,
+      "BindPoint": 1
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 56,
+      "Name": "Texture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "TextureCube"
+    },
+    {
+      "Index": 1,
+      "Offset": 64,
+      "Name": "TextureSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 2,
+      "Offset": 96,
+      "Name": "MipTreePosX",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 3,
+      "Offset": 104,
+      "Name": "MipTreeNegX",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 4,
+      "Offset": 112,
+      "Name": "MipTreePosY",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 5,
+      "Offset": 120,
+      "Name": "MipTreeNegY",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 6,
+      "Offset": 128,
+      "Name": "MipTreePosZ",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 7,
+      "Offset": 136,
+      "Name": "MipTreeNegZ",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 8,
+      "Offset": 144,
+      "Name": "MipTreePdfPosX",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 9,
+      "Offset": 152,
+      "Name": "MipTreePdfNegX",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 10,
+      "Offset": 160,
+      "Name": "MipTreePdfPosY",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 11,
+      "Offset": 168,
+      "Name": "MipTreePdfNegY",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 12,
+      "Offset": 176,
+      "Name": "MipTreePdfPosZ",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 13,
+      "Offset": 184,
+      "Name": "MipTreePdfNegZ",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    },
+    {
+      "Index": 14,
+      "Offset": 192,
+      "Name": "SolidAnglePdf",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Buffer<float>"
+    }
+  ]
+}
