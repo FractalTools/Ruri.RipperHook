@@ -29,26 +29,9 @@ internal static class ShaderLabProperties
             }
 
             string asset = map.PrimaryAsset;
+            MaterialConstantBufferReader.Read(uniformExpressions, asset);
             map.MaterialTextureOrder = new List<string>(MaterialTextureOrder.Extract(uniformExpressions, out List<int> textureBuckets));
             map.MaterialTextureBuckets = textureBuckets;
-
-            MaterialConstantBufferReader.Read(uniformExpressions, asset);
-            if (MaterialConstantBufferReader.EvaluatedCbufferValues.TryGetValue(asset, out var values))
-            {
-                map.MaterialCbufferValues = new Dictionary<string, string>(values, StringComparer.Ordinal);
-            }
-            if (MaterialConstantBufferReader.EvaluatedCbufferOffsets.TryGetValue(asset, out var offsets))
-            {
-                map.MaterialCbufferOffsets = new Dictionary<string, int>(offsets, StringComparer.Ordinal);
-            }
-            if (MaterialConstantBufferReader.EvaluatedCbufferPrograms.TryGetValue(asset, out var programs))
-            {
-                map.MaterialCbufferPrograms = new Dictionary<string, string>(programs, StringComparer.Ordinal);
-            }
-            if (MaterialConstantBufferReader.EvaluatedCbufferParams.TryGetValue(asset, out var parameters))
-            {
-                map.MaterialCbufferParams = new Dictionary<string, string>(parameters, StringComparer.Ordinal);
-            }
         }
 
         state.Log($"    Properties: populated {populated}/{state.ShaderMaps.Count} shader-maps.");
@@ -59,7 +42,11 @@ internal static class ShaderLabProperties
         var lines = new List<string>();
         HashSet<string> emittedIds = new(StringComparer.Ordinal);
 
-        foreach (FMaterialNumericParameterInfo parameter in uniformExpressions.UniformNumericParameters ?? [])
+        // Every numeric knob the material exposes, whichever way its engine wrote the table --
+        // one table of typed parameters on UE5, two untyped ones on UE4. Reading only the first
+        // shape registered not a single colour, vector or scalar for any pre-UE5 title, which is
+        // a shaderlab whose Properties name eight textures and nothing a shader actually reads.
+        foreach (NumericParameter parameter in MaterialExpressions.Of(uniformExpressions)?.Parameters ?? [])
         {
             string? line = TryBuildNumeric(parameter, emittedIds);
             if (line != null) lines.Add(line);
@@ -89,9 +76,9 @@ internal static class ShaderLabProperties
         return sb.ToString();
     }
 
-    private static string? TryBuildNumeric(FMaterialNumericParameterInfo parameter, HashSet<string> emittedIds)
+    private static string? TryBuildNumeric(NumericParameter parameter, HashSet<string> emittedIds)
     {
-        string rawName = parameter.ParameterInfo?.Name.Text ?? string.Empty;
+        string rawName = parameter.Name;
         if (string.IsNullOrWhiteSpace(rawName) || string.Equals(rawName, "None", StringComparison.OrdinalIgnoreCase)) return null;
         if (string.Equals(rawName, "SelectionColor", StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -99,22 +86,17 @@ internal static class ShaderLabProperties
         if (!emittedIds.Add(identifier)) return null;
 
         string display = EscapeDisplayName(rawName);
-        switch (parameter.ParameterType)
+        float[] value = parameter.Value ?? [0f, 0f, 0f, 0f];
+        switch (parameter.Kind)
         {
             case EMaterialParameterType.Scalar:
-                return $"{identifier} (\"{display}\", Float) = {FormatFloat(ReadScalar(parameter.Value))}";
+                return $"{identifier} (\"{display}\", Float) = {FormatFloat(value[0])}";
             case EMaterialParameterType.Vector:
-                {
-                    (double r, double g, double b, double a) = ReadVector(parameter.Value);
-                    return $"{identifier} (\"{display}\", Color) = ({FormatFloat(r)}, {FormatFloat(g)}, {FormatFloat(b)}, {FormatFloat(a)})";
-                }
+                return $"{identifier} (\"{display}\", Color) = ({FormatFloat(value[0])}, {FormatFloat(value[1])}, {FormatFloat(value[2])}, {FormatFloat(value[3])})";
             case EMaterialParameterType.DoubleVector:
-                {
-                    (double r, double g, double b, double a) = ReadVector(parameter.Value);
-                    return $"{identifier} (\"{display}\", Vector) = ({FormatFloat(r)}, {FormatFloat(g)}, {FormatFloat(b)}, {FormatFloat(a)})";
-                }
+                return $"{identifier} (\"{display}\", Vector) = ({FormatFloat(value[0])}, {FormatFloat(value[1])}, {FormatFloat(value[2])}, {FormatFloat(value[3])})";
             case EMaterialParameterType.StaticSwitch:
-                return $"[Toggle] {identifier} (\"{display}\", Float) = {(ReadScalar(parameter.Value) >= 0.5 ? 1 : 0)}";
+                return $"[Toggle] {identifier} (\"{display}\", Float) = {(value[0] >= 0.5f ? 1 : 0)}";
             default:
                 return null;
         }
@@ -145,24 +127,6 @@ internal static class ShaderLabProperties
         string display = EscapeDisplayName(rawName);
         return $"{identifier} (\"{display}\", {shaderlabType}) = {defaultLiteral}";
     }
-
-    private static double ReadScalar(object? value) => value switch
-    {
-        float single => single,
-        double wide => wide,
-        CUE4Parse.UE4.Objects.Core.Math.FLinearColor color => color.R,
-        CUE4Parse.UE4.Objects.Core.Math.FVector4 vector => vector.X,
-        _ => 0.0,
-    };
-
-    private static (double R, double G, double B, double A) ReadVector(object? value) => value switch
-    {
-        CUE4Parse.UE4.Objects.Core.Math.FLinearColor color => (color.R, color.G, color.B, color.A),
-        CUE4Parse.UE4.Objects.Core.Math.FVector4 vector => (vector.X, vector.Y, vector.Z, vector.W),
-        float single => (single, 0, 0, 0),
-        double wide => (wide, 0, 0, 0),
-        _ => (0, 0, 0, 0),
-    };
 
     private static string ToIdentifier(string raw)
     {

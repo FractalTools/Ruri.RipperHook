@@ -5,9 +5,10 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 
 /// <summary>
 /// One numeric parameter a preshader program can read: what it is called, what the material
-/// cooked as its value, and how many lanes of that value mean anything.
+/// cooked as its value, how many lanes of that value mean anything, and which kind of knob the
+/// material exposes it as -- which is what a host writes it back out as.
 /// </summary>
-public readonly record struct NumericParameter(string Name, float[]? Value, int Components);
+public readonly record struct NumericParameter(string Name, float[]? Value, int Components, EMaterialParameterType Kind);
 
 /// <summary>
 /// Everything a material's preshader programs run on: the opcode bytes, the parameters they
@@ -40,18 +41,18 @@ public sealed class PreshaderInputs
     /// <summary>Texture parameter names by the bucket the expression set groups them in, then by slot.</summary>
     public IReadOnlyList<IReadOnlyList<string>> TextureNames { get; }
 
+    /// <summary>
+    /// The inputs a material's programs run on, whichever way its engine wrote the parameters
+    /// down. Both dialects are normalised in one place -- <see cref="MaterialExpressions"/> --
+    /// so nothing here knows that a pre-UE5 cook keeps vectors and scalars in two tables.
+    /// </summary>
     public static PreshaderInputs? Of(FUniformExpressionSet? expressionSet)
     {
-        byte[]? opcodes = expressionSet?.UniformPreshaderData?.Data;
-        if (expressionSet is null || opcodes is null)
+        if (MaterialExpressions.Of(expressionSet) is not { } expressions)
         {
             return null;
         }
-        return new PreshaderInputs(
-            opcodes,
-            Parameters(expressionSet.UniformNumericParameters),
-            Array.ConvertAll(expressionSet.UniformPreshaderData.Names ?? [], static name => name.Text ?? string.Empty),
-            TextureBuckets(expressionSet.UniformTextureParameters));
+        return new PreshaderInputs(expressions.Opcodes, expressions.Parameters, expressions.Names, expressions.TextureNames);
     }
 
     /// <summary>The same inputs with every parameter the caller states replaced by the value it states.</summary>
@@ -82,7 +83,8 @@ public sealed class PreshaderInputs
             result[i] = new NumericParameter(
                 parameter.ParameterInfo?.Name.Text ?? string.Empty,
                 Value(parameter.Value, scalar),
-                scalar ? 1 : Components(parameter.Value));
+                scalar ? 1 : Components(parameter.Value),
+                parameter.ParameterType);
         }
         return result;
     }

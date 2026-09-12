@@ -6,21 +6,13 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
-internal enum UeMaterialPreshaderVersion
-{
-    Ue51 = 51,    Ue54 = 54,    Ue55 = 55,}
-
 internal static class MaterialConstantBufferReader
 {
-    public static UeMaterialPreshaderVersion PreshaderVersion { get; set; } = UeMaterialPreshaderVersion.Ue51;
-
-    public static readonly Dictionary<string, Dictionary<string, string>> EvaluatedCbufferValues = new(StringComparer.Ordinal);
-
-    public static readonly Dictionary<string, Dictionary<string, int>> EvaluatedCbufferOffsets = new(StringComparer.Ordinal);
-
-    public static readonly Dictionary<string, Dictionary<string, string>> EvaluatedCbufferPrograms = new(StringComparer.Ordinal);
-
-    public static readonly Dictionary<string, Dictionary<string, string>> EvaluatedCbufferParams = new(StringComparer.Ordinal);
+    /// <summary>
+    /// Which byte means which operation in the programs this reader is walking -- the mounted
+    /// build's own opcode enum, as the engine dump states it. Identity until a run says otherwise.
+    /// </summary>
+    public static MaterialPreshaderOpcodes Opcodes { get; set; } = MaterialPreshaderOpcodes.Identity;
 
     /// <summary>Per material, every preshader-filled field with the program that computes it, at its absolute byte offset in the buffer.</summary>
     public static readonly Dictionary<string, List<PreshaderField>> EvaluatedCbufferFields = new(StringComparer.Ordinal);
@@ -28,10 +20,6 @@ internal static class MaterialConstantBufferReader
     private static void ResetMaterialTables(string materialPath)
     {
         if (string.IsNullOrEmpty(materialPath)) return;
-        EvaluatedCbufferValues.Remove(materialPath);
-        EvaluatedCbufferOffsets.Remove(materialPath);
-        EvaluatedCbufferPrograms.Remove(materialPath);
-        EvaluatedCbufferParams.Remove(materialPath);
         EvaluatedCbufferFields.Remove(materialPath);
     }
 
@@ -123,104 +111,34 @@ internal static class MaterialConstantBufferReader
             : null;
     }
 
-    private static void RecordParams(string materialPath, NumericParameter[] parameters)
-    {
-        if (string.IsNullOrEmpty(materialPath)) return;
-
-        var table = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (NumericParameter parameter in parameters)
-        {
-            if (string.IsNullOrEmpty(parameter.Name) || parameter.Value is not { } v) continue;
-            table[parameter.Name] = string.Join(",", v.Select(static c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
-        }
-
-        if (table.Count > 0) EvaluatedCbufferParams[materialPath] = table;
-    }
-
-    private static void RecordEvaluated(string materialPath, string memberName, int rows, float[]? value, int byteOffset, string? program = null)
-    {
-        if (!string.IsNullOrEmpty(materialPath) && !string.IsNullOrEmpty(program))
-        {
-            if (!EvaluatedCbufferPrograms.TryGetValue(materialPath, out Dictionary<string, string>? programs))
-            {
-                programs = new Dictionary<string, string>(StringComparer.Ordinal);
-                EvaluatedCbufferPrograms[materialPath] = programs;
-            }
-
-            programs[memberName] = program;
-        }
-
-        if (!EvaluatedCbufferOffsets.TryGetValue(materialPath, out Dictionary<string, int>? offsets))
-        {
-            offsets = new Dictionary<string, int>(StringComparer.Ordinal);
-            EvaluatedCbufferOffsets[materialPath] = offsets;
-        }
-        offsets[memberName] = byteOffset;
-
-        if (value == null || string.IsNullOrEmpty(materialPath)) return;
-        if (!EvaluatedCbufferValues.TryGetValue(materialPath, out Dictionary<string, string>? byName))
-        {
-            byName = new Dictionary<string, string>(StringComparer.Ordinal);
-            EvaluatedCbufferValues[materialPath] = byName;
-        }
-        int comps = Math.Clamp(rows, 1, 4);
-        string[] parts = new string[comps];
-        for (int c = 0; c < comps; c++)
-        {
-            parts[c] = value[c].ToString("R", System.Globalization.CultureInfo.InvariantCulture);
-        }
-        byName[memberName] = string.Join(",", parts);
-    }
-
-    private static byte TranslateOpcode(byte raw)
-    {
-        switch (PreshaderVersion)
-        {
-            case UeMaterialPreshaderVersion.Ue51:
-                return raw;
-
-            case UeMaterialPreshaderVersion.Ue54:
-                if (raw <= 42) return raw;                if (raw == 43) return 255;                if (raw <= 54) return (byte)(raw - 1);                return 255;
-            case UeMaterialPreshaderVersion.Ue55:
-                if (raw <= 8) return raw;                if (raw == 9) return 255;                if (raw <= 43) return (byte)(raw - 1);                if (raw == 44) return 255;                if (raw <= 55) return (byte)(raw - 2);                return 255;        }
-        return raw;
-    }
+    private static byte TranslateOpcode(byte raw) => Opcodes.Translate(raw);
 
     private static readonly string? PreshaderDebugFilter =
         Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG");
 
     public static ConstantBufferParameter? Read(FUniformExpressionSet uniformExpressionSet, string? materialPath = null)
     {
-        FRHIUniformBufferLayoutInitializer layout = uniformExpressionSet.UniformBufferLayoutInitializer;
-        if (!string.Equals(layout.Name, "Material", StringComparison.Ordinal))
+        MaterialExpressions? expressions = MaterialExpressions.Of(uniformExpressionSet);
+        if (expressions is null)
         {
             return null;
         }
 
-        uint constantBufferSize = layout.ConstantBufferSize;
-        FMaterialUniformPreshaderHeader[] uniformPreshaders = uniformExpressionSet.UniformPreshaders ?? [];
-        FMaterialUniformPreshaderField[] uniformPreshaderFields = uniformExpressionSet.UniformPreshaderFields ?? [];
-        PreshaderInputs? inputs = PreshaderInputs.Of(uniformExpressionSet);
-        if (inputs is null)
-        {
-            return null;
-        }
-
-        byte[] opcodeData = inputs.Opcodes;
-        NumericParameter[] uniformNumericParameters = inputs.Numeric;
+        byte[] opcodeData = expressions.Opcodes;
         ConstantBufferParameter materialBuffer = new()
         {
             Name = "Material",
-            Size = checked((int)constantBufferSize)
+            Size = expressions.ConstantBufferSize,
         };
 
-        string[] preshaderNames = inputs.Names;
-        IReadOnlyList<IReadOnlyList<string>> uniformTextureParameters = inputs.TextureNames;
-
-        (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes, int numericRegionEnd) = ComputeNumericLayout(uniformExpressionSet, (int)constantBufferSize);
+        string[] preshaderNames = expressions.Names;
+        IReadOnlyList<IReadOnlyList<string>> uniformTextureParameters = expressions.TextureNames;
+        int vtPageTableBytes = expressions.VirtualPageTableBytes;
+        int vtUniformBytes = expressions.VirtualUniformBytes;
+        int numericRegionEnd = expressions.NumericRegionEnd;
+        int preshaderBufferStart = vtPageTableBytes + vtUniformBytes;
 
         ResetMaterialTables(materialPath ?? string.Empty);
-        RecordParams(materialPath ?? string.Empty, uniformNumericParameters);
 
         HashSet<int> seenOffsets = new();
         HashSet<string> seenNames = new(StringComparer.Ordinal);
@@ -262,43 +180,30 @@ internal static class MaterialConstantBufferReader
             seenNames.Add("VTPackedUniform");
         }
 
-        foreach (FMaterialUniformPreshaderHeader preshader in uniformPreshaders)
+        foreach (MaterialExpressions.Program program in expressions.Programs)
         {
-            uint opcodeOffset = preshader.OpcodeOffset;
-            uint opcodeSize = preshader.OpcodeSize;
-            uint fieldIndex = preshader is FMaterialUniformPreshaderHeader_5_1 fielded ? fielded.FieldIndex : 0;
-            uint numFields = preshader is FMaterialUniformPreshaderHeader_5_1 counted ? counted.NumFields : 0;
-            if (numFields < 1 || fieldIndex + numFields > (uint)uniformPreshaderFields.Length)
-            {
-                continue;
-            }
+            uint opcodeOffset = program.OpcodeOffset;
+            uint opcodeSize = program.OpcodeSize;
+            NumericParameter[] uniformNumericParameters = program.Parameters;
+            int numFields = program.Fields.Count;
 
             List<float[]>? stackValues = TryEvaluatePreshaderStack(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters);
 
             TryEvaluatePreshader(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters,
                 out string? opcodeProgram, preshaderNames, uniformTextureParameters);
 
-            for (uint fieldSlot = 0; fieldSlot < numFields; fieldSlot++)
+            for (int fieldSlot = 0; fieldSlot < numFields; fieldSlot++)
             {
-            FMaterialUniformPreshaderField field = uniformPreshaderFields[checked((int)(fieldIndex + fieldSlot))];
-            string rawFieldType = field.Type.ToString();
-            FieldKind kind = TryMapFieldType(rawFieldType, out int rows);
+            MaterialExpressions.Field field = program.Fields[fieldSlot];
+            FieldKind kind = TryMapFieldType(field.Type, out int rows);
             if (kind == FieldKind.Unknown)
             {
-                if (Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG") == "1")
-                {
-                    Console.WriteLine($"[preshader-field] 未识别字段类型 '{rawFieldType}' @cb={preshaderBufferStart + checked((int)field.BufferOffset * 4)} mat={materialPath}");
-                }
                 continue;
             }
 
-            int byteOffset = preshaderBufferStart + checked((int)field.BufferOffset * 4);
+            int byteOffset = field.ByteOffset;
             if (!seenOffsets.Add(byteOffset))
             {
-                if (Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG") == "1")
-                {
-                    Console.WriteLine($"[preshader-dup] 偏移 {byteOffset}(= [{byteOffset / 16}][{byteOffset % 16 / 4}])被重复写,丢弃后来者 mat={materialPath}");
-                }
                 continue;
             }
 
@@ -307,7 +212,7 @@ internal static class MaterialConstantBufferReader
 
             float[]? evaluated = stackValues == null ? null
                 : numFields == 1 ? stackValues[^1]
-                : stackValues.Count == numFields ? stackValues[checked((int)fieldSlot)]
+                : stackValues.Count == numFields ? stackValues[fieldSlot]
                 : null;
             DumpPreshaderDebug(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters, byteOffset, materialPath, rows, baseName);
             switch (kind)
@@ -316,8 +221,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Numeric:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
-                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, checked((int)fieldSlot), checked((int)numFields), opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
+                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, fieldSlot, numFields, opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
                     AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Float);
                     break;
@@ -325,8 +229,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Int:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
-                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, checked((int)fieldSlot), checked((int)numFields), opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
+                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, fieldSlot, numFields, opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
                     AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Int);
                     break;
@@ -334,8 +237,7 @@ internal static class MaterialConstantBufferReader
                 case FieldKind.Bool:
                 {
                     string memberName = RegisterUniqueName(seenNames, baseName, byteOffset);
-                    RecordEvaluated(materialPath, memberName, rows, evaluated, byteOffset - preshaderBufferStart, opcodeProgram);
-                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, checked((int)fieldSlot), checked((int)numFields), opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
+                    RecordField(materialPath, new PreshaderField(memberName, byteOffset, rows, opcodeOffset, opcodeSize, fieldSlot, numFields, opcodeProgram, ReferencedParameters(opcodeData, opcodeOffset, opcodeSize, uniformNumericParameters)));
                     for (int comp = 1; comp < rows; comp++) seenOffsets.Add(byteOffset + comp * 4);
                     AddVectorMember(vectorParams, memberName, byteOffset, rows, ShaderParamType.Bool);
                     break;
@@ -373,26 +275,11 @@ internal static class MaterialConstantBufferReader
             }
         }
 
-        bool preshaderAsArray = Environment.GetEnvironmentVariable("RURI_PRESHADER_AS_ARRAY") != "0";
-        if (preshaderAsArray && numericRegionEnd > preshaderBufferStart)
-        {
-            vectorParams.RemoveAll(v => v.Index >= preshaderBufferStart && v.Index < numericRegionEnd);
-            matrixParams.RemoveAll(m => m.Index >= preshaderBufferStart && m.Index < numericRegionEnd);
-            vectorParams.Add(new VectorParameter
-            {
-                Name = "PreshaderBuffer",
-                NameIndex = -1,
-                Type = ShaderParamType.Float,
-                Index = preshaderBufferStart,
-                ArraySize = (numericRegionEnd - preshaderBufferStart) / 16,
-                IsMatrix = false,
-                RowCount = 4,
-                ColumnCount = 1,
-            });
-        }
-
-        bool fillGaps = Environment.GetEnvironmentVariable("RURI_PRESHADER_FILL_GAPS") == "1";
-        for (int gapOffset = fillGaps ? preshaderBufferStart : numericRegionEnd; gapOffset + 4 <= numericRegionEnd; gapOffset += 4)
+        // Every register the numeric region holds ends up a member: one the programs named, or
+        // an explicitly unmapped one. A buffer with holes in it is a buffer whose later offsets
+        // a reader cannot trust, and one collapsed into a single array is a buffer with no names
+        // at all -- which is what a material's constants are read for.
+        for (int gapOffset = preshaderBufferStart; gapOffset + 4 <= numericRegionEnd; gapOffset += 4)
         {
             if (!seenOffsets.Add(gapOffset)) continue;
             string gapName = RegisterUniqueName(seenNames, $"Unmapped_at_{gapOffset}", gapOffset);
@@ -407,33 +294,6 @@ internal static class MaterialConstantBufferReader
         materialBuffer.VectorParameters = vectorParams.OrderBy(static p => p.Index).ToArray();
         materialBuffer.MatrixParameters = matrixParams.OrderBy(static p => p.Index).ToArray();
         return materialBuffer;
-    }
-
-    private static (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes, int numericEnd) ComputeNumericLayout(FUniformExpressionSet uniformExpressionSet, int constantBufferSize)
-    {
-        int preshaderBufferBytes = Math.Max(0, (int)uniformExpressionSet.UniformPreshaderBufferSize) * 16;
-
-        FRHIUniformBufferResource[]? resources = uniformExpressionSet.UniformBufferLayoutInitializer.Resources;
-        int numericEnd = resources is { Length: > 0 } ? (int)resources[0].MemberOffset : constantBufferSize;
-
-        FMaterialTextureParameterInfo[][]? textureParams = uniformExpressionSet.UniformTextureParameters;
-        int virtualCount = textureParams is { Length: > 5 } ? textureParams[5]?.Length ?? 0 : 0;
-        int vtUniformBytes = virtualCount * 16;
-
-        int vtPageTableBytes = numericEnd - preshaderBufferBytes - vtUniformBytes;
-        if (vtPageTableBytes < 0)
-        {
-            vtPageTableBytes = 0;
-        }
-
-        int preshaderBufferStart = vtPageTableBytes + vtUniformBytes;
-
-        if (int.TryParse(Environment.GetEnvironmentVariable("RURI_PRESHADER_OFFSET_DELTA"), out int delta))
-        {
-            preshaderBufferStart += delta;
-        }
-
-        return (preshaderBufferStart, vtPageTableBytes, vtUniformBytes, numericEnd);
     }
 
     private static string RegisterUniqueName(HashSet<string> seenNames, string candidate, int byteOffset)
@@ -524,6 +384,9 @@ internal static class MaterialConstantBufferReader
         return new string(chars[..numE]);
     }
 
+    /// <summary>The operation that reads one numeric parameter, as this evaluator numbers it.</summary>
+    private const byte ParameterOpcode = 3;
+
     private static string DerivePreshaderName(byte[] data, uint offset, uint size, NumericParameter[] parameters, int byteOffset, string? materialPath = null, int rows = 0, string[]? preshaderNames = null, IReadOnlyList<IReadOnlyList<string>>? textureParameters = null)
     {
         string anonymous = $"f_{byteOffset}";
@@ -531,7 +394,7 @@ internal static class MaterialConstantBufferReader
         {
             return anonymous;
         }
-        if (data[offset] != 3)
+        if (TranslateOpcode(data[offset]) != ParameterOpcode)
         {
             string? evaluatedFromNonParamLead = TryEvaluatePreshader(data, offset, size, parameters, preshaderNames, textureParameters);
             if (evaluatedFromNonParamLead != null) return evaluatedFromNonParamLead;

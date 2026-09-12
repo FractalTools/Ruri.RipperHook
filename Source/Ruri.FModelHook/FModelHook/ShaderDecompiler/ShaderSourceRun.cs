@@ -36,8 +36,8 @@ public static class ShaderSourceRun
         }
 
         string gameVersion = request.Provider.Versions.Game.ToString();
-        MaterialConstantBufferReader.PreshaderVersion = PreshaderVersionOf(gameVersion, log);
         EngineMetadata metadata = EngineMetadata.Load(request.EngineUbMetadataDirectory, gameVersion, log, logError);
+        MaterialConstantBufferReader.Opcodes = metadata.PreshaderOpcodes;
 
         using ShaderMapCatalog catalog = ShaderMapCatalog.Open(request.Provider, log, logError);
         Dictionary<string, List<(ShaderMapTarget Target, ShaderMapCatalog.Placement Placement)>> byArchive =
@@ -242,28 +242,6 @@ public static class ShaderSourceRun
     }
 
     /// <summary>The preshader opcode layout an engine version writes, from the game's EGame name.</summary>
-    internal static UeMaterialPreshaderVersion PreshaderVersionOf(string? gameVersionEnum, Action<string>? log)
-    {
-        if (string.IsNullOrWhiteSpace(gameVersionEnum))
-        {
-            return UeMaterialPreshaderVersion.Ue51;
-        }
-        string? baseUe = gameVersionEnum!.StartsWith("GAME_UE5_", StringComparison.Ordinal)
-            ? gameVersionEnum
-            : EngineUbMetadataRegistry.TryDeriveBaseUeFromEGameForShaderTypes(gameVersionEnum, out string derived) ? derived : null;
-        const string prefix = "GAME_UE5_";
-        if (string.IsNullOrEmpty(baseUe) || !baseUe!.StartsWith(prefix, StringComparison.Ordinal)
-            || !int.TryParse(baseUe.AsSpan(prefix.Length), out int minor))
-        {
-            return UeMaterialPreshaderVersion.Ue51;
-        }
-        UeMaterialPreshaderVersion picked =
-            minor >= 5 ? UeMaterialPreshaderVersion.Ue55 :
-            minor >= 4 ? UeMaterialPreshaderVersion.Ue54 :
-                         UeMaterialPreshaderVersion.Ue51;
-        log?.Invoke($"[ShaderSource] preshader-opcode layout = {picked} (from {gameVersionEnum}{(baseUe == gameVersionEnum ? "" : $" -> {baseUe}")})");
-        return picked;
-    }
 }
 
 /// <summary>
@@ -273,28 +251,31 @@ public static class ShaderSourceRun
 internal sealed class EngineMetadata
 {
     private EngineMetadata(EngineUbMetadataRegistry uniformBuffers, ShaderTypeSeedRegistry shaderTypes,
-        HashNameIndex vertexFactoryTypes, HashNameIndex pipelineTypes)
+        HashNameIndex vertexFactoryTypes, HashNameIndex pipelineTypes, MaterialPreshaderOpcodes preshaderOpcodes)
     {
         UniformBuffers = uniformBuffers;
         ShaderTypes = shaderTypes;
         VertexFactoryTypes = vertexFactoryTypes;
         PipelineTypes = pipelineTypes;
+        PreshaderOpcodes = preshaderOpcodes;
     }
 
     public EngineUbMetadataRegistry UniformBuffers { get; }
     public ShaderTypeSeedRegistry ShaderTypes { get; }
     public HashNameIndex VertexFactoryTypes { get; }
     public HashNameIndex PipelineTypes { get; }
+    public MaterialPreshaderOpcodes PreshaderOpcodes { get; }
 
     public static EngineMetadata Load(string? directory, string gameVersion, Action<string> log, Action<string> logError)
     {
-        string root = directory ?? Path.Combine(AppContext.BaseDirectory, "EngineUbMetadata");
+        string root = directory ?? ShaderSourceRequest.DefaultEngineUbMetadataDirectory;
         bool tryBase = ShaderDecompilerSettingsAccess.Current.TryMatchBaseEngineVersion;
         string? game = string.IsNullOrEmpty(gameVersion) ? null : gameVersion;
         return new EngineMetadata(
             EngineUbMetadataRegistry.LoadForGame(root, game, tryBase, log, logError),
             ShaderTypeSeedRegistry.LoadForGame(root, game, tryBase, log, logError),
             HashNameIndex.LoadForGame(root, "_VertexFactoryType", game, tryBase, log, logError),
-            HashNameIndex.LoadForGame(root, "_ShaderPipelineType", game, tryBase, log, logError));
+            HashNameIndex.LoadForGame(root, "_ShaderPipelineType", game, tryBase, log, logError),
+            MaterialPreshaderOpcodes.LoadForGame(root, game, tryBase, log, logError));
     }
 }

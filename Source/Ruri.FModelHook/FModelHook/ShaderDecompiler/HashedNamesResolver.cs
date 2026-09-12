@@ -62,7 +62,7 @@ internal static class HashedNamesResolver
     private static Dictionary<string, string> LoadPrecomputedHashIndex(string typeKindFolder)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        string root = Path.Combine(AppContext.BaseDirectory, "EngineUbMetadata");
+        string root = ShaderSourceRequest.DefaultEngineUbMetadataDirectory;
         if (!Directory.Exists(root))
         {
             string? moduleDir = Path.GetDirectoryName(typeof(HashedNamesResolver).Assembly.Location);

@@ -186,10 +186,6 @@ internal static class ShaderLabEmitter
             PropertiesBlock = map.PropertiesBlock,
             MaterialTextureOrder = new List<string>(map.MaterialTextureOrder),
             MaterialTextureBuckets = new List<int>(map.MaterialTextureBuckets),
-            MaterialCbufferValues = new Dictionary<string, string>(map.MaterialCbufferValues, StringComparer.Ordinal),
-            MaterialCbufferOffsets = new Dictionary<string, int>(map.MaterialCbufferOffsets, StringComparer.Ordinal),
-            MaterialCbufferPrograms = new Dictionary<string, string>(map.MaterialCbufferPrograms, StringComparer.Ordinal),
-            MaterialCbufferParams = new Dictionary<string, string>(map.MaterialCbufferParams, StringComparer.Ordinal),
             SubShaderTags = map.SubShaderTags,
             PassCommands = map.PassCommands,
             Programs = outputs
@@ -230,54 +226,6 @@ internal static class ShaderLabEmitter
         return map.ContainerByShaderIndex.GetValueOrDefault(archiveShaderIndex);
     }
 
-    private static void WriteMaterialCbufferValues(StringBuilder sb, UeShaderLabContainerMetadata metadata)
-    {
-        if (metadata.MaterialCbufferValues.Count == 0) return;
-        if (metadata.MaterialCbufferParams.Count > 0)
-        {
-            sb.AppendLine("    // MaterialCbufferParams:");
-            foreach (KeyValuePair<string, string> kv in metadata.MaterialCbufferParams.OrderBy(static p => p.Key, StringComparer.Ordinal))
-            {
-                sb.AppendLine($"    //   \"{kv.Key}\" = {kv.Value}");
-            }
-        }
-
-        sb.AppendLine("    // MaterialCbufferValues:");
-        foreach (KeyValuePair<string, string> kv in metadata.MaterialCbufferValues.OrderBy(static p => p.Key, StringComparer.Ordinal))
-        {
-            string program = metadata.MaterialCbufferPrograms.TryGetValue(kv.Key, out string? prog) && !string.IsNullOrEmpty(prog)
-                ? $" := {prog}"
-                : string.Empty;
-
-            if (metadata.MaterialCbufferOffsets.TryGetValue(kv.Key, out int off))
-            {
-                sb.AppendLine($"    //   [{off / 16}][{off % 16 / 4}] {kv.Key} = {kv.Value}{program}");
-            }
-            else
-            {
-                sb.AppendLine($"    //   {kv.Key} = {kv.Value}{program}");
-            }
-        }
-    }
-
-    private static Dictionary<string, string> LookupCbufferValues(ShaderMapInfo map)
-    {
-        var table = MaterialConstantBufferReader.EvaluatedCbufferValues;
-        foreach (string candidate in new[] { map.PrimaryName }.Concat(map.Assets))
-        {
-            if (string.IsNullOrEmpty(candidate)) continue;
-            foreach (KeyValuePair<string, Dictionary<string, string>> entry in table)
-            {
-                if (entry.Key.EndsWith(candidate, StringComparison.OrdinalIgnoreCase)
-                    || candidate.EndsWith(entry.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return new Dictionary<string, string>(entry.Value, StringComparer.Ordinal);
-                }
-            }
-        }
-        return new Dictionary<string, string>(StringComparer.Ordinal);
-    }
-
     private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem, HashSet<string> splittableStages)
     {
         StringBuilder sb = new();
@@ -292,16 +240,6 @@ internal static class ShaderLabEmitter
                 sb.AppendLine($"    //   {material}");
             }
         }
-        if (metadata.MaterialTextureOrder.Count > 0)
-        {
-            sb.AppendLine("    // MaterialTextureOrder:");
-            for (int i = 0; i < metadata.MaterialTextureOrder.Count; i++)
-            {
-                string bucket = i < metadata.MaterialTextureBuckets.Count ? $" bucket={metadata.MaterialTextureBuckets[i]}" : "";
-                sb.AppendLine($"    //   [{i}] {metadata.MaterialTextureOrder[i]}{bucket}");
-            }
-        }
-        WriteMaterialCbufferValues(sb, metadata);
         if (!string.IsNullOrEmpty(metadata.PropertiesBlock))
         {
             foreach (string line in metadata.PropertiesBlock.Split('\n'))
@@ -617,6 +555,13 @@ internal static class ShaderLabEmitter
         return SanitizeIdent(string.IsNullOrEmpty(firstArg) ? head : (head + "_" + firstArg));
     }
 
+
+    /// <summary>
+    /// A material texture's name as the emitted source spells it. The order list is read back off
+    /// the symbols the decompiler HANDED BACK, which already carry the buffer they belong to, so
+    /// the prefix is put on only when it is not there yet -- doubling it made every already-named
+    /// slot disagree with itself and the ordering was abandoned every single time.
+    /// </summary>
     private static void ApplyMaterialTextureOrder(
         string source,
         List<(string Ident, string HlslType, string UbmtKind, string SlotPrefix, string SlotIdx)> anons,
@@ -678,12 +623,6 @@ internal static class ShaderLabEmitter
         }
     }
 
-    /// <summary>
-    /// A material texture's name as the emitted source spells it. The order list is read back off
-    /// the symbols the decompiler HANDED BACK, which already carry the buffer they belong to, so
-    /// the prefix is put on only when it is not there yet -- doubling it made every already-named
-    /// slot disagree with itself and the ordering was abandoned every single time.
-    /// </summary>
     private static string MaterialSlotName(string stated)
     {
         string identifier = SanitizeIdent(stated);
@@ -789,6 +728,7 @@ internal static class ShaderLabEmitter
             ApplyUsagePatternMatches(result, anons, rename, claimedByOrdered);
 
             ApplyMaterialTextureOrder(result, anons, rename, claimedByOrdered, materialTextureOrder);
+
 
             Dictionary<(string, string), int> unclaimedByType = new();
             for (int i = 0; i < anons.Count; i++)
@@ -1165,13 +1105,9 @@ internal static class ShaderLabEmitter
 
         public List<int> MaterialTextureBuckets { get; set; } = new();
 
-        public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
 
-        public Dictionary<string, int> MaterialCbufferOffsets { get; set; } = new(StringComparer.Ordinal);
 
-        public Dictionary<string, string> MaterialCbufferPrograms { get; set; } = new(StringComparer.Ordinal);
 
-        public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
         public List<UeShaderLabProgramData> Programs { get; set; } = new();
         public string PropertiesBlock { get; set; } = string.Empty;
         public string SubShaderTags { get; set; } = string.Empty;

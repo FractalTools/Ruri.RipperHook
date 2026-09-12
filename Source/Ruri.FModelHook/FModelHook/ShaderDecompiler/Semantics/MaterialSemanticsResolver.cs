@@ -65,7 +65,8 @@ public sealed class MaterialSemanticsResolver : IDisposable
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.trace = trace ?? throw new ArgumentNullException(nameof(trace));
         catalog = new Lazy<ShaderMapCatalog>(() => ShaderMapCatalog.Open(provider, log, log), LazyThreadSafetyMode.ExecutionAndPublication);
-        MaterialConstantBufferReader.PreshaderVersion = ShaderSourceRun.PreshaderVersionOf(provider.Versions.Game.ToString(), trace);
+        MaterialConstantBufferReader.Opcodes = MaterialPreshaderOpcodes.LoadForGame(
+            ShaderSourceRequest.DefaultEngineUbMetadataDirectory, provider.Versions.Game.ToString(), tryBaseFallback: true, trace);
     }
 
     /// <summary>The semantics of the shader map this material renders with, or the reason there are none.</summary>

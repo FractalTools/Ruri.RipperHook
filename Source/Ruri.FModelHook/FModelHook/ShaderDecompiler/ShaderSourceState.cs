@@ -36,6 +36,18 @@ public sealed class ShaderSourceRequest
 
     public string? EngineUbMetadataDirectory { get; init; }
 
+    /// <summary>
+    /// Where the engine dumps live when a request names no folder: beside the assembly that reads
+    /// them, which is where they are built. Asking the PROCESS for its base directory answers with
+    /// the host's folder and, in a host that supplies none at all, with nothing -- and a relative
+    /// path never resolved, so every engine fact silently read as absent under that host.
+    /// </summary>
+    public static string DefaultEngineUbMetadataDirectory => Path.Combine(
+        Path.GetDirectoryName(typeof(ShaderSourceRequest).Assembly.Location) is { Length: > 0 } beside
+            ? beside
+            : AppContext.BaseDirectory,
+        "EngineUbMetadata");
+
     public Action<string>? Log { get; init; }
 
     public Action<string>? LogError { get; init; }
@@ -119,13 +131,9 @@ internal sealed class ShaderMapInfo
 
     public List<int> MaterialTextureBuckets { get; set; } = new();
 
-    public Dictionary<string, string> MaterialCbufferValues { get; set; } = new(StringComparer.Ordinal);
 
-    public Dictionary<string, int> MaterialCbufferOffsets { get; set; } = new(StringComparer.Ordinal);
 
-    public Dictionary<string, string> MaterialCbufferPrograms { get; set; } = new(StringComparer.Ordinal);
 
-    public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
     public string SubShaderTags { get; set; } = string.Empty;
     public string PassCommands { get; set; } = string.Empty;
 
