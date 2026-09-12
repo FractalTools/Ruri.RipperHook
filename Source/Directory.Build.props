@@ -1,0 +1,49 @@
+<Project>
+    <PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+		<LangVersion>preview</LangVersion>
+        <IsTrimmable>true</IsTrimmable>
+        <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+        <DebugType>embedded</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+        <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+
+        <!-- Every project under Source/ builds into ONE folder, because what ships IS one
+             folder: the Unity reader, the Unreal reader and both dependency closures load
+             into a single process, and a host that embeds them (Blender, Painter, the CLI)
+             is told one path and finds everything. Splitting them across the two upstream
+             submodules' own bin folders is what forced a module to announce itself to the
+             kernel by absolute path, and a host to carry a second setting for the decoder.
+
+             One folder means one version of each package the two closures share, and which
+             one lands is settled by BUILD ORDER, not by chance: Ruri.FModelHook references
+             the kernel, so its restore graph is the superset and resolves every shared
+             package to the higher of the two. Building the solution orders it that way by
+             the reference graph alone and leaves the highest of all ten (measured) in place.
+             Building a kernel project ALONE afterwards copies that project's own narrower
+             picks over some of them, which is harmless for the kernel and a downgrade for
+             the module, so a single-project build is for iterating and the solution build
+             is what a host should be pointed at. -->
+        <RuriOutputRoot>$(MSBuildThisFileDirectory)0Bins\</RuriOutputRoot>
+        <OutputPath>$(RuriOutputRoot)$(Configuration)\</OutputPath>
+        <IntermediateOutputPath>$(RuriOutputRoot)obj\$(MSBuildProjectName)\$(Configuration)\</IntermediateOutputPath>
+
+        <Version>1.0.0.0</Version>
+        <AssemblyVersion>$(Version)</AssemblyVersion>
+        <Copyright>Copyright © ShiyumeMeguri</Copyright>
+        <Authors>ShiyumeMeguri</Authors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Using Include="System"/>
+        <Using Include="System.Collections.Generic"/>
+        <Using Include="System.Diagnostics.CodeAnalysis"/>
+        <Using Include="System.IO"/>
+        <Using Include="System.Linq"/>
+        <Using Include="System.Threading"/>
+        <Using Include="System.Threading.Tasks"/>
+    </ItemGroup>
+</Project>

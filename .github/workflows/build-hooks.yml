@@ -1,0 +1,150 @@
+name: Build Hooks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: build-hooks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build-fmodelhook:
+    name: Build FModelHook
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Update required submodules
+        shell: pwsh
+        # FModelHook references Ruri.RipperHook (its Ripper/ tree is the Unreal decoder the
+        # RipperHook hosts load as a module), so the AssetRipper graph is part of this build too.
+        # git aborts the whole update when any path here is missing from .gitmodules, leaving
+        # every submodule uninitialized. Unchecked, that surfaces as thousands of CS0234s in
+        # the build step instead of here, so every call is checked and the checkout asserted.
+        run: |
+          $submodules = @("FModel", "AssetRipper", "Source/Ruri.ShaderDecompiler")
+          git submodule sync --recursive
+          if ($LASTEXITCODE -ne 0) { throw "git submodule sync failed ($LASTEXITCODE)" }
+          git submodule update --init --recursive --jobs 4 -- @submodules
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed ($LASTEXITCODE)" }
+          git submodule status --recursive
+          foreach ($path in $submodules) {
+            $status = @(git submodule status -- $path)
+            if ($LASTEXITCODE -ne 0 -or $status.Count -eq 0) { throw "submodule '$path' is not declared in .gitmodules" }
+            foreach ($line in $status) {
+              if ($line -match '^-') { throw "submodule '$path' was not checked out: $line" }
+            }
+          }
+
+      - name: Show .NET info
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Build FModelHook GUI
+        shell: pwsh
+        # NuGet sources come from the repo-root nuget.config (nuget.org + SamboyDev); no
+        # --configfile, so AssetRipper\nuget.config never shadows nuget.org.
+        # -p:PureRelease=true reaches the referenced Ruri.RipperHook: the game-hook submodule
+        # is not checked out here, and the pure kernel is what a module ships against.
+        run: dotnet build "Source\Ruri.FModelHook.GUI\Ruri.FModelHook.GUI.csproj" -c $env:BUILD_CONFIGURATION -p:PureRelease=true -m:1
+
+      - name: Build FModelHook CLI
+        shell: pwsh
+        # Sibling exe project (not referenced by the GUI project), shares the GUI's
+        # output folder -- must be built explicitly or its .exe never gets produced.
+        run: dotnet build "Source\Ruri.FModelHook.CLI\Ruri.FModelHook.CLI.csproj" -c $env:BUILD_CONFIGURATION -p:PureRelease=true -m:1
+
+      - name: Upload FModelHook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModelHook-${{ env.BUILD_CONFIGURATION }}
+          path: Source/0Bins/Release/**
+          if-no-files-found: error
+
+  build-pure-ripperhook:
+    name: Build Pure RipperHook
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Update required submodules
+        shell: pwsh
+        # Only what Ruri.RipperHook.GUI / .CLI actually reference: FModel is not in their
+        # project graph, and Ruri.GameHook is stripped by PureRelease.
+        # git aborts the whole update when any path here is missing from .gitmodules, leaving
+        # every submodule uninitialized. Unchecked, that surfaces as thousands of CS0234s in
+        # the build step instead of here, so every call is checked and the checkout asserted.
+        run: |
+          $submodules = @("AssetRipper", "Source/Ruri.ShaderDecompiler")
+          git submodule sync --recursive
+          if ($LASTEXITCODE -ne 0) { throw "git submodule sync failed ($LASTEXITCODE)" }
+          git submodule update --init --recursive --jobs 4 -- @submodules
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed ($LASTEXITCODE)" }
+          git submodule status --recursive
+          foreach ($path in $submodules) {
+            $status = @(git submodule status -- $path)
+            if ($LASTEXITCODE -ne 0 -or $status.Count -eq 0) { throw "submodule '$path' is not declared in .gitmodules" }
+            foreach ($line in $status) {
+              if ($line -match '^-') { throw "submodule '$path' was not checked out: $line" }
+            }
+          }
+
+      - name: Show .NET info
+        shell: pwsh
+        run: dotnet --info
+
+      - name: Build Pure RipperHook
+        working-directory: Source/Ruri.RipperHook.GUI
+        shell: cmd
+        # NuGet sources come from the repo-root nuget.config (nuget.org + SamboyDev).
+        # AssetRipper\nuget.config only declares SamboyDev and silently shadows nuget.org
+        # when passed via --configfile, causing NU1101 for public packages like
+        # K4os.Compression.LZ4 / SharpCompress / Microsoft.NET.ILLink.Tasks.
+        run: dotnet build -c Release -p:PureRelease=true
+
+      - name: Build RipperHook CLI
+        working-directory: Source/Ruri.RipperHook.CLI
+        shell: cmd
+        # Sibling exe project (not referenced by the GUI project), shares the GUI's
+        # output folder -- must be built explicitly or its .exe never gets produced.
+        # Same -p:PureRelease=true as the GUI build so both share the Ruri.GameHook
+        # strip + Release project-reference config (see Ruri.RipperHook.csproj).
+        run: dotnet build -c Release -p:PureRelease=true
+
+      - name: Upload Pure RipperHook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RipperHook-PureRelease
+          path: Source/0Bins/Release/**
+          if-no-files-found: error

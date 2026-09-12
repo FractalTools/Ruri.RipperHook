@@ -1,0 +1,102 @@
+{
+  "Name": "MeshParticleVF",
+  "EngineVersion": "5.5.4",
+  "EngineSource": "Engine/Source/Runtime/Engine/Public/MeshParticleVertexFactory.h",
+  "LayoutHash": "0x00400100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "MeshParticleVF",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SubImageSize",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TexCoordWeightA",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "TexCoordWeightB",
+        "NameIndex": -1,
+        "Index": 20,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PrevTransformAvailable",
+        "NameIndex": -1,
+        "Index": 24,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DeltaSeconds",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bUseLocalSpace",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LWCTile",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UseVelocityForMotionBlur",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

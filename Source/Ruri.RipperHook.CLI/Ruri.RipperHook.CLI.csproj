@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AssemblyName>Ruri.RipperHook.CLI</AssemblyName>
+		<RootNamespace>Ruri.RipperHook.CLI</RootNamespace>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<!-- This runtimeconfig.json is ALSO what the pythonnet bridge boots CoreCLR with inside
+		     Blender/Painter (see ruri_pybridge pythonnet_bridge._runtime_config_path). The bridge's
+		     import pipeline is a throughput workload full of large parallel allocations (texture
+		     decode/encode, whole-closure exports); workstation GC serializes exactly that. -->
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+		<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Ruri.RipperHook\Ruri.RipperHook.csproj" />
+	</ItemGroup>
+
+</Project>

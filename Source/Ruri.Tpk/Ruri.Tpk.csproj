@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RootNamespace>Ruri.Tpk</RootNamespace>
+		<Nullable>enable</Nullable>
+		<InternalsAssemblyNames>AssetRipper.AssemblyDumper</InternalsAssemblyNames>
+		<NoWarn>CS0436</NoWarn>
+	</PropertyGroup>
+
+	<!-- The manifest shape and the ordinal encoding are one contract shared by the packer and the
+	     runtime that reads it back; linking the source keeps a single definition rather than a copy
+	     the two sides could drift apart on. -->
+	<ItemGroup>
+		<Compile Include="..\Ruri.Hook\Core\VersionKey.cs" Link="Contract\VersionKey.cs" />
+		<!-- The dump root's directory names ARE these enum values, and a generated hook has to name a
+		     real GameType, so both are linked rather than mirrored into a lookup that could drift. -->
+		<Compile Include="..\Ruri.RipperHook\Core\CustomEngineType.cs" Link="Contract\CustomEngineType.cs" />
+		<Compile Include="..\Ruri.RipperHook\Core\GameType.cs" Link="Contract\GameType.cs" />
+		<!-- Capture paths are matched against the SANITIZED node names the runtime builds, so the drift
+		     pass has to speak the same vocabulary instead of the raw dump's. -->
+		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeNameFixer.cs" Link="Contract\TypeTreeNameFixer.cs" />
+		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeManifest.cs" Link="Contract\TypeTreeManifest.cs" />
+		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeOrdinal.cs" Link="Contract\TypeTreeOrdinal.cs" />
+		<!-- The Unreal lane restates a .usmap as this custom engine's type trees with the very
+		     builder the runtime registers the mounted schema through, so the packed file and the
+		     live lineage can never disagree. -->
+		<Compile Include="..\Ruri.FModelHook\FModelHook\Unreal\TypeTree\UsmapTypeTreeBuilder.cs" Link="Unreal\UsmapTypeTreeBuilder.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AssetRipper.Tpk" Version="2.0.0" />
+		<PackageReference Include="AssetRipper.Tpk.TypeTrees.Json" Version="2.0.0" />
+		<ProjectReference Include="..\..\FModel\CUE4Parse\CUE4Parse\CUE4Parse.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
+		<!-- Build AR.AssemblyDumper but reference its output via Reference (below) so the
+		     IgnoresAccessChecksToGenerator publicizer kicks in for internals access: the tpk packer
+		     runs AR's real Pass002_RenameSubnodes so the shipped tpk uses AR's field names. -->
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.AssemblyDumper\AssetRipper.AssemblyDumper.csproj">
+			<ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+		</ProjectReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="AssetRipper.AssemblyDumper">
+			<HintPath>..\..\AssetRipper\Source\0Bins\AssetRipper.AssemblyDumper\$(Configuration)\AssetRipper.AssemblyDumper.dll</HintPath>
+			<SpecificVersion>False</SpecificVersion>
+			<Private>true</Private>
+		</Reference>
+		<Reference Include="AssetRipper.AssemblyDumper.Utils">
+			<HintPath>..\..\AssetRipper\Source\0Bins\AssetRipper.AssemblyDumper\$(Configuration)\AssetRipper.AssemblyDumper.Utils.dll</HintPath>
+			<SpecificVersion>False</SpecificVersion>
+			<Private>true</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Must match what AssetRipper.AssemblyDumper was compiled against: it is referenced as a
+		     built assembly (below), so a lower pin here resolves at runtime, not at build time. -->
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.1" />
+		<PackageReference Include="AsmResolver.Symbols.Pdb" Version="6.0.1" />
+		<!-- AssemblyDumper's SharedState ctor reads the doc-history file through AssetRipper.DocExtraction,
+		     which binds this version. Referenced explicitly so it lands in the packer's output folder. -->
+		<PackageReference Include="System.Text.Json" Version="11.0.0-preview.6.26359.118" />
+		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,42 @@
+{
+  "Name": "EtcParameters",
+  "EngineVersion": "5.4.4",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/VT/RuntimeVirtualTextureRender.cpp",
+  "LayoutHash": "0x01800100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "EtcParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "ALPHA_DISTANCE_TABLES",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 16,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RGB_DISTANCE_TABLES",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 8,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 384,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

@@ -1,0 +1,109 @@
+{
+  "Name": "FVisualizeSkyLightMipTreePS",
+  "EngineVersion": "5.1.1",
+  "EngineSource": "RaytracingSkylight.cpp",
+  "LayoutHash": "0xCF44DCCE32A8C3AD",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "DimensionsParameter",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "MipTreePosXParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "MipTreeNegXParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "MipTreePosYParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "MipTreeNegYParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "MipTreePosZParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "MipTreeNegZParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "MipTreePosXParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "MipTreeNegXParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "MipTreePosYParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "MipTreeNegYParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "MipTreePosZParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "MipTreeNegZParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}
