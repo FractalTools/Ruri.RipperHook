@@ -59,7 +59,6 @@ public static class UnrealDatasets
     public const string MatchParam = "match";
     public const string PathParam = "path";
     private const string SkeletalMeshClassName = "SkeletalMesh";
-    private const string WorldClassName = "World";
     public const string DataTableId = "unreal.datatable";
     public const string MeshGeometryId = "unreal.mesh.geometry";
     public const string MeshSkeletonId = "unreal.mesh.skeleton";
@@ -381,7 +380,9 @@ public static class UnrealDatasets
             return table.Build();
         }
         SourceBasis basis = UnrealBasis.Basis;
-        foreach (UObject export in provider.LoadPackage(file).GetExports())
+        List<UObject> exports = provider.LoadPackage(file).GetExports().ToList();
+        bool composed = false;
+        foreach (UObject export in exports)
         {
             UnrealSceneGraph.Collector collector = new();
             switch (export)
@@ -394,17 +395,17 @@ public static class UnrealDatasets
                     UnrealBlueprint.Collect(collector, actorClass);
                     break;
                 case USkeletalMesh or UStaticMesh:
-                    Row(table, basis, export.Name, -1, true, FTransform.Identity,
-                        export.GetPathName(), export is USkeletalMesh,
-                        string.Join(ListSeparator, UnrealComponents.MaterialPaths(export, [])),
-                        string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    Mesh(table, basis, export);
+                    composed = true;
                     continue;
                 case UFastGeoContainer container:
                     Geometry(table, basis, container);
+                    composed = true;
                     continue;
                 default:
                     continue;
             }
+            composed = true;
             List<UnrealSceneGraph.Placed> ordered = collector.Ordered();
             List<(int Parent, string Name, FTransform Transform, string Mesh, string Materials)> instances = new();
             for (int index = 0; index < ordered.Count; index++)
@@ -419,7 +420,49 @@ public static class UnrealDatasets
                     string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
             }
         }
+        if (!composed)
+        {
+            Named(table, basis, exports);
+        }
         return table.Build();
+    }
+
+    /// <summary>One mesh at rest: the package IS the model and nothing composes it.</summary>
+    private static void Mesh(TableBuilder table, SourceBasis basis, UObject export) =>
+        Row(table, basis, export.Name, -1, true, FTransform.Identity,
+            export.GetPathName(), export is USkeletalMesh,
+            string.Join(ListSeparator, UnrealComponents.MaterialPaths(export, [])),
+            string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+
+    /// <summary>
+    /// The meshes a package of pure DATA names, for a package that composes nothing.
+    ///
+    /// A studio that assembles a character out of parts at runtime ships neither a world nor a
+    /// blueprint for it: it ships a data asset whose properties name the skeletal meshes the
+    /// parts are, and the game puts them on one skeleton. Nothing here knows those properties'
+    /// names -- every property that POINTS AT a mesh is one, which is the only thing that has to
+    /// be true for the model to come out whole. Reached only when the package placed nothing by
+    /// itself, so a world or an actor that merely references a mesh is untouched.
+    /// </summary>
+    private static void Named(TableBuilder table, SourceBasis basis, List<UObject> exports)
+    {
+        HashSet<string> placed = new(StringComparer.Ordinal);
+        foreach (UObject export in exports)
+        {
+            foreach (FPropertyTag property in export.Properties)
+            {
+                if (property.Tag?.GenericValue is not FPackageIndex pointer || pointer.IsNull)
+                {
+                    continue;
+                }
+                UObject? named = pointer.Load();
+                if (named is not (USkeletalMesh or UStaticMesh) || !placed.Add(named.GetPathName()))
+                {
+                    continue;
+                }
+                Mesh(table, basis, named);
+            }
+        }
     }
 
     /// <summary>One component's row: what it renders, decided by what kind of component it is.</summary>
@@ -928,17 +971,23 @@ public static class UnrealDatasets
         return (skeletal, statics);
     }
 
-    /// <summary>What a cabmap row says a world package lists as -- the whole set a World produces, for the same reason a skeletal mesh needs its whole set.</summary>
-    private static readonly int[] WorldClassIds =
-        UnrealClasses.Of(WorldClassName, null).Select(static id => (int)id).ToArray();
+    /// <summary>The ground a world's cells cover, or none when the build states no bounds for them.</summary>
+    public static (double MinX, double MinY, double MaxX, double MaxY) Ground(IReadOnlyList<UnrealWorldCell> cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        double minX = double.PositiveInfinity, minY = double.PositiveInfinity;
+        double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
+        foreach (UnrealWorldCell cell in cells)
+        {
+            minX = Math.Min(minX, cell.Bounds.Min.X);
+            minY = Math.Min(minY, cell.Bounds.Min.Y);
+            maxX = Math.Max(maxX, cell.Bounds.Max.X);
+            maxY = Math.Max(maxY, cell.Bounds.Max.Y);
+        }
+        return minX <= maxX && minY <= maxY ? (minX, minY, maxX, maxY) : (0, 0, 0, 0);
+    }
 
-    /// <summary>
-    /// Every world the install ships, asked of the cabmap: the packages it lists a World in,
-    /// minus the ones a World Partition cook generated for another world's cells. A file
-    /// extension answers nothing here -- which of ".uasset" and ".umap" a cook writes a world
-    /// under is that cook's choice, and a studio that writes every package under one extension
-    /// still ships worlds -- so the class the map already carries is what decides.
-    /// </summary>
+    /// <summary>Every world the install ships, as <see cref="UnrealWorlds"/> reads them.</summary>
     private static ColumnTable Worlds(DataRequest request)
     {
         TableBuilder table = new(WorldsId, "world", "name", "partitioned", "cells#", "minX#", "minY#", "maxX#", "maxY#");
@@ -948,38 +997,11 @@ public static class UnrealDatasets
                 $"dataset '{WorldsId}' reads the cabmap; build or load one for this install first.");
         }
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
-        string generatedMarker = "/" + UnrealWorldPartition.GeneratedFolder + "/";
-        CabTable map = request.Map;
-        List<string> packages = new();
-        for (int id = 0; id < map.Count; id++)
+        foreach (UnrealWorld world in UnrealWorlds.All(provider, request.Map))
         {
-            string cab = map.CabName(id);
-            if (Holds(map, id, WorldClassIds) && !cab.Contains(generatedMarker, StringComparison.OrdinalIgnoreCase))
-            {
-                packages.Add(cab);
-            }
-        }
-        packages.Sort(StringComparer.OrdinalIgnoreCase);
-        foreach (string package in packages)
-        {
-            if (!provider.Files.TryGetValue(package, out GameFile? file)
-                || provider.LoadUncached(file) is not AbstractUePackage loaded)
-            {
-                continue;
-            }
-            IReadOnlyList<UnrealWorldCell> cells = UnrealWorldPartition.Cells(provider, loaded, package);
-            double minX = double.PositiveInfinity, minY = double.PositiveInfinity;
-            double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
-            foreach (UnrealWorldCell cell in cells)
-            {
-                minX = Math.Min(minX, cell.Bounds.Min.X);
-                minY = Math.Min(minY, cell.Bounds.Min.Y);
-                maxX = Math.Max(maxX, cell.Bounds.Max.X);
-                maxY = Math.Max(maxY, cell.Bounds.Max.Y);
-            }
-            bool bounded = minX <= maxX && minY <= maxY;
-            table.Row(package, file.NameWithoutExtension, UnrealWorldPartition.IsPartitioned(loaded) ? "1" : "0", cells.Count,
-                bounded ? minX : 0, bounded ? minY : 0, bounded ? maxX : 0, bounded ? maxY : 0);
+            (double minX, double minY, double maxX, double maxY) = Ground(world.Cells);
+            table.Row(world.Package, world.Name, world.Partitioned ? "1" : "0", world.Cells.Count,
+                minX, minY, maxX, maxY);
         }
         return table.Build();
     }
