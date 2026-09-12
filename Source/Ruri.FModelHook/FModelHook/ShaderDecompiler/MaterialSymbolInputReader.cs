@@ -1,35 +1,23 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
+using CUE4Parse.UE4.Assets.Exports.Material;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
+/// <summary>
+/// What a material's compiled expression set says its shaders' symbols are: the constant buffer
+/// the material fills, the numeric parameters that fill it, and how many resources of each kind
+/// its uniform buffer holds -- which is what tells a binding index which texture it is.
+/// </summary>
 internal static class SymbolInputsReader
 {
-    public static SymbolInputs? Read(string materialPath, string? shaderPlatform, JsonElement asset)
-    {
-        SymbolInputs inputs = new()
-        {
-            MaterialPath = materialPath,
-            ShaderPlatform = shaderPlatform,
-        };
+    private const int Standard2DBucket = 0;
+    private const int CubeBucket = 1;
+    private const int Array2DBucket = 2;
+    private const int ArrayCubeBucket = 3;
+    private const int VolumeBucket = 4;
+    private const int VirtualBucket = 5;
 
-        JsonElement? selectedLoadedResource = SelectLoadedMaterialResource(asset, shaderPlatform, ref inputs);
-        JsonElement? uniformExpressionSet = ResolveUniformExpressionSet(selectedLoadedResource);
-        if (uniformExpressionSet.HasValue)
-        {
-            ReadUniformExpressionSet(inputs, uniformExpressionSet.Value);
-        }
-
-        ReadFallbackNumericParameters(asset, inputs.NumericParameterInfos);
-        return inputs.NumericParameterInfos.Count == 0 && inputs.MaterialConstantBuffer == null
-            ? null
-            : inputs;
-    }
-
-    public static SymbolInputs? ReadFromUniformExpressionSet(string materialPath, string? shaderPlatform, JsonElement uniformExpressionSet)
+    public static SymbolInputs? ReadFromUniformExpressionSet(string materialPath, string? shaderPlatform, FUniformExpressionSet uniformExpressionSet)
     {
         SymbolInputs inputs = new()
         {
@@ -38,7 +26,16 @@ internal static class SymbolInputsReader
             UsedLoadedMaterialResources = true,
         };
 
-        ReadUniformExpressionSet(inputs, uniformExpressionSet);
+        inputs.MaterialConstantBuffer = MaterialConstantBufferReader.Read(uniformExpressionSet, inputs.MaterialPath);
+        foreach (FMaterialNumericParameterInfo parameter in uniformExpressionSet.UniformNumericParameters ?? [])
+        {
+            if (Info(parameter.ParameterInfo) is { } info)
+            {
+                inputs.NumericParameterInfos.Add(info);
+            }
+        }
+        inputs.MaterialResourceCounts = ResourceCounts(uniformExpressionSet);
+
         return inputs.NumericParameterInfos.Count == 0
                && inputs.MaterialConstantBuffer == null
                && inputs.MaterialResourceCounts == null
@@ -46,314 +43,82 @@ internal static class SymbolInputsReader
             : inputs;
     }
 
-    private static void ReadUniformExpressionSet(SymbolInputs inputs, JsonElement uniformExpressionSet)
+    private static MaterialUniformBufferLayout.MaterialResourceCounts? ResourceCounts(FUniformExpressionSet uniformExpressionSet)
     {
-        inputs.MaterialConstantBuffer = MaterialConstantBufferReader.Read(uniformExpressionSet, inputs.MaterialPath);
-        ReadUniformNumericParameters(uniformExpressionSet, inputs.NumericParameterInfos);
-        inputs.MaterialResourceCounts = ReadMaterialResourceCounts(uniformExpressionSet);
-    }
-
-    private static JsonElement? SelectLoadedMaterialResource(JsonElement asset, string? shaderPlatform, ref SymbolInputs inputs)
-    {
-        if (!asset.TryGetProperty("LoadedMaterialResources", out JsonElement loadedResources) || loadedResources.ValueKind != JsonValueKind.Array)
+        FMaterialTextureParameterInfo[][]? buckets = uniformExpressionSet.UniformTextureParameters;
+        if (buckets is null)
         {
             return null;
         }
 
-        foreach (JsonElement resource in loadedResources.EnumerateArray())
+        FMaterialExternalTextureParameterInfo[]? externalParameters = uniformExpressionSet.UniformExternalTextureParameters;
+        List<int>? virtualTextureStackLayers = null;
+        if (uniformExpressionSet.VTStacks is { } stacks)
         {
-            if (!resource.TryGetProperty("LoadedShaderMap", out JsonElement loadedShaderMap) || loadedShaderMap.ValueKind != JsonValueKind.Object)
+            virtualTextureStackLayers = new List<int>(stacks.Length);
+            foreach (FMaterialVirtualTextureStack stack in stacks)
             {
-                continue;
-            }
-
-            string? candidateShaderPlatform = ReadString(loadedShaderMap, "ShaderPlatform");
-            if (!string.IsNullOrWhiteSpace(shaderPlatform) && !string.Equals(candidateShaderPlatform, shaderPlatform, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            inputs.UsedLoadedMaterialResources = true;
-            return resource.Clone();
-        }
-
-        foreach (JsonElement resource in loadedResources.EnumerateArray())
-        {
-            inputs.UsedLoadedMaterialResources = true;
-            return resource.Clone();
-        }
-
-        return null;
-    }
-
-    private static JsonElement? ResolveUniformExpressionSet(JsonElement? loadedResource)
-    {
-        if (!loadedResource.HasValue)
-        {
-            return null;
-        }
-
-        JsonElement resource = loadedResource.Value;
-        if (!resource.TryGetProperty("LoadedShaderMap", out JsonElement loadedShaderMap) || loadedShaderMap.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        if (loadedShaderMap.TryGetProperty("MaterialShaderMapContent", out JsonElement materialShaderMapContent)
-            && materialShaderMapContent.ValueKind == JsonValueKind.Object
-            && materialShaderMapContent.TryGetProperty("UniformExpressionSet", out JsonElement uniformExpressionSet))
-        {
-            return uniformExpressionSet.Clone();
-        }
-
-        if (loadedShaderMap.TryGetProperty("Content", out JsonElement content)
-            && content.ValueKind == JsonValueKind.Object
-            && content.TryGetProperty("MaterialCompilationOutput", out JsonElement materialCompilationOutput)
-            && materialCompilationOutput.ValueKind == JsonValueKind.Object
-            && materialCompilationOutput.TryGetProperty("UniformExpressionSet", out JsonElement nestedUniformExpressionSet))
-        {
-            return nestedUniformExpressionSet.Clone();
-        }
-
-        return null;
-    }
-
-    private static MaterialUniformBufferLayout.MaterialResourceCounts? ReadMaterialResourceCounts(JsonElement uniformExpressionSet)
-    {
-        if (!uniformExpressionSet.TryGetProperty("UniformTextureParameters", out JsonElement textureParams) || textureParams.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        int standard2D = ReadTypedArrayLength(textureParams, 0);
-        int cube = ReadTypedArrayLength(textureParams, 1);
-        int array2D = ReadTypedArrayLength(textureParams, 2);
-        int arrayCube = ReadTypedArrayLength(textureParams, 3);
-        int volume = ReadTypedArrayLength(textureParams, 4);
-        int virtualCount = ReadTypedArrayLength(textureParams, 5);
-
-        int external = 0;
-        if (uniformExpressionSet.TryGetProperty("UniformExternalTextureParameters", out JsonElement externalParams) && externalParams.ValueKind == JsonValueKind.Array)
-        {
-            external = externalParams.GetArrayLength();
-        }
-
-        List<int>? vtStackLayers = null;
-        if (uniformExpressionSet.TryGetProperty("VTStacks", out JsonElement vtStacks) && vtStacks.ValueKind == JsonValueKind.Array)
-        {
-            vtStackLayers = new List<int>(vtStacks.GetArrayLength());
-            foreach (JsonElement stack in vtStacks.EnumerateArray())
-            {
-                vtStackLayers.Add(ReadVirtualTextureStackNumLayers(stack));
+                virtualTextureStackLayers.Add((int)stack.NumLayers);
             }
         }
-
-        int? totalResources = null;
-        if (uniformExpressionSet.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement ubl)
-            && ubl.ValueKind == JsonValueKind.Object
-            && ubl.TryGetProperty("Resources", out JsonElement resources)
-            && resources.ValueKind == JsonValueKind.Array)
-        {
-            totalResources = resources.GetArrayLength();
-        }
-
-        IReadOnlyList<string?>? std2dNames = ReadTextureAuthorNames(textureParams, 0);
-        IReadOnlyList<string?>? cubeNames = ReadTextureAuthorNames(textureParams, 1);
-        IReadOnlyList<string?>? a2dNames = ReadTextureAuthorNames(textureParams, 2);
-        IReadOnlyList<string?>? acubeNames = ReadTextureAuthorNames(textureParams, 3);
-        IReadOnlyList<string?>? volNames = ReadTextureAuthorNames(textureParams, 4);
-        IReadOnlyList<string?>? virtNames = ReadTextureAuthorNames(textureParams, 5);
-        IReadOnlyList<string?>? extNames = ReadExternalAuthorNames(uniformExpressionSet);
 
         return new MaterialUniformBufferLayout.MaterialResourceCounts(
-            Standard2D: standard2D,
-            Cube: cube,
-            Array2D: array2D,
-            ArrayCube: arrayCube,
-            Volume: volume,
-            External: external,
-            Virtual: virtualCount,
-            VirtualTextureStackLayerCounts: vtStackLayers,
-            TotalResourceCount: totalResources,
-            Standard2DAuthorNames: std2dNames,
-            CubeAuthorNames: cubeNames,
-            Array2DAuthorNames: a2dNames,
-            ArrayCubeAuthorNames: acubeNames,
-            VolumeAuthorNames: volNames,
-            ExternalAuthorNames: extNames,
-            VirtualAuthorNames: virtNames);
+            Standard2D: Count(buckets, Standard2DBucket),
+            Cube: Count(buckets, CubeBucket),
+            Array2D: Count(buckets, Array2DBucket),
+            ArrayCube: Count(buckets, ArrayCubeBucket),
+            Volume: Count(buckets, VolumeBucket),
+            External: externalParameters?.Length ?? 0,
+            Virtual: Count(buckets, VirtualBucket),
+            VirtualTextureStackLayerCounts: virtualTextureStackLayers,
+            TotalResourceCount: uniformExpressionSet.UniformBufferLayoutInitializer?.Resources?.Length,
+            Standard2DAuthorNames: AuthorNames(buckets, Standard2DBucket),
+            CubeAuthorNames: AuthorNames(buckets, CubeBucket),
+            Array2DAuthorNames: AuthorNames(buckets, Array2DBucket),
+            ArrayCubeAuthorNames: AuthorNames(buckets, ArrayCubeBucket),
+            VolumeAuthorNames: AuthorNames(buckets, VolumeBucket),
+            ExternalAuthorNames: ExternalAuthorNames(externalParameters),
+            VirtualAuthorNames: AuthorNames(buckets, VirtualBucket));
     }
 
-    private static IReadOnlyList<string?>? ReadTextureAuthorNames(JsonElement arrayOfArrays, int typeIndex)
+    private static int Count(FMaterialTextureParameterInfo[][] buckets, int bucket) =>
+        bucket >= 0 && bucket < buckets.Length ? buckets[bucket]?.Length ?? 0 : 0;
+
+    private static IReadOnlyList<string?>? AuthorNames(FMaterialTextureParameterInfo[][] buckets, int bucket)
     {
-        if (typeIndex < 0 || typeIndex >= arrayOfArrays.GetArrayLength())
+        if (bucket < 0 || bucket >= buckets.Length || buckets[bucket] is not { } parameters)
         {
             return null;
         }
-
-        JsonElement inner = arrayOfArrays[typeIndex];
-        if (inner.ValueKind != JsonValueKind.Array)
+        List<string?> names = new(parameters.Length);
+        foreach (FMaterialTextureParameterInfo parameter in parameters)
         {
-            return null;
-        }
-
-        List<string?> names = new(inner.GetArrayLength());
-        foreach (JsonElement entry in inner.EnumerateArray())
-        {
-            FMaterialParameterInfo? info = ParseMaterialParameterInfo(entry);
-            names.Add(info?.Name);
+            names.Add(PreshaderInputs.NameOf(parameter));
         }
         return names;
     }
 
-    private static IReadOnlyList<string?>? ReadExternalAuthorNames(JsonElement uniformExpressionSet)
+    private static IReadOnlyList<string?>? ExternalAuthorNames(FMaterialExternalTextureParameterInfo[]? parameters)
     {
-        if (!uniformExpressionSet.TryGetProperty("UniformExternalTextureParameters", out JsonElement external)
-            || external.ValueKind != JsonValueKind.Array)
+        if (parameters is null)
         {
             return null;
         }
-
-        List<string?> names = new(external.GetArrayLength());
-        foreach (JsonElement entry in external.EnumerateArray())
+        List<string?> names = new(parameters.Length);
+        foreach (FMaterialExternalTextureParameterInfo parameter in parameters)
         {
-            FMaterialParameterInfo? info = ParseMaterialParameterInfo(entry);
-            names.Add(info?.Name);
+            string? name = parameter.ParameterName.Text;
+            names.Add(string.IsNullOrWhiteSpace(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase) ? null : name);
         }
         return names;
     }
 
-    private static int ReadVirtualTextureStackNumLayers(JsonElement stack)
+    private static FMaterialParameterInfo? Info(FMemoryImageMaterialParameterInfo? parameterInfo)
     {
-        if (stack.ValueKind != JsonValueKind.Object)
-        {
-            return 0;
-        }
-
-        if (stack.TryGetProperty("NumLayers", out JsonElement numLayers) && numLayers.ValueKind == JsonValueKind.Number)
-        {
-            return numLayers.GetInt32();
-        }
-
-        if (stack.TryGetProperty("LayerUniformExpressionIndices", out JsonElement layers) && layers.ValueKind == JsonValueKind.Array)
-        {
-            int count = 0;
-            foreach (JsonElement element in layers.EnumerateArray())
-            {
-                if (element.ValueKind == JsonValueKind.Number && element.GetInt32() >= 0)
-                {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        return 0;
-    }
-
-    private static int ReadTypedArrayLength(JsonElement arrayOfArrays, int index)
-    {
-        if (index < 0 || index >= arrayOfArrays.GetArrayLength())
-        {
-            return 0;
-        }
-
-        JsonElement inner = arrayOfArrays[index];
-        return inner.ValueKind == JsonValueKind.Array ? inner.GetArrayLength() : 0;
-    }
-
-    private static void ReadUniformNumericParameters(JsonElement uniformExpressionSet, List<FMaterialParameterInfo> destination)
-    {
-        if (!uniformExpressionSet.TryGetProperty("UniformNumericParameters", out JsonElement numericParameters) || numericParameters.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        foreach (JsonElement parameter in numericParameters.EnumerateArray())
-        {
-            FMaterialParameterInfo? parameterInfo = ParseMaterialParameterInfo(parameter);
-            if (parameterInfo != null)
-            {
-                destination.Add(parameterInfo);
-            }
-        }
-    }
-
-    private static void ReadFallbackNumericParameters(JsonElement asset, List<FMaterialParameterInfo> destination)
-    {
-        if (!asset.TryGetProperty("Properties", out JsonElement properties) || properties.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
-        AppendMaterialParameterInfos(properties, "ScalarParameterValues", destination);
-        AppendMaterialParameterInfos(properties, "VectorParameterValues", destination);
-        AppendMaterialParameterInfos(properties, "DoubleVectorParameterValues", destination);
-    }
-
-    private static void AppendMaterialParameterInfos(JsonElement properties, string propertyName, List<FMaterialParameterInfo> destination)
-    {
-        if (!properties.TryGetProperty(propertyName, out JsonElement array) || array.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        foreach (JsonElement entry in array.EnumerateArray())
-        {
-            FMaterialParameterInfo? parameterInfo = ParseMaterialParameterInfo(entry);
-            if (parameterInfo != null)
-            {
-                destination.Add(parameterInfo);
-            }
-        }
-    }
-
-    private static FMaterialParameterInfo? ParseMaterialParameterInfo(JsonElement element)
-    {
-        JsonElement parameterInfo;
-        bool nested;
-        if (element.TryGetProperty("ParameterInfo", out parameterInfo) && parameterInfo.ValueKind == JsonValueKind.Object)
-        {
-            nested = true;
-        }
-        else
-        {
-            parameterInfo = element;
-            nested = false;
-        }
-
-        string? name = nested
-            ? ReadString(parameterInfo, "Name")
-            : ReadString(parameterInfo, "ParameterName") ?? ReadString(parameterInfo, "Name");
-        if (string.IsNullOrWhiteSpace(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        string? associationRaw = ReadString(parameterInfo, "Association");
-        EMaterialParameterAssociation association = associationRaw switch
-        {
-            "EMaterialParameterAssociation::LayerParameter" => EMaterialParameterAssociation.LayerParameter,
-            "EMaterialParameterAssociation::BlendParameter" => EMaterialParameterAssociation.BlendParameter,
-            "LayerParameter" => EMaterialParameterAssociation.LayerParameter,
-            "BlendParameter" => EMaterialParameterAssociation.BlendParameter,
-            _ => EMaterialParameterAssociation.GlobalParameter
-        };
-
-        int index = parameterInfo.TryGetProperty("Index", out JsonElement indexElement) && indexElement.ValueKind == JsonValueKind.Number
-            ? indexElement.GetInt32()
-            : -1;
-        return new FMaterialParameterInfo(name, association, index);
-    }
-
-    private static string? ReadString(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        return value.GetString();
+        string? name = parameterInfo?.Name.Text;
+        return string.IsNullOrWhiteSpace(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : new FMaterialParameterInfo(name!, parameterInfo!.Association, parameterInfo.Index);
     }
 }
 

@@ -1,75 +1,79 @@
-using System;
-using System.Collections.Generic;
+using CUE4Parse.UE4.Assets.Exports.Material;
+using CUE4Parse.FileProvider.Vfs;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
-public sealed class LibraryDecompileOptions
+/// <summary>
+/// What a run is asked for: which assets to answer about, where the source goes, and how much of
+/// each variant to write. There is no filter here and no scope: what is named IS the work, so
+/// nothing is gathered that a later step would have to throw away.
+/// </summary>
+public sealed class ShaderSourceRequest
 {
-    public string LibraryPath { get; init; } = string.Empty;
-    public string OutputDirectory { get; init; } = string.Empty;
-    public string? UnifiedMetadataPath { get; init; }
-    public string? MaterialFilter { get; init; }
-    public IReadOnlyCollection<int>? ShaderIndexFilter { get; init; }
+    public required AbstractVfsFileProvider Provider { get; init; }
+
+    public required IReadOnlyList<IShaderMapSubject> Subjects { get; init; }
+
+    public required string OutputDirectory { get; init; }
+
     public uint ShaderModel { get; init; } = 51;
-    public bool RecreateOutputDirectory { get; init; } = true;
+
     public bool DumpFailures { get; init; } = true;
+
     public bool SplitVariantsToHlslFiles { get; init; }
+
     public string? EngineUbMetadataDirectory { get; init; }
+
     public Action<string>? Log { get; init; }
+
     public Action<string>? LogError { get; init; }
 }
 
-public sealed record DecompileSummary(int TotalShaders, int Decompiled, int Skipped, int Failed);
+/// <summary>One archive a run read from: what of it was asked for, and where that landed.</summary>
+public sealed record ShaderSourceArchive(string Archive, int ShaderMaps, int Decompiled, string OutputDirectory);
 
-internal sealed class PipelineState
+public sealed record ShaderSourceSummary(int ShaderMaps, int Decompiled, int Skipped, int Failed, IReadOnlyList<ShaderSourceArchive> Archives);
+
+/// <summary>One archive's worth of a run: the maps asked about that it carries, and what came of them.</summary>
+internal sealed class ShaderSourceState
 {
-    public LibraryDecompileOptions Options { get; }
+    public ShaderSourceState(ShaderSourceRequest request, ShaderLibrary library, string archiveName, string outputDirectory)
+    {
+        Request = request;
+        Library = library;
+        ArchiveName = archiveName;
+        OutputDirectory = outputDirectory;
+        FailuresRoot = Path.Combine(outputDirectory, "_failures");
+        Log = request.Log ?? (_ => { });
+        LogError = request.LogError ?? (_ => { });
+    }
+
+    public ShaderSourceRequest Request { get; }
     public Action<string> Log { get; }
     public Action<string> LogError { get; }
 
-    public ShaderLibrary? Library { get; set; }
+    public ShaderLibrary Library { get; }
+    public string ArchiveName { get; }
+    public string OutputDirectory { get; }
+    public string FailuresRoot { get; }
 
-    public Dictionary<string, HashSet<string>> ShaderMapToAssets { get; } = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, Dictionary<string, HashSet<byte>>> ShaderHashToAssetsByFreq { get; } = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, HashSet<string>> HashToMaterialsFromUnified { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<ShaderMapInfo> ShaderMaps { get; } = new();
 
     public Dictionary<int, HashSet<string>> UsageByShaderIndex { get; } = new();
     public Dictionary<int, string> NameByShaderIndex { get; } = new();
     public Dictionary<int, ShaderContainerInfo> ContainerByShaderIndex { get; } = new();
-    public Dictionary<string, Dictionary<int, ShaderContainerInfo>> ContainersByMapAndIndex { get; set; } = new();
-    public List<ShaderMapInfo> ShaderMaps { get; } = new();
-
-    public UnifiedMaterialReader? UnifiedMaterialReader { get; set; }
-    public MaterialJsonSymbolReader? MaterialJsonSymbolReader { get; set; }
+    public Dictionary<int, FShaderParameterMapInfo> ShaderParameterMapInfoByArchiveIndex { get; } = new();
 
     public EngineUbMetadataRegistry EngineUbRegistry { get; set; } = EngineUbMetadataRegistry.Empty;
-
     public ShaderTypeSeedRegistry ShaderTypeSeedRegistry { get; set; } = ShaderTypeSeedRegistry.Empty;
 
-    public HashNameIndex VertexFactoryTypeNameIndex { get; set; } = HashNameIndex.Empty;
-    public HashNameIndex PipelineTypeNameIndex { get; set; } = HashNameIndex.Empty;
-
-    public Dictionary<int, System.Text.Json.JsonElement> ShaderParameterMapInfoByArchiveIndex { get; } = new();
-
-    public string GameVersionEnum { get; set; } = string.Empty;
-
     public Dictionary<int, ShaderPrep> ShaderPrepByIndex { get; } = new();
-
     public Dictionary<int, DecompileResult> DecompileResultByIndex { get; } = new();
 
     public int Decompiled;
     public int Skipped;
     public int Failed;
-    public string FailuresRoot { get; set; } = string.Empty;
-    public string OutputDirectory { get; set; } = string.Empty;
-
-    public PipelineState(LibraryDecompileOptions options)
-    {
-        Options = options;
-        Log = options.Log ?? (_ => { });
-        LogError = options.LogError ?? (_ => { });
-    }
 }
 
 internal sealed class ShaderContainerInfo
@@ -91,8 +95,8 @@ internal sealed class ShaderContainerInfo
 
 internal sealed class ShaderMapInfo
 {
-    public int ShaderMapIndex { get; init; }
-    public string ShaderMapHash { get; init; } = string.Empty;
+    public required ShaderMapTarget Target { get; init; }
+    public string ShaderMapHash => Target.ShaderMapHash;
     public List<string> Assets { get; init; } = new();
     public string PrimaryAsset { get; init; } = string.Empty;
     public string PrimaryName { get; init; } = string.Empty;
@@ -113,11 +117,17 @@ internal sealed class ShaderMapInfo
     public Dictionary<string, string> MaterialCbufferParams { get; set; } = new(StringComparer.Ordinal);
     public string SubShaderTags { get; set; } = string.Empty;
     public string PassCommands { get; set; } = string.Empty;
+
+    /// <summary>The expression set this map compiled from, which states every symbol its shaders bind.</summary>
+    public FUniformExpressionSet? UniformExpressions =>
+        (Target.ShaderMap?.Content as FMaterialShaderMapContent)?.MaterialCompilationOutput?.UniformExpressionSet;
 }
 
 internal sealed class ShaderMapMember
 {
-    public int RelativeIndex { get; init; }    public int ArchiveShaderIndex { get; init; }}
+    public int RelativeIndex { get; init; }
+    public int ArchiveShaderIndex { get; init; }
+}
 
 internal sealed class ShaderPrep
 {

@@ -12,6 +12,7 @@ using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.IO.Objects;
 using CUE4Parse.FileProvider.Vfs;
+using Ruri.FModelHook.Unreal;
 using Ruri.Hook.Core;
 using CUE4Parse.FileProvider;
 using Ruri.FModelHook.Attributes;
@@ -25,13 +26,6 @@ namespace Ruri.FModelHook.ShaderDecompiler
     [FModelHook(GameType.UE_ShaderDecompiler)]
     public class UE_ShaderDecompiler_Hook : RuriHook
     {
-        private static readonly ExportPipelineState _exportState = new()
-        {
-            Log = HookLogger.Log,
-            LogError = HookLogger.LogFailure,
-        };
-        private static readonly object _exportStateLock = new();
-
         private static volatile int _mappingsWarningChoice;
 
         public static bool SplitVariantsToHlslFiles
@@ -63,32 +57,59 @@ namespace Ruri.FModelHook.ShaderDecompiler
 
             if (entry == null) return;
 
-            if (entry.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase))
+            if (self.Provider is not AbstractVfsFileProvider mount || !entry.Extension.Equals("uasset", StringComparison.OrdinalIgnoreCase)) return;
+            if (!Materials(mount, entry, out List<IShaderMapSubject> subjects) || subjects.Count == 0) return;
+
+            if (!ConfirmMappingsOrAbort(self))
             {
-                if (!ConfirmMappingsOrAbort(self))
-                {
-                    HookLogger.Log("[UE_ShaderDecompiler] Skipped: user cancelled (no mappings loaded).");
-                    return;
-                }
+                HookLogger.Log("[UE_ShaderDecompiler] Skipped: user cancelled (no mappings loaded).");
+                return;
+            }
 
-                string exportBasePath = Path.Combine(UserSettings.Default.RawDataDirectory, UserSettings.Default.KeepDirectoryStructure ? entry.PathWithoutExtension : entry.NameWithoutExtension).Replace('\\', '/');
-
-                try
+            string output = Path.Combine(
+                UserSettings.Default.RawDataDirectory,
+                self.Provider?.ProjectName ?? "UnknownProject",
+                "Shaders").Replace('\\', '/');
+            try
+            {
+                ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
                 {
-                    lock (_exportStateLock)
+                    Provider = mount,
+                    Subjects = subjects,
+                    OutputDirectory = output,
+                    SplitVariantsToHlslFiles = SplitVariantsToHlslFiles,
+                    Log = HookLogger.Log,
+                    LogError = HookLogger.LogFailure,
+                });
+                HookLogger.Log($"[UE_ShaderDecompiler] {entry.Name}: {summary.Decompiled} shader(s) of {summary.ShaderMaps} map(s) -> {output}");
+            }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[UE_ShaderDecompiler] Shader source failed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
+            }
+        }
+
+        /// <summary>The materials this package IS, or the ones its meshes name; nothing else compiles a shader.</summary>
+        private static bool Materials(AbstractVfsFileProvider mount, GameFile entry, out List<IShaderMapSubject> subjects)
+        {
+            subjects = new List<IShaderMapSubject>();
+            try
+            {
+                foreach (CUE4Parse.UE4.Assets.Exports.UObject export in mount.LoadPackage(entry).GetExports())
+                {
+                    if (export is CUE4Parse.UE4.Assets.Exports.Material.UMaterialInterface)
                     {
-                        _exportState.Provider = self.Provider;
-                        _exportState.ProjectOutputRoot = Path.Combine(
-                            UserSettings.Default.RawDataDirectory,
-                            self.Provider?.ProjectName ?? "UnknownProject");
-                        ShaderArchiveExporter.ProcessArchive(_exportState, entry, exportBasePath, SplitVariantsToHlslFiles);
+                        subjects.Add(new MaterialSubject(entry.PathWithoutExtension));
+                        return true;
                     }
                 }
-                catch (Exception ex)
-                {
-                    HookLogger.LogFailure($"[UE_ShaderDecompiler] Shader archive export failed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
-                }
             }
+            catch (Exception ex)
+            {
+                HookLogger.LogFailure($"[UE_ShaderDecompiler] {entry.Path}: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
+            return false;
         }
 
         private static bool ConfirmMappingsOrAbort(CUE4ParseViewModel vm)

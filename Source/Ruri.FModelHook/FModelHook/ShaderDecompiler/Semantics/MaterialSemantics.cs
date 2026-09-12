@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
-
 namespace Ruri.FModelHook.ShaderDecompiler.Semantics;
 
 /// <summary>
@@ -73,17 +70,9 @@ public sealed record MaterialValueSemantics(
 /// compiled with stays with it, so a field's value can be computed for any instance's
 /// parameters.
 /// </summary>
-public sealed record MaterialSemantics(string ShaderMapHash, string Status, IReadOnlyList<MaterialSlotSemantics> Slots, IReadOnlyList<MaterialValueSemantics> Values, string? ExpressionSet)
+public sealed record MaterialSemantics(string ShaderMapHash, string Status, IReadOnlyList<MaterialSlotSemantics> Slots, IReadOnlyList<MaterialValueSemantics> Values, PreshaderInputs? Preshaders)
 {
     public const string Resolved = "resolved";
-    private const string NumericParametersName = "UniformNumericParameters";
-    private const string ParameterInfoName = "ParameterInfo";
-    private const string NameName = "Name";
-    private const string ParameterNameName = "ParameterName";
-    private const string ParameterTypeName = "ParameterType";
-    private const string ScalarType = "Scalar";
-    private const string ValueName = "Value";
-    private static readonly string[] ComponentNames = ["R", "G", "B", "A"];
 
     public bool IsResolved => string.Equals(Status, Resolved, StringComparison.Ordinal);
 
@@ -91,53 +80,9 @@ public sealed record MaterialSemantics(string ShaderMapHash, string Status, IRea
         new(shaderMapHash, status, Array.Empty<MaterialSlotSemantics>(), Array.Empty<MaterialValueSemantics>(), null);
 
     /// <summary>
-    /// A field's value for one material: the map's numeric parameters with every one the
-    /// material states replaced by the material's own value (a scalar as four lanes, a vector
-    /// as its components), run through the field's preshader program.
+    /// A field's value for one material: the map's numeric parameters with every one the material
+    /// states replaced by the material's own value, run through the field's preshader program.
     /// </summary>
-    public float[]? Evaluate(MaterialValueSemantics value, IReadOnlyDictionary<string, float[]> parameters)
-    {
-        if (ExpressionSet is null)
-        {
-            return null;
-        }
-        using JsonDocument document = JsonDocument.Parse(ExpressionSet);
-        if (!document.RootElement.TryGetProperty(NumericParametersName, out JsonElement numeric) || numeric.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-        if (JsonNode.Parse(numeric.GetRawText()) is not JsonArray patched)
-        {
-            return null;
-        }
-        foreach (JsonNode? entry in patched)
-        {
-            if (entry is not JsonObject parameter || ParameterName(parameter) is not { } name || !parameters.TryGetValue(name, out float[]? stated))
-            {
-                continue;
-            }
-            bool scalar = string.Equals(parameter[ParameterTypeName]?.GetValue<string>(), ScalarType, StringComparison.Ordinal);
-            parameter[ValueName] = scalar ? JsonValue.Create(stated[0]) : Vector(stated);
-        }
-        return MaterialConstantBufferReader.Evaluate(document.RootElement, value.Field, JsonSerializer.SerializeToElement(patched));
-    }
-
-    private static string? ParameterName(JsonObject parameter)
-    {
-        if (parameter[ParameterInfoName] is JsonObject info)
-        {
-            return info[NameName]?.GetValue<string>();
-        }
-        return parameter[ParameterNameName]?.GetValue<string>() ?? parameter[NameName]?.GetValue<string>();
-    }
-
-    private static JsonObject Vector(float[] stated)
-    {
-        JsonObject vector = new();
-        for (int component = 0; component < ComponentNames.Length; component++)
-        {
-            vector[ComponentNames[component]] = component < stated.Length ? stated[component] : 0f;
-        }
-        return vector;
-    }
+    public float[]? Evaluate(MaterialValueSemantics value, IReadOnlyDictionary<string, float[]> parameters) =>
+        Preshaders is null ? null : MaterialConstantBufferReader.Evaluate(Preshaders.With(parameters), value.Field);
 }

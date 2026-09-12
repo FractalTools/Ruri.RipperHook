@@ -7,7 +7,7 @@ using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
-internal static class Pass200_EmitShaderLabFiles
+internal static class ShaderLabEmitter
 {
     private sealed class ContainerOutputEntry
     {
@@ -17,26 +17,10 @@ internal static class Pass200_EmitShaderLabFiles
         public required string SourceExtension { get; init; }
     }
 
-    public static void DoPass(PipelineState state)
-    {
-        if (state.ShaderMaps.Count == 0)
-        {
-            state.Log("    EmitShaderLabFiles: no shader-maps, skipping.");
-            return;
-        }
-
-        foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(m => m.PrimaryName, StringComparer.OrdinalIgnoreCase))
-        {
-            EmitShaderMap(state, map);
-        }
-
-        state.Log($"    Library {Path.GetFileName(state.Options.LibraryPath)}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}.");
-    }
-
-    public static void DoPassForOneMap(PipelineState state, ShaderMapInfo map)
+    public static void Emit(ShaderSourceState state, ShaderMapInfo map)
         => EmitShaderMap(state, map);
 
-    private static void EmitShaderMap(PipelineState state, ShaderMapInfo map)
+    private static void EmitShaderMap(ShaderSourceState state, ShaderMapInfo map)
     {
         List<ContainerOutputEntry> outputs = new(map.Members.Count);
         foreach (ShaderMapMember member in map.Members)
@@ -61,7 +45,7 @@ internal static class Pass200_EmitShaderLabFiles
     }
 
     private static ContainerOutputEntry? FinalizeForMap(
-        PipelineState state,
+        ShaderSourceState state,
         ShaderMapInfo map,
         ShaderMapMember member,
         ShaderPrep prep,
@@ -111,14 +95,14 @@ internal static class Pass200_EmitShaderLabFiles
         return SanitizeFileStem($"SM{mapShort}_{map.PrimaryName}");
     }
 
-    private static void WriteShaderMapOutputs(PipelineState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
+    private static void WriteShaderMapOutputs(ShaderSourceState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
     {
         string containerStem = BuildShaderMapStem(map);
         string containerBasePath = Path.Combine(state.OutputDirectory, containerStem);
 
         UeShaderLabContainerMetadata metadata = BuildShaderMapMetadata(state, map, outputs);
 
-        HashSet<string> splittableStages = ComputeSplittableStages(metadata.Programs, state.Options.SplitVariantsToHlslFiles);
+        HashSet<string> splittableStages = ComputeSplittableStages(metadata.Programs, state.Request.SplitVariantsToHlslFiles);
 
         if (splittableStages.Count > 0)
         {
@@ -190,7 +174,7 @@ internal static class Pass200_EmitShaderLabFiles
         return sb.ToString();
     }
 
-    private static UeShaderLabContainerMetadata BuildShaderMapMetadata(PipelineState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
+    private static UeShaderLabContainerMetadata BuildShaderMapMetadata(ShaderSourceState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
     {
         return new UeShaderLabContainerMetadata
         {
@@ -240,14 +224,9 @@ internal static class Pass200_EmitShaderLabFiles
         };
     }
 
-    private static ShaderContainerInfo? ResolvePerMapContainer(PipelineState state, ShaderMapInfo map, int archiveShaderIndex)
+    private static ShaderContainerInfo? ResolvePerMapContainer(ShaderSourceState state, ShaderMapInfo map, int archiveShaderIndex)
     {
-        if (state.ContainersByMapAndIndex.TryGetValue(map.ShaderMapHash, out Dictionary<int, ShaderContainerInfo>? perMap)
-            && perMap.TryGetValue(archiveShaderIndex, out ShaderContainerInfo? info))
-        {
-            return info;
-        }
-        return null;
+        return map.ContainerByShaderIndex.GetValueOrDefault(archiveShaderIndex);
     }
 
     private static void WriteMaterialCbufferValues(StringBuilder sb, UeShaderLabContainerMetadata metadata)
@@ -669,7 +648,7 @@ internal static class Pass200_EmitShaderLabFiles
         List<string> order = symbolMetadata.TextureParameters.Select(t => t.Name).ToList();
         if (order.Count < materialSlots.Count)
         {
-            Console.Error.WriteLine($"[Pass200] material-texture order: 槽 {materialSlots.Count} 个 > UES 名表 {order.Count} 项 — 放弃按序命名(宁可无名)。");
+            Console.Error.WriteLine($"[ShaderLab] material-texture order: 槽 {materialSlots.Count} 个 > UES 名表 {order.Count} 项 — 放弃按序命名(宁可无名)。");
             return;
         }
 
@@ -677,11 +656,11 @@ internal static class Pass200_EmitShaderLabFiles
         {
             var slot = materialSlots[i];
             if (slot.IsAnon) continue;
-            string expected = "Material_" + SanitizeIdent(order[i]);
+            string expected = MaterialSlotName(order[i]);
             if (!string.Equals(slot.Name, expected, StringComparison.Ordinal))
             {
                 Console.Error.WriteLine(
-                    $"[Pass200] material-texture order: 锚点不符(t{slot.Slot} 已具名 '{slot.Name}',按序应为 '{expected}')" +
+                    $"[ShaderLab] material-texture order: 锚点不符(t{slot.Slot} 已具名 '{slot.Name}',按序应为 '{expected}')" +
                     " — 声明序假设不成立,放弃按序命名。");
                 return;
             }
@@ -691,9 +670,22 @@ internal static class Pass200_EmitShaderLabFiles
         {
             var slot = materialSlots[i];
             if (!slot.IsAnon || claimed.Contains(slot.AnonIndex)) continue;
-            rename[slot.AnonIndex] = "Material_" + SanitizeIdent(order[i]);
+            rename[slot.AnonIndex] = MaterialSlotName(order[i]);
             claimed.Add(slot.AnonIndex);
         }
+    }
+
+    /// <summary>
+    /// A material texture's name as the emitted source spells it. The order list is read back off
+    /// the symbols the decompiler HANDED BACK, which already carry the buffer they belong to, so
+    /// the prefix is put on only when it is not there yet -- doubling it made every already-named
+    /// slot disagree with itself and the ordering was abandoned every single time.
+    /// </summary>
+    private static string MaterialSlotName(string stated)
+    {
+        const string prefix = "Material_";
+        string identifier = SanitizeIdent(stated);
+        return identifier.StartsWith(prefix, StringComparison.Ordinal) ? identifier : prefix + identifier;
     }
 
     private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata)
@@ -778,7 +770,7 @@ internal static class Pass200_EmitShaderLabFiles
                         int firstSlot = int.Parse(anons[run[0]].SlotIdx);
                         int lastSlot = int.Parse(anons[run[^1]].SlotIdx);
                         string usedUbsCsv = string.Join(",", shaderUsedUbs);
-                        Console.Error.WriteLine($"[Pass200][rename] type=({grp.Key.Item1}|{grp.Key.Item2}) run=t{firstSlot}..t{lastSlot} count={run.Count} usedUbs=[{usedUbsCsv}] -> ownerUb={ownerUb} ordered={(ordered == null ? "<null>" : string.Join(",", ordered))}");
+                        Console.Error.WriteLine($"[ShaderLab][rename] type=({grp.Key.Item1}|{grp.Key.Item2}) run=t{firstSlot}..t{lastSlot} count={run.Count} usedUbs=[{usedUbsCsv}] -> ownerUb={ownerUb} ordered={(ordered == null ? "<null>" : string.Join(",", ordered))}");
                     }
                     if (ordered == null || ordered.Count != run.Count) continue;
                     for (int i = 0; i < run.Count; i++)
@@ -841,7 +833,7 @@ internal static class Pass200_EmitShaderLabFiles
             {
                 if (kv.Value.Count <= 1) continue;
                 Console.Error.WriteLine(
-                    $"[Pass200] name collision: '{kv.Key}' claimed by {kv.Value.Count} bindings " +
+                    $"[ShaderLab] name collision: '{kv.Key}' claimed by {kv.Value.Count} bindings " +
                     $"({string.Join(", ", kv.Value)}) — reverting them to anonymous identifiers " +
                     "(a wrong symbol is worse than none).");
                 foreach (string ident in kv.Value) identToFinal[ident] = ident;
@@ -851,7 +843,7 @@ internal static class Pass200_EmitShaderLabFiles
             {
                 foreach (KeyValuePair<string, string> kv in identToFinal)
                 {
-                    Console.Error.WriteLine($"[Pass200][applyRename] '{kv.Key}' -> '{kv.Value}'");
+                    Console.Error.WriteLine($"[ShaderLab][applyRename] '{kv.Key}' -> '{kv.Value}'");
                 }
             }
             foreach (KeyValuePair<string, string> kv in identToFinal)

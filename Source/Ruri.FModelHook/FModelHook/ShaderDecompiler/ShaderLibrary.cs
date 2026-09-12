@@ -1,100 +1,98 @@
+using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
 using CUE4Parse.UE4.Shaders;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.UE4.VirtualFileSystem;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
 /// <summary>
 /// A shader-code library: the hashes of its shader maps and shaders, each map's run of the
-/// shared shader-index list, each shader's entry, and the code behind them. Comes from a
-/// library file the exporter wrote, a serialized archive the parser read whole, or an IoStore
-/// archive whose code stays in its container's chunks until asked for. The file layout is the
-/// engine's serialized archive: version, shader-map hashes, shader hashes, map entries, shader
-/// entries, preload entries, shader indices, then the code body.
+/// shared shader-index list, each shader's entry, and the code behind them.
+///
+/// Opened over the archive the game ships and never over a copy of it. Both shapes leave the
+/// code where it is until a shader is asked for: an IoStore archive's code lives in its
+/// container's group chunks, and a serialized archive's body is read a shader at a time through
+/// a ranged view of the container entry. Nothing a library does writes a file.
 /// </summary>
 internal sealed class ShaderLibrary : IDisposable
 {
-    public const uint FileVersion = 2;
-    private const int HashLength = 20;
-    private const int PreloadEntryLength = 16;
-
     private IShaderCodeSource? source;
+    private GameFileWindow? window;
 
-    public uint Version;
     public List<string> ShaderMapHashes = new();
     public List<string> ShaderHashes = new();
     public ShaderMapEntry[] ShaderMapEntries = Array.Empty<ShaderMapEntry>();
     public ShaderCodeEntry[] ShaderEntries = Array.Empty<ShaderCodeEntry>();
     public uint[] ShaderIndices = Array.Empty<uint>();
 
+    /// <summary>Which of the engine's two archive shapes this library was opened over.</summary>
+    public string SourceType { get; private init; } = string.Empty;
+
     public long CodeBodyLength => source?.Length ?? 0;
 
-    /// <summary>A library out of any seekable stream, which the library then keeps for reading code.</summary>
-    public static ShaderLibrary Read(Stream stream)
+    /// <summary>How many bytes the shipped archive holds in all.</summary>
+    public long Size { get; private set; }
+
+    /// <summary>How many of them this run actually read; the rest was never fetched.</summary>
+    public long BytesRead => window?.BytesFetched ?? 0;
+
+    /// <summary>
+    /// The library of one shipped shader archive, or null when the file is neither an IoStore
+    /// archive of a mounted container nor a serialized one.
+    ///
+    /// The archive's own tables are read by CUE4Parse's readers so that every dialect it knows --
+    /// the short hashes UE5.8 writes, the wide ones one title writes -- is read the way it states
+    /// them. Only WHICH reader applies is decided here, the same way
+    /// CUE4Parse/UE4/Shaders/FShaderCodeArchive.cs decides it, because that type reads the whole
+    /// code body into per-shader arrays as it parses and a caller after one character wants none
+    /// of it.
+    /// </summary>
+    public static ShaderLibrary? Open(GameFile file, VersionContainer versions)
     {
+        GameFileWindow window = new(file);
+        FArchive archive = new FStreamArchive(file.Path, window, versions);
         try
         {
-            using BinaryReader reader = new(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-            ShaderLibrary library = new() { Version = reader.ReadUInt32() };
-            int count = reader.ReadInt32();
-            for (int i = 0; i < count; i++)
+            uint archiveVersion = archive.Read<uint>();
+            bool isIoStore = archive.Game >= EGame.GAME_UE5_0 && archiveVersion == 1;
+            if (archive.Game is EGame.GAME_ArenaBreakoutMobile)
             {
-                library.ShaderMapHashes.Add(ReadHash(reader));
+                archiveVersion = 2;
             }
-            count = reader.ReadInt32();
-            for (int i = 0; i < count; i++)
+            if (archiveVersion == 2)
             {
-                library.ShaderHashes.Add(ReadHash(reader));
+                ShaderLibrary serialized = FromSerialized(new FSerializedShaderArchive(archive), archive);
+                serialized.window = window;
+                serialized.Size = file.Size;
+                return serialized;
             }
-            count = reader.ReadInt32();
-            library.ShaderMapEntries = new ShaderMapEntry[count];
-            for (int i = 0; i < count; i++)
+            if (isIoStore && file is VfsEntry { Vfs: IoStoreReader store })
             {
-                library.ShaderMapEntries[i] = new ShaderMapEntry
-                {
-                    ShaderIndicesOffset = reader.ReadUInt32(),
-                    NumShaders = reader.ReadUInt32(),
-                    FirstPreloadIndex = reader.ReadUInt32(),
-                    NumPreloadEntries = reader.ReadUInt32(),
-                };
+                ShaderLibrary library = FromIoStore(new FIoStoreShaderCodeArchive(archive), store);
+                library.Size = file.Size;
+                archive.Dispose();
+                return library;
             }
-            count = reader.ReadInt32();
-            library.ShaderEntries = new ShaderCodeEntry[count];
-            for (int i = 0; i < count; i++)
-            {
-                library.ShaderEntries[i] = new ShaderCodeEntry
-                {
-                    Offset = reader.ReadUInt64(),
-                    Size = reader.ReadUInt32(),
-                    UncompressedSize = reader.ReadUInt32(),
-                    Frequency = reader.ReadByte(),
-                };
-            }
-            count = reader.ReadInt32();
-            stream.Seek((long)count * PreloadEntryLength, SeekOrigin.Current);
-            count = reader.ReadInt32();
-            library.ShaderIndices = new uint[count];
-            for (int i = 0; i < count; i++)
-            {
-                library.ShaderIndices[i] = reader.ReadUInt32();
-            }
-            library.source = new StreamShaderCodeSource(stream, stream.Position, library.ShaderEntries);
-            return library;
+            archive.Dispose();
+            return null;
         }
         catch
         {
-            stream.Dispose();
+            archive.Dispose();
             throw;
         }
     }
 
     /// <summary>A library over an IoStore archive, reading each shader's group from the container that holds the archive.</summary>
-    public static ShaderLibrary FromIoStore(FIoStoreShaderCodeArchive archive, IoStoreReader store)
+    private static ShaderLibrary FromIoStore(FIoStoreShaderCodeArchive archive, IoStoreReader store)
     {
         IoStoreShaderCodeSource code = new(archive, store);
         return new ShaderLibrary
         {
-            Version = FileVersion,
+            SourceType = nameof(FIoStoreShaderCodeArchive),
             ShaderMapHashes = Hashes(archive.ShaderMapHashes),
             ShaderHashes = Hashes(archive.ShaderHashes),
             ShaderMapEntries = Array.ConvertAll(archive.ShaderMapEntries, map => new ShaderMapEntry
@@ -108,12 +106,19 @@ internal sealed class ShaderLibrary : IDisposable
         };
     }
 
-    /// <summary>A library over a serialized archive the parser has already split into per-shader arrays.</summary>
-    public static ShaderLibrary FromSerialized(FSerializedShaderArchive archive, byte[][] code)
+    /// <summary>A library over a serialized archive, whose code body starts where its tables end.</summary>
+    private static ShaderLibrary FromSerialized(FSerializedShaderArchive archive, FArchive reader)
     {
+        ShaderCodeEntry[] entries = Array.ConvertAll(archive.ShaderEntries, entry => new ShaderCodeEntry
+        {
+            Offset = entry.Offset,
+            Size = entry.Size,
+            UncompressedSize = entry.UncompressedSize,
+            Frequency = entry.Frequency,
+        });
         return new ShaderLibrary
         {
-            Version = FileVersion,
+            SourceType = nameof(FSerializedShaderArchive),
             ShaderMapHashes = Hashes(archive.ShaderMapHashes),
             ShaderHashes = Hashes(archive.ShaderHashes),
             ShaderMapEntries = Array.ConvertAll(archive.ShaderMapEntries, map => new ShaderMapEntry
@@ -123,22 +128,13 @@ internal sealed class ShaderLibrary : IDisposable
                 FirstPreloadIndex = map.FirstPreloadIndex,
                 NumPreloadEntries = map.NumPreloadEntries,
             }),
-            ShaderEntries = Array.ConvertAll(archive.ShaderEntries, entry => new ShaderCodeEntry
-            {
-                Offset = entry.Offset,
-                Size = entry.Size,
-                UncompressedSize = entry.UncompressedSize,
-                Frequency = entry.Frequency,
-            }),
+            ShaderEntries = entries,
             ShaderIndices = archive.ShaderIndices,
-            source = new ArrayShaderCodeSource(code),
+            source = new ArchiveShaderCodeSource(reader, reader.Position, entries),
         };
     }
 
     public byte[]? GetShaderCode(int index) => source?.Read(index);
-
-    /// <summary>Writes one shader's bytes to the destination; false when the library has no code for it.</summary>
-    public bool CopyShaderCode(int index, Stream destination) => source?.CopyTo(index, destination) ?? false;
 
     private static List<string> Hashes(FSHAHash[] hashes)
     {
@@ -149,8 +145,6 @@ internal sealed class ShaderLibrary : IDisposable
         }
         return texts;
     }
-
-    private static string ReadHash(BinaryReader reader) => Convert.ToHexString(reader.ReadBytes(HashLength));
 
     public void Dispose()
     {

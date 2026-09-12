@@ -25,31 +25,9 @@ using CUE4Parse_Conversion.Textures;
 
 namespace Ruri.FModelHook.ShaderDecompiler.Headless;
 
-public static class HeadlessShaderExportRunner
+public static class HeadlessMount
 {
-    public sealed class Options
-    {
-        public required HeadlessGameConfig Config { get; init; }
-        public IReadOnlyList<string>? ArchiveNameFilter { get; init; }
-        public bool SkipGlobal { get; init; }
-        public bool SplitVariants { get; init; }
-        public bool ListArchivesOnly { get; init; }
-        public bool SkipDecompile { get; init; }
-        public string? FindAssetSubstring { get; init; }
-        public string? MaterialFilter { get; init; }
-        public Action<string> Log { get; init; } = _ => { };
-        public Action<string> LogError { get; init; } = _ => { };
-    }
-
-    public sealed class RunResult
-    {
-        public int ArchivesProcessed { get; set; }
-        public int MaterialInterfaces { get; set; }
-        public bool MappingsLoaded { get; set; }
-        public string ProjectName { get; set; } = string.Empty;
-    }
-
-    private static AbstractVfsFileProvider MountProvider(HeadlessGameConfig cfg, Action<string> log, Action<string> logError, out bool mappingsLoaded)
+    public static AbstractVfsFileProvider MountProvider(HeadlessGameConfig cfg, Action<string> log, Action<string> logError, out bool mappingsLoaded)
     {
         if (cfg.HasUnsupportedVersioning)
             logError("[Headless] WARNING: this game's settings carry custom version/option/map-struct overrides which the headless mount does not yet replicate. Mount may misparse — fall back to the GUI if assets fail to load.");
@@ -70,92 +48,6 @@ public static class HeadlessShaderExportRunner
         catch (Exception ex) { logError($"[Headless] LoadVirtualPaths failed (continuing): {ex.Message}"); }
 
         return provider;
-    }
-
-    public static RunResult Run(Options options)
-    {
-        HeadlessGameConfig cfg = options.Config;
-        Action<string> log = options.Log;
-        Action<string> logError = options.LogError;
-
-        AbstractVfsFileProvider provider = MountProvider(cfg, log, logError, out bool mappingsLoaded);
-
-        if (!string.IsNullOrWhiteSpace(options.FindAssetSubstring))
-        {
-            var matches = provider.Files.Keys
-                .Where(k => k.IndexOf(options.FindAssetSubstring!, StringComparison.OrdinalIgnoreCase) >= 0)
-                .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            log($"[Headless] --find-asset '{options.FindAssetSubstring}': {matches.Count} match(es).");
-            foreach (string m in matches) log($"[Headless]   {m}");
-            return new RunResult { MappingsLoaded = mappingsLoaded, ProjectName = provider.ProjectName ?? string.Empty };
-        }
-
-        var exportState = new ExportPipelineState
-        {
-            Provider = provider,
-            ProjectOutputRoot = Path.Combine(cfg.RawDataDirectory, provider.ProjectName ?? "UnknownProject"),
-            Log = log,
-            LogError = logError,
-        };
-
-        List<GameFile> archives = provider.Files.Values
-            .Where(f => IsTargetArchive(f, options))
-            .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        log($"[Headless] {archives.Count} shader archive(s) selected for export.");
-
-        if (options.ListArchivesOnly)
-        {
-            foreach (GameFile entry in archives.OrderBy(f => f.Size))
-            {
-                log($"[Headless]   {entry.Size,12:N0}  {entry.Path}");
-            }
-            return new RunResult
-            {
-                ArchivesProcessed = 0,
-                MaterialInterfaces = 0,
-                MappingsLoaded = mappingsLoaded,
-                ProjectName = provider.ProjectName ?? string.Empty,
-            };
-        }
-
-        if (string.IsNullOrWhiteSpace(options.MaterialFilter))
-        {
-            var clearedDecompiledRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (GameFile entry in archives)
-            {
-                string ebp = Path.Combine(cfg.RawDataDirectory, entry.PathWithoutExtension).Replace('\\', '/');
-                string decompiledRoot = Path.Combine(Path.GetDirectoryName(ebp)!, "Decompiled");
-                if (!clearedDecompiledRoots.Add(decompiledRoot) || !Directory.Exists(decompiledRoot)) continue;
-                try
-                {
-                    Directory.Delete(decompiledRoot, true);
-                    log($"[Headless] Cleared stale decompiled output: {decompiledRoot}");
-                }
-                catch (Exception ex)
-                {
-                    logError($"[Headless] Failed to clear decompiled output {decompiledRoot}: {ex.Message}");
-                }
-            }
-        }
-
-        int processed = 0;
-        foreach (GameFile entry in archives)
-        {
-            string exportBasePath = Path.Combine(cfg.RawDataDirectory, entry.PathWithoutExtension).Replace('\\', '/');
-            log($"[Headless] ({processed + 1}/{archives.Count}) {entry.Path}");
-            ShaderArchiveExporter.ProcessArchive(exportState, entry, exportBasePath, options.SplitVariants, options.SkipDecompile, options.MaterialFilter);
-            processed++;
-        }
-
-        return new RunResult
-        {
-            ArchivesProcessed = processed,
-            MaterialInterfaces = exportState.Root.MaterialInterfaces.Count,
-            MappingsLoaded = mappingsLoaded,
-            ProjectName = provider.ProjectName ?? string.Empty,
-        };
     }
 
     public sealed class ExportAssetResult
@@ -274,120 +166,40 @@ public static class HeadlessShaderExportRunner
         FindShaderArchivesForMaterials(MountProvider(cfg, log, logError, out _), materialPaths, log, logError);
 
     /// <summary>
-    /// Where the compiled shader maps of the given materials live, read through a provider the
-    /// caller already has open. Only those material packages are loaded and only the shader
-    /// archives' headers are read, so a host that just wants one character's shaders never pays
-    /// for the rest of the install.
+    /// Where the compiled shader maps of the given materials live. Only those material packages
+    /// are loaded and only the archives' header tables are read, so a host that just wants one
+    /// character's shaders never pays for the rest of the install.
     /// </summary>
     public static List<MaterialShaderLocation> FindShaderArchivesForMaterials(AbstractVfsFileProvider provider, IReadOnlyList<string> materialPaths, Action<string> log, Action<string> logError)
     {
         var locations = new List<MaterialShaderLocation>();
-        var allTargetHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using ShaderMapCatalog catalog = ShaderMapCatalog.Open(provider, log, logError);
         foreach (string materialPath in materialPaths)
         {
-            CUE4Parse.UE4.Assets.IPackage package;
-            try
+            foreach (ShaderMapTarget target in new MaterialSubject(materialPath).Resolve(provider, log, logError))
             {
-                package = provider.LoadPackage(materialPath);
-            }
-            catch (Exception ex)
-            {
-                logError($"[Headless] --find-shader-for-material: failed to load '{materialPath}': {ex.GetType().Name}: {ex.Message}");
-                continue;
-            }
-
-            foreach (CUE4Parse.UE4.Assets.Exports.UObject export in package.GetExports())
-            {
-                if (export is not UMaterialInterface material) continue;
-
-                UMaterialInterface owner = material;
-                int depth = 0;
-                while ((owner.LoadedMaterialResources == null || owner.LoadedMaterialResources.Count == 0)
-                       && owner is UMaterialInstance instance && instance.Parent != null && depth < 16)
+                MaterialShaderLocation location = new()
                 {
-                    owner = (UMaterialInterface)instance.Parent;
-                    depth++;
-                }
-
-                if (owner.LoadedMaterialResources == null || owner.LoadedMaterialResources.Count == 0)
-                {
-                    log($"[Headless]   {materialPath}: no compiled shader-map found up the parent chain (walked {depth} level(s), stopped at '{owner.Name}').");
-                    continue;
-                }
-
-                string ownerPath = ReferenceEquals(owner, material) ? materialPath : (owner.GetPathName());
-                foreach (var resource in owner.LoadedMaterialResources)
-                {
-                    FMaterialShaderMap? shaderMap = resource.LoadedShaderMap;
-                    if (shaderMap == null) continue;
-                    string? hash = shaderMap.ResourceHash?.ToString() ?? shaderMap.Code?.ResourceHash.ToString();
-                    if (string.IsNullOrWhiteSpace(hash)) continue;
-                    allTargetHashes.Add(hash);
-                    locations.Add(new MaterialShaderLocation { MaterialPath = materialPath, OwningMaterialPath = ownerPath, ResourceHash = hash });
-                }
-            }
-        }
-
-        if (allTargetHashes.Count == 0)
-        {
-            log("[Headless] --find-shader-for-material: no ResourceHash resolved for any given material (inline shader map missing?).");
-            return locations;
-        }
-
-        foreach (GameFile file in provider.Files.Values)
-        {
-            if (!file.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase)) continue;
-            HashSet<string> archiveHashes;
-            try
-            {
-                var headerAr = file.CreateReader();
-                var archive = new FShaderCodeArchive(headerAr);
-                // Both shapes an archive comes in state the same fact. A build that cooks to
-                // IoStore writes one, a build that cooks to pak writes the other, and reading only
-                // the first made every pak-cooked title answer "no archive carries this material".
-                CUE4Parse.UE4.Objects.Core.Misc.FSHAHash[] hashes = archive.SerializedShaders switch
-                {
-                    FIoStoreShaderCodeArchive ioArchive => ioArchive.ShaderMapHashes,
-                    FSerializedShaderArchive serialized => serialized.ShaderMapHashes,
-                    _ => [],
+                    MaterialPath = target.AssetPath,
+                    OwningMaterialPath = target.OwningAssetPath,
+                    ResourceHash = target.ShaderMapHash,
                 };
-                if (hashes.Length == 0) continue;
-                archiveHashes = hashes.Select(h => h.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            }
-            catch (Exception ex)
-            {
-                logError($"[Headless] --find-shader-for-material: failed to read archive header '{file.Path}': {ex.Message}");
-                continue;
-            }
-
-            foreach (MaterialShaderLocation loc in locations)
-            {
-                if (archiveHashes.Contains(loc.ResourceHash)) loc.ArchivePaths.Add(file.Path);
+                if (catalog.TryPlace(target.ShaderMapHash, out ShaderMapCatalog.Placement placement))
+                {
+                    location.ArchivePaths.Add(placement.ArchivePath);
+                }
+                locations.Add(location);
             }
         }
 
-        foreach (MaterialShaderLocation loc in locations)
+        foreach (MaterialShaderLocation location in locations)
         {
-            string ownerNote = string.Equals(loc.MaterialPath, loc.OwningMaterialPath, StringComparison.OrdinalIgnoreCase)
+            string ownerNote = string.Equals(location.MaterialPath, location.OwningMaterialPath, StringComparison.OrdinalIgnoreCase)
                 ? string.Empty
-                : $" (owned by parent template '{loc.OwningMaterialPath}')";
-            log($"[Headless]   {loc.MaterialPath}{ownerNote} hash={loc.ResourceHash} archives=[{string.Join(", ", loc.ArchivePaths)}]");
+                : $" (owned by parent template '{location.OwningMaterialPath}')";
+            log($"[Headless]   {location.MaterialPath}{ownerNote} hash={location.ResourceHash} archives=[{string.Join(", ", location.ArchivePaths)}]");
         }
         return locations;
-    }
-
-    private static bool IsTargetArchive(GameFile file, Options options)
-    {
-        if (!file.Extension.Equals("ushaderbytecode", StringComparison.OrdinalIgnoreCase)) return false;
-        if (options.SkipGlobal && file.Name.IndexOf("ShaderArchive-Global", StringComparison.OrdinalIgnoreCase) >= 0) return false;
-
-        IReadOnlyList<string>? filter = options.ArchiveNameFilter;
-        if (filter == null || filter.Count == 0) return true;
-        foreach (string token in filter)
-        {
-            if (file.Name.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-        }
-        return false;
     }
 
     private static IEnumerable<KeyValuePair<FGuid, FAesKey>> BuildKeys(HeadlessGameConfig cfg)

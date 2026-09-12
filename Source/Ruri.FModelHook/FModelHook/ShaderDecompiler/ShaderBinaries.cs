@@ -2,24 +2,25 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CUE4Parse.UE4.Assets.Exports.Material;
 using Ruri.ShaderTools;
 using EngineDecompileOptions = Ruri.ShaderTools.DecompileOptions;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
-internal static class Pass180_PrepareShaderBinaries
+internal static class ShaderBinaries
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_seedHitsByClass = new(StringComparer.Ordinal);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unknownShaderTypeHashes = new(StringComparer.Ordinal);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_unmatchedClassNames = new(StringComparer.Ordinal);
 
-    private static void ReconcileMaterialTextureBindings(PipelineState state, int shaderIndex, SerializedProgramData metadata)
+    private static void ReconcileMaterialTextureBindings(ShaderSourceState state, int shaderIndex, SerializedProgramData metadata)
     {
-        bool hasPmi = state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out System.Text.Json.JsonElement pmi);
+        bool hasPmi = state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out FShaderParameterMapInfo? pmi);
         if (s_textureBindDiagLogged.Count < 12 && s_textureBindDiagLogged.TryAdd(shaderIndex.ToString(), true))
         {
-            string props = hasPmi && pmi.ValueKind == System.Text.Json.JsonValueKind.Object
-                ? string.Join(",", pmi.EnumerateObject().Select(p => $"{p.Name}[{(p.Value.ValueKind == System.Text.Json.JsonValueKind.Array ? p.Value.GetArrayLength() : -1)}]"))
+            string props = hasPmi
+                ? $"UniformBuffers[{pmi!.UniformBuffers?.Length ?? -1}],TextureSamplers[{pmi.TextureSamplers?.Length ?? -1}],SRVs[{pmi.SRVs?.Length ?? -1}],LooseParameterBuffers[{pmi.LooseParameterBuffers?.Length ?? -1}]"
                 : "(none)";
             state.Log($"    [texbind-diag] shader={shaderIndex} uesTextures={metadata.TextureParameters.Count} pmi={hasPmi} props={props}");
         }
@@ -27,19 +28,12 @@ internal static class Pass180_PrepareShaderBinaries
         if (!hasPmi) return;
 
         var slots = new List<int>();
-        foreach (string arrayName in new[] { "TextureSamplers", "SRVs" })
+        foreach (FShaderParameterInfo[]? bindings in new[] { pmi!.TextureSamplers, pmi.SRVs })
         {
-            if (!pmi.TryGetProperty(arrayName, out System.Text.Json.JsonElement arr)
-                || arr.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
-            foreach (System.Text.Json.JsonElement entry in arr.EnumerateArray())
+            foreach (FShaderParameterInfo entry in bindings ?? [])
             {
-                if (entry.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
-                if (!entry.TryGetProperty("BaseIndex", out System.Text.Json.JsonElement bi)) continue;
-                if (!bi.TryGetInt32(out int slot)) continue;
-                if (entry.TryGetProperty("Type", out System.Text.Json.JsonElement ty)
-                    && ty.ValueKind == System.Text.Json.JsonValueKind.String
-                    && ty.GetString() is string typeName
-                    && typeName.IndexOf("Sampler", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (entry is FShaderResourceParameterInfo { Type: EShaderParameterType.Sampler or EShaderParameterType.BindlessSampler }) continue;
+                int slot = entry.BaseIndex;
                 if (!slots.Contains(slot)) slots.Add(slot);
             }
         }
@@ -64,35 +58,30 @@ internal static class Pass180_PrepareShaderBinaries
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_textureBindMismatchLogged = new();
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_textureBindDiagLogged = new();
 
-    private static ConstantBufferParameter? TryReconcileGlobalsCB(EngineUbMetadata seed, System.Text.Json.JsonElement parameterMapInfo)
+    private static ConstantBufferParameter? TryReconcileGlobalsCB(EngineUbMetadata seed, FShaderParameterMapInfo parameterMapInfo)
     {
-        if (!parameterMapInfo.TryGetProperty("LooseParameterBuffers", out System.Text.Json.JsonElement loose)
-            || loose.ValueKind != System.Text.Json.JsonValueKind.Array
-            || loose.GetArrayLength() == 0)
+        if (parameterMapInfo.LooseParameterBuffers is not { Length: > 0 } loose)
         {
             return null;
         }
 
-        System.Text.Json.JsonElement first = loose[0];
-        if (!first.TryGetProperty("Parameters", out System.Text.Json.JsonElement parameters)
-            || parameters.ValueKind != System.Text.Json.JsonValueKind.Array)
+        FShaderLooseParameterBufferInfo first = loose[0];
+        if (first.Parameters is not { } parameters)
         {
             return null;
         }
 
         int seedCount = seed.ConstantBuffer!.VectorParameters.Length;
-        int cookCount = parameters.GetArrayLength();
+        int cookCount = parameters.Length;
         int pairCount = Math.Min(seedCount, cookCount);
         if (pairCount == 0) return null;
 
         VectorParameter[] reconciled = new VectorParameter[cookCount];
         int i = 0;
-        foreach (System.Text.Json.JsonElement p in parameters.EnumerateArray())
+        foreach (FShaderLooseParameterInfo p in parameters)
         {
-            int baseIdx = p.TryGetProperty("BaseIndex", out System.Text.Json.JsonElement b) && b.ValueKind == System.Text.Json.JsonValueKind.Number
-                ? b.GetInt32() : -1;
-            int sizeBytes = p.TryGetProperty("Size", out System.Text.Json.JsonElement sz) && sz.ValueKind == System.Text.Json.JsonValueKind.Number
-                ? sz.GetInt32() : 0;
+            int baseIdx = p.BaseIndex;
+            int sizeBytes = p.Size;
             if (baseIdx < 0 || sizeBytes <= 0) return null;
 
             int rowCount = Math.Clamp(sizeBytes / 4, 1, 4);
@@ -128,9 +117,7 @@ internal static class Pass180_PrepareShaderBinaries
             i++;
         }
 
-        int totalSize = first.TryGetProperty("Size", out System.Text.Json.JsonElement totSz) && totSz.ValueKind == System.Text.Json.JsonValueKind.Number
-            ? totSz.GetInt32()
-            : seed.ConstantBuffer.Size;
+        int totalSize = first.Size > 0 ? first.Size : seed.ConstantBuffer.Size;
         return new ConstantBufferParameter
         {
             Name = "$Globals",
@@ -143,56 +130,43 @@ internal static class Pass180_PrepareShaderBinaries
         };
     }
 
-    public static void DoPass(PipelineState state)
+    public static void Build(ShaderSourceState state)
     {
         s_seedHitsByClass.Clear();
         s_unknownShaderTypeHashes.Clear();
         s_unmatchedClassNames.Clear();
-        if (state.Library is null) throw new InvalidOperationException("Pass110 must run before Pass180.");
 
-        string outputDir = Path.GetFullPath(state.Options.OutputDirectory);
-        bool filtered = (state.Options.ShaderIndexFilter is { Count: > 0 })
-                     || !string.IsNullOrWhiteSpace(state.Options.MaterialFilter);
-
-        if (state.Options.RecreateOutputDirectory && !filtered && Directory.Exists(outputDir))
-        {
-            Directory.Delete(outputDir, true);
-        }
-        Directory.CreateDirectory(outputDir);
-        state.OutputDirectory = outputDir;
-        state.FailuresRoot = Path.Combine(outputDir, "_failures");
+        Directory.CreateDirectory(state.OutputDirectory);
 
         ShaderLibrary lib = state.Library;
-        HashSet<int> wantedIndices = new();
+        int wanted = 0;
         foreach (ShaderMapInfo map in state.ShaderMaps)
         {
+            MaterialSymbolSource? symbols = MaterialSymbols.Of(map);
+            if (symbols is null && map.UniformExpressions is not null)
+            {
+                state.LogError($"Shader map {map.ShaderMapHash} ({map.PrimaryAsset}) states an expression set but no symbols came of it - material CB will be unnamed.");
+            }
             foreach (ShaderMapMember member in map.Members)
             {
-                wantedIndices.Add(member.ArchiveShaderIndex);
-            }
-        }
-        if (state.Options.ShaderIndexFilter is { Count: > 0 })
-        {
-            wantedIndices.IntersectWith(state.Options.ShaderIndexFilter);
-        }
-
-        foreach (int i in wantedIndices.OrderBy(static x => x))
-        {
-            byte[]? raw = lib.GetShaderCode(i);
-            if (raw == null) { state.Skipped++; continue; }
-            try
-            {
-                ShaderPrep prep = PrepareSingleShader(state, i, raw);
-                state.ShaderPrepByIndex[i] = prep;
-            }
-            catch (Exception ex)
-            {
-                state.Failed++;
-                state.LogError($"Shader {i}: prep exception: {ex.Message}");
+                int i = member.ArchiveShaderIndex;
+                if (state.ShaderPrepByIndex.ContainsKey(i)) continue;
+                wanted++;
+                byte[]? raw = lib.GetShaderCode(i);
+                if (raw == null) { state.Skipped++; continue; }
+                try
+                {
+                    state.ShaderPrepByIndex[i] = PrepareSingleShader(state, i, raw, symbols);
+                }
+                catch (Exception ex)
+                {
+                    state.Failed++;
+                    state.LogError($"Shader {i}: prep exception: {ex.Message}");
+                }
             }
         }
 
-        state.Log($"    PrepareShaderBinaries: prepped {state.ShaderPrepByIndex.Count}/{wantedIndices.Count} binaries.");
+        state.Log($"    PrepareShaderBinaries: prepped {state.ShaderPrepByIndex.Count}/{wanted} binaries.");
 
         if (state.ShaderTypeSeedRegistry.HashToNameCount > 0)
         {
@@ -215,9 +189,9 @@ internal static class Pass180_PrepareShaderBinaries
         }
     }
 
-    private static ShaderPrep PrepareSingleShader(PipelineState state, int shaderIndex, byte[] raw)
+    private static ShaderPrep PrepareSingleShader(ShaderSourceState state, int shaderIndex, byte[] raw, MaterialSymbolSource? symbols)
     {
-        ShaderCodeEntry entry = state.Library!.ShaderEntries[shaderIndex];
+        ShaderCodeEntry entry = state.Library.ShaderEntries[shaderIndex];
         string typeSuffix = ShaderFrequency.ToString(entry.Frequency);
         ShaderContainerInfo? container = state.ContainerByShaderIndex.TryGetValue(shaderIndex, out ShaderContainerInfo? mappedContainer)
             ? mappedContainer
@@ -231,16 +205,11 @@ internal static class Pass180_PrepareShaderBinaries
 
         byte[] strippedCode = UnrealShaderParser.Parse(raw, out ShaderBinaryFormat detectedFormat, out UnrealShaderParser.UnrealMetadata? unrealMetadata);
 
-        bool hadUsage = state.UsageByShaderIndex.TryGetValue(shaderIndex, out HashSet<string>? usedBy) && usedBy.Count > 0;
-        MaterialSymbolSource? bestSource = hadUsage
-            ? ResolveBestSymbolSource(state, usedBy!, entry.Frequency, container?.ShaderMapHash)
-            : null;
-
-        if (hadUsage && bestSource == null)
+        state.UsageByShaderIndex.TryGetValue(shaderIndex, out HashSet<string>? usedBy);
+        MaterialSymbolSource? bestSource = symbols is null ? null : symbols with
         {
-            string firstMat = usedBy!.OrderBy(static m => m, StringComparer.OrdinalIgnoreCase).First();
-            state.LogError($"Shader {shaderIndex}: usage has {usedBy!.Count} material(s) (first: {firstMat}) but symbol reader returned null - material CB will be unnamed.");
-        }
+            Metadata = Clone(symbols.Metadata),
+        };
 
         SerializedProgramData metadata = SubProgramMetadataReader.Read(unrealMetadata, bestSource, state.EngineUbRegistry, state.Log);
 
@@ -286,9 +255,9 @@ internal static class Pass180_PrepareShaderBinaries
             if (typeSeed.ConstantBuffer != null
                 && typeSeed.ConstantBuffer.VectorParameters != null
                 && typeSeed.ConstantBuffer.VectorParameters.Length > 0
-                && state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out System.Text.Json.JsonElement pmi))
+                && state.ShaderParameterMapInfoByArchiveIndex.TryGetValue(shaderIndex, out FShaderParameterMapInfo? pmi))
             {
-                ConstantBufferParameter? globalsCb = TryReconcileGlobalsCB(typeSeed, pmi);
+                ConstantBufferParameter? globalsCb = TryReconcileGlobalsCB(typeSeed, pmi!);
                 if (globalsCb != null)
                 {
                     metadata.ConstantBufferParameters.Add(globalsCb);
@@ -298,7 +267,7 @@ internal static class Pass180_PrepareShaderBinaries
 
         ReconcileMaterialTextureBindings(state, shaderIndex, metadata);
 
-        uint perShaderModel = state.Options.ShaderModel;
+        uint perShaderModel = state.Request.ShaderModel;
         bool optionallyMarkedSm6 = unrealMetadata?.IsSm6Shader == true;
         if (optionallyMarkedSm6 || detectedFormat == ShaderBinaryFormat.Dxil)
         {
@@ -311,8 +280,8 @@ internal static class Pass180_PrepareShaderBinaries
             Symbols = metadata,
             ShaderModel = perShaderModel,
             SymbolEnricher = static (spv, symbols) => MaterialTextureNameInferrer.InferAndAppend(spv, symbols),
-            DebugDumpDirectory = state.Options.DumpFailures ? failureDumpDir : null,
-            DebugDumpStem = state.Options.DumpFailures ? (bestSource != null ? "with-symbols" : "no-symbols") : null,
+            DebugDumpDirectory = state.Request.DumpFailures ? failureDumpDir : null,
+            DebugDumpStem = state.Request.DumpFailures ? (bestSource != null ? "with-symbols" : "no-symbols") : null,
         };
 
         return new ShaderPrep
@@ -327,58 +296,25 @@ internal static class Pass180_PrepareShaderBinaries
             ProvisionalStem = provisionalStem,
             Metadata = metadata,
             ContainerInfo = container,
-            UsedBy = hadUsage ? usedBy : null,
+            UsedBy = usedBy,
         };
     }
 
-    private static MaterialSymbolSource? ResolveBestSymbolSource(PipelineState state, HashSet<string> usedBy, byte frequency, string? shaderMapHash)
+    /// <summary>A per-shader copy, because the decompiler fills the symbols it is handed.</summary>
+    private static SerializedProgramData Clone(SerializedProgramData source) => new()
     {
-        string shaderPlatform = frequency switch
-        {
-            0 or 1 or 2 or 3 or 4 or 5 => "SP_PCD3D_SM5",
-            _ => string.Empty,
-        };
+        ConstantBufferParameters = new List<ConstantBufferParameter>(source.ConstantBufferParameters),
+        BufferBindingParameters = new List<BufferBindingParameter>(source.BufferBindingParameters),
+        TextureParameters = new List<TextureParameter>(source.TextureParameters),
+        SamplerParameters = new List<SamplerParameter>(source.SamplerParameters),
+        UAVParameters = new List<UAVParameter>(source.UAVParameters),
+        DescriptorSetParameters = new List<DescriptorSetParameter>(source.DescriptorSetParameters),
+        EntryPoint = source.EntryPoint,
+        DebugName = source.DebugName,
+        UsedMaterials = new List<string>(source.UsedMaterials),
+    };
 
-        foreach (string material in usedBy)
-        {
-            MaterialSymbolSource? candidate = state.UnifiedMaterialReader?.GetSource(material, shaderPlatform, shaderMapHash)
-                                            ?? state.MaterialJsonSymbolReader?.GetSource(material, shaderPlatform);
-            if (candidate != null && state.MaterialJsonSymbolReader != null)
-            {
-                MaterialSymbolSource? jsonCandidate = state.MaterialJsonSymbolReader.GetSource(material, shaderPlatform);
-                if (jsonCandidate != null && !ReferenceEquals(jsonCandidate, candidate))
-                {
-                    foreach (ConstantBufferParameter cb in jsonCandidate.Metadata.ConstantBufferParameters)
-                    {
-                        if (cb.Name.StartsWith("MaterialCollection", StringComparison.Ordinal)
-                            && !candidate.Metadata.ConstantBufferParameters.Any(existing => string.Equals(existing.Name, cb.Name, StringComparison.Ordinal)))
-                        {
-                            candidate.Metadata.ConstantBufferParameters.Add(cb);
-                        }
-                    }
-                }
-            }
-            if (candidate != null)
-            {
-                SerializedProgramData clone = new()
-                {
-                    ConstantBufferParameters = new List<ConstantBufferParameter>(candidate.Metadata.ConstantBufferParameters),
-                    BufferBindingParameters = new List<BufferBindingParameter>(candidate.Metadata.BufferBindingParameters),
-                    TextureParameters = new List<TextureParameter>(candidate.Metadata.TextureParameters),
-                    SamplerParameters = new List<SamplerParameter>(candidate.Metadata.SamplerParameters),
-                    UAVParameters = new List<UAVParameter>(candidate.Metadata.UAVParameters),
-                    DescriptorSetParameters = new List<DescriptorSetParameter>(candidate.Metadata.DescriptorSetParameters),
-                    EntryPoint = candidate.Metadata.EntryPoint,
-                    DebugName = candidate.Metadata.DebugName,
-                    UsedMaterials = new List<string>(candidate.Metadata.UsedMaterials),
-                };
-                return candidate with { Metadata = clone };
-            }
-        }
-        return null;
-    }
-
-    private static string ResolveFinalName(PipelineState state, int shaderIndex)
+    private static string ResolveFinalName(ShaderSourceState state, int shaderIndex)
     {
         if (state.NameByShaderIndex.TryGetValue(shaderIndex, out string? mapped) && !string.IsNullOrWhiteSpace(mapped))
         {

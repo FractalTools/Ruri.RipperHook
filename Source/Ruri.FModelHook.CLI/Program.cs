@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using CUE4Parse.Encryption.Aes;
 using CUE4Parse.FileProvider;
+using CUE4Parse.FileProvider.Vfs;
 using CUE4Parse.MappingsProvider;
 using CUE4Parse.MappingsProvider.Usmap;
 using CUE4Parse.UE4.Objects.Core.Misc;
@@ -42,11 +43,6 @@ public static class Program
             return RunListHooks();
         }
 
-        if (!string.IsNullOrWhiteSpace(opts.DecompileOnly))
-        {
-            return RunDecompileOnly(opts.DecompileOnly!, opts);
-        }
-
         if (opts.ExportAssetPaths.Count > 0)
         {
             return RunExportAsset(opts);
@@ -57,73 +53,55 @@ public static class Program
             return RunFindShaderForMaterial(opts);
         }
 
-        return RunHeadlessShaderExport(opts);
+        return RunShaderSource(opts);
     }
 
-    private static int RunDecompileOnly(string libraryPath, CliOptions opts)
+    /// <summary>The source of the shaders the named materials compiled to, and nothing else.</summary>
+    private static int RunShaderSource(CliOptions opts)
     {
-        if (!File.Exists(libraryPath))
+        if (opts.MaterialPaths.Count == 0)
         {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --decompile-only: file not found: {libraryPath}");
-            return 1;
+            HookLogger.LogFailure("[ShaderSource] Nothing named. Pass --material <package path> (comma-separated / repeatable).");
+            return 2;
         }
-        string libDir = Path.GetDirectoryName(Path.GetFullPath(libraryPath))!;
-        string libStem = Path.GetFileNameWithoutExtension(libraryPath);
-        string outDir = Path.Combine(libDir, "Decompiled", libStem);
-
-        string? unifiedPath = null;
-        DirectoryInfo? probe = new(libDir);
-        while (probe != null)
+        if (!TryLoadConfig(opts, "ShaderSource", out HeadlessGameConfig cfg, out int failure))
         {
-            string candidate = Path.Combine(probe.FullName, "UnifiedShaderMetadata.json");
-            if (File.Exists(candidate)) { unifiedPath = candidate; break; }
-            probe = probe.Parent;
+            return failure;
         }
 
-        HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: library={libraryPath}");
-        HookLogger.Log($"[Ruri.FModelHook.CLI]                   output={outDir}");
-        HookLogger.Log($"[Ruri.FModelHook.CLI]                   unified={(unifiedPath ?? "(none — names will fall back to sidecars)")}");
+        bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
+        string output = string.IsNullOrWhiteSpace(opts.ExportOut)
+            ? Path.Combine(cfg.RawDataDirectory, "Shaders")
+            : opts.ExportOut!;
+        HookLogger.Log($"[ShaderSource] Config: game='{cfg.GameDirectory}' version={cfg.UeVersion} keys={1 + cfg.DynamicKeys.Count} out='{output}' splitVariants={splitVariants}");
 
         try
         {
-            bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
-
-            HashSet<int>? indexFilter = null;
-            string? envFilter = Environment.GetEnvironmentVariable("RURI_SHADER_INDEX_FILTER");
-            if (!string.IsNullOrWhiteSpace(envFilter))
+            AbstractVfsFileProvider provider = HeadlessMount.MountProvider(cfg, HookLogger.Log, HookLogger.LogFailure, out bool mappingsLoaded);
+            ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
             {
-                indexFilter = new HashSet<int>();
-                foreach (string tok in envFilter.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (int.TryParse(tok.Trim(), out int idx)) indexFilter.Add(idx);
-                }
-                HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: RURI_SHADER_INDEX_FILTER active, {indexFilter.Count} index(es).");
-            }
-
-            DecompileSummary summary = DecompilePipeline.Run(new LibraryDecompileOptions
-            {
-                LibraryPath = libraryPath,
-                OutputDirectory = outDir,
-                UnifiedMetadataPath = unifiedPath,
-                MaterialFilter = opts.MaterialFilter,
-                RecreateOutputDirectory = indexFilter == null && string.IsNullOrWhiteSpace(opts.MaterialFilter),
+                Provider = provider,
+                Subjects = opts.MaterialPaths.Select(static path => (IShaderMapSubject)new MaterialSubject(path)).ToList(),
+                OutputDirectory = output,
                 SplitVariantsToHlslFiles = splitVariants,
-                ShaderIndexFilter = indexFilter,
                 Log = HookLogger.Log,
                 LogError = HookLogger.LogFailure,
             });
-            HookLogger.Log($"[Ruri.FModelHook.CLI] --decompile-only: done. shaders={summary.TotalShaders} decompiled={summary.Decompiled} skipped={summary.Skipped} failed={summary.Failed}");
-            return summary.Failed > 0 ? 2 : 0;
+            HookLogger.LogSuccess($"[ShaderSource] Done. shader-maps={summary.ShaderMaps} decompiled={summary.Decompiled} skipped={summary.Skipped} failed={summary.Failed} mappings={mappingsLoaded}");
+            return summary.Failed > 0 ? 2 : mappingsLoaded ? 0 : 3;
         }
         catch (Exception ex)
         {
-            HookLogger.LogFailure($"[Ruri.FModelHook.CLI] --decompile-only: crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
+            HookLogger.LogFailure($"[ShaderSource] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
             return 1;
         }
     }
 
-    private static int RunHeadlessShaderExport(CliOptions opts)
+    /// <summary>The settings snapshot every headless mode mounts through.</summary>
+    private static bool TryLoadConfig(CliOptions opts, string lane, out HeadlessGameConfig cfg, out int failure)
     {
+        cfg = null!;
+        failure = 0;
         string? configPath = opts.GameConfig;
         if (string.IsNullOrWhiteSpace(configPath))
         {
@@ -136,56 +114,20 @@ public static class Program
         }
         if (!File.Exists(configPath))
         {
-            HookLogger.LogFailure($"[Headless] --game-config not found: {configPath}. Pass --game-config <AppSettings.json>.");
-            return 2;
+            HookLogger.LogFailure($"[{lane}] --game-config not found: {configPath}. Pass --game-config <AppSettings.json>.");
+            failure = 2;
+            return false;
         }
-
-        HeadlessGameConfig cfg;
         try
         {
             cfg = HeadlessGameConfig.Load(configPath);
+            return true;
         }
         catch (Exception ex)
         {
-            HookLogger.LogFailure($"[Headless] Failed to parse config {configPath}: {ex.Message}");
-            return 2;
-        }
-
-        string? filterRaw = !string.IsNullOrWhiteSpace(opts.ArchiveFilter)
-            ? opts.ArchiveFilter
-            : Environment.GetEnvironmentVariable("RURI_ARCHIVE_NAME_FILTER");
-        List<string>? filter = null;
-        if (!string.IsNullOrWhiteSpace(filterRaw))
-        {
-            filter = filterRaw!.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            HookLogger.Log($"[Headless] Archive filter: [{string.Join(", ", filter)}]");
-        }
-
-        bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
-        HookLogger.Log($"[Headless] Config: game='{cfg.GameDirectory}' version={cfg.UeVersion} keys={1 + cfg.DynamicKeys.Count} rawData='{cfg.RawDataDirectory}' splitVariants={splitVariants}");
-
-        try
-        {
-            HeadlessShaderExportRunner.RunResult result = HeadlessShaderExportRunner.Run(new HeadlessShaderExportRunner.Options
-            {
-                Config = cfg,
-                ArchiveNameFilter = filter,
-                SkipGlobal = opts.SkipGlobal,
-                SplitVariants = splitVariants,
-                SkipDecompile = opts.ExportOnly,
-                ListArchivesOnly = opts.ListArchives,
-                FindAssetSubstring = opts.FindAsset,
-                MaterialFilter = opts.MaterialFilter,
-                Log = HookLogger.Log,
-                LogError = HookLogger.LogFailure,
-            });
-            HookLogger.LogSuccess($"[Headless] Done. project={result.ProjectName} archives={result.ArchivesProcessed} materials={result.MaterialInterfaces} mappings={result.MappingsLoaded}");
-            return result.MappingsLoaded ? 0 : 3;
-        }
-        catch (Exception ex)
-        {
-            HookLogger.LogFailure($"[Headless] Crashed: {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}");
-            return 1;
+            HookLogger.LogFailure($"[{lane}] Failed to parse config {configPath}: {ex.Message}");
+            failure = 2;
+            return false;
         }
     }
 
@@ -220,7 +162,7 @@ public static class Program
 
         try
         {
-            var locations = HeadlessShaderExportRunner.FindShaderArchivesForMaterials(cfg, opts.FindShaderForMaterialPaths, HookLogger.Log, HookLogger.LogFailure);
+            var locations = HeadlessMount.FindShaderArchivesForMaterials(cfg, opts.FindShaderForMaterialPaths, HookLogger.Log, HookLogger.LogFailure);
             int withArchive = locations.Count(l => l.ArchivePaths.Count > 0);
             HookLogger.LogSuccess($"[FindShader] Done. shader-maps-found={locations.Count} with-archive={withArchive}");
             return withArchive > 0 ? 0 : 3;
@@ -269,7 +211,7 @@ public static class Program
         try
         {
             var exportOptions = UnrealExportOptions.Create(EMeshFormat.UEFormat);
-            HeadlessShaderExportRunner.ExportAssetResult result = HeadlessShaderExportRunner.ExportAssetPackages(
+            HeadlessMount.ExportAssetResult result = HeadlessMount.ExportAssetPackages(
                 cfg,
                 opts.ExportAssetPaths,
                 outputDirectory,

@@ -1,9 +1,8 @@
 using System.Collections.Generic;
+using CUE4Parse.UE4.Assets.Exports.Material;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
-
-internal enum EMaterialParameterAssociation { LayerParameter = 0, BlendParameter = 1, GlobalParameter = 2 }
 
 internal sealed class FMaterialParameterInfo
 {

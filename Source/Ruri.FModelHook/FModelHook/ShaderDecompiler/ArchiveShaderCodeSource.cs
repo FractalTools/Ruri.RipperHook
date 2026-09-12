@@ -1,23 +1,25 @@
+using CUE4Parse.UE4.Readers;
+
 namespace Ruri.FModelHook.ShaderDecompiler;
 
 /// <summary>
-/// The code body of a library file: a shader's bytes are read from the stream at its entry's
-/// offset past the body's start, one reader at a time since the stream has one position.
-/// Owns the stream.
+/// The code body of a serialized shader archive: a shader's bytes sit at its entry's offset past
+/// the body's start and are read from there when the shader is asked for, so a caller after one
+/// character's shaders never touches the rest of the archive. Owns the reader.
 /// </summary>
-internal sealed class StreamShaderCodeSource : IShaderCodeSource
+internal sealed class ArchiveShaderCodeSource : IShaderCodeSource
 {
-    private readonly Stream stream;
-    private readonly long baseOffset;
+    private readonly FArchive archive;
+    private readonly long bodyStart;
     private readonly ShaderCodeEntry[] entries;
     private readonly object gate = new();
 
-    public StreamShaderCodeSource(Stream stream, long baseOffset, ShaderCodeEntry[] entries)
+    public ArchiveShaderCodeSource(FArchive archive, long bodyStart, ShaderCodeEntry[] entries)
     {
-        this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
-        this.baseOffset = baseOffset;
+        this.archive = archive ?? throw new ArgumentNullException(nameof(archive));
+        this.bodyStart = bodyStart;
         this.entries = entries ?? throw new ArgumentNullException(nameof(entries));
-        Length = stream.Length - baseOffset;
+        Length = archive.Length - bodyStart;
     }
 
     public long Length { get; }
@@ -32,30 +34,20 @@ internal sealed class StreamShaderCodeSource : IShaderCodeSource
         {
             return Array.Empty<byte>();
         }
-        byte[] code = new byte[size];
+        byte[] code;
         lock (gate)
         {
-            stream.Position = baseOffset + offset;
-            if (stream.ReadAtLeast(code, size, throwOnEndOfStream: false) < size)
-            {
-                return null;
-            }
+            archive.Position = bodyStart + offset;
+            code = archive.ReadBytes(size);
+        }
+        if (code.Length < size)
+        {
+            return null;
         }
         uint uncompressed = entries[shaderIndex].UncompressedSize;
         return ShaderCodeCompression.IsCompressed((uint)size, uncompressed)
             ? ShaderCodeCompression.Decompress(code, (int)uncompressed)
             : code;
-    }
-
-    public bool CopyTo(int shaderIndex, Stream destination)
-    {
-        byte[]? code = Read(shaderIndex);
-        if (code is null)
-        {
-            return false;
-        }
-        destination.Write(code, 0, code.Length);
-        return true;
     }
 
     /// <summary>The slice an entry names, when it lies inside the body and fits an array.</summary>
@@ -77,5 +69,5 @@ internal sealed class StreamShaderCodeSource : IShaderCodeSource
         return true;
     }
 
-    public void Dispose() => stream.Dispose();
+    public void Dispose() => archive.Dispose();
 }

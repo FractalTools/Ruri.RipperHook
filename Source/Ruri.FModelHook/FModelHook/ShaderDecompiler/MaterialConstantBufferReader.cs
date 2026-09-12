@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
+using CUE4Parse.UE4.Assets.Exports.Material;
 using Ruri.ShaderTools;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
@@ -40,7 +40,7 @@ internal static class MaterialConstantBufferReader
     /// by each opcode's operand size the way the evaluator does; a program with an opcode
     /// the evaluator does not know is walked up to it.
     /// </summary>
-    private static IReadOnlyList<string> ReferencedParameters(byte[] data, uint offset, uint size, JsonElement parameters)
+    private static IReadOnlyList<string> ReferencedParameters(byte[] data, uint offset, uint size, NumericParameter[] parameters)
     {
         List<string> names = new();
         int n = checked((int)size);
@@ -67,7 +67,7 @@ internal static class MaterialConstantBufferReader
                     if (i + 2 > n) return names;
                     ushort idx = BitConverter.ToUInt16(data, dataStart + i);
                     i += 2;
-                    if (idx < parameters.GetArrayLength() && ParseMaterialParameterInfo(parameters[idx]) is { } info && !string.IsNullOrEmpty(info.Name) && !names.Contains(info.Name))
+                    if (idx < parameters.Length && parameters[idx] is { Name.Length: > 0 } info && !names.Contains(info.Name))
                     {
                         names.Add(info.Name);
                     }
@@ -111,19 +111,9 @@ internal static class MaterialConstantBufferReader
     /// expression set carries, with any parameter's <c>Value</c> replaced by what a material
     /// instance sets it to -- computed by the field's own preshader program.
     /// </summary>
-    public static float[]? Evaluate(JsonElement uniformExpressionSet, PreshaderField field, JsonElement numericParameters)
+    public static float[]? Evaluate(PreshaderInputs inputs, PreshaderField field)
     {
-        if (!uniformExpressionSet.TryGetProperty("UniformPreshaderData", out JsonElement uniformPreshaderData)
-            || uniformPreshaderData.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-        string? encodedData = ReadString(uniformPreshaderData, "Data");
-        if (string.IsNullOrWhiteSpace(encodedData))
-        {
-            return null;
-        }
-        List<float[]>? stackValues = TryEvaluatePreshaderStack(Convert.FromBase64String(encodedData), field.OpcodeOffset, field.OpcodeSize, numericParameters);
+        List<float[]>? stackValues = TryEvaluatePreshaderStack(inputs.Opcodes, field.OpcodeOffset, field.OpcodeSize, inputs.Numeric);
         if (stackValues == null)
         {
             return null;
@@ -133,18 +123,15 @@ internal static class MaterialConstantBufferReader
             : null;
     }
 
-    private static void RecordParams(string materialPath, JsonElement parameters)
+    private static void RecordParams(string materialPath, NumericParameter[] parameters)
     {
-        if (string.IsNullOrEmpty(materialPath) || parameters.ValueKind != JsonValueKind.Array) return;
+        if (string.IsNullOrEmpty(materialPath)) return;
 
         var table = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (JsonElement parameter in parameters.EnumerateArray())
+        foreach (NumericParameter parameter in parameters)
         {
-            FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameter);
-            if (info == null || string.IsNullOrEmpty(info.Name)) continue;
-            float[]? v = ReadParameterValue(parameter);
-            if (v == null) continue;
-            table[info.Name] = string.Join(",", v.Select(static c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
+            if (string.IsNullOrEmpty(parameter.Name) || parameter.Value is not { } v) continue;
+            table[parameter.Name] = string.Join(",", v.Select(static c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         if (table.Count > 0) EvaluatedCbufferParams[materialPath] = table;
@@ -202,49 +189,33 @@ internal static class MaterialConstantBufferReader
     private static readonly string? PreshaderDebugFilter =
         Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG");
 
-    public static ConstantBufferParameter? Read(JsonElement uniformExpressionSet, string? materialPath = null)
+    public static ConstantBufferParameter? Read(FUniformExpressionSet uniformExpressionSet, string? materialPath = null)
     {
-        if (!uniformExpressionSet.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement uniformBufferLayoutInitializer)
-            || uniformBufferLayoutInitializer.ValueKind != JsonValueKind.Object)
+        FRHIUniformBufferLayoutInitializer layout = uniformExpressionSet.UniformBufferLayoutInitializer;
+        if (!string.Equals(layout.Name, "Material", StringComparison.Ordinal))
         {
             return null;
         }
 
-        string? bufferName = ReadString(uniformBufferLayoutInitializer, "Name");
-        if (!string.Equals(bufferName, "Material", StringComparison.Ordinal))
+        uint constantBufferSize = layout.ConstantBufferSize;
+        FMaterialUniformPreshaderHeader[] uniformPreshaders = uniformExpressionSet.UniformPreshaders ?? [];
+        FMaterialUniformPreshaderField[] uniformPreshaderFields = uniformExpressionSet.UniformPreshaderFields ?? [];
+        PreshaderInputs? inputs = PreshaderInputs.Of(uniformExpressionSet);
+        if (inputs is null)
         {
             return null;
         }
 
-        uint constantBufferSize = ReadUInt32(uniformBufferLayoutInitializer, "ConstantBufferSize");
-        if (!uniformExpressionSet.TryGetProperty("UniformPreshaders", out JsonElement uniformPreshaders)
-            || uniformPreshaders.ValueKind != JsonValueKind.Array
-            || !uniformExpressionSet.TryGetProperty("UniformPreshaderFields", out JsonElement uniformPreshaderFields)
-            || uniformPreshaderFields.ValueKind != JsonValueKind.Array
-            || !uniformExpressionSet.TryGetProperty("UniformNumericParameters", out JsonElement uniformNumericParameters)
-            || uniformNumericParameters.ValueKind != JsonValueKind.Array
-            || !uniformExpressionSet.TryGetProperty("UniformPreshaderData", out JsonElement uniformPreshaderData)
-            || uniformPreshaderData.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        string? encodedData = ReadString(uniformPreshaderData, "Data");
-        if (string.IsNullOrWhiteSpace(encodedData))
-        {
-            return null;
-        }
-
-        byte[] opcodeData = Convert.FromBase64String(encodedData);
+        byte[] opcodeData = inputs.Opcodes;
+        NumericParameter[] uniformNumericParameters = inputs.Numeric;
         ConstantBufferParameter materialBuffer = new()
         {
             Name = "Material",
             Size = checked((int)constantBufferSize)
         };
 
-        string[] preshaderNames = ExtractPreshaderNames(uniformPreshaderData);
-        JsonElement uniformTextureParameters = default;
-        uniformExpressionSet.TryGetProperty("UniformTextureParameters", out uniformTextureParameters);
+        string[] preshaderNames = inputs.Names;
+        IReadOnlyList<IReadOnlyList<string>> uniformTextureParameters = inputs.TextureNames;
 
         (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes, int numericRegionEnd) = ComputeNumericLayout(uniformExpressionSet, (int)constantBufferSize);
 
@@ -291,13 +262,13 @@ internal static class MaterialConstantBufferReader
             seenNames.Add("VTPackedUniform");
         }
 
-        foreach (JsonElement preshader in uniformPreshaders.EnumerateArray())
+        foreach (FMaterialUniformPreshaderHeader preshader in uniformPreshaders)
         {
-            uint opcodeOffset = ReadUInt32(preshader, "OpcodeOffset");
-            uint opcodeSize = ReadUInt32(preshader, "OpcodeSize");
-            uint fieldIndex = ReadUInt32(preshader, "FieldIndex");
-            uint numFields = ReadUInt32(preshader, "NumFields");
-            if (numFields < 1 || fieldIndex + numFields > (uint)uniformPreshaderFields.GetArrayLength())
+            uint opcodeOffset = preshader.OpcodeOffset;
+            uint opcodeSize = preshader.OpcodeSize;
+            uint fieldIndex = preshader is FMaterialUniformPreshaderHeader_5_1 fielded ? fielded.FieldIndex : 0;
+            uint numFields = preshader is FMaterialUniformPreshaderHeader_5_1 counted ? counted.NumFields : 0;
+            if (numFields < 1 || fieldIndex + numFields > (uint)uniformPreshaderFields.Length)
             {
                 continue;
             }
@@ -309,19 +280,19 @@ internal static class MaterialConstantBufferReader
 
             for (uint fieldSlot = 0; fieldSlot < numFields; fieldSlot++)
             {
-            JsonElement field = uniformPreshaderFields[checked((int)(fieldIndex + fieldSlot))];
-            string? rawFieldType = ReadString(field, "Type");
+            FMaterialUniformPreshaderField field = uniformPreshaderFields[checked((int)(fieldIndex + fieldSlot))];
+            string rawFieldType = field.Type.ToString();
             FieldKind kind = TryMapFieldType(rawFieldType, out int rows);
             if (kind == FieldKind.Unknown)
             {
                 if (Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG") == "1")
                 {
-                    Console.WriteLine($"[preshader-field] 未识别字段类型 '{rawFieldType}' @cb={preshaderBufferStart + checked((int)ReadUInt32(field, "BufferOffset") * 4)} mat={materialPath}");
+                    Console.WriteLine($"[preshader-field] 未识别字段类型 '{rawFieldType}' @cb={preshaderBufferStart + checked((int)field.BufferOffset * 4)} mat={materialPath}");
                 }
                 continue;
             }
 
-            int byteOffset = preshaderBufferStart + checked((int)ReadUInt32(field, "BufferOffset") * 4);
+            int byteOffset = preshaderBufferStart + checked((int)field.BufferOffset * 4);
             if (!seenOffsets.Add(byteOffset))
             {
                 if (Environment.GetEnvironmentVariable("RURI_PRESHADER_DEBUG") == "1")
@@ -438,35 +409,15 @@ internal static class MaterialConstantBufferReader
         return materialBuffer;
     }
 
-    private static (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes, int numericEnd) ComputeNumericLayout(JsonElement uniformExpressionSet, int constantBufferSize)
+    private static (int preshaderBufferStart, int vtPageTableBytes, int vtUniformBytes, int numericEnd) ComputeNumericLayout(FUniformExpressionSet uniformExpressionSet, int constantBufferSize)
     {
-        int preshaderBufferSizeFloat4 = 0;
-        if (uniformExpressionSet.TryGetProperty("UniformPreshaderBufferSize", out JsonElement sizeElement) && sizeElement.ValueKind == JsonValueKind.Number)
-        {
-            preshaderBufferSizeFloat4 = sizeElement.GetInt32();
-        }
-        int preshaderBufferBytes = Math.Max(0, preshaderBufferSizeFloat4) * 16;
+        int preshaderBufferBytes = Math.Max(0, (int)uniformExpressionSet.UniformPreshaderBufferSize) * 16;
 
-        int numericEnd = constantBufferSize;
-        if (uniformExpressionSet.TryGetProperty("UniformBufferLayoutInitializer", out JsonElement ubl)
-            && ubl.ValueKind == JsonValueKind.Object
-            && ubl.TryGetProperty("Resources", out JsonElement resources)
-            && resources.ValueKind == JsonValueKind.Array
-            && resources.GetArrayLength() > 0
-            && resources[0].TryGetProperty("MemberOffset", out JsonElement firstResourceOffset)
-            && firstResourceOffset.ValueKind == JsonValueKind.Number)
-        {
-            numericEnd = firstResourceOffset.GetInt32();
-        }
+        FRHIUniformBufferResource[]? resources = uniformExpressionSet.UniformBufferLayoutInitializer.Resources;
+        int numericEnd = resources is { Length: > 0 } ? (int)resources[0].MemberOffset : constantBufferSize;
 
-        int virtualCount = 0;
-        if (uniformExpressionSet.TryGetProperty("UniformTextureParameters", out JsonElement textureParams)
-            && textureParams.ValueKind == JsonValueKind.Array
-            && textureParams.GetArrayLength() > 5
-            && textureParams[5].ValueKind == JsonValueKind.Array)
-        {
-            virtualCount = textureParams[5].GetArrayLength();
-        }
+        FMaterialTextureParameterInfo[][]? textureParams = uniformExpressionSet.UniformTextureParameters;
+        int virtualCount = textureParams is { Length: > 5 } ? textureParams[5]?.Length ?? 0 : 0;
         int vtUniformBytes = virtualCount * 16;
 
         int vtPageTableBytes = numericEnd - preshaderBufferBytes - vtUniformBytes;
@@ -573,7 +524,7 @@ internal static class MaterialConstantBufferReader
         return new string(chars[..numE]);
     }
 
-    private static string DerivePreshaderName(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath = null, int rows = 0, string[]? preshaderNames = null, JsonElement textureParameters = default)
+    private static string DerivePreshaderName(byte[] data, uint offset, uint size, NumericParameter[] parameters, int byteOffset, string? materialPath = null, int rows = 0, string[]? preshaderNames = null, IReadOnlyList<IReadOnlyList<string>>? textureParameters = null)
     {
         string anonymous = $"f_{byteOffset}";
         if (size < 3 || offset >= (uint)data.Length || offset + 3 > (uint)data.Length)
@@ -591,13 +542,13 @@ internal static class MaterialConstantBufferReader
         }
 
         ushort paramIdx = BitConverter.ToUInt16(data, checked((int)offset + 1));
-        if (paramIdx >= parameters.GetArrayLength())
+        if (paramIdx >= parameters.Length)
         {
             return anonymous;
         }
 
-        FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[paramIdx]);
-        if (info == null)
+        NumericParameter info = parameters[paramIdx];
+        if (info.Name.Length == 0)
         {
             return anonymous;
         }
@@ -646,10 +597,10 @@ internal static class MaterialConstantBufferReader
             ushort otherIdx = BitConverter.ToUInt16(data, rest + 1);
             byte binaryOp = data[rest + 3];
             string? binary = MapBinaryOp(binaryOp);
-            if (binary != null && otherIdx < parameters.GetArrayLength())
+            if (binary != null && otherIdx < parameters.Length)
             {
-                FMaterialParameterInfo? otherInfo = ParseMaterialParameterInfo(parameters[otherIdx]);
-                if (otherInfo != null)
+                NumericParameter otherInfo = parameters[otherIdx];
+                if (otherInfo.Name.Length > 0)
                 {
                     return $"{baseName}_{binary}_{otherInfo.Name}";
                 }
@@ -692,10 +643,10 @@ internal static class MaterialConstantBufferReader
         return anonymous;
     }
 
-    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, JsonElement parameters, string[]? preshaderNames = null, JsonElement textureParameters = default)
+    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, NumericParameter[] parameters, string[]? preshaderNames = null, IReadOnlyList<IReadOnlyList<string>>? textureParameters = null)
         => TryEvaluatePreshader(data, offset, size, parameters, out _, preshaderNames, textureParameters);
 
-    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, JsonElement parameters, out string? program, string[]? preshaderNames = null, JsonElement textureParameters = default)
+    private static string? TryEvaluatePreshader(byte[] data, uint offset, uint size, NumericParameter[] parameters, out string? program, string[]? preshaderNames = null, IReadOnlyList<IReadOnlyList<string>>? textureParameters = null)
     {
         program = null;
         int n = checked((int)size);
@@ -753,12 +704,12 @@ internal static class MaterialConstantBufferReader
                 case 3:                {
                     if (i + 2 > n) return null;
                     ushort idx = BitConverter.ToUInt16(data, dataStart + i);
-                    if (idx >= parameters.GetArrayLength()) return null;
-                    FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[idx]);
-                    if (info == null || string.IsNullOrEmpty(info.Name)) return null;
+                    if (idx >= parameters.Length) return null;
+                    NumericParameter info = parameters[idx];
+                    if (string.IsNullOrEmpty(info.Name)) return null;
                     string pname = SanitizeIdent(info.Name);
                     firstParamName ??= pname;
-                    stack.Push(StackVal.Param(pname, "p" + ParameterComponentCount(parameters[idx]) + ProgramQuote(info.Name)));
+                    stack.Push(StackVal.Param(pname, "p" + parameters[idx].Components + ProgramQuote(info.Name)));
                     i += 2;
                     break;
                 }
@@ -939,27 +890,6 @@ internal static class MaterialConstantBufferReader
         _ => null,
     };
 
-    private static int ParameterComponentCount(JsonElement parameter)
-    {
-        if (string.Equals(ReadString(parameter, "ParameterType"), "Scalar", StringComparison.Ordinal)) return 1;
-        if (parameter.ValueKind == JsonValueKind.Object
-            && parameter.TryGetProperty("Value", out JsonElement value))
-        {
-            if (value.ValueKind == JsonValueKind.Number) return 1;
-            if (value.ValueKind == JsonValueKind.Object)
-            {
-                int last = 0;
-                string[] names = { "R", "G", "B", "A" };
-                for (int c = 0; c < 4; c++)
-                {
-                    if (value.TryGetProperty(names[c], out JsonElement comp) && comp.ValueKind == JsonValueKind.Number) last = c + 1;
-                }
-                if (last > 0) return last;
-            }
-        }
-        return 4;
-    }
-
     private static string ProgramQuote(string raw) => "\"" + raw.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     private static string ConstProgram(byte[] data, int valueStart, byte ctype)
@@ -976,20 +906,7 @@ internal static class MaterialConstantBufferReader
         return $"c{components}:{string.Join(",", parts)}";
     }
 
-    private static string[] ExtractPreshaderNames(JsonElement uniformPreshaderData)
-    {
-        if (uniformPreshaderData.ValueKind != JsonValueKind.Object) return Array.Empty<string>();
-        if (!uniformPreshaderData.TryGetProperty("Names", out JsonElement names) || names.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-        List<string> result = new(names.GetArrayLength());
-        foreach (JsonElement n in names.EnumerateArray())
-        {
-            result.Add(n.ValueKind == JsonValueKind.String ? (n.GetString() ?? "") : "");
-        }
-        return result.ToArray();
-    }
-
-    private static string ResolveTextureName(ushort nameIdx, int textureIdx, string[]? preshaderNames, JsonElement textureParameters)
+    private static string ResolveTextureName(ushort nameIdx, int textureIdx, string[]? preshaderNames, IReadOnlyList<IReadOnlyList<string>>? textureParameters)
     {
         if (preshaderNames != null && nameIdx < preshaderNames.Length)
         {
@@ -1000,30 +917,13 @@ internal static class MaterialConstantBufferReader
             }
         }
 
-        if (textureParameters.ValueKind == JsonValueKind.Array && textureIdx >= 0)
+        if (textureParameters != null && textureIdx >= 0)
         {
-            for (int t = 0; t < textureParameters.GetArrayLength(); t++)
+            foreach (IReadOnlyList<string> bucket in textureParameters)
             {
-                JsonElement bucket = textureParameters[t];
-                if (bucket.ValueKind != JsonValueKind.Array) continue;
-                if (textureIdx >= bucket.GetArrayLength()) continue;
+                if (textureIdx >= bucket.Count) continue;
 
-                JsonElement entry = bucket[textureIdx];
-                if (entry.ValueKind != JsonValueKind.Object) continue;
-
-                string? name = null;
-                if (entry.TryGetProperty("ParameterName", out JsonElement pn) && pn.ValueKind == JsonValueKind.String)
-                {
-                    name = pn.GetString();
-                }
-                else if (entry.TryGetProperty("ParameterInfo", out JsonElement pi)
-                         && pi.ValueKind == JsonValueKind.Object
-                         && pi.TryGetProperty("Name", out JsonElement nameEl)
-                         && nameEl.ValueKind == JsonValueKind.String)
-                {
-                    name = nameEl.GetString();
-                }
-
+                string name = bucket[textureIdx];
                 if (!string.IsNullOrEmpty(name) && !string.Equals(name, "None", StringComparison.Ordinal))
                 {
                     return SanitizeIdent(name);
@@ -1034,10 +934,10 @@ internal static class MaterialConstantBufferReader
         return $"Texture_{textureIdx}";
     }
 
-    private static float[]? TryEvaluatePreshaderNumeric(byte[] data, uint offset, uint size, JsonElement parameters)
+    private static float[]? TryEvaluatePreshaderNumeric(byte[] data, uint offset, uint size, NumericParameter[] parameters)
         => TryEvaluatePreshaderStack(data, offset, size, parameters) is { Count: > 0 } s ? s[^1] : null;
 
-    private static List<float[]>? TryEvaluatePreshaderStack(byte[] data, uint offset, uint size, JsonElement parameters)
+    private static List<float[]>? TryEvaluatePreshaderStack(byte[] data, uint offset, uint size, NumericParameter[] parameters)
     {
         int n = checked((int)size);
         int dataStart = checked((int)offset);
@@ -1073,11 +973,11 @@ internal static class MaterialConstantBufferReader
                 case 3:                {
                     if (i + 2 > n) return null;
                     ushort idx = BitConverter.ToUInt16(data, dataStart + i);
-                    if (idx >= parameters.GetArrayLength()) return null;
-                    float[]? pv = ReadParameterValue(parameters[idx]);
+                    if (idx >= parameters.Length) return null;
+                    float[]? pv = parameters[idx].Value;
                     if (pv == null) return null;
                     stack.Push(pv);
-                    widths.Push(ParameterComponentCount(parameters[idx]));
+                    widths.Push(parameters[idx].Components);
                     i += 2;
                     break;
                 }
@@ -1194,39 +1094,6 @@ internal static class MaterialConstantBufferReader
         if (stack.Count == 0) return null;
         var bottomToTop = new List<float[]>(stack);        bottomToTop.Reverse();
         return bottomToTop;
-    }
-
-    private static float[]? ReadParameterValue(JsonElement parameter)
-    {
-        if (parameter.ValueKind != JsonValueKind.Object) return null;
-        if (!parameter.TryGetProperty("Value", out JsonElement value)) return null;
-
-        if (value.ValueKind == JsonValueKind.Number)
-        {
-            float f = value.GetSingle();
-            return new[] { f, f, f, f };
-        }
-        if (value.ValueKind != JsonValueKind.Object) return null;
-
-        float[] v = new float[4];
-        string[] names = { "R", "G", "B", "A" };
-        bool any = false;
-        for (int c = 0; c < 4; c++)
-        {
-            if (value.TryGetProperty(names[c], out JsonElement comp) && comp.ValueKind == JsonValueKind.Number)
-            {
-                v[c] = comp.GetSingle();
-                any = true;
-            }
-        }
-        if (!any) return null;
-        if (string.Equals(ReadString(parameter, "ParameterType"), "Scalar", StringComparison.Ordinal))
-        {
-            v[1] = v[0];
-            v[2] = v[0];
-            v[3] = v[0];
-        }
-        return v;
     }
 
     private static float[]? ApplyBinary(byte op, float[] a, float[] b)
@@ -1378,7 +1245,7 @@ internal static class MaterialConstantBufferReader
         return s.Substring(0, MaxLen - 4) + "_etc";
     }
 
-    private static string? TryRecoverViaSingleParamScan(byte[] data, uint offset, uint size, JsonElement parameters)
+    private static string? TryRecoverViaSingleParamScan(byte[] data, uint offset, uint size, NumericParameter[] parameters)
     {
         int n = checked((int)size);
         int dataStart = checked((int)offset);
@@ -1395,7 +1262,7 @@ internal static class MaterialConstantBufferReader
             if (op == 3)            {
                 if (i + 1 + 2 > n) return null;
                 ushort idx = BitConverter.ToUInt16(data, dataStart + i + 1);
-                if (idx >= parameters.GetArrayLength()) return null;
+                if (idx >= parameters.Length) return null;
                 if (singleIdx.HasValue && singleIdx.Value != idx) return null;
                 singleIdx = idx;
                 operandBytes = 2;
@@ -1424,11 +1291,11 @@ internal static class MaterialConstantBufferReader
         }
 
         if (!singleIdx.HasValue) return null;
-        FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[singleIdx.Value]);
-        return string.IsNullOrEmpty(info?.Name) ? null : info!.Name;
+        NumericParameter info = parameters[singleIdx.Value];
+        return string.IsNullOrEmpty(info.Name) ? null : info.Name;
     }
 
-    private static void DumpPreshaderDebug(byte[] data, uint offset, uint size, JsonElement parameters, int byteOffset, string? materialPath, int rows, string baseName)
+    private static void DumpPreshaderDebug(byte[] data, uint offset, uint size, NumericParameter[] parameters, int byteOffset, string? materialPath, int rows, string baseName)
     {
         if (string.IsNullOrEmpty(PreshaderDebugFilter)) return;
         if (string.IsNullOrEmpty(materialPath) || materialPath.IndexOf(PreshaderDebugFilter, StringComparison.OrdinalIgnoreCase) < 0) return;
@@ -1454,9 +1321,9 @@ internal static class MaterialConstantBufferReader
         {
             if (data[start + i] != 3) continue;
             ushort idx = BitConverter.ToUInt16(data, start + i + 1);
-            if (idx >= parameters.GetArrayLength()) continue;
-            FMaterialParameterInfo? info = ParseMaterialParameterInfo(parameters[idx]);
-            if (info == null) continue;
+            if (idx >= parameters.Length) continue;
+            NumericParameter info = parameters[idx];
+            if (info.Name.Length == 0) continue;
             if (!first) sb.Append(',');
             sb.Append('@').Append(i).Append(':').Append(info.Name);
             first = false;
@@ -1545,61 +1412,4 @@ internal static class MaterialConstantBufferReader
         }
     }
 
-    private static FMaterialParameterInfo? ParseMaterialParameterInfo(JsonElement element)
-    {
-        JsonElement parameterInfo;
-        bool nested;
-        if (element.TryGetProperty("ParameterInfo", out parameterInfo) && parameterInfo.ValueKind == JsonValueKind.Object)
-        {
-            nested = true;
-        }
-        else
-        {
-            parameterInfo = element;
-            nested = false;
-        }
-
-        string? name = nested
-            ? ReadString(parameterInfo, "Name")
-            : ReadString(parameterInfo, "ParameterName") ?? ReadString(parameterInfo, "Name");
-        if (string.IsNullOrWhiteSpace(name) || string.Equals(name, "None", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        string? associationRaw = ReadString(parameterInfo, "Association");
-        EMaterialParameterAssociation association = associationRaw switch
-        {
-            "EMaterialParameterAssociation::LayerParameter" => EMaterialParameterAssociation.LayerParameter,
-            "EMaterialParameterAssociation::BlendParameter" => EMaterialParameterAssociation.BlendParameter,
-            "LayerParameter" => EMaterialParameterAssociation.LayerParameter,
-            "BlendParameter" => EMaterialParameterAssociation.BlendParameter,
-            _ => EMaterialParameterAssociation.GlobalParameter
-        };
-
-        int index = parameterInfo.TryGetProperty("Index", out JsonElement indexElement) && indexElement.ValueKind == JsonValueKind.Number
-            ? indexElement.GetInt32()
-            : -1;
-        return new FMaterialParameterInfo(name, association, index);
-    }
-
-    private static string? ReadString(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        return value.GetString();
-    }
-
-    private static uint ReadUInt32(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.Number)
-        {
-            throw new InvalidDataException($"Missing numeric property: {propertyName}");
-        }
-
-        return value.GetUInt32();
-    }
 }

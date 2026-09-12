@@ -1,30 +1,27 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
-using System.Text.Json;
+using CUE4Parse.UE4.Assets.Exports.Material;
+using CUE4Parse.UE4.Objects.UObject;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
-internal static class Pass175_BuildRenderStateBlock
+/// <summary>
+/// How the map's material is drawn -- blend, cull, depth -- stated as the shaderlab tags and pass
+/// commands that mean the same. Read off the material the caller named, because an instance is
+/// free to override what its template blends as.
+/// </summary>
+internal static class ShaderLabRenderState
 {
-    public static void DoPass(PipelineState state)
+    public static void Build(ShaderSourceState state)
     {
-        if (state.UnifiedMaterialReader == null)
-        {
-            state.Log("    RenderState: skipped (no UnifiedMaterialReader).");
-            return;
-        }
-
         int populated = 0;
         foreach (ShaderMapInfo map in state.ShaderMaps)
         {
-            if (!TryResolveRenderState(state, map, out JsonElement renderState))
+            if (map.Target.Material is not { } material)
             {
                 continue;
             }
 
-            ResolvedState resolved = Resolve(renderState);
+            ResolvedState resolved = Resolve(material);
             string tagsBlock = BuildSubShaderTags(resolved);
             string passCommands = BuildPassCommands(resolved);
 
@@ -37,21 +34,6 @@ internal static class Pass175_BuildRenderStateBlock
         }
 
         state.Log($"    RenderState: populated {populated}/{state.ShaderMaps.Count} shader-maps.");
-    }
-
-    private static bool TryResolveRenderState(PipelineState state, ShaderMapInfo map, out JsonElement renderState)
-    {
-        renderState = default;
-        foreach (string asset in map.Assets)
-        {
-            JsonElement? candidate = state.UnifiedMaterialReader!.TryGetRenderState(asset);
-            if (candidate.HasValue)
-            {
-                renderState = candidate.Value;
-                return true;
-            }
-        }
-        return false;
     }
 
     private readonly struct ResolvedState
@@ -77,15 +59,57 @@ internal static class Pass175_BuildRenderStateBlock
         public bool EffectiveTwoSided => TwoSided || string.Equals(ShadingModel, "MSM_TwoSidedFoliage", StringComparison.Ordinal);
     }
 
-    private static ResolvedState Resolve(JsonElement rs)
+    /// <summary>
+    /// The material's drawing state: what it declares itself, and -- when it is an instance --
+    /// what it overrides of its template's, falling back to the template for the properties an
+    /// instance cannot override.
+    /// </summary>
+    private static ResolvedState Resolve(UMaterialInterface material)
     {
+        string blendMode = "BLEND_Opaque";
+        string shadingModel = "MSM_DefaultLit";
+        bool twoSided = false;
+        bool disableDepthTest = false;
+        bool ditheredLODTransition = false;
+
+        if (material is UMaterial declared)
+        {
+            blendMode = declared.BlendMode.ToString();
+            shadingModel = declared.ShadingModel.ToString();
+            twoSided = declared.TwoSided;
+            disableDepthTest = declared.bDisableDepthTest;
+        }
+
+        if (material is UMaterialInstance instance)
+        {
+            if (instance.BasePropertyOverrides is { } overrides)
+            {
+                blendMode = overrides.BlendMode.ToString();
+                shadingModel = overrides.ShadingModel.ToString();
+                ditheredLODTransition = overrides.DitheredLODTransition;
+            }
+            if (instance.Parent is UMaterial template)
+            {
+                twoSided |= template.TwoSided;
+                disableDepthTest |= template.bDisableDepthTest;
+            }
+        }
+
+        string materialDomain = material.TryGetValue(out FName domain, "MaterialDomain") && !domain.IsNone
+            ? domain.Text
+            : "MD_Surface";
+        if (!ditheredLODTransition && material.TryGetValue(out bool dithered, "DitheredLODTransition"))
+        {
+            ditheredLODTransition = dithered;
+        }
+
         return new ResolvedState(
-            blendMode: NormaliseEnumLiteral(ReadString(rs, "BlendMode")) ?? "BLEND_Opaque",
-            shadingModel: NormaliseEnumLiteral(ReadString(rs, "ShadingModel")) ?? "MSM_DefaultLit",
-            materialDomain: NormaliseEnumLiteral(ReadString(rs, "MaterialDomain")) ?? "MD_Surface",
-            twoSided: ReadBool(rs, "TwoSided"),
-            disableDepthTest: ReadBool(rs, "DisableDepthTest"),
-            ditheredLODTransition: ReadBool(rs, "DitheredLODTransition"));
+            blendMode: NormaliseEnumLiteral(blendMode) ?? "BLEND_Opaque",
+            shadingModel: NormaliseEnumLiteral(shadingModel) ?? "MSM_DefaultLit",
+            materialDomain: NormaliseEnumLiteral(materialDomain) ?? "MD_Surface",
+            twoSided: twoSided,
+            disableDepthTest: disableDepthTest,
+            ditheredLODTransition: ditheredLODTransition);
     }
 
     private static string BuildSubShaderTags(ResolvedState rs)
@@ -244,19 +268,5 @@ internal static class Pass175_BuildRenderStateBlock
         if (string.IsNullOrEmpty(raw)) return raw;
         int sep = raw.IndexOf("::", StringComparison.Ordinal);
         return sep >= 0 ? raw[(sep + 2)..] : raw;
-    }
-
-    private static string? ReadString(JsonElement obj, string property)
-    {
-        if (obj.ValueKind != JsonValueKind.Object) return null;
-        if (!obj.TryGetProperty(property, out JsonElement value)) return null;
-        return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    }
-
-    private static bool ReadBool(JsonElement obj, string property)
-    {
-        if (obj.ValueKind != JsonValueKind.Object) return false;
-        if (!obj.TryGetProperty(property, out JsonElement value)) return false;
-        return value.ValueKind == JsonValueKind.True;
     }
 }

@@ -50,12 +50,12 @@ public sealed class MaterialSemanticsResolver : IDisposable
     private readonly AbstractFileProvider provider;
     private readonly Action<string> log;
     private readonly Action<string> trace;
-    private readonly Lazy<MaterialShaderLibraryIndex> libraries;
+    private readonly Lazy<ShaderMapCatalog> catalog;
     private readonly ConcurrentDictionary<string, Lazy<MaterialSemantics>> byShaderMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> reportedStatuses = new(StringComparer.Ordinal);
 
     /// <summary>What one reading of a map's symbols yields: the named bindings, the layout that named them, the preshader fields of the material buffer, and the expression set they came from.</summary>
-    private readonly record struct SymbolReading(SerializedProgramData Symbols, MaterialUniformBufferLayout? Layout, IReadOnlyList<PreshaderField> Fields, string? ExpressionSet);
+    private readonly record struct SymbolReading(SerializedProgramData Symbols, MaterialUniformBufferLayout? Layout, IReadOnlyList<PreshaderField> Fields, PreshaderInputs? Preshaders);
 
     /// <param name="log">Where library loads and each distinct failure go.</param>
     /// <param name="trace">Where every shader map read is described binding by binding.</param>
@@ -64,8 +64,8 @@ public sealed class MaterialSemanticsResolver : IDisposable
         this.provider = provider ?? throw new ArgumentNullException(nameof(provider));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.trace = trace ?? throw new ArgumentNullException(nameof(trace));
-        libraries = new Lazy<MaterialShaderLibraryIndex>(() => MaterialShaderLibraryIndex.Load(provider, log), LazyThreadSafetyMode.ExecutionAndPublication);
-        MaterialConstantBufferReader.PreshaderVersion = DecompilePipeline.DetectPreshaderVersion(provider.Versions.Game.ToString(), trace);
+        catalog = new Lazy<ShaderMapCatalog>(() => ShaderMapCatalog.Open(provider, log, log), LazyThreadSafetyMode.ExecutionAndPublication);
+        MaterialConstantBufferReader.PreshaderVersion = ShaderSourceRun.PreshaderVersionOf(provider.Versions.Game.ToString(), trace);
     }
 
     /// <summary>The semantics of the shader map this material renders with, or the reason there are none.</summary>
@@ -165,7 +165,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
 
     private MaterialSemantics Analyze(string hash, FMaterialShaderMap shaderMap, string materialPath)
     {
-        if (!libraries.Value.TryFind(hash, out MaterialShaderLibraryIndex.Entry entry))
+        if (!catalog.Value.TryPlace(hash, out ShaderMapCatalog.Placement entry))
         {
             return MaterialSemantics.Unresolved(hash, "no shipped shader library holds this shader map");
         }
@@ -178,7 +178,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
         {
             return MaterialSemantics.Unresolved(hash, "the shader map lists no base pass pixel shader");
         }
-        int shaderIndex = MaterialShaderLibraryIndex.ShaderIndex(entry, pixelShader.ResourceIndex);
+        int shaderIndex = ShaderMapCatalog.ShaderIndex(entry, pixelShader.ResourceIndex);
         if (shaderIndex < 0 || entry.Library.ShaderEntries[shaderIndex].Frequency != (byte)EShaderFrequency.SF_Pixel)
         {
             return MaterialSemantics.Unresolved(hash, $"resource {pixelShader.ResourceIndex} of the map is not a pixel shader in the library");
@@ -205,7 +205,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
         List<MaterialValueSemantics> values = Values(reading.Fields, materialBuffer, taint);
         string origin = $"{entry.Platform} {format} metadata {(runtimeMetadata is null ? "none" : "read")} {shaderMap.ShaderMapId.FeatureLevel}/{shaderMap.ShaderMapId.QualityLevel} shader {shaderIndex}";
         trace(Describe(materialPath, hash, origin, reading, materialBuffer, taint, slots, values));
-        return new MaterialSemantics(hash, MaterialSemantics.Resolved, slots, values, reading.ExpressionSet);
+        return new MaterialSemantics(hash, MaterialSemantics.Resolved, slots, values, reading.Preshaders);
     }
 
     /// <summary>One line per shader map read: where the shader came from, the targets the base pass writes with how many bindings feed each, every binding the pass samples, the constant buffers, every texture binding as the layout names it, each slot's and each field's parts, and what reaches what.</summary>
@@ -325,15 +325,13 @@ public sealed class MaterialSemanticsResolver : IDisposable
         MaterialSymbolSource? source = null;
         MaterialUniformBufferLayout? layout = null;
         IReadOnlyList<PreshaderField> fields = Array.Empty<PreshaderField>();
-        string? expressionSet = null;
         FUniformExpressionSet? uniformExpressions = content.MaterialCompilationOutput?.UniformExpressionSet;
+        PreshaderInputs? preshaders = PreshaderInputs.Of(uniformExpressions);
         lock (SymbolGate)
         {
             if (uniformExpressions is not null)
             {
-                expressionSet = JsonConvert.SerializeObject(uniformExpressions);
-                using JsonDocument document = JsonDocument.Parse(expressionSet);
-                SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(materialPath, platform, document.RootElement);
+                SymbolInputs? inputs = SymbolInputsReader.ReadFromUniformExpressionSet(materialPath, platform, uniformExpressions);
                 if (inputs is not null)
                 {
                     layout = inputs.MaterialResourceCounts is { } counts ? new MaterialUniformBufferLayout(counts) : null;
@@ -344,7 +342,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
                     fields = read.ToArray();
                 }
             }
-            return new SymbolReading(SubProgramMetadataReader.Read(runtimeMetadata, source, null, log), layout, fields, expressionSet);
+            return new SymbolReading(SubProgramMetadataReader.Read(runtimeMetadata, source, null, log), layout, fields, preshaders);
         }
     }
 
@@ -541,9 +539,9 @@ public sealed class MaterialSemanticsResolver : IDisposable
 
     public void Dispose()
     {
-        if (libraries.IsValueCreated)
+        if (catalog.IsValueCreated)
         {
-            libraries.Value.Dispose();
+            catalog.Value.Dispose();
         }
     }
 }

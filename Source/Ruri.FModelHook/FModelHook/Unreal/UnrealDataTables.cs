@@ -1,3 +1,4 @@
+using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Engine;
@@ -34,7 +35,7 @@ public static class UnrealDataTables
     /// stands for; only a name it holds no file for falls back to the spelling alone, which is
     /// what a caller's own "no such package" message then reports.
     /// </summary>
-    public static string Key(UnrealFileProvider provider, string path)
+    public static string Key(AbstractFileProvider provider, string path)
     {
         ArgumentNullException.ThrowIfNull(provider);
         string rooted = Rooted(provider, path);
@@ -53,7 +54,7 @@ public static class UnrealDataTables
     /// stand for. Nothing translated between the two, so following any reference a build states
     /// found no file at all.
     /// </summary>
-    private static string Rooted(UnrealFileProvider provider, string path)
+    private static string Rooted(AbstractFileProvider provider, string path)
     {
         // The browser's own head. A cabmap row and every list drawn from one spell a package
         // under "Assets/" so every title's rows read alike; the mount never heard of it.

@@ -5,21 +5,15 @@ namespace Ruri.FModelHook.CLI;
 
 internal sealed class CliOptions
 {
-    public bool SkipGlobal { get; set; }
     public bool ListHooks { get; set; }
-    public bool ListArchives { get; set; }
     public string? FindAsset { get; set; }
     public List<string> ExportAssetPaths { get; } = new();
     public List<string> FindShaderForMaterialPaths { get; } = new();
-    public string? MaterialFilter { get; set; }
+    public List<string> MaterialPaths { get; } = new();
     public bool Help { get; set; }
     public bool? SplitVariants { get; set; }    public List<string> Hooks { get; } = new();
-    public string? DecompileOnly { get; set; }
     public string? GameConfig { get; set; }
 
-    public bool Headless { get; set; }
-    public string? ArchiveFilter { get; set; }
-    public bool ExportOnly { get; set; }
 
     public string? GameDir { get; set; }    public string? MappingsPath { get; set; }    public string? UeVersion { get; set; }    public string? ExportOut { get; set; }    public string? Aes { get; set; }
     public bool ExportUnity { get; set; }
@@ -40,12 +34,6 @@ internal sealed class CliOptions
                 case "--list-hooks":
                     opts.ListHooks = true;
                     break;
-                case "--skip-global":
-                    opts.SkipGlobal = true;
-                    break;
-                case "--list-archives":
-                    opts.ListArchives = true;
-                    break;
                 case "--find-asset":
                     if (i + 1 < args.Length) { opts.FindAsset = args[i + 1]; i++; }
                     break;
@@ -65,8 +53,13 @@ internal sealed class CliOptions
                         i++;
                     }
                     break;
-                case "--material-filter":
-                    if (i + 1 < args.Length) { opts.MaterialFilter = args[i + 1]; i++; }
+                case "--material":
+                    if (i + 1 < args.Length)
+                    {
+                        foreach (string tok in args[i + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            opts.MaterialPaths.Add(tok);
+                        i++;
+                    }
                     break;
                 case "--split-variants":
                     opts.SplitVariants = true;
@@ -81,28 +74,12 @@ internal sealed class CliOptions
                         i++;
                     }
                     break;
-                case "--decompile-only":
-                    if (i + 1 < args.Length)
-                    {
-                        opts.DecompileOnly = args[i + 1];
-                        i++;
-                    }
-                    break;
                 case "--game-config":
                     if (i + 1 < args.Length)
                     {
                         opts.GameConfig = args[i + 1];
                         i++;
                     }
-                    break;
-                case "--headless":
-                    opts.Headless = true;
-                    break;
-                case "--archive-filter":
-                    if (i + 1 < args.Length) { opts.ArchiveFilter = args[i + 1]; i++; }
-                    break;
-                case "--export-only":
-                    opts.ExportOnly = true;
                     break;
                 case "--game-dir":
                     if (i + 1 < args.Length) { opts.GameDir = args[i + 1]; i++; }
@@ -147,40 +124,31 @@ internal sealed class CliOptions
     {
         "Ruri.FModelHook.CLI - headless driver for the FModel ShaderDecompiler hook.",
         "",
-        "Usage (headless shader export — the default and only shader mode):",
-        "  Ruri.FModelHook.CLI.exe --game-config <AppSettings.json>",
-        "                          [--skip-global] [--archive-filter <tok,...>]",
-        "                          [--split-variants | --no-split-variants] [--export-only]",
+        "Usage (shader source - the default and only shader mode):",
+        "  Ruri.FModelHook.CLI.exe --game-config <AppSettings.json> --material <path,...>",
+        "                          [--export-out <dir>] [--split-variants | --no-split-variants]",
         "                          [--hook <id> ...] [--list-hooks]",
         "",
-        "Shader export (export level is set entirely by these flags):",
-        "  --game-config PATH    FModel AppSettings(_Debug).json snapshot — the headless",
+        "Shader source (what is named IS the work - there is no filter and no whole-install mode):",
+        "  --game-config PATH    FModel AppSettings(_Debug).json snapshot - the headless",
         "                        mount reads GameDirectory, EGame version, ALL AES keys",
         "                        and mappings straight from it. Falls back to the live",
         "                        %AppData%/FModel/AppSettings(_Debug).json if omitted.",
-        "  --archive-filter TOK  Only export .ushaderbytecode archives whose name contains",
-        "                        TOK (comma/space/semicolon list; substring match).",
-        "  --skip-global         Skip the engine-internal Global shader archive.",
-        "  --list-archives       Mount the provider and print every target archive (name +",
-        "                        size, respecting --skip-global/--archive-filter), then exit.",
-        "  --find-asset SUBSTR   Mount the provider (full AppSettings key set) and print every",
-        "                        file path containing SUBSTR, then exit — no shader export.",
-        "  --export-asset PATH   Mount (full AppSettings key set) and directly export the given",
-        "                        package path(s) — mesh + material + texture, via the same",
-        "                        Exporter FModel's GUI \"Export\" uses. Comma-separated / repeatable.",
-        "                        Use with --export-out to set the output directory.",
+        "  --material PATH       Decompile the shaders THIS material compiled to (comma-separated",
+        "                        / repeatable). Only that package and the templates it inherits",
+        "                        from are loaded, and only the archives carrying its maps are",
+        "                        opened - header tables only, code read shader by shader.",
+        "  --export-out DIR      Where the source goes (default: <RawData>/Shaders). One folder",
+        "                        per archive; nothing else is ever written.",
         "  --find-shader-for-material PATH",
-        "                        Mount and report which .ushaderbytecode archive(s) contain the",
-        "                        given material's shader-maps (comma-separated / repeatable).",
-        "  --material-filter TOK Narrow the shader-export decompile OUTPUT to shader-maps whose",
-        "                        material path contains TOK. Additive (doesn't wipe prior output)",
-        "                        — combine with --archive-filter for a fast, incremental decompile",
-        "                        of one material instead of a whole (possibly huge) archive.",
+        "                        Report which .ushaderbytecode archive(s) carry the given",
+        "                        material's shader maps, without decompiling anything.",
+        "  --find-asset SUBSTR   Mount the provider and print every file path containing SUBSTR.",
+        "  --export-asset PATH   Mount and directly export the given package path(s) - mesh +",
+        "                        material + texture, via the same Exporter FModel's GUI uses.",
+        "                        Comma-separated / repeatable; --export-out sets the directory.",
         "  --split-variants      Emit EVERY per-stage variant as a sibling .hlsl file.",
         "  --no-split-variants   Keep only the primary variant inline in the .shader (default).",
-        "  --export-only         Build cache + sidecars + .ushaderlib but SKIP decompile.",
-        "  --decompile-only PATH Skip the export side; just run DecompilePipeline against an",
-        "                        existing <basename>.ushaderlib (sidecars must sit next to it).",
         "  --hook <id>           Enable a specific hook id (repeatable). Default: all discovered.",
         "  --list-hooks          Print discovered hook ids and exit.",
         "",
