@@ -39,7 +39,21 @@ public sealed class View : IDisposable
         Shown = shown;
         Summary = summary;
         _keys = rows.FirstWithRole(ColumnRole.Key);
+        Column? sections = rows.Find(GroupColumnName);
+        FirstLine = -1;
+        for (int row = 0; row < rows.RowCount; row++)
+        {
+            if (sections is null || !sections.Truthy(row))
+            {
+                FirstLine = row;
+                break;
+            }
+        }
     }
+
+    /// <summary>The first drawn line that is not a section header -- where a cursor lands on a
+    /// list nobody has picked anything in yet. A header is not a thing that can be selected.</summary>
+    public int FirstLine { get; }
 
     public ViewSpec Spec { get; }
 
@@ -108,9 +122,14 @@ public sealed class View : IDisposable
         Column? named = source.FirstWithRole(ColumnRole.Named);
         Column? shipped = source.FirstWithRole(ColumnRole.Shipped);
 
+        Column? shippedTest = spec.ShippedOnly ? shipped : null;
+        // The facet switch is the TABLE's own kinds, not the current search's. A switch
+        // whose entries come and go as a person types is one whose stored value stops
+        // matching anything -- and the host then silently moves them to a different kind.
+        ColumnTable facets = CountFacets(facet, Narrow(Every(source), null, string.Empty,
+            shippedTest), spec.Facet);
         int[] matched = Narrow(search.Search(spec.Search, spec.Rules), null, string.Empty,
-            spec.ShippedOnly ? shipped : null);
-        ColumnTable facets = CountFacets(facet, matched, spec.Facet);
+            shippedTest);
         int[] kept = Narrow(matched, facet, spec.Facet, null);
         Sort(kept, source, spec, labels, group, named);
 
@@ -119,6 +138,16 @@ public sealed class View : IDisposable
         ColumnTable rows = Materialize(source, plan, headers, labels);
         return new View(spec, source, rows, facets, kept.Length, window,
             Describe(kept.Length, source.RowCount, window, spec.Note));
+    }
+
+    private static int[] Every(ColumnTable source)
+    {
+        int[] rows = new int[source.RowCount];
+        for (int row = 0; row < rows.Length; row++)
+        {
+            rows[row] = row;
+        }
+        return rows;
     }
 
     private static string Describe(int kept, int total, int shown, string note)
