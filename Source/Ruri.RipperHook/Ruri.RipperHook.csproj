@@ -68,6 +68,10 @@
 		     current release reads those streams while we get its fixes and its security options
 		     (see KoikatuPack) instead of pinning ourselves to whatever the game shipped in 2018. -->
 		<PackageReference Include="MessagePack" Version="3.1.8" />
+		<!-- Snappy, the block format. One source compresses the whole of a saved lot with it, and
+		     the reference reader for that source uses this same library, so the two agree by
+		     construction rather than by a second implementation of the copy-with-overlap rule. -->
+		<PackageReference Include="IronSnappy" Version="1.3.1" />
 	</ItemGroup>
 
 	<ItemDefinitionGroup Condition="'$(PureRelease)' == 'true'">
