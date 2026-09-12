@@ -179,9 +179,9 @@ public sealed class MaterialSemanticsResolver : IDisposable
             return MaterialSemantics.Unresolved(hash, "the shader map lists no base pass pixel shader");
         }
         int shaderIndex = ShaderMapCatalog.ShaderIndex(entry, pixelShader.ResourceIndex);
-        if (shaderIndex < 0 || entry.Library.ShaderEntries[shaderIndex].Frequency != (byte)EShaderFrequency.SF_Pixel)
+        if (shaderIndex < 0)
         {
-            return MaterialSemantics.Unresolved(hash, $"resource {pixelShader.ResourceIndex} of the map is not a pixel shader in the library");
+            return MaterialSemantics.Unresolved(hash, $"the library lists no shader at resource {pixelShader.ResourceIndex} of the map");
         }
         byte[]? raw = entry.Library.GetShaderCode(shaderIndex);
         if (raw is null || raw.Length == 0)
@@ -300,10 +300,6 @@ public sealed class MaterialSemanticsResolver : IDisposable
         {
             foreach (FShader shader in meshMap.Shaders)
             {
-                if (shader.Target.Frequency != EShaderFrequency.SF_Pixel)
-                {
-                    continue;
-                }
                 string typeName = HashedNamesResolver.ResolveShaderTypeName(shader.Type.Hash.ToString("X16"));
                 if (typeName.StartsWith(BasePassPixelShaderPrefix, StringComparison.Ordinal))
                 {

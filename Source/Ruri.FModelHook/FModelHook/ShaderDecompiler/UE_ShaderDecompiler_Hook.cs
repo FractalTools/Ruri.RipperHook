@@ -66,10 +66,12 @@ namespace Ruri.FModelHook.ShaderDecompiler
                 return;
             }
 
-            string output = Path.Combine(
-                UserSettings.Default.RawDataDirectory,
-                self.Provider?.ProjectName ?? "UnknownProject",
-                "Shaders").Replace('\\', '/');
+            string output = ShaderSourceRequest.DefaultOutputDirectory(UserSettings.Default.GameDirectory).Replace('\\', '/');
+            if (output.Length == 0)
+            {
+                HookLogger.LogFailure("[UE_ShaderDecompiler] No game directory is set, so there is nowhere to put the source.");
+                return;
+            }
             try
             {
                 ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest

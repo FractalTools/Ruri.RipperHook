@@ -10,13 +10,6 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 /// </summary>
 internal static class SymbolInputsReader
 {
-    private const int Standard2DBucket = 0;
-    private const int CubeBucket = 1;
-    private const int Array2DBucket = 2;
-    private const int ArrayCubeBucket = 3;
-    private const int VolumeBucket = 4;
-    private const int VirtualBucket = 5;
-
     public static SymbolInputs? ReadFromUniformExpressionSet(string materialPath, string? shaderPlatform, FUniformExpressionSet uniformExpressionSet)
     {
         SymbolInputs inputs = new()
@@ -63,22 +56,22 @@ internal static class SymbolInputsReader
         }
 
         return new MaterialUniformBufferLayout.MaterialResourceCounts(
-            Standard2D: Count(buckets, Standard2DBucket),
-            Cube: Count(buckets, CubeBucket),
-            Array2D: Count(buckets, Array2DBucket),
-            ArrayCube: Count(buckets, ArrayCubeBucket),
-            Volume: Count(buckets, VolumeBucket),
+            Standard2D: Count(buckets, MaterialTextureOrder.Standard2DBucket),
+            Cube: Count(buckets, MaterialTextureOrder.CubeBucket),
+            Array2D: Count(buckets, MaterialTextureOrder.Array2DBucket),
+            ArrayCube: Count(buckets, MaterialTextureOrder.ArrayCubeBucket),
+            Volume: Count(buckets, MaterialTextureOrder.VolumeBucket),
             External: externalParameters?.Length ?? 0,
-            Virtual: Count(buckets, VirtualBucket),
+            Virtual: Count(buckets, MaterialTextureOrder.VirtualBucket),
             VirtualTextureStackLayerCounts: virtualTextureStackLayers,
             TotalResourceCount: uniformExpressionSet.UniformBufferLayoutInitializer?.Resources?.Length,
-            Standard2DAuthorNames: AuthorNames(buckets, Standard2DBucket),
-            CubeAuthorNames: AuthorNames(buckets, CubeBucket),
-            Array2DAuthorNames: AuthorNames(buckets, Array2DBucket),
-            ArrayCubeAuthorNames: AuthorNames(buckets, ArrayCubeBucket),
-            VolumeAuthorNames: AuthorNames(buckets, VolumeBucket),
+            Standard2DAuthorNames: AuthorNames(buckets, MaterialTextureOrder.Standard2DBucket),
+            CubeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.CubeBucket),
+            Array2DAuthorNames: AuthorNames(buckets, MaterialTextureOrder.Array2DBucket),
+            ArrayCubeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.ArrayCubeBucket),
+            VolumeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.VolumeBucket),
             ExternalAuthorNames: ExternalAuthorNames(externalParameters),
-            VirtualAuthorNames: AuthorNames(buckets, VirtualBucket));
+            VirtualAuthorNames: AuthorNames(buckets, MaterialTextureOrder.VirtualBucket));
     }
 
     private static int Count(FMaterialTextureParameterInfo[][] buckets, int bucket) =>

@@ -11,6 +11,17 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 /// </summary>
 public sealed class ShaderSourceRequest
 {
+    /// <summary>
+    /// Where an install's shader source goes when the caller has nothing better to say:
+    /// a folder of its own under the install itself, so two installs never write into
+    /// each other's and nobody has to remember a path per game.
+    /// </summary>
+    public const string DefaultFolderName = "RuriShaderOutput";
+
+    /// <summary>That folder for one install root, or empty when no root is known.</summary>
+    public static string DefaultOutputDirectory(string? installRoot) =>
+        string.IsNullOrWhiteSpace(installRoot) ? string.Empty : Path.Combine(installRoot, DefaultFolderName);
+
     public required AbstractVfsFileProvider Provider { get; init; }
 
     public required IReadOnlyList<IShaderMapSubject> Subjects { get; init; }
@@ -135,7 +146,6 @@ internal sealed class ShaderPrep
     public required string ContainerKey { get; init; }
     public required string MaterialName { get; init; }
     public required string VariantSuffix { get; init; }
-    public required string TypeSuffix { get; init; }
     public required byte[] StrippedCode { get; init; }
     public required DecompileOptions EngineOptions { get; init; }
     public required string ProvisionalStem { get; init; }

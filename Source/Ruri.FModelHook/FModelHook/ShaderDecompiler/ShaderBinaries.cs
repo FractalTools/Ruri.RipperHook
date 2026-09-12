@@ -191,12 +191,10 @@ internal static class ShaderBinaries
 
     private static ShaderPrep PrepareSingleShader(ShaderSourceState state, int shaderIndex, byte[] raw, MaterialSymbolSource? symbols)
     {
-        ShaderCodeEntry entry = state.Library.ShaderEntries[shaderIndex];
-        string typeSuffix = ShaderFrequency.ToString(entry.Frequency);
         ShaderContainerInfo? container = state.ContainerByShaderIndex.TryGetValue(shaderIndex, out ShaderContainerInfo? mappedContainer)
             ? mappedContainer
             : null;
-        string containerKey = container?.ContainerKey ?? $"Ungrouped_{typeSuffix}_{shaderIndex:D6}";
+        string containerKey = container?.ContainerKey ?? $"Ungrouped_{shaderIndex:D6}";
         string materialName = SanitizeFileStem(container?.MaterialName ?? ResolveFinalName(state, shaderIndex));
         string variantSuffix = BuildVariantSuffix(shaderIndex, container);
 
@@ -290,7 +288,6 @@ internal static class ShaderBinaries
             ContainerKey = containerKey,
             MaterialName = materialName,
             VariantSuffix = variantSuffix,
-            TypeSuffix = typeSuffix,
             StrippedCode = strippedCode,
             EngineOptions = engineOptions,
             ProvisionalStem = provisionalStem,
@@ -345,15 +342,4 @@ internal static class ShaderBinaries
     {
         return string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
     }
-}
-
-internal static class ShaderFrequency
-{
-    public static string ToString(byte frequency) => frequency switch
-    {
-        0 => "VS", 1 => "HS", 2 => "DS", 3 => "PS", 4 => "GS", 5 => "CS",
-        6 => "RG", 7 => "RM", 8 => "RH", 9 => "RC",
-        10 => "MS", 11 => "AS",
-        _ => $"Freq{frequency}",
-    };
 }

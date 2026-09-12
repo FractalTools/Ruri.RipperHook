@@ -71,8 +71,13 @@ public static class Program
 
         bool splitVariants = opts.SplitVariants ?? ShaderDecompilerSettingsAccess.Current.SplitVariantsToHlslFiles;
         string output = string.IsNullOrWhiteSpace(opts.ExportOut)
-            ? Path.Combine(cfg.RawDataDirectory, "Shaders")
+            ? ShaderSourceRequest.DefaultOutputDirectory(cfg.GameDirectory)
             : opts.ExportOut!;
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            HookLogger.LogFailure("[ShaderSource] The config states no GameDirectory to default the output under; pass --export-out <dir>.");
+            return 2;
+        }
         HookLogger.Log($"[ShaderSource] Config: game='{cfg.GameDirectory}' version={cfg.UeVersion} keys={1 + cfg.DynamicKeys.Count} out='{output}' splitVariants={splitVariants}");
 
         try

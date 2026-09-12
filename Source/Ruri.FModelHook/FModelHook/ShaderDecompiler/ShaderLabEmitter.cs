@@ -9,6 +9,9 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 
 internal static class ShaderLabEmitter
 {
+    /// <summary>What the decompiler prefixes every binding of the material's own buffer with.</summary>
+    private const string MaterialBufferPrefix = "Material_";
+
     private sealed class ContainerOutputEntry
     {
         public required ShaderPrep Prep { get; init; }
@@ -62,9 +65,7 @@ internal static class ShaderLabEmitter
         {
             state.Failed++;
             string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
-            byte freq = state.Library != null && member.ArchiveShaderIndex >= 0 && member.ArchiveShaderIndex < state.Library.ShaderEntries.Length
-                ? state.Library.ShaderEntries[member.ArchiveShaderIndex].Frequency : (byte)255;
-            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [stage={result.FailedStage} freq={ShaderFrequency.ToString(freq)}]: {firstLine}");
+            state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [reached {result.FailedStage}]: {firstLine}");
             return new ContainerOutputEntry
             {
                 Prep = prep,
@@ -154,7 +155,7 @@ internal static class ShaderLabEmitter
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            string source = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata);
+            string source = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata, metadata.MaterialTextureOrder);
             foreach (string line in SplitLines(source))
             {
                 sb.AppendLine(line);
@@ -192,7 +193,7 @@ internal static class ShaderLabEmitter
             SubShaderTags = map.SubShaderTags,
             PassCommands = map.PassCommands,
             Programs = outputs
-                .OrderBy(static o => StageSortKey(ToUnityStageName(o.Prep.TypeSuffix)))
+                .OrderBy(static o => StageSortKey(StageName(o.Result.Stage)))
                 .ThenBy(static o => o.Prep.ShaderIndex)
                 .Select(output =>
                 {
@@ -200,7 +201,7 @@ internal static class ShaderLabEmitter
                     ShaderContainerInfo? container = perMap ?? output.Prep.ContainerInfo;
                     return new UeShaderLabProgramData
                     {
-                        Stage = ToUnityStageName(output.Prep.TypeSuffix),
+                        Stage = StageName(output.Result.Stage),
                         ShaderIndex = output.Prep.ShaderIndex,
                         ResourceIndex = container?.ResourceIndex ?? -1,
                         PermutationId = container?.PermutationId ?? -1,
@@ -398,7 +399,7 @@ internal static class ShaderLabEmitter
                 {
                     sb.AppendLine($"            // Note: {stagePrograms.Count - 1} additional variant(s) elided (single-variant emit mode).");
                 }
-                EmitProgramBlock(sb, primary, variantFolderStem, splitInclude: stageSplit);
+                EmitProgramBlock(sb, primary, variantFolderStem, splitInclude: stageSplit, metadata.MaterialTextureOrder);
 
                 if (stageMacro != null)
                 {
@@ -437,7 +438,7 @@ internal static class ShaderLabEmitter
         return $"P{pipeline}_V{vf}_S{type}";
     }
 
-    private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, string variantFolderStem, bool splitInclude)
+    private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, string variantFolderStem, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
     {
         if (splitInclude)
         {
@@ -455,7 +456,7 @@ internal static class ShaderLabEmitter
 
         if (program.Success && !string.IsNullOrWhiteSpace(program.SourceCode))
         {
-            string renamed = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata);
+            string renamed = RenameAnonymousGlobals(program.SourceCode!, program.ShaderTypeName, program.ShaderHash, program.SymbolMetadata, materialTextureOrder);
             string adapted = AdaptHlslForUnity(renamed);
             foreach (string line in SplitLines(adapted))
             {
@@ -621,9 +622,9 @@ internal static class ShaderLabEmitter
         List<(string Ident, string HlslType, string UbmtKind, string SlotPrefix, string SlotIdx)> anons,
         Dictionary<int, string> rename,
         HashSet<int> claimed,
-        SerializedProgramData? symbolMetadata)
+        IReadOnlyList<string> materialTextureOrder)
     {
-        if (symbolMetadata == null || symbolMetadata.TextureParameters.Count == 0) return;
+        if (materialTextureOrder.Count == 0) return;
 
         var declarations = new List<(string Name, int Slot, bool IsAnon, int AnonIndex)>();
         foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
@@ -637,18 +638,20 @@ internal static class ShaderLabEmitter
         if (declarations.Count == 0) return;
         declarations.Sort((a, b) => a.Slot.CompareTo(b.Slot));
 
+        // A slot is the material's when it is still anonymous or already carries the
+        // material buffer's own prefix. Naming every OTHER uniform buffer instead was a
+        // list that could only ever be incomplete: one unlisted buffer put an extra slot
+        // in the count, the count stopped matching the material's own texture list, and
+        // the whole ordering was abandoned for that shader.
         var materialSlots = declarations
-            .Where(d => !d.Name.StartsWith("View_", StringComparison.Ordinal)
-                     && !d.Name.StartsWith("Scene_", StringComparison.Ordinal)
-                     && !d.Name.StartsWith("TranslucentBasePass_", StringComparison.Ordinal)
-                     && !d.Name.StartsWith("OpaqueBasePass_", StringComparison.Ordinal))
+            .Where(d => d.IsAnon || d.Name.StartsWith(MaterialBufferPrefix, StringComparison.Ordinal))
             .ToList();
         if (materialSlots.Count == 0) return;
 
-        List<string> order = symbolMetadata.TextureParameters.Select(t => t.Name).ToList();
+        IReadOnlyList<string> order = materialTextureOrder;
         if (order.Count < materialSlots.Count)
         {
-            Console.Error.WriteLine($"[ShaderLab] material-texture order: 槽 {materialSlots.Count} 个 > UES 名表 {order.Count} 项 — 放弃按序命名(宁可无名)。");
+            Console.Error.WriteLine($"[ShaderLab] material-texture order: 槽 {materialSlots.Count} 个 > 材质贴图表 {order.Count} 项 — 放弃按序命名(宁可无名)。");
             return;
         }
 
@@ -683,12 +686,13 @@ internal static class ShaderLabEmitter
     /// </summary>
     private static string MaterialSlotName(string stated)
     {
-        const string prefix = "Material_";
         string identifier = SanitizeIdent(stated);
-        return identifier.StartsWith(prefix, StringComparison.Ordinal) ? identifier : prefix + identifier;
+        return identifier.StartsWith(MaterialBufferPrefix, StringComparison.Ordinal)
+            ? identifier
+            : MaterialBufferPrefix + identifier;
     }
 
-    private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata)
+    private static string RenameAnonymousGlobals(string source, string shaderTypeName, string shaderHash, SerializedProgramData? symbolMetadata, IReadOnlyList<string> materialTextureOrder)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
         string discriminator = string.IsNullOrWhiteSpace(shaderTypeName)
@@ -784,7 +788,7 @@ internal static class ShaderLabEmitter
 
             ApplyUsagePatternMatches(result, anons, rename, claimedByOrdered);
 
-            ApplyMaterialTextureOrder(result, anons, rename, claimedByOrdered, symbolMetadata);
+            ApplyMaterialTextureOrder(result, anons, rename, claimedByOrdered, materialTextureOrder);
 
             Dictionary<(string, string), int> unclaimedByType = new();
             for (int i = 0; i < anons.Count; i++)
@@ -1090,23 +1094,49 @@ internal static class ShaderLabEmitter
     private static int StageSortKey(string stage) => stage switch
     {
         "Vertex" => 0,
-        "Hull" => 1,
-        "Domain" => 2,
-        "Geometry" => 3,
-        "Fragment" => 4,
-        "Compute" => 5,
+        "Amplification" => 1,
+        "Mesh" => 2,
+        "Hull" => 3,
+        "Domain" => 4,
+        "Geometry" => 5,
+        "Fragment" => 6,
+        "Compute" => 7,
+        "RayGeneration" => 8,
+        "Intersection" => 9,
+        "AnyHit" => 10,
+        "ClosestHit" => 11,
+        "Miss" => 12,
+        "Callable" => 13,
         _ => 100,
     };
 
-    private static string ToUnityStageName(string typeSuffix) => typeSuffix switch
+    /// <summary>
+    /// What to call the stage a shader runs at, as the BINARY declared it.
+    ///
+    /// Never from the container's frequency byte: that byte is numbered by the engine
+    /// BUILD, and a fork that inserts a frequency shifts every later one. One shipped
+    /// title numbers pixel 5 and geometry 6 where stock 4.26 numbers them 3 and 4, so
+    /// every pixel shader it ships was written out as a compute shader and every map
+    /// read as having no pixel shader at all -- silently, because a mislabelled file
+    /// still decompiles.
+    /// </summary>
+    private static string StageName(PipelineStage stage) => stage switch
     {
-        "VS" => "Vertex",
-        "PS" => "Fragment",
-        "GS" => "Geometry",
-        "HS" => "Hull",
-        "DS" => "Domain",
-        "CS" => "Compute",
-        _ => typeSuffix,
+        PipelineStage.Vertex => "Vertex",
+        PipelineStage.TessControl => "Hull",
+        PipelineStage.TessEvaluation => "Domain",
+        PipelineStage.Geometry => "Geometry",
+        PipelineStage.Fragment => "Fragment",
+        PipelineStage.Compute => "Compute",
+        PipelineStage.RayGeneration => "RayGeneration",
+        PipelineStage.Intersection => "Intersection",
+        PipelineStage.AnyHit => "AnyHit",
+        PipelineStage.ClosestHit => "ClosestHit",
+        PipelineStage.Miss => "Miss",
+        PipelineStage.Callable => "Callable",
+        PipelineStage.Task => "Amplification",
+        PipelineStage.Mesh => "Mesh",
+        _ => "Unknown",
     };
 
     private static IEnumerable<string> SplitLines(string text)
