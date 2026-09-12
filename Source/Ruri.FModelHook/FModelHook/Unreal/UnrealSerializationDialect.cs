@@ -1,9 +1,11 @@
 using System.Collections.Frozen;
 using System.Reflection;
+using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
 using CUE4Parse.UE4.Assets.Readers;
 using CUE4Parse.UE4.Readers;
 using CUE4Parse.UE4.Versions;
+using CUE4Parse.Utils;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
@@ -60,6 +62,88 @@ public static class UnrealSerializationDialect
         SkeletalMeshSections.TryGetValue(archive.Game, out FUE5MainStreamObjectVersion.Type stated) ? stated : engine;
 
     /// <summary>
+    /// Leave a material parameter's name record at the width the build wrote it, so the value that
+    /// follows is read from where it actually is.
+    ///
+    /// The engine's reader ends the record by aligning, which states the stock record's width as
+    /// an arithmetic consequence rather than as a width. A build that widened the record lands
+    /// four bytes short of every value and, worse, four bytes short of every NEXT parameter, so
+    /// the name lookup -- which is by exact position in the frozen image's patch table -- misses
+    /// from the second parameter onward and only resolves again where the two strides happen to
+    /// meet. Landing at the stated width instead fixes scalars, vectors and textures at once,
+    /// because all three carry this same record and differ only in the value after it.
+    /// </summary>
+    [RetargetMethodCtorFunc(typeof(FMemoryImageMaterialParameterInfo), typeof(FMemoryImageArchive))]
+    public static bool MaterialParameterRecord(ILContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        MethodReference land = context.Import(typeof(UnrealSerializationDialect)
+            .GetMethod(nameof(LandAfterRecord), BindingFlags.NonPublic | BindingFlags.Static)!);
+        MethodReference reads = context.Import(typeof(FArchive).GetProperty(nameof(FArchive.Position))!.GetGetMethod()!);
+
+        VariableDefinition entry = new(context.Import(typeof(long)));
+        context.Body.Variables.Add(entry);
+
+        ILCursor cursor = new(context);
+        cursor.Goto(0, MoveType.Before);
+        cursor.Emit(OpCodes.Ldarg_1);
+        cursor.Emit(OpCodes.Callvirt, reads);
+        cursor.Emit(OpCodes.Stloc, entry);
+
+        int rewritten = 0;
+        while (cursor.TryGotoNext(MoveType.Before, instruction => instruction.OpCode == OpCodes.Ret))
+        {
+            cursor.Emit(OpCodes.Ldarg_1);
+            cursor.Emit(OpCodes.Ldloc, entry);
+            cursor.Emit(OpCodes.Call, land);
+            cursor.Index++;
+            rewritten++;
+        }
+        return rewritten > 0;
+    }
+
+    /// <summary>
+    /// End a scalar parameter where its own record ends rather than at the next eight-byte mark.
+    ///
+    /// The engine's reader aligns to eight after the value, which costs nothing while the record
+    /// plus a float happens to be a multiple of eight and swallows the next parameter's first four
+    /// bytes as soon as it is not. The alignment a build's scalars actually have is asked for here
+    /// instead of assumed, so a stock build keeps the answer it already had.
+    /// </summary>
+    [RetargetMethodCtorFunc(typeof(FMaterialScalarParameterInfo), typeof(FMemoryImageArchive))]
+    public static bool MaterialScalarParameter(ILContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        MethodReference stated = context.Import(typeof(UnrealSerializationDialect)
+            .GetMethod(nameof(ScalarRecordAlignment), BindingFlags.NonPublic | BindingFlags.Static)!);
+
+        ILCursor cursor = new(context);
+        int rewritten = 0;
+        while (cursor.TryGotoNext(MoveType.Before, instruction => IsCallTo(instruction, nameof(AlignUtils), nameof(AlignUtils.Align))))
+        {
+            cursor.Emit(OpCodes.Pop);
+            cursor.Emit(OpCodes.Ldarg_1);
+            cursor.Emit(OpCodes.Call, stated);
+            cursor.Index++;
+            rewritten++;
+        }
+        return rewritten > 0;
+    }
+
+    /// <summary>Where the record ends: the width the title states, or wherever the engine's own reader stopped.</summary>
+    private static void LandAfterRecord(FMemoryImageArchive archive, long entry)
+    {
+        if (MaterialParameterRecords.TryGetValue(archive.Game, out int stated))
+        {
+            archive.Position = entry + stated;
+        }
+    }
+
+    /// <summary>What a scalar parameter is aligned to: its own four bytes where the title states a record, else the engine's eight.</summary>
+    private static int ScalarRecordAlignment(FMemoryImageArchive archive) =>
+        MaterialParameterRecords.ContainsKey(archive.Game) ? sizeof(float) : sizeof(long);
+
+    /// <summary>
     /// The section version each declaring title's dialect is read at, by the dialect itself: what
     /// an archive carries at this point is the dialect it was opened with, and a title's dialect
     /// is what that title's row states it cooked with.
@@ -76,6 +160,24 @@ public static class UnrealSerializationDialect
             if (title.SkeletalMeshSectionVersion is { } version)
             {
                 stated[title.Game] = version;
+            }
+        }
+        return stated.ToFrozenDictionary();
+    }
+
+    /// <summary>The width each declaring title's material parameter record is read at, by the dialect it was cooked with.</summary>
+    private static readonly Lazy<FrozenDictionary<EGame, int>> DeclaredRecords = new(CollectRecords);
+
+    private static FrozenDictionary<EGame, int> MaterialParameterRecords => DeclaredRecords.Value;
+
+    private static FrozenDictionary<EGame, int> CollectRecords()
+    {
+        Dictionary<EGame, int> stated = new();
+        foreach (UnrealTitle title in UnrealTitles.All)
+        {
+            if (title.MaterialParameterRecordBytes is { } bytes)
+            {
+                stated[title.Game] = bytes;
             }
         }
         return stated.ToFrozenDictionary();

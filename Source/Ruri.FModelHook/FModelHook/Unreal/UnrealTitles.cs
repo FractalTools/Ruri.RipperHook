@@ -62,6 +62,21 @@ public sealed record UnrealTitle
     public FUE5MainStreamObjectVersion.Type? SkeletalMeshSectionVersion { get; init; }
 
     /// <summary>
+    /// How many bytes one material parameter's NAME RECORD takes in this build's frozen material
+    /// data, before the value that follows it. Null for a build whose record is its own engine's,
+    /// which is almost every build.
+    ///
+    /// The engine freezes a parameter as its name, the layer index it belongs to and the
+    /// association that says which -- and a studio that widened that record moved every value
+    /// after it. Nothing in the cook states the width, but the frozen image's own name table does:
+    /// its patches land one per parameter, so their spacing measures the record. Applied by
+    /// <see cref="UnrealSerializationDialect"/> at the one read that follows from it; without it
+    /// a build's scalars, vectors and textures all read their neighbour's bytes as their value and
+    /// every parameter name after the first few resolves to none.
+    /// </summary>
+    public int? MaterialParameterRecordBytes { get; init; }
+
+    /// <summary>
     /// Content paths this build keeps its characters under, as they read in a container path.
     /// Which folder a studio files its cast in is a fact about the build that nothing in the
     /// build states, the same kind of fact as <see cref="Markers"/> -- no character is named
