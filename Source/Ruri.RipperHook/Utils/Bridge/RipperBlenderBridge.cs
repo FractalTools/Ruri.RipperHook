@@ -182,32 +182,15 @@ public static class RipperBlenderBridge
         return new CabMapHandle(cabMapPath, CabMap.LoadTable(cabMapPath));
     }
 
-    /// <summary>The dependency closure of a set of seed CABs -- one statement of what "everything
-    /// this reaches" means, so the importer and every other reader of a closure agree.</summary>
+    /// <summary>The dependency closure of a set of seed CABs. What "everything this reaches"
+    /// means and how loading it is gated are stated once, in Data.ClosureReader -- this names
+    /// the one choice this bridge makes about it: a selection that reaches nothing but scripted
+    /// data widens to what pictures it.</summary>
     private static CabClosure Closure(CabMapHandle map, string[] seedCabNames) =>
-        new CabSelection { SeedCabNames = seedCabNames, ReachThroughDependents = true }.Resolve(map.Table);
+        Data.ClosureReader.Resolve(map.Table, seedCabNames, reachThroughDependents: true);
 
-    /// <summary>Load one closure's files, gated to the closure itself. The gate is process-wide
-    /// state on the bundle hook, so it is set and cleared in ONE place rather than by each caller
-    /// remembering to.</summary>
-    private static GameData LoadClosure(CabClosure closure, ExportHandler handler)
-    {
-        HashSet<string> loadFilterFileNames = closure.LoadFilterFileNames;
-        HashSet<string> seedFileNames = closure.SeedFileNames;
-        GameBundleHook.LoadIncludeFile = loadFilterFileNames.Count > 0
-            ? name => loadFilterFileNames.Contains(name)
-            : null;
-        GameBundleHook.LoadSeedFile = seedFileNames.Count > 0 ? name => seedFileNames.Contains(name) : null;
-        try
-        {
-            return handler.Load(closure.Files, LocalFileSystem.Instance);
-        }
-        finally
-        {
-            GameBundleHook.LoadIncludeFile = null;
-            GameBundleHook.LoadSeedFile = null;
-        }
-    }
+    private static GameData LoadClosure(CabClosure closure, ExportHandler handler) =>
+        Data.ClosureReader.Load(closure, handler);
 
     /// <summary>Every shader the given seeds reach, written out as source.
     ///

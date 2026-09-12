@@ -64,9 +64,11 @@ public static class UnrealDatasets
     public const string MeshSkeletonId = "unreal.mesh.skeleton";
     public const string PlacementsId = "unreal.placements";
     public const string AnimationsId = "unreal.animations";
+    public const string MorphTargetsId = "unreal.morphtargets";
     public const string MaterialsId = "unreal.materials";
     public const string TexturesId = "unreal.textures";
     public const string PackageParam = "package";
+    public const string PackagesParam = "packages";
     public const string MaterialParam = "material";
     public const string TextureParam = "texture";
     public const string WorldParam = "world";
@@ -185,6 +187,12 @@ public static class UnrealDatasets
             + "sequence's own compression tolerance justifies, bone paths in the reference skeleton's "
             + "own naming, coordinates in the host's basis. No AnimationClip asset is created.",
             Animations);
+        Datasets.Publish(MorphTargetsId, DataRole.ExpressionCatalog, [DataParam.List(PackagesParam)],
+            "Every named morph target the skeletal meshes of the given packages carry -- the "
+            + "expression vocabulary a model was built with, as the MESH itself states it. One row "
+            + "per (mesh, shape), carrying the shape's index in that mesh's own order.",
+            MorphTargets);
+
         Datasets.Publish(MaterialsId, DataRole.Internal, [DataParam.List(MaterialParam)],
             "The parameter set each named material interface resolves to, the way the engine resolves it "
             + "(the base material's cached defaults, each instance overriding by name, then what the "
@@ -761,6 +769,51 @@ public static class UnrealDatasets
     /// FixPath alone is not enough: it reads the leaf BEFORE trimming an object name off, so it
     /// never appends the extension it just removed and answers a key no mount holds.
     /// </summary>
+    /// <summary>
+    /// Every named morph target the skeletal meshes of a selection carry.
+    ///
+    /// The engine's own answer to "what expressions was this built with", asked of the same
+    /// packages an import of that row would read. A name is read off the mesh's own morph list
+    /// without loading the target: the deltas are a separate question, asked when a face is
+    /// actually driven.
+    /// </summary>
+    private static ColumnTable MorphTargets(DataRequest request)
+    {
+        TableBuilder table = new(MorphTargetsId,
+            "name|Expression", "mesh|Mesh", "index#|Index", "cab|Package", "key|Id");
+        table.Role(ColumnRole.Label, "name")
+            .Role(ColumnRole.Facet | ColumnRole.Group, "mesh")
+            .Role(ColumnRole.Key | ColumnRole.Payload, "key");
+        UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
+        foreach (string stated in request.List(PackagesParam))
+        {
+            string package = PackageKey(provider, stated);
+            if (!provider.Files.TryGetValue(package, out GameFile? file))
+            {
+                continue;
+            }
+            foreach (UObject export in provider.LoadUncached(file).GetExports())
+            {
+                if (export is not USkeletalMesh skeletalMesh)
+                {
+                    continue;
+                }
+                for (int index = 0; index < skeletalMesh.MorphTargets.Length; index++)
+                {
+                    FPackageIndex shape = skeletalMesh.MorphTargets[index];
+                    if (shape.IsNull)
+                    {
+                        continue;
+                    }
+                    table.Row(shape.Name, export.Name, index, package,
+                        package + "|" + export.Name + "|" + index.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+        }
+        return table.Build();
+    }
+
     private static string PackageKey(UnrealFileProvider provider, string path) =>
         UnrealDataTables.Key(provider, path);
 

@@ -33,6 +33,11 @@ public static class CoreDatasets
         }
         _registered = true;
 
+        // What the ENGINE states about a selection, which no title has to be taught to answer.
+        // Registered from here so "the datasets that are always there" is one call, not a list
+        // every entry point keeps its own copy of.
+        UnityDatasets.Register();
+
         Datasets.Publish(DatasetsId, DataRole.Introspection, [],
             "Every dataset this session publishes, with the role a host binds it by.", Published);
 
