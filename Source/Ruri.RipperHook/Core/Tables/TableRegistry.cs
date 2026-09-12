@@ -13,11 +13,14 @@ public static class TableRegistry
         Open[handle] = new ColumnSearch(table);
     }
 
-    public static int[] Search(string handle, string query, IReadOnlyList<FilterRule>? rules)
+    public static ColumnSearch Opened(string handle)
         => Open.TryGetValue(handle, out ColumnSearch? search)
-            ? search.Search(query, rules)
+            ? search
             : throw new InvalidOperationException(
                 $"no table is open under handle '{handle}' -- open it before searching it.");
+
+    public static int[] Search(string handle, string query, IReadOnlyList<FilterRule>? rules)
+        => Opened(handle).Search(query, rules);
 
     public static string OpenHostTable(string handle, string[] columns, string[] flatValues)
     {
@@ -37,10 +40,10 @@ public static class TableRegistry
         Column[] built = new Column[columns.Length];
         for (int c = 0; c < columns.Length; c++)
         {
-            Utf8ColumnBuilder builder = new(rowCount);
+            ColumnBuilder builder = new(ColumnKind.Text, rowCount);
             for (int row = 0; row < rowCount; row++)
             {
-                builder.Add(Encoding.UTF8.GetBytes(flatValues[row * columns.Length + c] ?? string.Empty));
+                builder.Add(flatValues[row * columns.Length + c]);
             }
             built[c] = builder.Build(columns[c]);
         }

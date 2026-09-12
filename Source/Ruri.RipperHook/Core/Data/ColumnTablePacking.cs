@@ -5,50 +5,91 @@ namespace Ruri.RipperHook.Data;
 
 public static class ColumnTablePacking
 {
-    public const string TextKind = "text";
-    public const string IntegerKind = "int";
-    public const string RealKind = "real";
-    public const string BlobKind = "blob";
+    public static readonly string[] KindNames = ["text", "blob", "int", "real"];
 
-    public static (string Name, int RowCount, string[] Columns, string[] Kinds, byte[][] Blobs, byte[][] Offsets)
-        Pack(ColumnTable table)
+    public static string KindName(ColumnKind kind) => KindNames[(int)kind];
+
+    public static PinnedTable Pin(string handle, ColumnTable table)
     {
         ArgumentNullException.ThrowIfNull(table);
-        string[] names = new string[table.Columns.Length];
-        string[] kinds = new string[table.Columns.Length];
-        byte[][] blobs = new byte[table.Columns.Length][];
-        byte[][] offsets = new byte[table.Columns.Length][];
-        for (int index = 0; index < table.Columns.Length; index++)
+        return new PinnedTable(handle, table);
+    }
+}
+
+public sealed class PinnedTable : IDisposable
+{
+    private GCHandle[] _handles;
+
+    internal PinnedTable(string handle, ColumnTable table)
+    {
+        Handle = handle;
+        Name = table.Name;
+        RowCount = table.RowCount;
+        int count = table.Columns.Length;
+        Names = new string[count];
+        Kinds = new string[count];
+        Roles = new int[count];
+        Addresses = new long[count * 2];
+        Lengths = new int[count * 2];
+        _handles = new GCHandle[count * 2];
+        for (int index = 0; index < count; index++)
         {
             Column column = table.Columns[index];
-            names[index] = column.Name;
-            switch (column)
+            Names[index] = column.Name;
+            Kinds[index] = ColumnTablePacking.KindName(column.Kind);
+            Roles[index] = (int)column.Role;
+            Hold(index * 2, column.Data, column.Data.Length);
+            Hold(index * 2 + 1, column.Offsets, column.Offsets.Length * sizeof(int));
+        }
+    }
+
+    public string Handle { get; }
+
+    public string Name { get; }
+
+    public int RowCount { get; }
+
+    public string[] Names { get; }
+
+    public string[] Kinds { get; }
+
+    public int[] Roles { get; }
+
+    public long[] Addresses { get; }
+
+    public int[] Lengths { get; }
+
+    private void Hold(int slot, Array buffer, int byteLength)
+    {
+        if (byteLength == 0)
+        {
+            return;
+        }
+        GCHandle pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        _handles[slot] = pin;
+        Addresses[slot] = pin.AddrOfPinnedObject().ToInt64();
+        Lengths[slot] = byteLength;
+    }
+
+    ~PinnedTable() => Release();
+
+    public void Dispose()
+    {
+        Release();
+        GC.SuppressFinalize(this);
+    }
+
+    private void Release()
+    {
+        GCHandle[] held = Interlocked.Exchange(ref _handles, []);
+        for (int slot = 0; slot < held.Length; slot++)
+        {
+            Addresses[slot] = 0;
+            Lengths[slot] = 0;
+            if (held[slot].IsAllocated)
             {
-                case Utf8Column text:
-                    kinds[index] = TextKind;
-                    blobs[index] = text.Blob;
-                    offsets[index] = MemoryMarshal.AsBytes(text.Offsets.AsSpan()).ToArray();
-                    break;
-                case BlobColumn payload:
-                    kinds[index] = BlobKind;
-                    blobs[index] = payload.Payload;
-                    offsets[index] = MemoryMarshal.AsBytes(payload.Offsets.AsSpan()).ToArray();
-                    break;
-                case IntegerColumn integers:
-                    kinds[index] = IntegerKind;
-                    blobs[index] = MemoryMarshal.AsBytes(integers.Values.AsSpan()).ToArray();
-                    offsets[index] = [];
-                    break;
-                case RealColumn reals:
-                    kinds[index] = RealKind;
-                    blobs[index] = MemoryMarshal.AsBytes(reals.Values.AsSpan()).ToArray();
-                    offsets[index] = [];
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"column '{column.Name}' has unsupported shape {column.GetType().Name}");
+                held[slot].Free();
             }
         }
-        return (table.Name, table.RowCount, names, kinds, blobs, offsets);
     }
 }

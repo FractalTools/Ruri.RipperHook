@@ -6,8 +6,32 @@ public sealed record FilterRule(string Field, string Relation, string Value, boo
 
 public static class RuleFilter
 {
+    public const int FlatWidth = 5;
+
     public static bool AnyEnabled(IReadOnlyList<FilterRule>? rules)
         => rules is not null && rules.Any(static rule => rule.Enabled);
+
+    public static FilterRule[] Parse(string[]? flat)
+    {
+        if (flat is null || flat.Length == 0)
+        {
+            return [];
+        }
+        if (flat.Length % FlatWidth != 0)
+        {
+            throw new ArgumentException(
+                $"flatRules length {flat.Length} is not a multiple of {FlatWidth} "
+                + "(field, relation, value, action, enabled)");
+        }
+        FilterRule[] rules = new FilterRule[flat.Length / FlatWidth];
+        for (int index = 0; index < rules.Length; index++)
+        {
+            int at = index * FlatWidth;
+            rules[index] = new FilterRule(flat[at], flat[at + 1], flat[at + 2],
+                flat[at + 3] != "exclude", flat[at + 4] == "1");
+        }
+        return rules;
+    }
 
     public static int[] Apply(int[] candidates, IReadOnlyList<FilterRule> rules,
         Func<int, string, string> field)

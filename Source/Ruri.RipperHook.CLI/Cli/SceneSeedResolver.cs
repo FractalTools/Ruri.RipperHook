@@ -64,7 +64,7 @@ internal static class SceneSeedResolver
     private static SceneWindow FromLandmark(string spec)
     {
         ColumnTable places = Read(LandmarksDataset, []);
-        Utf8Column levelIds = Text(places, "levelId");
+        Column levelIds = Text(places, "levelId");
         string[] fields = Fields(spec);
         string levelId = fields[0];
         int row = -1;
@@ -114,9 +114,9 @@ internal static class SceneSeedResolver
         }
     }
 
-    private static Utf8Column Text(ColumnTable table, string column) => (Utf8Column)table[column];
+    private static Column Text(ColumnTable table, string column) => table[column];
 
-    private static double[] Real(ColumnTable table, string column) => ((RealColumn)table[column]).Values;
+    private static double[] Real(ColumnTable table, string column) => table[column].Reals.ToArray();
 
     private static string[] Fields(string spec)
         => spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -167,16 +167,16 @@ internal static class SceneSeedResolver
 
         List<string>[] materialsByPlacement = new List<string>[placements.RowCount];
         double[] owner = Real(materials, "placement");
-        Utf8Column materialPath = Text(materials, "path");
+        Column materialPath = Text(materials, "path");
         for (int index = 0; index < materials.RowCount; index++)
         {
             int placement = (int)owner[index];
             (materialsByPlacement[placement] ??= new List<string>()).Add(materialPath.Text(index));
         }
 
-        Utf8Column assetPath = Text(placements, "assetPath");
-        Utf8Column entityName = Text(placements, "entityName");
-        Utf8Column sourceChunk = Text(placements, "sourceChunk");
+        Column assetPath = Text(placements, "assetPath");
+        Column entityName = Text(placements, "entityName");
+        Column sourceChunk = Text(placements, "sourceChunk");
         double[] px = Real(placements, "px"), py = Real(placements, "py"), pz = Real(placements, "pz");
         double[] qx = Real(placements, "qx"), qy = Real(placements, "qy");
         double[] qz = Real(placements, "qz"), qw = Real(placements, "qw");
@@ -195,7 +195,7 @@ internal static class SceneSeedResolver
         int noTransform = (int)Real(counts, "noTransform")[0];
         int lodFiltered = (int)Real(counts, "lodFiltered")[0];
         ColumnTable seedPaths = Read(SeedPathsDataset, [.. args]);
-        Utf8Column seedPath = Text(seedPaths, "path");
+        Column seedPath = Text(seedPaths, "path");
         string[] allPaths = new string[seedPaths.RowCount];
         for (int index = 0; index < allPaths.Length; index++)
         {

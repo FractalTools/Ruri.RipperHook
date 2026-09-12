@@ -248,7 +248,7 @@ public static class RipperBlenderBridge
         string sortColumn, int sortDirection)
     {
         ArgumentNullException.ThrowIfNull(map);
-        int[] ids = map.Search.Search(query, ParseFlatRules(flatRules), sortColumn, sortDirection);
+        int[] ids = map.Search.Search(query, RuleFilter.Parse(flatRules), sortColumn, sortDirection);
         return IntsToBytes(ids, ids.Length);
     }
 
@@ -258,29 +258,6 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(rowIds);
         int[] ids = map.Search.SortIds(rowIds, sortColumn, sortDirection);
         return IntsToBytes(ids, ids.Length);
-    }
-
-    private static List<FilterRule>? ParseFlatRules(string[]? flatRules)
-    {
-        if (flatRules is null || flatRules.Length == 0)
-        {
-            return null;
-        }
-        if (flatRules.Length % 5 != 0)
-        {
-            throw new ArgumentException($"flatRules length {flatRules.Length} is not a multiple of 5 (field, relation, value, action, enabled)");
-        }
-        List<FilterRule> rules = new(flatRules.Length / 5);
-        for (int i = 0; i < flatRules.Length; i += 5)
-        {
-            rules.Add(new FilterRule(
-                Field: flatRules[i],
-                Relation: flatRules[i + 1],
-                Value: flatRules[i + 2],
-                Include: flatRules[i + 3] != "exclude",
-                Enabled: flatRules[i + 4] == "1"));
-        }
-        return rules;
     }
 
     public static string[] ResolveCabsForPaths(CabMapHandle map, string[] containerPaths)
@@ -1278,20 +1255,23 @@ public static class RipperBlenderBridge
 
 
 
-    public static ColumnTableDto GameDataTable(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation)
+    public static Data.PinnedTable GameDataTable(CabMapHandle? map, string datasetId, string[] args,
+        CancellationToken cancellation)
     {
         (string handle, Tables.ColumnTable table) = Data.Datasets.Table(datasetId, args ?? [], cancellation, map?.Table);
-        (string name, int rowCount, string[] columns, string[] kinds, byte[][] blobs, byte[][] offsets) =
-            Data.ColumnTablePacking.Pack(table);
-        return new ColumnTableDto(handle, name, rowCount, columns, kinds, blobs, offsets);
+        return Data.ColumnTablePacking.Pin(handle, table);
     }
+
+    public static Views.View OpenView(string handle, string facet, string search, string[]? flatRules,
+        string note, bool shippedOnly, string sortColumn, int sortDirection, int window) =>
+        Views.View.Open(handle, facet, search, flatRules, note, shippedOnly, sortColumn, sortDirection, window);
 
     public static byte[] GameDataBlob(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation) =>
         Data.Datasets.Blob(datasetId, args ?? [], cancellation, map?.Table);
 
     public static byte[] SearchDataTable(string handle, string query, string[]? flatRules)
     {
-        int[] rows = TableRegistry.Search(handle, query, ParseFlatRules(flatRules));
+        int[] rows = TableRegistry.Search(handle, query, RuleFilter.Parse(flatRules));
         return IntsToBytes(rows, rows.Length);
     }
 
@@ -1715,9 +1695,6 @@ public sealed record PackedTableDto(
     byte[] ClassFlat, byte[] ClassStarts,
     byte[] DependencyCounts,
     string ClassIdNames);
-
-public sealed record ColumnTableDto(
-    string Handle, string Name, int RowCount, string[] Names, string[] Kinds, byte[][] Blobs, byte[][] Offsets);
 
 public sealed record VfsFileDto(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath);
 

@@ -7,60 +7,51 @@ public sealed class TableBuilder
 
     private readonly string _name;
     private readonly string[] _columns;
-    private readonly ColumnShape[] _shapes;
-    private readonly Utf8ColumnBuilder?[] _text;
-    private readonly BlobColumnBuilder?[] _blobs;
-    private readonly List<double>[] _numbers;
+    private readonly ColumnBuilder[] _builders;
+    private readonly ColumnRole[] _roles;
     private int _cursor;
     private int _rows;
-
-    private enum ColumnShape
-    {
-        Text,
-        Real,
-        Blob,
-    }
 
     public TableBuilder(string name, params string[] columns)
     {
         _name = name;
         _columns = columns.Select(column => column.TrimEnd(NumericMark, BlobMark)).ToArray();
-        _shapes = columns.Select(column =>
-            column.EndsWith(NumericMark) ? ColumnShape.Real :
-            column.EndsWith(BlobMark) ? ColumnShape.Blob : ColumnShape.Text).ToArray();
-        _text = new Utf8ColumnBuilder?[columns.Length];
-        _blobs = new BlobColumnBuilder?[columns.Length];
-        _numbers = new List<double>[columns.Length];
-        for (int index = 0; index < columns.Length; index++)
-        {
-            switch (_shapes[index])
-            {
-                case ColumnShape.Real:
-                    _numbers[index] = [];
-                    break;
-                case ColumnShape.Blob:
-                    _blobs[index] = new BlobColumnBuilder(0);
-                    break;
-                default:
-                    _text[index] = new Utf8ColumnBuilder(0);
-                    break;
-            }
-        }
+        _builders = columns.Select(column => new ColumnBuilder(
+            column.EndsWith(NumericMark) ? ColumnKind.Real :
+            column.EndsWith(BlobMark) ? ColumnKind.Blob : ColumnKind.Text, 0)).ToArray();
+        _roles = new ColumnRole[columns.Length];
     }
 
     public int RowCount => _rows;
 
+    public TableBuilder Role(ColumnRole role, params string[] columns)
+    {
+        foreach (string column in columns)
+        {
+            int index = Array.FindIndex(_columns,
+                name => string.Equals(name, column, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                throw new ArgumentException(
+                    $"table '{_name}' has no column '{column}' to state as {role}; it has: "
+                    + string.Join(", ", _columns));
+            }
+            _roles[index] |= role;
+        }
+        return this;
+    }
+
     public TableBuilder Add(string? value)
     {
         Slot(out int index);
-        _text[index]!.Add(value ?? string.Empty);
+        _builders[index].Add(value);
         return this;
     }
 
     public TableBuilder Add(double value)
     {
         Slot(out int index);
-        _numbers[index].Add(value);
+        _builders[index].Add(value);
         return this;
     }
 
@@ -69,11 +60,12 @@ public sealed class TableBuilder
     public TableBuilder Add(ReadOnlySpan<byte> value)
     {
         Slot(out int index);
-        _blobs[index]!.Add(value);
+        _builders[index].Add(value);
         return this;
     }
 
-    public TableBuilder Add(bool value) => _shapes[_cursor] == ColumnShape.Real ? Add(value ? 1d : 0d) : Add(value ? "1" : "0");
+    public TableBuilder Add(bool value) =>
+        _builders[_cursor].Kind == ColumnKind.Real ? Add(value ? 1d : 0d) : Add(value ? "1" : "0");
 
     public TableBuilder Row(params object?[] values)
     {
@@ -81,7 +73,7 @@ public sealed class TableBuilder
         {
             switch (value)
             {
-                case null when _shapes[_cursor] == ColumnShape.Blob: Add(ReadOnlySpan<byte>.Empty); break;
+                case null when _builders[_cursor].Kind == ColumnKind.Blob: Add(ReadOnlySpan<byte>.Empty); break;
                 case null: Add(string.Empty); break;
                 case string text: Add(text); break;
                 case byte[] bytes: Add(bytes.AsSpan()); break;
@@ -118,12 +110,7 @@ public sealed class TableBuilder
         Column[] columns = new Column[_columns.Length];
         for (int index = 0; index < _columns.Length; index++)
         {
-            columns[index] = _shapes[index] switch
-            {
-                ColumnShape.Real => new RealColumn { Name = _columns[index], Values = _numbers[index].ToArray() },
-                ColumnShape.Blob => _blobs[index]!.Build(_columns[index]),
-                _ => _text[index]!.Build(_columns[index]),
-            };
+            columns[index] = _builders[index].Build(_columns[index], _roles[index]);
         }
         return new ColumnTable { Name = _name, RowCount = _rows, Columns = columns };
     }
