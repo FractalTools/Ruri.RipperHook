@@ -1263,8 +1263,10 @@ public static class RipperBlenderBridge
     }
 
     public static Views.View OpenView(string handle, string facet, string search, string[]? flatRules,
-        string note, bool shippedOnly, string sortColumn, int sortDirection, int window) =>
-        Views.View.Open(handle, facet, search, flatRules, note, shippedOnly, sortColumn, sortDirection, window);
+        string note, bool shippedOnly, string sortColumn, int sortDirection, int window,
+        bool ordered, string labelColumn, string groupColumn) =>
+        Views.View.Open(handle, facet, search, flatRules, note, shippedOnly, sortColumn,
+            sortDirection, window, ordered, labelColumn, groupColumn);
 
     public static byte[] GameDataBlob(CabMapHandle? map, string datasetId, string[] args, CancellationToken cancellation) =>
         Data.Datasets.Blob(datasetId, args ?? [], cancellation, map?.Table);

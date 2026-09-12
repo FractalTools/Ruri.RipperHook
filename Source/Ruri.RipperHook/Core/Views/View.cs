@@ -13,7 +13,10 @@ public readonly record struct ViewSpec(
     bool ShippedOnly,
     string SortColumn,
     int SortDirection,
-    int Window);
+    int Window,
+    bool Ordered,
+    string LabelColumn,
+    string GroupColumn);
 
 public sealed class View : IDisposable
 {
@@ -63,10 +66,13 @@ public sealed class View : IDisposable
     }
 
     public static View Open(string table, string facet, string search, string[]? flatRules, string note,
-        bool shippedOnly, string sortColumn, int sortDirection, int window) =>
+        bool shippedOnly, string sortColumn, int sortDirection, int window, bool ordered,
+        string labelColumn, string groupColumn) =>
         Compose(new ViewSpec(table, facet ?? string.Empty, search ?? string.Empty,
             RuleFilter.Parse(flatRules), note ?? string.Empty, shippedOnly,
-            sortColumn ?? string.Empty, sortDirection, window), TableRegistry.Opened(table));
+            sortColumn ?? string.Empty, sortDirection, window, ordered,
+            labelColumn ?? string.Empty, groupColumn ?? string.Empty),
+            TableRegistry.Opened(table));
 
     public int IndexOfKey(string key)
     {
@@ -88,9 +94,17 @@ public sealed class View : IDisposable
     public static View Compose(ViewSpec spec, ColumnSearch search)
     {
         ColumnTable source = search.Table;
-        Column[] labels = source.WithRole(ColumnRole.Label);
+        // A column the VIEW names wins over the column's own role: one table drawn
+        // two ways (these clips by shot, the same clips by which story they are
+        // from) has two right answers, and which one is right is the question being
+        // asked, not a fact about the table.
+        Column[] labels = spec.LabelColumn.Length == 0
+            ? source.WithRole(ColumnRole.Label)
+            : [source[spec.LabelColumn]];
         Column? facet = source.FirstWithRole(ColumnRole.Facet);
-        Column? group = source.FirstWithRole(ColumnRole.Group);
+        Column? group = spec.GroupColumn.Length == 0
+            ? source.FirstWithRole(ColumnRole.Group)
+            : source[spec.GroupColumn];
         Column? named = source.FirstWithRole(ColumnRole.Named);
         Column? shipped = source.FirstWithRole(ColumnRole.Shipped);
 
@@ -183,6 +197,13 @@ public sealed class View : IDisposable
     private static void Sort(int[] rows, ColumnTable source, ViewSpec spec, Column[] labels,
         Column? group, Column? named)
     {
+        if (spec.Ordered && spec.SortDirection == 0)
+        {
+            // The producer already stated the order -- a tally listed most-animated
+            // first, a plan in the order its steps run. Re-sorting by name would
+            // throw away the one fact the list was FOR.
+            return;
+        }
         if (spec.SortColumn.Length != 0 && spec.SortDirection != 0)
         {
             Column column = source[spec.SortColumn];
