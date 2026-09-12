@@ -193,8 +193,15 @@ public sealed class View : IDisposable
         foreach ((string value, int count) in seen.OrderByDescending(pair => pair.Value)
                      .ThenBy(pair => pair.Key, StringComparer.Ordinal))
         {
-            facets.Row(value.Length == 0 ? EveryFacet : value,
-                value.Length == 0 ? "Unfiled" : value, $"{count} row(s)");
+            // A row the table files under nothing is reachable through All and through
+            // nothing else -- narrowing compares the cell to the entry, and there is no
+            // cell to compare. So it gets no entry of its own, rather than a second one
+            // spelled the same as All: a switch with one word twice in it is a switch a
+            // host cannot draw (its entries are addressed by that word).
+            if (value.Length != 0)
+            {
+                facets.Row(value, value, $"{count} row(s)");
+            }
         }
         return facets.Build();
     }

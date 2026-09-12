@@ -150,7 +150,20 @@ public sealed class ColumnTable
                     Column? found = table.Find(shape[index].Name);
                     if (found is null)
                     {
-                        builders[index].AddBlank();
+                        // A part that states nothing for a column contributes nothing to it --
+                        // except where the column is the SHIPPED test, whose whole meaning is
+                        // "this install has something behind this row". A table carrying no such
+                        // column at all has every row shipped (that is what a view does when
+                        // nothing carries the role), so a PART carrying none does too: blank
+                        // would read as "nothing behind any of these" and hide that part whole.
+                        if ((shape[index].Role & ColumnRole.Shipped) != 0)
+                        {
+                            builders[index].Add(1L);
+                        }
+                        else
+                        {
+                            builders[index].AddBlank();
+                        }
                     }
                     else if (found.Kind == shape[index].Kind)
                     {
