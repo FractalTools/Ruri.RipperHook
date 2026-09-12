@@ -1,13 +1,8 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Processing;
-using AssetRipper.SourceGenerated.Classes.ClassID_111;
-using AssetRipper.SourceGenerated.Classes.ClassID_221;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
-using AssetRipper.SourceGenerated.Classes.ClassID_74;
-using AssetRipper.SourceGenerated.Classes.ClassID_91;
 using AssetRipper.SourceGenerated.Extensions;
-using AssetRipper.SourceGenerated.Subclasses.AnimationClipOverride;
 using AssetRipper.SourceGenerated.Subclasses.MeshBlendShapeChannel;
 using Ruri.RipperHook.Bridge;
 using Ruri.RipperHook.CabMapping;
@@ -19,17 +14,20 @@ namespace Ruri.RipperHook.Data;
 /// <summary>What a Unity BUILD states about a selection, for every title built on that engine.
 ///
 /// A title's own hook publishes what that title's designers wrote down -- a roster table, an
-/// outfit catalog, a named expression library. These two are the floor underneath all of it:
-/// the engine stores which clips an animator plays and what a mesh's blend shapes are called,
-/// in every build, so no title has to be taught to answer them and a title that never wrote a
-/// catalog still answers.
+/// outfit catalog, a named expression library. This is the floor underneath all of it: every
+/// build stores what a mesh's blend shapes are called, beside the deltas, so no title has to
+/// be taught to answer it and a title that never wrote a catalog still answers.
 ///
-/// Both are asked of a SELECTION -- the archives one row is made of -- and both read the same
-/// dependency closure an import of that row would (<see cref="ClosureReader"/>).</summary>
+/// It is asked of a SELECTION -- the archives one row is made of -- and reads the same
+/// dependency closure an import of that row would (<see cref="ClosureReader"/>).
+///
+/// There is deliberately no such reader for ANIMATIONS. Which clips a row plays would mean
+/// loading the closure of every archive those clips live in -- hundreds, for one character --
+/// to produce names the cabmap already carries, so that question is answered by a search over
+/// the map instead (the bundle browser's own).</summary>
 public static class UnityDatasets
 {
     public const string IdPrefix = "unity.";
-    public const string AnimationsId = "unity.animations";
     public const string BlendShapesId = "unity.blendshapes";
 
     private const string Cab = "cab";
@@ -44,125 +42,11 @@ public static class UnityDatasets
         }
         _registered = true;
 
-        Datasets.Publish(AnimationsId, DataRole.AnimationCatalog, [DataParam.List(Cab)],
-            "Every animation the given archives reach, filed under what PLAYS it: an animator "
-            + "controller states its clips, an override controller restates the ones it replaces, "
-            + "a legacy Animation component lists its own. A clip nothing names is listed under "
-            + "no player. Each row carries the asset key that loads that one clip.",
-            Animations);
-
         Datasets.Publish(BlendShapesId, DataRole.ExpressionCatalog, [DataParam.List(Cab)],
             "Every named blend shape the given archives reach, as the MESH itself states it -- "
             + "the expression vocabulary a model was built with, which every Unity build stores "
             + "beside the deltas. Each row carries the mesh and the shape's index in it.",
             BlendShapes);
-    }
-
-    /// <summary>Every animation the selection reaches, filed under what plays it.
-    ///
-    /// Not "every clip in these archives": a character's closure co-hosts whole libraries
-    /// belonging to somebody else, and the game's own filing of a clip is which animator names
-    /// it. So the players are walked first and each clip is filed under the first one that names
-    /// it; what is left over is still listed, because a title that plays clips by name from
-    /// script names none of them in data.</summary>
-    private static ColumnTable Animations(DataRequest request)
-    {
-        TableBuilder table = new(AnimationsId,
-            "name|Clip", "player|Played By", "length|Length", "frames#|Frames",
-            "cab|Cab", "key|Id");
-        table.Role(ColumnRole.Label, "name")
-            .Role(ColumnRole.Facet | ColumnRole.Group, "player")
-            .Role(ColumnRole.Detail, "length")
-            .Role(ColumnRole.Key | ColumnRole.Payload, "key");
-
-        GameData? loaded = ClosureReader.Read(request.Map, request.List(Cab));
-        if (loaded is null)
-        {
-            return table.Build();
-        }
-        HashSet<string> reached = Reached(request);
-        Dictionary<AssetCollection, string> identities = ClosureGraphBlob.CollectionIdentities(loaded);
-        Dictionary<IAnimationClip, string> playedBy = new(ReferenceEqualityComparer.Instance);
-        List<IAnimationClip> clips = [];
-
-        // The first player to name a clip is the one it is filed under; a clip met on its own
-        // before anything names it is refiled the moment something does.
-        void File(IAnimationClip? clip, string player)
-        {
-            if (clip is null)
-            {
-                return;
-            }
-            if (playedBy.TryGetValue(clip, out string? already))
-            {
-                if (already.Length == 0)
-                {
-                    playedBy[clip] = player;
-                }
-                return;
-            }
-            playedBy[clip] = player;
-            clips.Add(clip);
-        }
-
-        foreach (IUnityObjectBase asset in loaded.GameBundle.FetchAssets())
-        {
-            request.Cancellation.ThrowIfCancellationRequested();
-            if (!Reaches(reached, asset))
-            {
-                continue;
-            }
-            switch (asset)
-            {
-                case IAnimatorController controller:
-                    foreach (IAnimationClip? clip in controller.AnimationClipsP)
-                    {
-                        File(clip, controller.GetBestName());
-                    }
-                    break;
-                case IAnimatorOverrideController overrides:
-                    foreach (IAnimationClipOverride pair in overrides.Clips)
-                    {
-                        File(pair.OriginalClip.TryGetAsset(overrides.Collection), overrides.GetBestName());
-                        File(pair.OverrideClip.TryGetAsset(overrides.Collection), overrides.GetBestName());
-                    }
-                    break;
-                case IAnimation animation:
-                    foreach (IAnimationClip? clip in animation.AnimationsP)
-                    {
-                        File(clip, animation.GetBestName());
-                    }
-                    break;
-                case IAnimationClip loose:
-                    File(loose, string.Empty);
-                    break;
-            }
-        }
-
-        foreach (IAnimationClip clip in clips)
-        {
-            (string length, double frames) = Duration(clip);
-            table.Row(clip.GetBestName(), playedBy.GetValueOrDefault(clip, string.Empty), length, frames,
-                clip.Collection.Name, Key(identities, clip));
-        }
-        return table.Build();
-    }
-
-    /// <summary>How long a clip runs, as the clip itself states it. A build that strips the
-    /// muscle clip leaves nothing to say, and saying nothing is the honest answer.</summary>
-    private static (string Length, double Frames) Duration(IAnimationClip clip)
-    {
-        if (!clip.Has_MuscleClip_C74())
-        {
-            return (string.Empty, 0d);
-        }
-        float seconds = clip.MuscleClip_C74.StopTime - clip.MuscleClip_C74.StartTime;
-        if (seconds <= 0f)
-        {
-            return (string.Empty, 0d);
-        }
-        double frames = Math.Round(seconds * clip.SampleRate_C74);
-        return (seconds.ToString("0.##", CultureInfo.InvariantCulture) + " s", frames);
     }
 
     /// <summary>Every named blend shape the selection reaches.</summary>
