@@ -1275,8 +1275,9 @@ public static class RipperBlenderBridge
         return IntsToBytes(rows, rows.Length);
     }
 
-    public static string OpenHostTable(string handle, string[] columns, string[] flatValues)
-        => TableRegistry.OpenHostTable(handle, columns, flatValues);
+    public static string OpenHostTable(string handle, string[] columns, int[]? roles,
+        string[] flatValues)
+        => TableRegistry.OpenHostTable(handle, columns, roles, flatValues);
 
     private static T VfsFuncOrThrow<T>(T? func) where T : class =>
         func ?? throw new InvalidOperationException(

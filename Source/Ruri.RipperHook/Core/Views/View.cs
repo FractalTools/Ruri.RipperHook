@@ -197,7 +197,10 @@ public sealed class View : IDisposable
         {
             if (named is not null)
             {
-                int rank = (named.Bytes(left).IsEmpty ? 1 : 0) - (named.Bytes(right).IsEmpty ? 1 : 0);
+                // Truthy, not "has bytes": a build states "the game names this one"
+                // as a flag as often as as a string, and a numeric column always
+                // has bytes.
+                int rank = (named.Truthy(left) ? 0 : 1) - (named.Truthy(right) ? 0 : 1);
                 if (rank != 0)
                 {
                     return rank;

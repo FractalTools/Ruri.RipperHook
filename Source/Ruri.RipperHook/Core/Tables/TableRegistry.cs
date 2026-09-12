@@ -22,7 +22,12 @@ public static class TableRegistry
     public static int[] Search(string handle, string query, IReadOnlyList<FilterRule>? rules)
         => Opened(handle).Search(query, rules);
 
-    public static string OpenHostTable(string handle, string[] columns, string[] flatValues)
+    /// <summary>A list the caller assembled, published as a table so it gets the one search,
+    /// the one rule evaluator and the one view engine every other list gets. Columns are
+    /// spelled as they are anywhere else ("name", "count#", "name|Displayed Name"), and
+    /// <paramref name="roles"/> states positionally what each one answers.</summary>
+    public static string OpenHostTable(string handle, string[] columns, int[]? roles,
+        string[] flatValues)
     {
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(flatValues);
@@ -36,18 +41,16 @@ public static class TableRegistry
                 $"flatValues length {flatValues.Length} is not a multiple of the {columns.Length} column(s)",
                 nameof(flatValues));
         }
-        int rowCount = flatValues.Length / columns.Length;
-        Column[] built = new Column[columns.Length];
-        for (int c = 0; c < columns.Length; c++)
+        TableBuilder table = new(handle, columns);
+        if (roles is { Length: > 0 })
         {
-            ColumnBuilder builder = new(ColumnKind.Text, rowCount);
-            for (int row = 0; row < rowCount; row++)
-            {
-                builder.Add(flatValues[row * columns.Length + c]);
-            }
-            built[c] = builder.Build(columns[c]);
+            table.Roles(roles.Select(role => (ColumnRole)role).ToArray());
         }
-        Register(handle, new ColumnTable { Name = handle, RowCount = rowCount, Columns = built });
+        foreach (string value in flatValues)
+        {
+            table.Add(value);
+        }
+        Register(handle, table.Build());
         return handle;
     }
 }

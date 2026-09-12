@@ -181,7 +181,19 @@ public sealed class ColumnBuilder
         _offsets[_rows] = _length;
     }
 
-    public void Add(string? text) => Add(text is null or "" ? [] : Encoding.UTF8.GetBytes(text));
+    public void Add(string? text)
+    {
+        if (_kind is ColumnKind.Integer or ColumnKind.Real)
+        {
+            // A numeric column given text is the flat wire form, not a mistake: parse it
+            // rather than writing its bytes, which would make every later row of that
+            // column read as garbage.
+            Add(double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out double parsed) ? parsed : 0d);
+            return;
+        }
+        Add(text is null or "" ? [] : Encoding.UTF8.GetBytes(text));
+    }
 
     public void Add(long value)
     {

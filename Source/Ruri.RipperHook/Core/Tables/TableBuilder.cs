@@ -34,6 +34,22 @@ public sealed class TableBuilder
 
     public int RowCount => _rows;
 
+    /// <summary>Every column's role at once, positionally -- what a table arriving as a flat
+    /// wire form states, where naming each column again would just be the same list twice.</summary>
+    public TableBuilder Roles(params ColumnRole[] perColumn)
+    {
+        if (perColumn.Length > _roles.Length)
+        {
+            throw new ArgumentException(
+                $"table '{_name}' has {_roles.Length} column(s) but {perColumn.Length} role(s) were stated.");
+        }
+        for (int index = 0; index < perColumn.Length; index++)
+        {
+            _roles[index] |= perColumn[index];
+        }
+        return this;
+    }
+
     public TableBuilder Role(ColumnRole role, params string[] columns)
     {
         int previous = -1;
