@@ -4,19 +4,29 @@ public sealed class TableBuilder
 {
     private const char NumericMark = '#';
     private const char BlobMark = '@';
+    private const char TitleMark = '|';
 
     private readonly string _name;
     private readonly string[] _columns;
+    private readonly string[] _titles;
     private readonly ColumnBuilder[] _builders;
     private readonly ColumnRole[] _roles;
     private int _cursor;
     private int _rows;
 
+    /// <summary>A column is "name", "name#" (a number), "name@" (a payload), and any of those
+    /// followed by "|What A Person Sees" where its own name would not read well.</summary>
     public TableBuilder(string name, params string[] columns)
     {
         _name = name;
-        _columns = columns.Select(column => column.TrimEnd(NumericMark, BlobMark)).ToArray();
-        _builders = columns.Select(column => new ColumnBuilder(
+        string[] stated = columns.Select(column => column.Split(TitleMark)[0]).ToArray();
+        _titles = columns.Select(column =>
+        {
+            int mark = column.IndexOf(TitleMark);
+            return mark < 0 ? string.Empty : column[(mark + 1)..];
+        }).ToArray();
+        _columns = stated.Select(column => column.TrimEnd(NumericMark, BlobMark)).ToArray();
+        _builders = stated.Select(column => new ColumnBuilder(
             column.EndsWith(NumericMark) ? ColumnKind.Real :
             column.EndsWith(BlobMark) ? ColumnKind.Blob : ColumnKind.Text, 0)).ToArray();
         _roles = new ColumnRole[columns.Length];
@@ -26,6 +36,7 @@ public sealed class TableBuilder
 
     public TableBuilder Role(ColumnRole role, params string[] columns)
     {
+        int previous = -1;
         foreach (string column in columns)
         {
             int index = Array.FindIndex(_columns,
@@ -36,6 +47,18 @@ public sealed class TableBuilder
                     $"table '{_name}' has no column '{column}' to state as {role}; it has: "
                     + string.Join(", ", _columns));
             }
+            // Several columns in one role are a FALLBACK CHAIN, and a chain's order
+            // is the table's own column order -- there is no second place stating
+            // it. So a chain written in an order the columns are not in is a build
+            // error here, rather than a list that quietly shows the wrong thing.
+            if (index <= previous)
+            {
+                throw new ArgumentException(
+                    $"table '{_name}' states {role} as {string.Join(" then ", columns)}, but its "
+                    + $"columns run {string.Join(", ", _columns)} -- a fallback chain is read in "
+                    + "column order, so put the columns in the order the chain wants them.");
+            }
+            previous = index;
             _roles[index] |= role;
         }
         return this;
@@ -110,7 +133,7 @@ public sealed class TableBuilder
         Column[] columns = new Column[_columns.Length];
         for (int index = 0; index < _columns.Length; index++)
         {
-            columns[index] = _builders[index].Build(_columns[index], _roles[index]);
+            columns[index] = _builders[index].Build(_columns[index], _roles[index], _titles[index]);
         }
         return new ColumnTable { Name = _name, RowCount = _rows, Columns = columns };
     }

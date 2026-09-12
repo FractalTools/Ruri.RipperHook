@@ -96,7 +96,7 @@ public sealed class View : IDisposable
 
         int[] matched = Narrow(search.Search(spec.Search, spec.Rules), null, string.Empty,
             spec.ShippedOnly ? shipped : null);
-        ColumnTable facets = CountFacets(facet, matched);
+        ColumnTable facets = CountFacets(facet, matched, spec.Facet);
         int[] kept = Narrow(matched, facet, spec.Facet, null);
         Sort(kept, source, spec, labels, group, named);
 
@@ -122,7 +122,7 @@ public sealed class View : IDisposable
         return said.ToString();
     }
 
-    private static ColumnTable CountFacets(Column? facet, int[] matched)
+    private static ColumnTable CountFacets(Column? facet, int[] matched, string picked)
     {
         TableBuilder facets = new("facets", "id", "label", "detail");
         facets.Role(ColumnRole.Key, "id").Role(ColumnRole.Label, "label").Role(ColumnRole.Detail, "detail");
@@ -138,6 +138,13 @@ public sealed class View : IDisposable
         if (seen.Count < 2)
         {
             return facets.Build();
+        }
+        // Whatever the switch is CURRENTLY set to stays on it even when nothing
+        // matches it any more: a search that empties the picked kind must not
+        // silently move the user to a different one.
+        if (picked.Length != 0 && picked != EveryFacet)
+        {
+            seen.TryAdd(picked, 0);
         }
         facets.Row(EveryFacet, "All", $"{matched.Length} row(s)");
         foreach ((string value, int count) in seen.OrderByDescending(pair => pair.Value)

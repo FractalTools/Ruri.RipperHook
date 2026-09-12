@@ -22,6 +22,11 @@ public sealed class Column
     public required int[] Offsets { get; init; }
     public ColumnRole Role { get; init; }
 
+    /// <summary>What a person should see this column called. Empty means its own name reads well enough.</summary>
+    public string Title { get; init; } = string.Empty;
+
+    public string Display => Title.Length == 0 ? Name : Title;
+
     public bool Sliced => Kind is ColumnKind.Text or ColumnKind.Blob;
 
     public int RowCount => Sliced ? Math.Max(Offsets.Length - 1, 0) : Data.Length / ScalarWidth;
@@ -61,7 +66,7 @@ public sealed class Column
     };
 
     public Column Restated(string name, ColumnRole role) =>
-        new() { Name = name, Kind = Kind, Data = Data, Offsets = Offsets, Role = role };
+        new() { Name = name, Kind = Kind, Data = Data, Offsets = Offsets, Role = role, Title = Title };
 }
 
 public sealed class ColumnTable
@@ -105,7 +110,7 @@ public sealed class ColumnTable
         {
             builder.Add(column.Bytes(row));
         }
-        return builder.Build(column.Name, column.Role);
+        return builder.Build(column.Name, column.Role, column.Title);
     }
 
     public ColumnTable DistinctBy(string distinctColumn, string preferColumn)
@@ -213,7 +218,7 @@ public sealed class ColumnBuilder
         Add(zero);
     }
 
-    public Column Build(string name, ColumnRole role = ColumnRole.None)
+    public Column Build(string name, ColumnRole role = ColumnRole.None, string title = "")
     {
         byte[] data = new byte[_length];
         Array.Copy(_data, data, _length);
@@ -223,6 +228,9 @@ public sealed class ColumnBuilder
             offsets = new int[_rows + 1];
             Array.Copy(_offsets, offsets, _rows + 1);
         }
-        return new Column { Name = name, Kind = _kind, Data = data, Offsets = offsets, Role = role };
+        return new Column
+        {
+            Name = name, Kind = _kind, Data = data, Offsets = offsets, Role = role, Title = title,
+        };
     }
 }

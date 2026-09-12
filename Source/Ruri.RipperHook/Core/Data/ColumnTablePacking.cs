@@ -27,6 +27,7 @@ public sealed class PinnedTable : IDisposable
         RowCount = table.RowCount;
         int count = table.Columns.Length;
         Names = new string[count];
+        Titles = new string[count];
         Kinds = new string[count];
         Roles = new int[count];
         Addresses = new long[count * 2];
@@ -36,6 +37,7 @@ public sealed class PinnedTable : IDisposable
         {
             Column column = table.Columns[index];
             Names[index] = column.Name;
+            Titles[index] = column.Display;
             Kinds[index] = ColumnTablePacking.KindName(column.Kind);
             Roles[index] = (int)column.Role;
             Hold(index * 2, column.Data, column.Data.Length);
@@ -50,6 +52,8 @@ public sealed class PinnedTable : IDisposable
     public int RowCount { get; }
 
     public string[] Names { get; }
+
+    public string[] Titles { get; }
 
     public string[] Kinds { get; }
 
