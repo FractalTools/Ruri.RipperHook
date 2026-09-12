@@ -68,6 +68,7 @@
     "AssetRipper.Processing.AnimationClips.CustomCurveResolver::ToAttributeName(BindingCustomType,UInt32,String)": "3ba98aaae37779d1",
     "AssetRipper.Processing.Scenes.OriginalPathProcessor::Process(GameData)": "b58bbbcdee8993fa",
     "AssetRipper.SourceGenerated.Extensions.BlendTreeNodeConstantExtensions::GetPosition(IBlendTreeNodeConstant,Int32)": "42c0a51756af4e10",
-    "AssetRipper.SourceGenerated.Extensions.TagManagerExtensions::TagIDToName(ITagManager,Int32)": "9bea3de961c43da7"
+    "AssetRipper.SourceGenerated.Extensions.TagManagerExtensions::TagIDToName(ITagManager,Int32)": "9bea3de961c43da7",
+    "CUE4Parse.UE4.Assets.Exports.SkeletalMesh.FSkelMeshSection::SerializeRenderItem(FAssetArchive)": "7250feb2dd19ad98"
   }
 }

@@ -28,6 +28,11 @@ public static class UnrealDataTables
     /// (<c>/Game/Path/Name.Name</c>), a browser row states it under the shared <c>Assets/</c>
     /// head, and the mount lists it by the project path that content root stands for -- so every
     /// caller normalises here and none keeps its own idea of what a package path looks like.
+    ///
+    /// The extension is the mount's to say. A stripped reference names no extension and a package
+    /// is written under either of the engine's two, so the mount is asked which file the name
+    /// stands for; only a name it holds no file for falls back to the spelling alone, which is
+    /// what a caller's own "no such package" message then reports.
     /// </summary>
     public static string Key(UnrealFileProvider provider, string path)
     {
@@ -35,9 +40,10 @@ public static class UnrealDataTables
         string rooted = Rooted(provider, path);
         int slash = rooted.LastIndexOf('/');
         int dot = rooted.LastIndexOf('.');
-        return provider.FixPath(dot > slash && !GameFile.UePackageExtensionsSet.Contains(rooted[(dot + 1)..])
+        string stripped = dot > slash && !GameFile.UePackageExtensionsSet.Contains(rooted[(dot + 1)..])
             ? rooted[..dot]
-            : rooted);
+            : rooted;
+        return provider.TryGetGameFile(stripped, out GameFile? file) ? file.Path : provider.FixPath(stripped);
     }
 
     /// <summary>

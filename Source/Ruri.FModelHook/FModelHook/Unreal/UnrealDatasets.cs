@@ -28,6 +28,7 @@ using System.Numerics;
 using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Assets.Exports.Engine;
+using CUE4Parse.UE4.Assets.Exports.FastGeoStreaming;
 using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse.UE4.Pak;
@@ -58,6 +59,7 @@ public static class UnrealDatasets
     public const string MatchParam = "match";
     public const string PathParam = "path";
     private const string SkeletalMeshClassName = "SkeletalMesh";
+    private const string WorldClassName = "World";
     public const string DataTableId = "unreal.datatable";
     public const string MeshGeometryId = "unreal.mesh.geometry";
     public const string MeshSkeletonId = "unreal.mesh.skeleton";
@@ -143,9 +145,11 @@ public static class UnrealDatasets
             + "nobody anticipated still arrives.",
             DataTable);
         Datasets.Publish(WorldsId, DataRole.SceneList, [],
-            "Every world the install ships outside a World Partition's generated folder: its package, whether its "
-            + "persistent level is partitioned, how many streaming cells a partitioned one lists, and the ground "
-            + "those cells cover in Unreal units -- the union of their bounds, zero for a world with none.",
+            "Every world the install ships outside a World Partition's generated folder, found by the class the "
+            + "cabmap lists for a package rather than by the extension a cook happened to write it under: its "
+            + "package, whether its persistent level is partitioned, how many streaming cells a partitioned one "
+            + "lists, and the ground those cells cover in Unreal units -- the union of their bounds, zero for a "
+            + "world with none.",
             Worlds);
         Datasets.Publish(WorldCellsId, DataRole.PlaceList,
             [DataParam.Text(WorldParam), DataParam.Real(MinXParam, required: false), DataParam.Real(MinYParam, required: false),
@@ -395,6 +399,9 @@ public static class UnrealDatasets
                         string.Join(ListSeparator, UnrealComponents.MaterialPaths(export, [])),
                         string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
                     continue;
+                case UFastGeoContainer container:
+                    Geometry(table, basis, container);
+                    continue;
                 default:
                     continue;
             }
@@ -473,6 +480,33 @@ public static class UnrealDatasets
     }
 
     /// <summary>The mesh a component points at and the material every slot of it draws with.</summary>
+    /// <summary>
+    /// Every mesh a geometry container places.
+    ///
+    /// A cook that streams its static geometry as scene proxies rather than as actors writes a
+    /// cell's meshes into a container instead of a level: there is no actor, no component tree
+    /// and no attachment, only primitives already in world space. So each one is a row that
+    /// stands on its own, and a level whose content is a container places exactly what the
+    /// container holds rather than nothing at all.
+    /// </summary>
+    private static void Geometry(TableBuilder table, SourceBasis basis, UFastGeoContainer container)
+    {
+        foreach (FFastGeoComponentCluster cluster in container.ComponentClusters)
+        {
+            foreach (FFastGeoStaticMeshComponent component in cluster.StaticMeshComponents)
+            {
+                if (component.SceneProxyDesc.StaticMeshSceneProxyDesc is not { } described)
+                {
+                    continue;
+                }
+                (string mesh, string materials) = Mesh(described.StaticMesh, component.OverrideMaterials);
+                Row(table, basis, $"{cluster.Name}_{component.ComponentIndex}", -1, component.bVisible,
+                    component.WorldTransform, mesh, false, materials,
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+            }
+        }
+    }
+
     private static (string Mesh, string Materials) Mesh(FPackageIndex pointer, FPackageIndex?[] overrides)
     {
         if (pointer.IsNull)
@@ -803,7 +837,7 @@ public static class UnrealDatasets
         CabTable map = request.Map;
         for (int id = 0; id < map.Count; id++)
         {
-            if (!HoldsSkeletalMesh(map, id))
+            if (!Holds(map, id, SkeletalMeshClassIds))
             {
                 continue;
             }
@@ -821,17 +855,18 @@ public static class UnrealDatasets
         return table.Build();
     }
 
-    private static bool HoldsSkeletalMesh(CabTable map, int id)
+    /// <summary>Whether the cabmap lists everything an Unreal class produces for this package -- the whole set, because any one of those ids alone is produced by half a dozen other classes.</summary>
+    private static bool Holds(CabTable map, int id, int[] produced)
     {
         ReadOnlySpan<int> listed = map.ClassIds(id);
-        foreach (int wanted in SkeletalMeshClassIds)
+        foreach (int wanted in produced)
         {
             if (!listed.Contains(wanted))
             {
                 return false;
             }
         }
-        return SkeletalMeshClassIds.Length > 0;
+        return produced.Length > 0;
     }
 
     private static bool Rooted(string container, string[] roots)
@@ -893,20 +928,46 @@ public static class UnrealDatasets
         return (skeletal, statics);
     }
 
+    /// <summary>What a cabmap row says a world package lists as -- the whole set a World produces, for the same reason a skeletal mesh needs its whole set.</summary>
+    private static readonly int[] WorldClassIds =
+        UnrealClasses.Of(WorldClassName, null).Select(static id => (int)id).ToArray();
+
+    /// <summary>
+    /// Every world the install ships, asked of the cabmap: the packages it lists a World in,
+    /// minus the ones a World Partition cook generated for another world's cells. A file
+    /// extension answers nothing here -- which of ".uasset" and ".umap" a cook writes a world
+    /// under is that cook's choice, and a studio that writes every package under one extension
+    /// still ships worlds -- so the class the map already carries is what decides.
+    /// </summary>
     private static ColumnTable Worlds(DataRequest request)
     {
         TableBuilder table = new(WorldsId, "world", "name", "partitioned", "cells#", "minX#", "minY#", "maxX#", "maxY#");
+        if (!request.HasMap)
+        {
+            throw new InvalidOperationException(
+                $"dataset '{WorldsId}' reads the cabmap; build or load one for this install first.");
+        }
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         string generatedMarker = "/" + UnrealWorldPartition.GeneratedFolder + "/";
-        foreach (GameFile file in provider.Files.Values.OrderBy(static file => file.Path, StringComparer.OrdinalIgnoreCase))
+        CabTable map = request.Map;
+        List<string> packages = new();
+        for (int id = 0; id < map.Count; id++)
         {
-            if (!file.IsUePackage || !file.Path.EndsWith(UnrealWorldPartition.WorldExtension, StringComparison.OrdinalIgnoreCase)
-                || file.Path.Contains(generatedMarker, StringComparison.OrdinalIgnoreCase))
+            string cab = map.CabName(id);
+            if (Holds(map, id, WorldClassIds) && !cab.Contains(generatedMarker, StringComparison.OrdinalIgnoreCase))
+            {
+                packages.Add(cab);
+            }
+        }
+        packages.Sort(StringComparer.OrdinalIgnoreCase);
+        foreach (string package in packages)
+        {
+            if (!provider.Files.TryGetValue(package, out GameFile? file)
+                || provider.LoadUncached(file) is not AbstractUePackage loaded)
             {
                 continue;
             }
-            bool partitioned = UnrealWorldPartition.IsPartitioned(provider, file);
-            IReadOnlyList<UnrealWorldCell> cells = partitioned ? UnrealWorldPartition.Cells(provider, file.Path) : [];
+            IReadOnlyList<UnrealWorldCell> cells = UnrealWorldPartition.Cells(provider, loaded, package);
             double minX = double.PositiveInfinity, minY = double.PositiveInfinity;
             double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
             foreach (UnrealWorldCell cell in cells)
@@ -917,7 +978,7 @@ public static class UnrealDatasets
                 maxY = Math.Max(maxY, cell.Bounds.Max.Y);
             }
             bool bounded = minX <= maxX && minY <= maxY;
-            table.Row(file.Path, file.NameWithoutExtension, partitioned ? "1" : "0", cells.Count,
+            table.Row(package, file.NameWithoutExtension, UnrealWorldPartition.IsPartitioned(loaded) ? "1" : "0", cells.Count,
                 bounded ? minX : 0, bounded ? minY : 0, bounded ? maxX : 0, bounded ? maxY : 0);
         }
         return table.Build();

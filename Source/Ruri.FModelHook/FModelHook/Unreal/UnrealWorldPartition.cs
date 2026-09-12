@@ -38,9 +38,13 @@ public sealed record UnrealWorldCell(
 public static class UnrealWorldPartition
 {
     public const string GeneratedFolder = "_Generated_";
-    public const string WorldExtension = ".umap";
 
     private const string WorldPartitionName = "WorldPartition";
+    private const string LevelStreamingName = "LevelStreaming";
+    private const string WorldAssetName = "WorldAsset";
+    private const string StreamingDataName = "StreamingData";
+    private const string PackageNameName = "PackageName";
+    private const string GeometryContainerName = "FastGeoContainerPtr";
     private const string RuntimeHashName = "RuntimeHash";
     private const string StreamingGridsName = "StreamingGrids";
     private const string GridNameName = "GridName";
@@ -63,12 +67,11 @@ public static class UnrealWorldPartition
     private const string DataLayersName = "DataLayers";
     private const string DataLayerNamesName = "DataLayerNames";
 
-    /// <summary>Whether the package is a world whose persistent level carries a WorldPartition, read from its export map alone.</summary>
-    public static bool IsPartitioned(UnrealFileProvider provider, GameFile file)
+    /// <summary>Whether a world's persistent level carries a WorldPartition, read from its export map alone.</summary>
+    public static bool IsPartitioned(AbstractUePackage package)
     {
-        ArgumentNullException.ThrowIfNull(provider);
-        ArgumentNullException.ThrowIfNull(file);
-        return provider.LoadUncached(file) is AbstractUePackage package && PartitionSlot(package) >= 0;
+        ArgumentNullException.ThrowIfNull(package);
+        return PartitionSlot(package) >= 0;
     }
 
     /// <summary>The export map slot of the level's WorldPartition object, or -1: the object is a subobject of the persistent level, and the level's own pointer to it is not a tagged property CUE4Parse reads.</summary>
@@ -85,17 +88,6 @@ public static class UnrealWorldPartition
         return -1;
     }
 
-    /// <summary>The generated level packages of a world's cells live beside it, in a folder named after the world.</summary>
-    public static string GeneratedRoot(string worldPackagePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(worldPackagePath);
-        string trimmed = worldPackagePath.Replace('\\', '/');
-        int dot = trimmed.LastIndexOf('.');
-        int slash = trimmed.LastIndexOf('/');
-        string stem = dot > slash ? trimmed[..dot] : trimmed;
-        return stem + "/" + GeneratedFolder + "/";
-    }
-
     public static IReadOnlyList<UnrealWorldCell> Cells(UnrealFileProvider provider, string worldPackagePath)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -104,13 +96,25 @@ public static class UnrealWorldPartition
         {
             throw new InvalidDataException($"[Unreal] '{worldPackagePath}' is not a package with exports.");
         }
-        int slot = PartitionSlot(package);
-        if (slot < 0)
+        if (PartitionSlot(package) < 0)
         {
             throw new InvalidDataException($"[Unreal] '{worldPackagePath}' is not partitioned: it carries no {WorldPartitionName}.");
         }
+        return Cells(provider, package, worldPackagePath);
+    }
+
+    /// <summary>The streaming cells of a world already read, empty for a world that carries no WorldPartition.</summary>
+    public static IReadOnlyList<UnrealWorldCell> Cells(UnrealFileProvider provider, AbstractUePackage package, string worldPackagePath)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentException.ThrowIfNullOrWhiteSpace(worldPackagePath);
+        int slot = PartitionSlot(package);
+        if (slot < 0)
+        {
+            return [];
+        }
         UObject partition = package.ExportsLazy[slot].Value;
-        string generatedRoot = GeneratedRoot(worldPackagePath);
         List<UnrealWorldCell> cells = new();
         if (partition.GetOrDefault<FPackageIndex?>(RuntimeHashName)?.Load() is not { } hash)
         {
@@ -127,7 +131,7 @@ public static class UnrealWorldPartition
                 {
                     foreach (FPackageIndex pointer in layer.GetOrDefault<FPackageIndex[]>(GridCellsName, []))
                     {
-                        Add(cells, pointer, gridName, level, loadingRange, generatedRoot, worldPackagePath);
+                        Add(cells, provider, pointer, gridName, level, loadingRange, worldPackagePath);
                     }
                 }
             }
@@ -138,22 +142,68 @@ public static class UnrealWorldPartition
             float loadingRange = partitionData.GetOrDefault<int>(LoadingRangeName);
             foreach (FPackageIndex pointer in partitionData.GetOrDefault<FPackageIndex[]>(SpatiallyLoadedCellsName, []))
             {
-                Add(cells, pointer, name, 0, loadingRange, generatedRoot, worldPackagePath);
+                Add(cells, provider, pointer, name, 0, loadingRange, worldPackagePath);
             }
             foreach (FPackageIndex pointer in partitionData.GetOrDefault<FPackageIndex[]>(NonSpatiallyLoadedCellsName, []))
             {
-                Add(cells, pointer, name, 0, loadingRange, generatedRoot, worldPackagePath);
+                Add(cells, provider, pointer, name, 0, loadingRange, worldPackagePath);
             }
         }
         return cells;
     }
 
     /// <summary>
-    /// One cell as a row. An always-loaded cell has no package of its own: the cook folds its
+    /// One cell as a row. A streamed cell NAMES the level package it loads, through the level
+    /// streaming object it owns, so that is where the package comes from -- reconstructing it
+    /// from the world's folder and the cell's name only holds while a cook writes cells straight
+    /// under the generated folder, and a cook that buckets them (by content bundle, by data
+    /// layer) writes them a folder deeper. An always-loaded cell names none: the cook folds its
     /// actors into the world's persistent package (OnPrepareGeneratorPackageForCook), so that is
     /// the package its content is read from.
     /// </summary>
-    private static void Add(List<UnrealWorldCell> cells, FPackageIndex pointer, string grid, int level, float loadingRange, string generatedRoot, string worldPackagePath)
+    /// <summary>The mount path of the level a streamed cell loads, as the cell itself names it, or null when it names none.</summary>
+    private static string? LevelPackage(UnrealFileProvider provider, UObject cell)
+    {
+        foreach (string stated in StatedPackages(cell))
+        {
+            if (stated.Length > 0)
+            {
+                return UnrealDataTables.Key(provider, stated);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Where a cell names the package it loads. A cell states it directly in its streaming data,
+    /// or through the level streaming object it owns, or -- for a cell whose content is a
+    /// geometry container rather than a level -- as that container. All three are the CELL's own
+    /// statement, which is why they are asked in turn and the first answer taken: reconstructing
+    /// the name instead, out of the world's folder and the cell's own name, is a guess about
+    /// where a cook writes its output and breaks the moment a cook buckets its cells.
+    /// </summary>
+    private static IEnumerable<string> StatedPackages(UObject cell)
+    {
+        if (cell.GetOrDefault<FStructFallback?>(StreamingDataName) is { } streaming)
+        {
+            yield return streaming.GetOrDefault(PackageNameName, string.Empty);
+            if (streaming.GetOrDefault<FSoftObjectPath?>(WorldAssetName) is { } stated)
+            {
+                yield return stated.AssetPathName.Text ?? string.Empty;
+            }
+        }
+        if (cell.GetOrDefault<FPackageIndex?>(LevelStreamingName)?.Load() is { } level
+            && level.GetOrDefault<FSoftObjectPath?>(WorldAssetName) is { } asset)
+        {
+            yield return asset.AssetPathName.Text ?? string.Empty;
+        }
+        if (cell.GetOrDefault<FSoftObjectPath?>(GeometryContainerName) is { } container)
+        {
+            yield return container.AssetPathName.Text ?? string.Empty;
+        }
+    }
+
+    private static void Add(List<UnrealWorldCell> cells, UnrealFileProvider provider, FPackageIndex pointer, string grid, int level, float loadingRange, string worldPackagePath)
     {
         if (pointer.Load() is not { } cell)
         {
@@ -187,7 +237,7 @@ public static class UnrealWorldPartition
         bool alwaysLoaded = cell.GetOrDefault<bool>(AlwaysLoadedName);
         cells.Add(new UnrealWorldCell(
             cell.Name,
-            alwaysLoaded ? worldPackagePath : generatedRoot + cell.Name + WorldExtension,
+            alwaysLoaded ? worldPackagePath : LevelPackage(provider, cell) ?? worldPackagePath,
             grid,
             hierarchicalLevel,
             loadingRange,

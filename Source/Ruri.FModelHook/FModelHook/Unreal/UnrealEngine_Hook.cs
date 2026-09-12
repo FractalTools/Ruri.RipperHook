@@ -27,6 +27,7 @@ public partial class UnrealEngine_Hook : RipperHookCommon
         GameBundleHook.ScanIncludeFile = UnrealInstall.IsArchive;
         GameBundleHook.ScanChunkFull = UnrealArchiveScan.ScanFull;
 
+        Registry.ApplyTypeHooks(typeof(UnrealSerializationDialect));
         UnrealDatasets.Register();
         UnrealShaders.Register();
         Session.DeclareLayout(UnrealInstall.ContentRoots);

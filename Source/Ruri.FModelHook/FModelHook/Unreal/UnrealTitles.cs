@@ -53,6 +53,15 @@ public sealed record UnrealTitle
     public string VersionFile { get; init; } = string.Empty;
 
     /// <summary>
+    /// The //UE5/Main version this build's skeletal mesh SECTIONS were cooked at, for a studio
+    /// that backported that layout onto an older branch and ships packages declaring no custom
+    /// versions at all. Null for a build whose sections are its own engine's, which is almost
+    /// every build. Applied by <see cref="UnrealSerializationDialect"/>, and deliberately narrow:
+    /// it says what the sections are, not what the whole cook is.
+    /// </summary>
+    public FUE5MainStreamObjectVersion.Type? SkeletalMeshSectionVersion { get; init; }
+
+    /// <summary>
     /// Content paths this build keeps its characters under, as they read in a container path.
     /// Which folder a studio files its cast in is a fact about the build that nothing in the
     /// build states, the same kind of fact as <see cref="Markers"/> -- no character is named
