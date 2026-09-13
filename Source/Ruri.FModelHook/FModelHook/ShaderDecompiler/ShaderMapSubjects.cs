@@ -33,6 +33,18 @@ public sealed class ShaderMapTarget
     public UMaterialInterface? Owner { get; init; }
 
     public FMaterialShaderMap? ShaderMap { get; init; }
+
+    /// <summary>
+    /// Every asset that named this map, the first of them being what the source is named after.
+    ///
+    /// A shader map is compiled ONCE and keyed by the hash of what it compiled from, so every
+    /// material whose compilation produced the same one shares it -- an instance and its template,
+    /// and every instance of that template that overrides only values. They are namers of one map,
+    /// not one map each: answering per namer decompiles identical bytes again for every one of
+    /// them and writes them out again under a different folder, which on a whole-install run is
+    /// the difference between the install's shader inventory and its material count.
+    /// </summary>
+    public List<string> NamedBy { get; } = [];
 }
 
 /// <summary>

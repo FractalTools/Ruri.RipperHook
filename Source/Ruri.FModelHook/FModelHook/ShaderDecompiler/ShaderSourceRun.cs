@@ -116,22 +116,38 @@ public static class ShaderSourceRun
             state.DecompileResultByIndex[pending[i].ShaderIndex] = results[i];
         }
     }
-    /// <summary>Every shader map the subjects name, once each, in the order they were named.</summary>
+    /// <summary>
+    /// Every DISTINCT shader map the subjects name, in the order they were first named, each
+    /// carrying every asset that named it.
+    ///
+    /// The map is the unit of work because the map is the unit the engine compiled: two materials
+    /// that name the same hash name the same bytes, and the source written for them would be
+    /// identical but for the folder it landed in.
+    /// </summary>
     private static List<ShaderMapTarget> Resolve(ShaderSourceRequest request, Action<string> log, Action<string> logError)
     {
         List<ShaderMapTarget> targets = new();
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ShaderMapTarget> byHash = new(StringComparer.OrdinalIgnoreCase);
+        int named = 0;
         foreach (IShaderMapSubject subject in request.Subjects)
         {
             foreach (ShaderMapTarget target in subject.Resolve(request.Provider, log, logError))
             {
-                if (seen.Add(target.ShaderMapHash + "\n" + target.AssetPath))
+                named++;
+                if (byHash.TryGetValue(target.ShaderMapHash, out ShaderMapTarget? already))
                 {
-                    targets.Add(target);
+                    if (!already.NamedBy.Contains(target.AssetPath, StringComparer.OrdinalIgnoreCase))
+                    {
+                        already.NamedBy.Add(target.AssetPath);
+                    }
+                    continue;
                 }
+                target.NamedBy.Add(target.AssetPath);
+                byHash[target.ShaderMapHash] = target;
+                targets.Add(target);
             }
         }
-        log($"[ShaderSource] {request.Subjects.Count} subject(s) named {targets.Count} shader map(s).");
+        log($"[ShaderSource] {request.Subjects.Count} subject(s) named {named} map(s), {targets.Count} of them distinct.");
         return targets;
     }
 
@@ -175,7 +191,7 @@ public static class ShaderSourceRun
             ShaderMapInfo map = new()
             {
                 Target = target,
-                Assets = [target.AssetPath],
+                Assets = [.. target.NamedBy],
                 PrimaryAsset = target.AssetPath,
                 PrimaryName = primaryName,
                 Members = members,
@@ -194,7 +210,10 @@ public static class ShaderSourceRun
                     usedBy = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     state.UsageByShaderIndex[member.ArchiveShaderIndex] = usedBy;
                 }
-                usedBy.Add(target.AssetPath);
+                foreach (string namer in target.NamedBy)
+                {
+                    usedBy.Add(namer);
+                }
                 state.NameByShaderIndex.TryAdd(member.ArchiveShaderIndex, primaryName);
             }
 
