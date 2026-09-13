@@ -916,6 +916,10 @@ public static class UnrealDatasets
     private static ColumnTable Characters(DataRequest request)
     {
         TableBuilder table = new(CharactersId, "name", "package", "folder");
+        table.Role(ColumnRole.Label, "name")
+            .Role(ColumnRole.Key, "name")
+            .Role(ColumnRole.Shipped, "package")
+            .Role(ColumnRole.Payload, "package");
         if (!request.HasMap)
         {
             throw new InvalidOperationException(
