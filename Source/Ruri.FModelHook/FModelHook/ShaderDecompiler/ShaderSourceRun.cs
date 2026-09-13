@@ -38,6 +38,7 @@ public static class ShaderSourceRun
         string gameVersion = request.Provider.Versions.Game.ToString();
         EngineMetadata metadata = EngineMetadata.Load(request.EngineUbMetadataDirectory, gameVersion, log, logError);
         MaterialConstantBufferReader.Opcodes = metadata.PreshaderOpcodes;
+        MaterialUniformBufferRecipe.Current = metadata.MaterialUniformBuffer;
 
         using ShaderMapCatalog catalog = ShaderMapCatalog.Open(request.Provider, log, logError);
         Dictionary<string, List<(ShaderMapTarget Target, ShaderMapCatalog.Placement Placement)>> byArchive =
@@ -251,13 +252,15 @@ public static class ShaderSourceRun
 internal sealed class EngineMetadata
 {
     private EngineMetadata(EngineUbMetadataRegistry uniformBuffers, ShaderTypeSeedRegistry shaderTypes,
-        HashNameIndex vertexFactoryTypes, HashNameIndex pipelineTypes, MaterialPreshaderOpcodes preshaderOpcodes)
+        HashNameIndex vertexFactoryTypes, HashNameIndex pipelineTypes, MaterialPreshaderOpcodes preshaderOpcodes,
+        MaterialUniformBufferRecipe materialUniformBuffer)
     {
         UniformBuffers = uniformBuffers;
         ShaderTypes = shaderTypes;
         VertexFactoryTypes = vertexFactoryTypes;
         PipelineTypes = pipelineTypes;
         PreshaderOpcodes = preshaderOpcodes;
+        MaterialUniformBuffer = materialUniformBuffer;
     }
 
     public EngineUbMetadataRegistry UniformBuffers { get; }
@@ -265,6 +268,7 @@ internal sealed class EngineMetadata
     public HashNameIndex VertexFactoryTypes { get; }
     public HashNameIndex PipelineTypes { get; }
     public MaterialPreshaderOpcodes PreshaderOpcodes { get; }
+    public MaterialUniformBufferRecipe MaterialUniformBuffer { get; }
 
     public static EngineMetadata Load(string? directory, string gameVersion, Action<string> log, Action<string> logError)
     {
@@ -276,6 +280,7 @@ internal sealed class EngineMetadata
             ShaderTypeSeedRegistry.LoadForGame(root, game, tryBase, log, logError),
             HashNameIndex.LoadForGame(root, "_VertexFactoryType", game, tryBase, log, logError),
             HashNameIndex.LoadForGame(root, "_ShaderPipelineType", game, tryBase, log, logError),
-            MaterialPreshaderOpcodes.LoadForGame(root, game, tryBase, log, logError));
+            MaterialPreshaderOpcodes.LoadForGame(root, game, tryBase, log, logError),
+            MaterialUniformBufferRecipe.LoadForGame(root, game, tryBase, log, logError));
     }
 }

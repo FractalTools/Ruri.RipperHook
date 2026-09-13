@@ -109,21 +109,21 @@ internal static class ShaderLabProperties
         string identifier = ToIdentifier(rawName);
         if (!emittedIds.Add(identifier)) return null;
 
-        string shaderlabType = bucket switch
+        // Keyed by what the engine CALLS the kind, not by which bucket it happens to be: the
+        // buckets move between engine versions and the kinds do not. This mapping is the only
+        // thing here that is Unity's vocabulary rather than Unreal's, which is why it lives on
+        // this side at all.
+        string kind = MaterialTextureOrder.KindOf(bucket);
+        string shaderlabType = kind switch
         {
-            MaterialTextureOrder.Standard2DBucket => "2D",
-            MaterialTextureOrder.CubeBucket => "Cube",
-            MaterialTextureOrder.Array2DBucket => "2DArray",
-            MaterialTextureOrder.ArrayCubeBucket => "CubeArray",
-            MaterialTextureOrder.VolumeBucket => "3D",
-            MaterialTextureOrder.VirtualBucket => "2D",
+            "Standard2D" or "Virtual" => "2D",
+            "Cube" => "Cube",
+            "Array2D" => "2DArray",
+            "ArrayCube" => "CubeArray",
+            "Volume" or "SparseVolume" => "3D",
             _ => "2D",
         };
-        string defaultLiteral = bucket switch
-        {
-            MaterialTextureOrder.Standard2DBucket or MaterialTextureOrder.VirtualBucket => "\"white\" {}",
-            _ => "\"\" {}",
-        };
+        string defaultLiteral = shaderlabType == "2D" ? "\"white\" {}" : "\"\" {}";
         string display = EscapeDisplayName(rawName);
         return $"{identifier} (\"{display}\", {shaderlabType}) = {defaultLiteral}";
     }

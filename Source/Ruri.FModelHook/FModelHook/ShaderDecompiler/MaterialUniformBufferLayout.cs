@@ -3,15 +3,78 @@ using System.Collections.Generic;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
+/// <summary>
+/// One material's uniform buffer as the engine actually built it: every resource slot in the
+/// order the cooked layout lists them, so a shader's resource index IS an index into this.
+///
+/// The order, the member names and which kind sits in which bucket all come from the engine's
+/// own recipe (<see cref="MaterialUniformBufferRecipe"/>), replayed with this material's counts.
+/// They used to be written out here by hand, in UE5's order -- which silently renamed every
+/// pre-UE5 build's volume textures as cube arrays, its virtual textures as volumes, and put the
+/// resource ORDER out of step from the first non-2D texture onward. A join that is exact needs
+/// no ordering assumption, and this is the join.
+/// </summary>
 internal sealed class MaterialUniformBufferLayout
 {
     private readonly List<string> _resourceMemberNames;
     private readonly Dictionary<string, string> _typedSlotByAuthorName;
+    private readonly Dictionary<string, (int Bucket, int Slot)> _slotByMemberName;
 
-    public MaterialUniformBufferLayout(MaterialResourceCounts counts)
+    /// <summary>What one material states about itself: how many of each kind it holds, and what it calls them.</summary>
+    public sealed record MaterialResources(
+        MaterialUniformBufferRecipe.Counts Counts,
+        IReadOnlyList<IReadOnlyList<string?>> TextureAuthorNamesByBucket,
+        IReadOnlyList<string?> ExternalAuthorNames);
+
+    public MaterialUniformBufferLayout(MaterialResources material)
     {
-        _resourceMemberNames = BuildResourceMemberNames(counts);
-        _typedSlotByAuthorName = BuildAuthorIndex(counts);
+        ArgumentNullException.ThrowIfNull(material);
+        MaterialUniformBufferRecipe recipe = MaterialUniformBufferRecipe.Current;
+        _resourceMemberNames = new List<string>();
+        _typedSlotByAuthorName = new Dictionary<string, string>(StringComparer.Ordinal);
+        _slotByMemberName = new Dictionary<string, (int, int)>(StringComparer.Ordinal);
+
+        // Every texture member the recipe emits for a bucket is numbered by slot, and the sampler
+        // that follows it carries the same number -- so one pass over the replay recovers both
+        // the engine's own name and which (bucket, slot) it stands for, without this side
+        // knowing one member name.
+        Dictionary<string, int> bucketByTemplateStem = new(StringComparer.Ordinal);
+        foreach (MaterialUniformBufferRecipe.Member member in recipe.Members)
+        {
+            if (member.RepeatOver.StartsWith(MaterialUniformBufferRecipe.TexturesPrefix, StringComparison.Ordinal)
+                && member.Ubmt is "UBMT_TEXTURE" or "UBMT_SRV")
+            {
+                int bucket = recipe.BucketOf(member.RepeatOver[MaterialUniformBufferRecipe.TexturesPrefix.Length..]);
+                if (bucket >= 0)
+                {
+                    bucketByTemplateStem[Stem(member.NameTemplate)] = bucket;
+                }
+            }
+        }
+
+        foreach (MaterialUniformBufferRecipe.Placed placed in recipe.Replay(material.Counts))
+        {
+            if (!placed.IsResource)
+            {
+                continue;
+            }
+            (string stem, int slot) = Split(placed.Name);
+            string? author = AuthorOf(material, recipe, stem, bucketByTemplateStem, slot);
+            bool sampler = placed.Ubmt == "UBMT_SAMPLER";
+            string named = author is null ? placed.Name
+                : sampler ? author + "Sampler"
+                : author;
+            _resourceMemberNames.Add(named);
+
+            if (author is not null && named != placed.Name)
+            {
+                _typedSlotByAuthorName[named] = placed.Name;
+            }
+            if (!sampler && bucketByTemplateStem.TryGetValue(stem, out int bucketIndex))
+            {
+                _slotByMemberName[placed.Name] = (bucketIndex, slot);
+            }
+        }
     }
 
     public bool TryResolveAuthorName(string authorName, out string typedSlot)
@@ -19,79 +82,89 @@ internal sealed class MaterialUniformBufferLayout
 
     public string? ResolveResourceName(SrtRecord record)
     {
-        int idx = record.ResourceIndex;
-        if (idx < 0 || idx >= _resourceMemberNames.Count)
-        {
-            return null;
-        }
-
-        return $"Material_{_resourceMemberNames[idx]}";
+        int index = record.ResourceIndex;
+        return index < 0 || index >= _resourceMemberNames.Count
+            ? null
+            : $"Material_{_resourceMemberNames[index]}";
     }
 
     public IReadOnlyList<string> ResourceMemberNames => _resourceMemberNames;
 
     /// <summary>
-    /// The texture-parameter group and index a member name states, the inverse of the naming
-    /// above: the groups are the material's texture parameter types in the order the engine
-    /// keeps them -- 2D, cube, 2D array, cube array, volume, virtual (its physical texture).
+    /// The texture bucket and slot a member name states, the inverse of the naming above. Read
+    /// off the replay this layout was built from, so it answers in the mounted engine's own
+    /// bucket numbering and never in some other version's.
     /// </summary>
-    public static bool TryParseTextureSlot(string memberName, out int group, out int index)
+    public bool TryParseTextureSlot(string memberName, out int bucket, out int slot)
     {
-        group = -1;
-        index = -1;
-        int underscore = memberName.LastIndexOf('_');
-        if (underscore <= 0 || !int.TryParse(memberName[(underscore + 1)..], out index))
+        if (_slotByMemberName.TryGetValue(memberName, out (int Bucket, int Slot) found))
         {
-            return false;
+            bucket = found.Bucket;
+            slot = found.Slot;
+            return true;
         }
-        group = Array.IndexOf(TextureGroupPrefixes, memberName[..underscore]);
-        return group >= 0;
+        bucket = -1;
+        slot = -1;
+        return false;
     }
 
-    private static readonly string[] TextureGroupPrefixes = ["Texture2D", "TextureCube", "Texture2DArray", "TextureCubeArray", "VolumeTexture", "VirtualTexturePhysical"];
-
-    private static List<string> BuildResourceMemberNames(MaterialResourceCounts counts)
+    private static string? AuthorOf(MaterialResources material, MaterialUniformBufferRecipe recipe,
+        string stem, IReadOnlyDictionary<string, int> bucketByTemplateStem, int slot)
     {
-        List<string> result = new();
-        AppendTextureSamplerPairs(result, "Texture2D", counts.Standard2D, counts.Standard2DAuthorNames);
-        AppendTextureSamplerPairs(result, "TextureCube", counts.Cube, counts.CubeAuthorNames);
-        AppendTextureSamplerPairs(result, "Texture2DArray", counts.Array2D, counts.Array2DAuthorNames);
-        AppendTextureSamplerPairs(result, "TextureCubeArray", counts.ArrayCube, counts.ArrayCubeAuthorNames);
-        AppendTextureSamplerPairs(result, "VolumeTexture", counts.Volume, counts.VolumeAuthorNames);
-        AppendTextureSamplerPairs(result, "ExternalTexture", counts.External, counts.ExternalAuthorNames);
-
-        if (counts.VirtualTextureStackLayerCounts != null)
+        IReadOnlyList<string?>? names = null;
+        if (bucketByTemplateStem.TryGetValue(stem, out int bucket))
         {
-            AppendVirtualTextureStacks(result, counts.VirtualTextureStackLayerCounts);
+            names = bucket < material.TextureAuthorNamesByBucket.Count
+                ? material.TextureAuthorNamesByBucket[bucket]
+                : null;
         }
-        else if (counts.TotalResourceCount is int total)
+        else if (ExternalStem(recipe, stem))
         {
-            int textureSamplerPairsConsumed = 2 * (counts.Standard2D + counts.Cube + counts.Array2D + counts.ArrayCube + counts.Volume + counts.External);
-            int virtualPhysicalConsumed = 2 * counts.Virtual;
-            int fixedTrailingSamplers = 2;
-            int vtSlotCount = total - textureSamplerPairsConsumed - virtualPhysicalConsumed - fixedTrailingSamplers;
-            for (int i = 0; i < vtSlotCount; i++)
+            names = material.ExternalAuthorNames;
+        }
+        if (names is null || slot < 0 || slot >= names.Count)
+        {
+            return null;
+        }
+        string sanitized = SanitizeHlslIdent(names[slot]);
+        return sanitized.Length == 0 ? null : sanitized;
+    }
+
+    private static bool ExternalStem(MaterialUniformBufferRecipe recipe, string stem)
+    {
+        foreach (MaterialUniformBufferRecipe.Member member in recipe.Members)
+        {
+            if (member.RepeatOver == MaterialUniformBufferRecipe.ExternalTextures
+                && member.Ubmt == "UBMT_TEXTURE"
+                && Stem(member.NameTemplate) == stem)
             {
-                result.Add($"VTStackResource_{i}");
+                return true;
             }
         }
-
-        AppendTextureSamplerPairs(result, "VirtualTexturePhysical", counts.Virtual, counts.VirtualAuthorNames);
-        result.Add("Wrap_WorldGroupSettings");
-        result.Add("Clamp_WorldGroupSettings");
-        return result;
+        return false;
     }
 
-    private static void AppendTextureSamplerPairs(List<string> result, string baseName, int count, IReadOnlyList<string?>? authorNames = null)
+    /// <summary>A name template without its number and without the suffix that follows it: "Texture2D_%dSampler" states "Texture2D".</summary>
+    private static string Stem(string template)
     {
-        for (int i = 0; i < count; i++)
+        int at = template.IndexOf("_%d", StringComparison.Ordinal);
+        return at < 0 ? template : template[..at];
+    }
+
+    /// <summary>A replayed member back into the stem it was numbered from and the number itself.</summary>
+    private static (string Stem, int Slot) Split(string name)
+    {
+        const string samplerSuffix = "Sampler";
+        string body = name.EndsWith(samplerSuffix, StringComparison.Ordinal)
+            ? name[..^samplerSuffix.Length]
+            : name;
+        int underscore = body.LastIndexOf('_');
+        if (underscore <= 0 || underscore == body.Length - 1
+            || !int.TryParse(body[(underscore + 1)..], out int slot))
         {
-            string? author = authorNames != null && i < authorNames.Count ? authorNames[i] : null;
-            string sanitized = SanitizeHlslIdent(author);
-            string textureName = string.IsNullOrEmpty(sanitized) ? $"{baseName}_{i}" : sanitized;
-            result.Add(textureName);
-            result.Add($"{textureName}Sampler");
+            return (name, -1);
         }
+        return (body[..underscore], slot);
     }
 
     private static string SanitizeHlslIdent(string? raw)
@@ -121,73 +194,4 @@ internal sealed class MaterialUniformBufferLayout
 
         return new string(buffer[..written]);
     }
-
-    private static Dictionary<string, string> BuildAuthorIndex(MaterialResourceCounts counts)
-    {
-        Dictionary<string, string> index = new(StringComparer.Ordinal);
-        Add(index, "Texture2D", counts.Standard2D, counts.Standard2DAuthorNames);
-        Add(index, "TextureCube", counts.Cube, counts.CubeAuthorNames);
-        Add(index, "Texture2DArray", counts.Array2D, counts.Array2DAuthorNames);
-        Add(index, "TextureCubeArray", counts.ArrayCube, counts.ArrayCubeAuthorNames);
-        Add(index, "VolumeTexture", counts.Volume, counts.VolumeAuthorNames);
-        Add(index, "ExternalTexture", counts.External, counts.ExternalAuthorNames);
-        Add(index, "VirtualTexturePhysical", counts.Virtual, counts.VirtualAuthorNames);
-        return index;
-
-        static void Add(Dictionary<string, string> idx, string baseName, int count, IReadOnlyList<string?>? authorNames)
-        {
-            if (authorNames == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < count && i < authorNames.Count; i++)
-            {
-                string sanitized = SanitizeHlslIdent(authorNames[i]);
-                if (sanitized.Length == 0)
-                {
-                    continue;
-                }
-
-                idx[sanitized] = $"{baseName}_{i}";
-                idx[sanitized + "Sampler"] = $"{baseName}_{i}Sampler";
-            }
-        }
-    }
-
-    private static void AppendVirtualTextureStacks(List<string> result, IReadOnlyList<int>? layerCountsPerStack)
-    {
-        if (layerCountsPerStack == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < layerCountsPerStack.Count; i++)
-        {
-            result.Add($"VirtualTexturePageTable0_{i}");
-            if (layerCountsPerStack[i] > 4)
-            {
-                result.Add($"VirtualTexturePageTable1_{i}");
-            }
-            result.Add($"VirtualTexturePageTableIndirection_{i}");
-        }
-    }
-
-    public sealed record MaterialResourceCounts(
-        int Standard2D,
-        int Cube,
-        int Array2D,
-        int ArrayCube,
-        int Volume,
-        int External,
-        int Virtual,
-        IReadOnlyList<int>? VirtualTextureStackLayerCounts,
-        int? TotalResourceCount = null,
-        IReadOnlyList<string?>? Standard2DAuthorNames = null,
-        IReadOnlyList<string?>? CubeAuthorNames = null,
-        IReadOnlyList<string?>? Array2DAuthorNames = null,
-        IReadOnlyList<string?>? ArrayCubeAuthorNames = null,
-        IReadOnlyList<string?>? VolumeAuthorNames = null,
-        IReadOnlyList<string?>? ExternalAuthorNames = null,
-        IReadOnlyList<string?>? VirtualAuthorNames = null);
 }

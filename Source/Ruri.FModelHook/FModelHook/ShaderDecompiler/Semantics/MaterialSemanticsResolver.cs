@@ -65,8 +65,10 @@ public sealed class MaterialSemanticsResolver : IDisposable
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.trace = trace ?? throw new ArgumentNullException(nameof(trace));
         catalog = new Lazy<ShaderMapCatalog>(() => ShaderMapCatalog.Open(provider, log, log), LazyThreadSafetyMode.ExecutionAndPublication);
-        MaterialConstantBufferReader.Opcodes = MaterialPreshaderOpcodes.LoadForGame(
-            ShaderSourceRequest.DefaultEngineUbMetadataDirectory, provider.Versions.Game.ToString(), tryBaseFallback: true, trace);
+        string engineFacts = ShaderSourceRequest.DefaultEngineUbMetadataDirectory;
+        string cookedWith = provider.Versions.Game.ToString();
+        MaterialConstantBufferReader.Opcodes = MaterialPreshaderOpcodes.LoadForGame(engineFacts, cookedWith, tryBaseFallback: true, trace);
+        MaterialUniformBufferRecipe.Current = MaterialUniformBufferRecipe.LoadForGame(engineFacts, cookedWith, tryBaseFallback: true, trace);
     }
 
     /// <summary>The semantics of the shader map this material renders with, or the reason there are none.</summary>
@@ -369,7 +371,8 @@ public sealed class MaterialSemanticsResolver : IDisposable
             if (symbols.GetSetIdFor(texture.Index, ShaderResourceType.Texture) != 0
                 || texture.Name is not { } name
                 || !name.StartsWith(MaterialPrefix, StringComparison.Ordinal)
-                || !MaterialUniformBufferLayout.TryParseTextureSlot(TypedMember(layout, name[MaterialPrefix.Length..]), out int group, out int index)
+                || layout is null
+                || !layout.TryParseTextureSlot(TypedMember(layout, name[MaterialPrefix.Length..]), out int group, out int index)
                 || group >= groups.Length
                 || index >= groups[group].Length)
             {

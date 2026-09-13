@@ -20,6 +20,9 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 /// </summary>
 internal sealed class MaterialExpressions
 {
+    /// <summary>What the engine calls the bucket whose uniforms sit between the page table and the preshaders.</summary>
+    private const string VirtualTextureKind = "Virtual";
+
     private const int RegisterBytes = 16;
     private const int ComponentBytes = 4;
     private const int ScalarsPerRegister = 4;
@@ -99,8 +102,9 @@ internal sealed class MaterialExpressions
 
         int preshaderBufferBytes = Math.Max(0, (int)expressionSet.UniformPreshaderBufferSize) * RegisterBytes;
         FMaterialTextureParameterInfo[][]? buckets = expressionSet.UniformTextureParameters;
-        int virtualCount = buckets is { Length: > MaterialTextureOrder.VirtualBucket }
-            ? buckets[MaterialTextureOrder.VirtualBucket]?.Length ?? 0
+        int virtualBucket = MaterialTextureOrder.BucketOf(VirtualTextureKind);
+        int virtualCount = virtualBucket >= 0 && buckets is not null && virtualBucket < buckets.Length
+            ? buckets[virtualBucket]?.Length ?? 0
             : 0;
         int virtualUniformBytes = virtualCount * RegisterBytes;
         int virtualPageTableBytes = Math.Max(0, numericRegionEnd - preshaderBufferBytes - virtualUniformBytes);

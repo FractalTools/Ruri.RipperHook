@@ -36,7 +36,12 @@ internal static class SymbolInputsReader
             : inputs;
     }
 
-    private static MaterialUniformBufferLayout.MaterialResourceCounts? ResourceCounts(FUniformExpressionSet uniformExpressionSet)
+    /// <summary>
+    /// What this material states about its own uniform buffer: how many of each kind of texture
+    /// it holds and what it calls them, bucket by bucket AS THE COOK WROTE THEM. Which kind each
+    /// bucket is stays the engine's business -- this side only counts.
+    /// </summary>
+    private static MaterialUniformBufferLayout.MaterialResources? ResourceCounts(FUniformExpressionSet uniformExpressionSet)
     {
         FMaterialTextureParameterInfo[][]? buckets = uniformExpressionSet.UniformTextureParameters;
         if (buckets is null)
@@ -44,52 +49,40 @@ internal static class SymbolInputsReader
             return null;
         }
 
-        FMaterialExternalTextureParameterInfo[]? externalParameters = uniformExpressionSet.UniformExternalTextureParameters;
-        List<int>? virtualTextureStackLayers = null;
-        if (uniformExpressionSet.VTStacks is { } stacks)
+        List<int> byBucket = new(buckets.Length);
+        List<IReadOnlyList<string?>> namesByBucket = new(buckets.Length);
+        for (int bucket = 0; bucket < buckets.Length; bucket++)
         {
-            virtualTextureStackLayers = new List<int>(stacks.Length);
-            foreach (FMaterialVirtualTextureStack stack in stacks)
+            FMaterialTextureParameterInfo[]? held = buckets[bucket];
+            byBucket.Add(held?.Length ?? 0);
+            List<string?> names = new(held?.Length ?? 0);
+            foreach (FMaterialTextureParameterInfo parameter in held ?? [])
             {
-                virtualTextureStackLayers.Add((int)stack.NumLayers);
+                names.Add(PreshaderInputs.NameOf(parameter));
             }
+            namesByBucket.Add(names);
         }
 
-        return new MaterialUniformBufferLayout.MaterialResourceCounts(
-            Standard2D: Count(buckets, MaterialTextureOrder.Standard2DBucket),
-            Cube: Count(buckets, MaterialTextureOrder.CubeBucket),
-            Array2D: Count(buckets, MaterialTextureOrder.Array2DBucket),
-            ArrayCube: Count(buckets, MaterialTextureOrder.ArrayCubeBucket),
-            Volume: Count(buckets, MaterialTextureOrder.VolumeBucket),
-            External: externalParameters?.Length ?? 0,
-            Virtual: Count(buckets, MaterialTextureOrder.VirtualBucket),
-            VirtualTextureStackLayerCounts: virtualTextureStackLayers,
-            TotalResourceCount: uniformExpressionSet.UniformBufferLayoutInitializer?.Resources?.Length,
-            Standard2DAuthorNames: AuthorNames(buckets, MaterialTextureOrder.Standard2DBucket),
-            CubeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.CubeBucket),
-            Array2DAuthorNames: AuthorNames(buckets, MaterialTextureOrder.Array2DBucket),
-            ArrayCubeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.ArrayCubeBucket),
-            VolumeAuthorNames: AuthorNames(buckets, MaterialTextureOrder.VolumeBucket),
-            ExternalAuthorNames: ExternalAuthorNames(externalParameters),
-            VirtualAuthorNames: AuthorNames(buckets, MaterialTextureOrder.VirtualBucket));
+        FMaterialExternalTextureParameterInfo[]? externalParameters = uniformExpressionSet.UniformExternalTextureParameters;
+        List<int> virtualTextureStackLayers = new();
+        foreach (FMaterialVirtualTextureStack stack in uniformExpressionSet.VTStacks ?? [])
+        {
+            virtualTextureStackLayers.Add((int)stack.NumLayers);
+        }
+
+        MaterialUniformBufferRecipe.Counts counts = new(
+            TexturesByBucket: byBucket,
+            ExternalTextures: externalParameters?.Length ?? 0,
+            TextureCollections: uniformExpressionSet.UniformTextureCollectionParameters?.Length ?? 0,
+            VirtualTextureStackLayers: virtualTextureStackLayers,
+            VectorPreshaders: uniformExpressionSet.UniformVectorPreshaders?.Length ?? 0,
+            ScalarPreshaders: uniformExpressionSet.UniformScalarPreshaders?.Length ?? 0,
+            PreshaderBufferSize: (int)uniformExpressionSet.UniformPreshaderBufferSize);
+
+        return new MaterialUniformBufferLayout.MaterialResources(
+            counts, namesByBucket, ExternalAuthorNames(externalParameters));
     }
 
-    private static int Count(FMaterialTextureParameterInfo[][] buckets, int bucket) =>
-        bucket >= 0 && bucket < buckets.Length ? buckets[bucket]?.Length ?? 0 : 0;
-
-    private static IReadOnlyList<string?>? AuthorNames(FMaterialTextureParameterInfo[][] buckets, int bucket)
-    {
-        if (bucket < 0 || bucket >= buckets.Length || buckets[bucket] is not { } parameters)
-        {
-            return null;
-        }
-        List<string?> names = new(parameters.Length);
-        foreach (FMaterialTextureParameterInfo parameter in parameters)
-        {
-            names.Add(PreshaderInputs.NameOf(parameter));
-        }
-        return names;
-    }
 
     private static IReadOnlyList<string?>? ExternalAuthorNames(FMaterialExternalTextureParameterInfo[]? parameters)
     {

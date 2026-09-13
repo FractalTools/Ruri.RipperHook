@@ -24,6 +24,6 @@ internal sealed class SymbolInputs
     public bool UsedLoadedMaterialResources { get; set; }
     public ConstantBufferParameter? MaterialConstantBuffer { get; set; }
     public List<FMaterialParameterInfo> NumericParameterInfos { get; } = new();
-    public MaterialUniformBufferLayout.MaterialResourceCounts? MaterialResourceCounts { get; set; }
+    public MaterialUniformBufferLayout.MaterialResources? MaterialResourceCounts { get; set; }
     public List<ConstantBufferParameter> ExtraConstantBuffers { get; } = new();
 }
