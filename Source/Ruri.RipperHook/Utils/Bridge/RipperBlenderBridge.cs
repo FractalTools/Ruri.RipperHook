@@ -206,35 +206,108 @@ public static class RipperBlenderBridge
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(seedCabNames);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDir);
-        TableBuilder table = new(ShaderExportId, "material|Material", "name|Shader",
-            "keywords|Variant", "file|File", "bytes#|Size", "cab|Cab");
-        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Detail, "keywords")
-            .Role(ColumnRole.Group, "material");
+        ShaderWriter writer = new(outputDir);
         CabClosure closure = Closure(map, seedCabNames);
         if (closure.Files.Length == 0)
         {
-            return Data.ColumnTablePacking.Pin(ShaderExportId, table.Build());
+            return writer.Pin();
         }
 
-        FullConfiguration settings = new();
-        settings.LoadFromDefaultPath();
-        settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
-        GameData gameData = LoadClosure(closure, new ExportHandler(settings));
-        Directory.CreateDirectory(outputDir);
         // What the row actually SHADES WITH, not everything its archives happen to carry:
         // a character's closure co-hosts shaders nothing on that character references. So
         // the MATERIALS are walked, and each states its own shader plus the keywords it
         // enables -- which is the variant that shader is compiled for on this row.
-        Dictionary<AssetRipper.SourceGenerated.Classes.ClassID_48.IShader, string> written = [];
-        HashSet<string> taken = new(StringComparer.OrdinalIgnoreCase);
-        foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
+        foreach (IUnityObjectBase asset in Load(closure).GameBundle.FetchAssets())
         {
-            if (asset is not AssetRipper.SourceGenerated.Classes.ClassID_21.IMaterial material
-                || material.Shader_C21.TryGetAsset(material.Collection) is not
+            if (asset is AssetRipper.SourceGenerated.Classes.ClassID_21.IMaterial material
+                && material.Shader_C21.TryGetAsset(material.Collection) is
                     AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader)
             {
-                continue;
+                writer.Write(shader, material);
             }
+        }
+        return writer.Pin();
+    }
+
+    /// <summary>
+    /// Every shader the INSTALL ships, written out as source -- the same answer as
+    /// <see cref="ExportShaders"/> with nothing selected to narrow it.
+    ///
+    /// The seeds are the rows the map itself lists as holding a shader, chosen here rather than
+    /// by a host sweeping the table a row at a time. The closure deliberately does NOT reach
+    /// through dependents: what depends on a shader is every material in the game, and following
+    /// that would load the whole install to answer a question none of those materials are part of.
+    ///
+    /// The SHADERS are walked here rather than the materials, because that is literally the
+    /// question: a shader no material in the install references is still a shader the install
+    /// ships. A shader reached this way states no variant, since no material picked one.
+    /// </summary>
+    public static Data.PinnedTable ExportAllShaders(CabMapHandle map, string outputDir)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDir);
+        ShaderWriter writer = new(outputDir);
+        CabClosure closure = Data.ClosureReader.Resolve(map.Table, ShaderBearingCabs(map.Table));
+        if (closure.Files.Length == 0)
+        {
+            return writer.Pin();
+        }
+
+        foreach (IUnityObjectBase asset in Load(closure).GameBundle.FetchAssets())
+        {
+            if (asset is AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader)
+            {
+                writer.Write(shader, material: null);
+            }
+        }
+        return writer.Pin();
+    }
+
+    /// <summary>Every row the map lists as holding a shader asset -- what "all the shaders" names.</summary>
+    private static string[] ShaderBearingCabs(CabTable table)
+    {
+        List<string> cabs = [];
+        for (int id = 0; id < table.Count; id++)
+        {
+            if (table.ClassIds(id).Contains((int)ClassIDType.Shader))
+            {
+                cabs.Add(table.CabName(id));
+            }
+        }
+        return [.. cabs];
+    }
+
+    private static GameData Load(CabClosure closure)
+    {
+        FullConfiguration settings = new();
+        settings.LoadFromDefaultPath();
+        settings.ImportSettings.ScriptContentLevel = AssetRipper.Import.Configuration.ScriptContentLevel.Level0;
+        return LoadClosure(closure, new ExportHandler(settings));
+    }
+
+    /// <summary>
+    /// One shader per file, one row per reason it was asked for. A shader reached twice -- by two
+    /// materials, or by a material and by the install sweep -- is written once and named once.
+    /// </summary>
+    private sealed class ShaderWriter
+    {
+        private readonly Dictionary<AssetRipper.SourceGenerated.Classes.ClassID_48.IShader, string> _written = [];
+        private readonly HashSet<string> _taken = new(StringComparer.OrdinalIgnoreCase);
+        private readonly TableBuilder _table;
+        private readonly string _outputDir;
+
+        public ShaderWriter(string outputDir)
+        {
+            _outputDir = outputDir;
+            _table = new TableBuilder(ShaderExportId, "material|Material", "name|Shader",
+                "keywords|Variant", "file|File", "bytes#|Size", "cab|Cab");
+            _table.Role(ColumnRole.Label, "name").Role(ColumnRole.Detail, "keywords")
+                .Role(ColumnRole.Group, "material");
+        }
+
+        public void Write(AssetRipper.SourceGenerated.Classes.ClassID_48.IShader shader,
+            AssetRipper.SourceGenerated.Classes.ClassID_21.IMaterial? material)
+        {
             // A shader's own name is the one ShaderLab states ("Hidden/Foo/Bar"), which is
             // what a person recognises it by. The asset's m_Name is empty in a stripped
             // build, and GetBestName then falls back to the CLASS name -- which would file
@@ -242,23 +315,26 @@ public static class RipperBlenderBridge
             string name = shader.ParsedForm?.Name_R.String is { Length: > 0 } stated
                 ? stated
                 : shader.GetBestName();
-            if (!written.TryGetValue(shader, out string? file))
+            if (!_written.TryGetValue(shader, out string? file))
             {
-                file = Path.Combine(outputDir, Readable(name) + ".shader");
-                for (int copy = 2; !taken.Add(file); copy++)
+                Directory.CreateDirectory(_outputDir);
+                file = Path.Combine(_outputDir, Readable(name) + ".shader");
+                for (int copy = 2; !_taken.Add(file); copy++)
                 {
-                    file = Path.Combine(outputDir, Readable(name) + "_" + copy + ".shader");
+                    file = Path.Combine(_outputDir, Readable(name) + "_" + copy + ".shader");
                 }
                 if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
                 {
-                    continue;
+                    return;
                 }
-                written[shader] = file;
+                _written[shader] = file;
             }
-            table.Row(material.GetBestName(), name, Keywords(material), file,
+            _table.Row(material is null ? string.Empty : material.GetBestName(), name,
+                material is null ? string.Empty : Keywords(material), file,
                 new FileInfo(file).Length, shader.Collection.Name);
         }
-        return Data.ColumnTablePacking.Pin(ShaderExportId, table.Build());
+
+        public Data.PinnedTable Pin() => Data.ColumnTablePacking.Pin(ShaderExportId, _table.Build());
     }
 
     /// <summary>The variant one material asks its shader for: the keywords it enables, which

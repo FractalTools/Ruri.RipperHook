@@ -1,5 +1,7 @@
 using AssetRipper.Import.Logging;
+using AssetRipper.SourceGenerated;
 using Ruri.FModelHook.ShaderDecompiler;
+using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.Data;
 using Ruri.RipperHook.Tables;
 
@@ -13,14 +15,17 @@ namespace Ruri.FModelHook.Unreal;
 /// the only way back to readable code is: resolve the material, find the map it compiled to, find
 /// which archive carries that hash, and decompile the entries of that hash out of it.
 ///
-/// Nothing is scanned. Only the package asked for is loaded, only the archives its materials
-/// actually live in are opened, only their tables are read, and only its own shaders are pulled
-/// out of them -- so the cost is the character's, not the install's, and the only thing that lands
-/// on disk is the source.
+/// Nothing is scanned. Only the packages asked for are loaded, only the archives their materials
+/// actually live in are opened, only their tables are read, and only their own shaders are pulled
+/// out of them -- so the cost is what was asked for, and the only thing that lands on disk is the
+/// source. Asking for the whole install is the SAME question with every material named, not a
+/// different mode: the map already says which packages those are, so even that names its subjects
+/// instead of sweeping.
 /// </summary>
 public static class UnrealShaders
 {
     public const string ShadersId = "unreal.shaders";
+    public const string AllShadersId = "unreal.shaders.all";
     public const string PackagesParam = "packages";
     public const string OutputParam = "output";
 
@@ -36,26 +41,60 @@ public static class UnrealShaders
             + "is the vertex and pixel stages as source, one file per variant, beside the metadata "
             + "naming which material each came from.",
             Shaders);
+
+        Datasets.Publish(AllShadersId, DataRole.Payload,
+            [DataParam.Text(OutputParam)],
+            "Decompile every shader this install ships, into the stated folder -- the same answer "
+            + "as the packaged question with nothing named to narrow it. Which packages those are "
+            + "is read off the mounted map, which already states what every package holds.",
+            AllShaders);
     }
 
     private static ColumnTable Shaders(DataRequest request)
     {
-        TableBuilder table = new(ShadersId, "archive", "shaderMaps#", "output");
-        UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         string[] packages = request.List(PackagesParam);
-        string output = request.Text(OutputParam);
-        if (output.Length == 0)
-        {
-            throw new ArgumentException($"dataset '{ShadersId}' writes files; state where with '{OutputParam}'.");
-        }
         if (packages.Length == 0)
         {
             throw new ArgumentException($"dataset '{ShadersId}' answers about packages; name them with '{PackagesParam}'.");
         }
+        return Decompile(ShadersId, request, packages);
+    }
+
+    /// <summary>
+    /// Every material package the mounted map lists, as the subjects of one run.
+    ///
+    /// Unreal ships no shader asset, so "all the shaders" IS "every material": the program is the
+    /// material's own compiled map. The map already states what each package holds -- it was read
+    /// once when the map was built -- so this names them from there rather than re-opening every
+    /// package in the install to find out.
+    /// </summary>
+    private static ColumnTable AllShaders(DataRequest request)
+    {
+        CabTable map = request.Map;
+        List<string> packages = [];
+        for (int id = 0; id < map.Count; id++)
+        {
+            if (map.ClassIds(id).Contains((int)ClassIDType.Material))
+            {
+                packages.Add(map.CabName(id));
+            }
+        }
+        Say($"[ShaderSource] the map lists {packages.Count} material package(s) in this install.");
+        return Decompile(AllShadersId, request, [.. packages]);
+    }
+
+    private static ColumnTable Decompile(string id, DataRequest request, string[] packages)
+    {
+        TableBuilder table = new(id, "archive", "shaderMaps#", "output");
+        string output = request.Text(OutputParam);
+        if (output.Length == 0)
+        {
+            throw new ArgumentException($"dataset '{id}' writes files; state where with '{OutputParam}'.");
+        }
 
         ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
         {
-            Provider = provider,
+            Provider = UnrealProviderSession.Open(request.GameRoot),
             Subjects = Array.ConvertAll(packages, static path => (IShaderMapSubject)new PackageSubject(path)),
             OutputDirectory = output,
             SplitVariantsToHlslFiles = true,
