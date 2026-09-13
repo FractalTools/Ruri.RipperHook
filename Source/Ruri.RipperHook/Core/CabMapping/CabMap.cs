@@ -118,6 +118,14 @@ public static class CabMap
         string fallbackName = Path.GetFileName(file);
         foreach (FileBase fileBase in fileStack)
         {
+            // WHICH ARCHIVE this came out of, not which file was opened to get at it. A
+            // decoder whose archives carry other archives puts each of them on the stack
+            // under its own name, and naming them all after the file on disk threw that
+            // away -- so a closure could only ever say "open this container", never "open
+            // this archive out of it", and one wanted archive dragged in every tenant of
+            // its container. The file on disk is kept separately (Entry.RelativePath) and
+            // is still what gets opened; this is the name the load is gated by.
+            string archiveName = fileBase.Name is { Length: > 0 } ? fileBase.Name : fallbackName;
             try
             {
                 IEnumerable<SerializedFile> serializedFiles;
@@ -136,7 +144,7 @@ public static class CabMap
 
                 foreach (SerializedFile sf in serializedFiles)
                 {
-                    result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, fallbackName));
+                    result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, archiveName));
                 }
             }
             catch (Exception ex)
