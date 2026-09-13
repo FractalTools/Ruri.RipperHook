@@ -335,7 +335,8 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         foreach (ISerializedSubProgram subProgram in program.SubPrograms)
         {
-            var emissionKey = CreateEmissionKey(subProgram.BlobIndex, null, subProgram.KeywordIndices);
+            List<ushort> keywords = KeywordIndicesOf(subProgram);
+            var emissionKey = CreateEmissionKey(subProgram.BlobIndex, null, keywords);
             if (emitted.Contains(emissionKey))
             {
                 continue;
@@ -349,7 +350,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             yield return new ShaderReadSource(
                 subProgram.BlobIndex,
                 null,
-                subProgram.KeywordIndices?.ToList() ?? [],
+                keywords,
                 subProgram.Has_Parameters() ? subProgram.Parameters : null);
         }
     }
@@ -651,6 +652,35 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         {
             yield return new UnityShaderMetadataBuilder.ProgramBlobReference(source.BlobIndex, source.ParameterBlobIndex, source.KeywordIndices);
         }
+    }
+
+    /// <summary>
+    /// Every keyword index a subprogram states, from WHICHEVER list its build wrote them in.
+    ///
+    /// The lists are ALTERNATIVES, not parts of one list: a build states its keywords either as
+    /// one list or -- after Unity split global from local keywords -- as that pair, and the two
+    /// spellings number into their own name tables. Reading only the single one gave every
+    /// variant of a split build an empty keyword set, so they all looked like one variant and
+    /// whatever grouped them kept one. Reading BOTH and concatenating is the opposite mistake:
+    /// it mixes two numberings, and an index from the wrong one names no keyword at all.
+    /// </summary>
+    private static List<ushort> KeywordIndicesOf(ISerializedSubProgram subProgram)
+    {
+        if (subProgram.Has_KeywordIndices() && subProgram.KeywordIndices is { Count: > 0 } single)
+        {
+            return single.ToList();
+        }
+
+        List<ushort> indices = new();
+        if (subProgram.Has_GlobalKeywordIndices() && subProgram.GlobalKeywordIndices is { } globals)
+        {
+            indices.AddRange(globals);
+        }
+        if (subProgram.Has_LocalKeywordIndices() && subProgram.LocalKeywordIndices is { } locals)
+        {
+            indices.AddRange(locals);
+        }
+        return indices;
     }
 
     private static (uint BlobIndex, uint? ParameterBlobIndex, string KeywordIdentity) CreateEmissionKey(uint blobIndex, uint? parameterBlobIndex, IReadOnlyList<ushort>? keywordIndices)
