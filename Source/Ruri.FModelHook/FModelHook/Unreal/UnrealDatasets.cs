@@ -1194,6 +1194,15 @@ public static class UnrealDatasets
     /// engine, the keys and the schema by itself; the two that are documents rather than text say
     /// what arrived and from where, because a quarter of a megabyte of keys is not a field value.
     /// </summary>
+    /// <summary>
+    /// What an option is ALREADY answered with, in the option's own syntax -- a value a host can
+    /// put straight into the field that holds it.
+    ///
+    /// It has to be the value and never a description of one. Answering "3348 published by
+    /// &lt;url&gt;" left a host with something it could only render BESIDE the field, so the field
+    /// itself stayed blank and read as "still to be found" while the install was open on exactly
+    /// those keys -- two places saying one thing, and the empty one the more prominent.
+    /// </summary>
     private static string Effective(string name, UnrealTitle? title, UnrealKeyring.Schema schema, UnrealKeyring.Keyset published)
     {
         if (string.Equals(name, UnrealSourceOptions.MainKey, StringComparison.Ordinal))
@@ -1204,13 +1213,29 @@ public static class UnrealDatasets
         }
         if (string.Equals(name, UnrealSourceOptions.DynamicKeys, StringComparison.Ordinal))
         {
-            int count = published.Keys.Count(entry => entry.Key != default);
-            return count > 0 && title?.Keys is not null ? $"{count} published by {title.Keys.Url}" : string.Empty;
+            string stated = UnrealSourceOptions.Text(UnrealSourceOptions.DynamicKeys, title);
+            if (stated.Length > 0)
+            {
+                return stated;
+            }
+            // The same guid=key;... the option is READ back as, written by the one place that
+            // states that syntax, so what the field shows is what a host could have typed.
+            return string.Join(UnrealSourceOptions.EntrySeparator, published.Keys
+                .Where(static entry => entry.Key != default)
+                .Select(static entry => $"{entry.Key}{UnrealSourceOptions.ValueSeparator}{entry.Value}"));
         }
         if (string.Equals(name, UnrealSourceOptions.Mappings, StringComparison.Ordinal))
         {
             string stated = UnrealSourceOptions.Text(UnrealSourceOptions.Mappings, title);
-            return stated.Length > 0 ? stated : schema.Name;
+            if (stated.Length > 0)
+            {
+                return stated;
+            }
+            // A published schema is kept beside this title's other published facts, so it has a
+            // path like any stated one -- the field takes that, not the file's bare name.
+            return schema.Name.Length > 0 && title is not null
+                ? Path.Combine(UnrealKeyring.KeptRoot, title.Product, schema.Name)
+                : string.Empty;
         }
         return UnrealSourceOptions.Text(name, title);
     }
