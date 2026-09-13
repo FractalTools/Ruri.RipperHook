@@ -119,18 +119,25 @@ internal static class ShaderLabEmitter
         File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, containerStem, splittableStages));
     }
 
+    /// <summary>
+    /// Which stages are written as their own .hlsl files.
+    ///
+    /// The container's decision, not the stage's: a container that compiled to one program is
+    /// one file and reads better as one, and anything more is split. This used to ask it per
+    /// STAGE -- more than one program of that stage or stay inline -- which is the same flaw the
+    /// Unity road had: a lone program is not a small one, and a container full of stages holding
+    /// one program each got no files at all.
+    /// </summary>
     private static HashSet<string> ComputeSplittableStages(List<UeShaderLabProgramData> programs, bool splitEnabled)
     {
         HashSet<string> result = new(StringComparer.Ordinal);
-        if (!splitEnabled) return result;
-        Dictionary<string, int> counts = new(StringComparer.Ordinal);
+        if (!splitEnabled || programs.Count <= 1)
+        {
+            return result;
+        }
         foreach (UeShaderLabProgramData program in programs)
         {
-            counts[program.Stage] = counts.GetValueOrDefault(program.Stage) + 1;
-        }
-        foreach (var kvp in counts)
-        {
-            if (kvp.Value > 1) result.Add(kvp.Key);
+            result.Add(program.Stage);
         }
         return result;
     }
