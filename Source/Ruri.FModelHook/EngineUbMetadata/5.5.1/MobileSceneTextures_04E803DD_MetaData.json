@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h",
   "LayoutHash": "0x04E803DD",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "MobileSceneTextures",
     "NameIndex": -1,

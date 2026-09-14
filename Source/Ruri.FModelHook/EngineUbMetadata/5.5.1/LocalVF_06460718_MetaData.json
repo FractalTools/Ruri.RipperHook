@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h",
   "LayoutHash": "0x06460718",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LocalVF",
     "NameIndex": -1,

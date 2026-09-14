@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h",
   "LayoutHash": "0x05950908",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "TranslucentSelfShadow",
     "NameIndex": -1,

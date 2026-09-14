@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsRasterCommon.h",
   "LayoutHash": "0x00390218",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "DeepRasterPass",
     "NameIndex": -1,

@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/HeterogeneousVolumes/HeterogeneousVolumes.h",
   "LayoutHash": "0x11701021",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "OrthoGridUniformBuffer",
     "NameIndex": -1,

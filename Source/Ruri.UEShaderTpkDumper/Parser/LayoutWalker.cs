@@ -5,8 +5,10 @@ namespace Ruri.UEShaderTpkDumper.Parser;
 public sealed class ResolvedResource
 {
     public required int Offset;
-    public required string Ubmt;    public required string Name;
-    public required int ResourceIndex;    public string ShaderType { get; set; } = string.Empty;
+    public required string Ubmt;
+    public required string Name;
+    public required int ResourceIndex;
+    public string ShaderType { get; set; } = string.Empty;
 }
 
 public sealed class LayoutResult
@@ -32,23 +34,32 @@ public sealed class NumericMember
     public required int ArraySize;
 }
 
+/// <summary>
+/// One uniform buffer struct laid out as the engine lays it out: members in declaration order,
+/// each aligned as its type's own specialisation says, resources one pointer slot each, arrays
+/// one element-alignment stride each, the whole rounded up to the struct alignment.
+///
+/// A member whose type the engine does not declare a layout for, or whose array size names a
+/// constant the tree does not define, stops the walk: a seed missing one member hashes to a
+/// value no cook carries and reads as "engine modified", which is worse than no seed at all.
+/// </summary>
 public sealed class LayoutWalker
 {
-    private readonly IReadOnlyDictionary<string, int> _ubmtTable;
-    private readonly IReadOnlyDictionary<string, long> _constants;
-    private readonly Dictionary<string, StructBlock> _structRegistry;
-    private readonly IReadOnlyDictionary<string, MacroTableExpander.TableEntry> _macroTables;
+    private readonly EngineFacts facts;
+    private readonly IReadOnlyDictionary<string, long> constants;
+    private readonly Dictionary<string, StructBlock> structRegistry;
+    private readonly IReadOnlyDictionary<string, MacroTableExpander.TableEntry> macroTables;
 
     public LayoutWalker(
-        IReadOnlyDictionary<string, int> ubmtTable,
+        EngineFacts facts,
         IReadOnlyDictionary<string, long> constants,
         Dictionary<string, StructBlock> structRegistry,
         IReadOnlyDictionary<string, MacroTableExpander.TableEntry>? macroTables = null)
     {
-        _ubmtTable = ubmtTable;
-        _constants = constants;
-        _structRegistry = structRegistry;
-        _macroTables = macroTables ?? new Dictionary<string, MacroTableExpander.TableEntry>();
+        this.facts = facts;
+        this.constants = constants;
+        this.structRegistry = structRegistry;
+        this.macroTables = macroTables ?? new Dictionary<string, MacroTableExpander.TableEntry>();
     }
 
     public LayoutResult Walk(StructBlock block)
@@ -63,21 +74,23 @@ public sealed class LayoutWalker
             Resources = new(),
         };
 
-        string expandedBody = _macroTables.Count > 0
-            ? MacroTableExpander.Expand(block.Body, _macroTables)
+        string expandedBody = macroTables.Count > 0
+            ? MacroTableExpander.Expand(block.Body, macroTables)
             : block.Body;
 
-        var ctx = new WalkContext();
-        WalkBlock(expandedBody, prefix: string.Empty, baseOffset: 0, ctx, result);
+        WalkContext context = new();
+        WalkBlock(expandedBody, prefix: string.Empty, baseOffset: 0, context, result);
 
-        result.Size = AlignUp(ctx.LocalNext, Core.UbmtTables.StructAlign);
+        result.Size = AlignUp(context.LocalNext, facts.StructAlignment);
         result.Resources.Sort((a, b) =>
         {
-            int cmp = a.Offset.CompareTo(b.Offset);
-            if (cmp != 0) return cmp;
-            return string.CompareOrdinal(a.Ubmt, b.Ubmt);
+            int byOffset = a.Offset.CompareTo(b.Offset);
+            return byOffset != 0 ? byOffset : string.CompareOrdinal(a.Ubmt, b.Ubmt);
         });
-        for (int i = 0; i < result.Resources.Count; i++) result.Resources[i].ResourceIndex = i;
+        for (int i = 0; i < result.Resources.Count; i++)
+        {
+            result.Resources[i].ResourceIndex = i;
+        }
         return result;
     }
 
@@ -86,159 +99,152 @@ public sealed class LayoutWalker
         public int LocalNext;
     }
 
-    private void WalkBlock(string body, string prefix, int baseOffset, WalkContext ctx, LayoutResult result)
+    private void WalkBlock(string body, string prefix, int baseOffset, WalkContext context, LayoutResult result)
     {
         foreach (MemberLine line in MemberLineParser.ParseBody(body))
         {
             if (line.IsResource)
             {
-                AddResource(line, prefix, baseOffset, ctx, result);
+                AddResource(line, prefix, baseOffset, context, result);
             }
-            else if (line.Ubmt == "INCLUDED_STRUCT")
+            else if (line.Ubmt is "INCLUDED_STRUCT" or "NESTED_STRUCT")
             {
-                if (_structRegistry.TryGetValue(line.CppType, out StructBlock inner))
-                {
-                    WalkBlock(inner.Body, prefix, baseOffset + ctx.LocalNext, ctx, result);
-                }
-            }
-            else if (line.Ubmt == "NESTED_STRUCT")
-            {
-                if (_structRegistry.TryGetValue(line.CppType, out StructBlock inner))
-                {
-                    ctx.LocalNext = AlignUp(ctx.LocalNext, Core.UbmtTables.StructAlign);
-                    int childBase = baseOffset + ctx.LocalNext;
-                    var childCtx = new WalkContext();
-                    WalkBlock(inner.Body, prefix + line.Name + "_", childBase, childCtx, result);
-                    ctx.LocalNext += AlignUp(childCtx.LocalNext, Core.UbmtTables.StructAlign);
-                }
+                // Either way the member is a C++ object of the inner struct type, aligned and
+                // sized as a struct; the two differ only in whether its members keep its name.
+                // Walking an included struct on the parent's own running offset counted that
+                // offset twice -- every member after the first include landed past the end.
+                StructBlock inner = Registered(line);
+                context.LocalNext = AlignUp(context.LocalNext, facts.StructAlignment);
+                int childBase = baseOffset + context.LocalNext;
+                string childPrefix = line.Ubmt == "NESTED_STRUCT" ? prefix + line.Name + "_" : prefix;
+                WalkContext childContext = new();
+                WalkBlock(inner.Body, childPrefix, childBase, childContext, result);
+                context.LocalNext += AlignUp(childContext.LocalNext, facts.StructAlignment);
             }
             else
             {
-                AddNumeric(line, prefix, baseOffset, ctx, result);
+                AddNumeric(line, prefix, baseOffset, context, result);
             }
         }
     }
 
-    private void AddResource(MemberLine line, string prefix, int baseOffset, WalkContext ctx, LayoutResult result)
+    /// <summary>The declared block of a nested struct, by the type's own name whichever namespace the member spelled it in.</summary>
+    private StructBlock Registered(MemberLine line)
     {
-        int align = Core.UbmtTables.PointerAlign;
-        int elemSize = Core.UbmtTables.PointerAlign;
-        int arrayN = ResolveArraySize(line.ArrayDecl);
-
-        if (arrayN > 0)
+        string type = line.CppType;
+        int scope = type.LastIndexOf("::", StringComparison.Ordinal);
+        if (scope >= 0)
         {
-            ctx.LocalNext = AlignUp(ctx.LocalNext, align);
-            for (int i = 0; i < arrayN; i++)
-            {
-                int off = baseOffset + ctx.LocalNext + i * elemSize;
-                result.Resources.Add(new ResolvedResource
-                {
-                    Name = prefix + line.Name,
-                    Ubmt = line.Ubmt,
-                    Offset = off,
-                    ResourceIndex = 0,
-                    ShaderType = line.ShaderType ?? string.Empty,
-                });
-            }
-            ctx.LocalNext += elemSize * arrayN;
+            type = type[(scope + 2)..];
         }
-        else
+        if (structRegistry.TryGetValue(type, out StructBlock inner))
         {
-            ctx.LocalNext = AlignUp(ctx.LocalNext, align);
-            int off = baseOffset + ctx.LocalNext;
+            return inner;
+        }
+        throw new InvalidOperationException($"member '{line.Name}' nests struct '{line.CppType}', which no BEGIN_*_STRUCT in the tree declares");
+    }
+
+    private void AddResource(MemberLine line, string prefix, int baseOffset, WalkContext context, LayoutResult result)
+    {
+        int slot = facts.PointerAlignment;
+        int count = Math.Max(1, ResolveArraySize(line.ArrayDecl, line.Name));
+        context.LocalNext = AlignUp(context.LocalNext, slot);
+        for (int i = 0; i < count; i++)
+        {
             result.Resources.Add(new ResolvedResource
             {
                 Name = prefix + line.Name,
                 Ubmt = line.Ubmt,
-                Offset = off,
+                Offset = baseOffset + context.LocalNext + i * slot,
                 ResourceIndex = 0,
                 ShaderType = line.ShaderType ?? string.Empty,
             });
-            ctx.LocalNext += elemSize;
         }
+        context.LocalNext += slot * count;
     }
 
-    private void AddNumeric(MemberLine line, string prefix, int baseOffset, WalkContext ctx, LayoutResult result)
+    private void AddNumeric(MemberLine line, string prefix, int baseOffset, WalkContext context, LayoutResult result)
     {
         string cppType = line.CppType;
-        int arrayN = ResolveArraySize(line.ArrayDecl);
-        bool isScalarArrayMacro = string.Equals(line.Macro, "SHADER_PARAMETER_SCALAR_ARRAY", StringComparison.Ordinal);
-        if (isScalarArrayMacro && TypeTable.ScalarArrayPack.TryGetValue(cppType, out string? packedType))
+        int arrayCount = ResolveArraySize(line.ArrayDecl, line.Name);
+        if (string.Equals(line.Macro, "SHADER_PARAMETER_SCALAR_ARRAY", StringComparison.Ordinal)
+            && EngineFacts.ScalarArrayPack.TryGetValue(cppType, out string? packedType))
         {
             cppType = packedType;
-            arrayN = (arrayN + 3) / 4;
+            arrayCount = (arrayCount + 3) / 4;
         }
 
-        if (!TypeTable.Table.TryGetValue(cppType, out NumericTypeInfo info))
+        if (!facts.NumericTypes.TryGetValue(cppType, out NumericTypeInfo info))
         {
-            return;
+            throw new InvalidOperationException($"member '{line.Name}' has type '{cppType}', which the engine declares no shader parameter layout for");
         }
 
-        if (arrayN > 0)
+        if (arrayCount > 0)
         {
-            int elemStride = Math.Max(info.Alignment, Core.UbmtTables.ArrayElemAlign);
-            ctx.LocalNext = AlignUp(ctx.LocalNext, elemStride);
-            for (int i = 0; i < arrayN; i++)
-            {
-                int off = baseOffset + ctx.LocalNext + i * elemStride;
-                result.NumericMembers.Add(new NumericMember
-                {
-                    Name = prefix + line.Name + (arrayN > 0 && i > 0 ? "" : ""),
-                    Offset = off,
-                    Size = info.Size,
-                    HlslType = info.HlslName,
-                    Ubmt = info.Ubmt,
-                    RowCount = info.RowCount,
-                    ColumnCount = info.ColumnCount,
-                    IsMatrix = info.IsMatrix,
-                    ArraySize = arrayN,
-                });
-                break;
-            }
-            ctx.LocalNext += elemStride * arrayN;
-        }
-        else
-        {
-            ctx.LocalNext = AlignUp(ctx.LocalNext, info.Alignment);
-            int off = baseOffset + ctx.LocalNext;
+            // An array element occupies its own size rounded up to the element alignment: a
+            // scalar takes a whole register, a matrix its four. Striding by the alignment alone
+            // packed every matrix array to a quarter of its length.
+            int stride = AlignUp(info.Size, facts.ArrayElementAlignment);
+            context.LocalNext = AlignUp(context.LocalNext, facts.ArrayElementAlignment);
             result.NumericMembers.Add(new NumericMember
             {
                 Name = prefix + line.Name,
-                Offset = off,
+                Offset = baseOffset + context.LocalNext,
                 Size = info.Size,
                 HlslType = info.HlslName,
                 Ubmt = info.Ubmt,
                 RowCount = info.RowCount,
                 ColumnCount = info.ColumnCount,
                 IsMatrix = info.IsMatrix,
-                ArraySize = 0,
+                ArraySize = arrayCount,
             });
-            ctx.LocalNext += info.Size;
+            context.LocalNext += stride * arrayCount;
+            return;
         }
+
+        context.LocalNext = AlignUp(context.LocalNext, info.Alignment);
+        result.NumericMembers.Add(new NumericMember
+        {
+            Name = prefix + line.Name,
+            Offset = baseOffset + context.LocalNext,
+            Size = info.Size,
+            HlslType = info.HlslName,
+            Ubmt = info.Ubmt,
+            RowCount = info.RowCount,
+            ColumnCount = info.ColumnCount,
+            IsMatrix = info.IsMatrix,
+            ArraySize = 0,
+        });
+        context.LocalNext += info.Size;
     }
 
-    private int ResolveArraySize(string? arrayDecl)
+    /// <summary>How many elements an array declaration names, or zero for no array; a name the tree does not define stops the walk.</summary>
+    private int ResolveArraySize(string? arrayDecl, string memberName)
     {
-        if (string.IsNullOrEmpty(arrayDecl)) return 0;
+        if (string.IsNullOrEmpty(arrayDecl))
+        {
+            return 0;
+        }
         string inner = arrayDecl.Trim('[', ']').Trim();
-        if (inner.Length == 0) return 0;
-        if (int.TryParse(inner, out int direct)) return direct;
-        string ident = inner;
-        int sep = ident.LastIndexOf("::", StringComparison.Ordinal);
-        if (sep >= 0) ident = ident[(sep + 2)..];
-        if (_constants.TryGetValue(ident, out long v)) return (int)v;
-        return 0;
+        if (inner.Length == 0)
+        {
+            return 0;
+        }
+        if (ConstantsCollector.TryEvaluate(inner, constants, out long value) && value > 0)
+        {
+            return (int)value;
+        }
+        throw new InvalidOperationException($"member '{memberName}' is an array sized by '{inner}', which the tree does not define as an integer");
     }
 
-    private static int AlignUp(int x, int a) => (x + a - 1) & ~(a - 1);
+    private static int AlignUp(int value, int alignment) => (value + alignment - 1) & ~(alignment - 1);
 
-    public static List<ComputeLayoutHash.Resource> ToHashResources(LayoutResult layout, IReadOnlyDictionary<string, int> ubmtTable)
+    public static List<ComputeLayoutHash.Resource> ToHashResources(LayoutResult layout, EngineFacts facts)
     {
         List<ComputeLayoutHash.Resource> resources = new(layout.Resources.Count);
-        foreach (ResolvedResource r in layout.Resources)
+        foreach (ResolvedResource resource in layout.Resources)
         {
-            int ubmtValue = Core.UbmtTables.Resolve(ubmtTable, r.Ubmt);
-            resources.Add(new ComputeLayoutHash.Resource(r.Offset, ubmtValue));
+            resources.Add(new ComputeLayoutHash.Resource(resource.Offset, facts.BaseType(resource.Ubmt)));
         }
         return resources;
     }

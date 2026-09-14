@@ -60,11 +60,22 @@ public static class Program
     private static void ProcessEngine(DiscoveredEngine engine, string outRoot)
     {
         Console.WriteLine($"\n=== {engine.Version} ({engine.OriginalFolderName}) ===");
-        IReadOnlyDictionary<string, int> ubmtTable = UbmtTables.ForVersion(engine.Version.Major, engine.Version.Minor);
-        Console.WriteLine($"[tpk] UBMT table: {ubmtTable.Count} entries (RDG_TEXTURE_UAV={ubmtTable["RDG_TEXTURE_UAV"]})");
-
         var sourceFiles = UeSourceScanner.EnumerateSourceFiles(engine.RootDir).ToList();
         Console.WriteLine($"[tpk] source files: {sourceFiles.Count}");
+
+        EngineFacts facts = EngineFacts.Read(engine.RootDir, sourceFiles);
+        Console.WriteLine($"[tpk] engine facts: {facts.UniformBufferBaseTypes.Count} base types, {facts.NumericTypes.Count} numeric types, "
+                          + $"align struct/array/pointer = {facts.StructAlignment}/{facts.ArrayElementAlignment}/{facts.PointerAlignment}, "
+                          + $"hash = {facts.HashFormula}, usage flags = {facts.UsageFlags.Count}");
+        foreach (string missing in facts.Unresolved)
+        {
+            Console.Error.WriteLine("  [engine-fact-missing] " + missing);
+        }
+        if (facts.Unresolved.Count > 0 || facts.HashFormula.Length == 0)
+        {
+            Console.Error.WriteLine("[tpk] this tree does not state every engine fact a seed needs; nothing emitted for it.");
+            return;
+        }
         var constants = ConstantsCollector.Collect(sourceFiles);
         Console.WriteLine($"[tpk] constants: {constants.Count}");
 
@@ -88,8 +99,12 @@ public static class Program
 
         string outDir = Path.Combine(outRoot, engine.Version.ToString());
         Directory.CreateDirectory(outDir);
+        foreach (string stale in Directory.EnumerateFiles(outDir, "*_MetaData.json"))
+        {
+            File.Delete(stale);
+        }
         int emitted = 0;
-        var walker = new LayoutWalker(ubmtTable, constants, registry, macroTables);
+        var walker = new LayoutWalker(facts, constants, registry, macroTables);
         foreach (StructBlock block in registry.Values)
         {
             if (block.Kind == "param") continue;
@@ -100,14 +115,17 @@ public static class Program
                 Console.Error.WriteLine($"  [walk-fail] {block.CppName}: {ex.Message}");
                 continue;
             }
-            var hashResources = LayoutWalker.ToHashResources(layout, ubmtTable);
-            int bindingFlags = 1;            bool hasStaticSlot = false;
+            var hashResources = LayoutWalker.ToHashResources(layout, facts);
+            int bindingFlags = 1;
+            bool hasStaticSlot = false;
             string bindingFlagsName = "Shader";
+            string usageFlagsText = string.Empty;
             string emitBindingName = layout.BindingName;
             if (implementMap.TryGetValue(block.CppName, out ImplementMapping impl))
             {
                 bindingFlags = impl.BindingFlags;
                 hasStaticSlot = impl.HasStaticSlot;
+                usageFlagsText = impl.UsageFlags;
                 emitBindingName = string.IsNullOrEmpty(impl.ShaderBindingName) ? layout.BindingName : impl.ShaderBindingName;
                 bindingFlagsName = bindingFlags switch
                 {
@@ -117,10 +135,12 @@ public static class Program
                     _ => $"Flags{bindingFlags}",
                 };
             }
-            uint hash = ComputeLayoutHash.Compute(layout.Size, bindingFlags, hasStaticSlot, hashResources);
+            int usageFlags = UsageFlagBits(usageFlagsText, facts);
+            uint hash = ComputeLayoutHash.Compute(facts.HashFormula, layout.Size, bindingFlags, hasStaticSlot,
+                usageFlags, facts.UsageFlags, hashResources);
 
             layout.BindingName = emitBindingName;
-            JsonEmitter.EmitLayout(outDir, layout, hash, bindingFlagsName, ubmtTable,
+            JsonEmitter.EmitLayout(outDir, layout, hash, bindingFlagsName, facts.HashFormula, usageFlagsText,
                 engineVersion: engine.Version.ToString(),
                 engineSourcePath: Path.GetRelativePath(engine.RootDir, block.SourceFile).Replace('\\', '/'));
             emitted++;
@@ -173,6 +193,28 @@ public static class Program
             int opcodeCount = PreshaderOpcodeEmitter.Emit(outDir, opcodes, engine.Version.ToString());
             Console.WriteLine($"[tpk] preshader opcodes: {opcodeCount} from {opcodes.EnumName}");
         }
+    }
+
+    /// <summary>
+    /// The usage flags an IMPLEMENT_*_EX line states, as the engine's own enum values them: the
+    /// argument is the flag names OR-ed together, each qualified however the source felt like.
+    /// </summary>
+    private static int UsageFlagBits(string usageFlagsText, EngineFacts facts)
+    {
+        int bits = 0;
+        foreach (string term in usageFlagsText.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string name = term[(term.LastIndexOf("::", StringComparison.Ordinal) is var scope && scope >= 0 ? scope + 2 : 0)..];
+            if (facts.UsageFlags.TryGetValue(name, out int bit))
+            {
+                bits |= bit;
+            }
+            else if (name.Length > 0 && name != "None")
+            {
+                Console.Error.WriteLine($"  [usage-flag-unknown] '{name}' is not a member of the engine's EUsageFlags");
+            }
+        }
+        return bits;
     }
 
     private const string HelpText = """

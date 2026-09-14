@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/LocalVertexFactory.h",
   "LayoutHash": "0x00260100",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LocalVFLooseParameters",
     "NameIndex": -1,

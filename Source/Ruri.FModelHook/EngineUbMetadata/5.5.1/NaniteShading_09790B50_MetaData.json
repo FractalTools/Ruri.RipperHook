@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/Nanite/NaniteShared.h",
   "LayoutHash": "0x09790B50",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "NaniteShading",
     "NameIndex": -1,

@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/SingleLayerWaterRendering.cpp",
   "LayoutHash": "0x00190B24",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "SingleLayerWater",
     "NameIndex": -1,

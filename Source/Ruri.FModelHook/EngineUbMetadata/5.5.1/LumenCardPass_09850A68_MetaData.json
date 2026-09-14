@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenViewState.h",
   "LayoutHash": "0x09850A68",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LumenCardPass",
     "NameIndex": -1,

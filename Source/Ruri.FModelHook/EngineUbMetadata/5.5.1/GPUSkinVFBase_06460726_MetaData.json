@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Engine/Private/GPUSkinVertexFactory.cpp",
   "LayoutHash": "0x06460726",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "GPUSkinVFBase",
     "NameIndex": -1,

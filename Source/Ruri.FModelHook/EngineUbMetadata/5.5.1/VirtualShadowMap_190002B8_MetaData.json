@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.h",
   "LayoutHash": "0x190002B8",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "VirtualShadowMap",
     "NameIndex": -1,
@@ -352,7 +354,7 @@
       {
         "Name": "MaxLightGridEntryIndex",
         "NameIndex": -1,
-        "Index": 464,
+        "Index": 240,
         "ArraySize": 0,
         "Type": "UInt",
         "RowCount": 1,
@@ -478,14 +480,14 @@
     },
     {
       "Index": 7,
-      "Offset": 448,
+      "Offset": 224,
       "Name": "LightGridData",
       "UbmtType": "UBMT_RDG_BUFFER_SRV",
       "ShaderType": "StructuredBuffer<uint>"
     },
     {
       "Index": 8,
-      "Offset": 456,
+      "Offset": 232,
       "Name": "NumCulledLightsGrid",
       "UbmtType": "UBMT_RDG_BUFFER_SRV",
       "ShaderType": "StructuredBuffer<uint>"

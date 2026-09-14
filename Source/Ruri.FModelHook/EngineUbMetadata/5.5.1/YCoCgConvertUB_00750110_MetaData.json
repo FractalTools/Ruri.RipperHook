@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp",
   "LayoutHash": "0x00750110",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "YCoCgConvertUB",
     "NameIndex": -1,

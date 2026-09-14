@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenFrontLayerTranslucency.cpp",
   "LayoutHash": "0x09700E08",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LumenFrontLayerTranslucencyGBufferPass",
     "NameIndex": -1,

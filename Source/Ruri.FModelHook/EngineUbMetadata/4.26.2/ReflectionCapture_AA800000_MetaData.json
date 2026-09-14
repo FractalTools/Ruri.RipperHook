@@ -1,0 +1,75 @@
+{
+  "Name": "ReflectionCapture",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/SceneRendering.h",
+  "LayoutHash": "0xAA800000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "ReflectionCapture",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "BoxTransform",
+        "NameIndex": -1,
+        "Index": 16368,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "PositionAndRadius",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureProperties",
+        "NameIndex": -1,
+        "Index": 5456,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CaptureOffsetAndAverageBrightness",
+        "NameIndex": -1,
+        "Index": 10912,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "BoxScales",
+        "NameIndex": -1,
+        "Index": 38192,
+        "ArraySize": 341,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 43648,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

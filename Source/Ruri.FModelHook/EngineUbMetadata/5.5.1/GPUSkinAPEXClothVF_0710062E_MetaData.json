@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Engine/Private/GPUSkinVertexFactory.cpp",
   "LayoutHash": "0x0710062E",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "GPUSkinAPEXClothVF",
     "NameIndex": -1,

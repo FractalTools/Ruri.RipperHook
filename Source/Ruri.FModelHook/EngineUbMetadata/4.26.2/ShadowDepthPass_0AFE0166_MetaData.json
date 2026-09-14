@@ -1,0 +1,523 @@
+{
+  "Name": "ShadowDepthPass",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/ShadowRendering.h",
+  "LayoutHash": "0x0AFE0166",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "ShadowDepthPass",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "LPV_mRsmToWorld",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "ProjectionMatrix",
+        "NameIndex": -1,
+        "Index": 304,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "ViewMatrix",
+        "NameIndex": -1,
+        "Index": 368,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "ShadowViewProjectionMatrices",
+        "NameIndex": -1,
+        "Index": 464,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      },
+      {
+        "Name": "ShadowViewMatrices",
+        "NameIndex": -1,
+        "Index": 848,
+        "ArraySize": 6,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "LPV_mLightColour",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_GeometryVolumeCaptureLightDirection",
+        "NameIndex": -1,
+        "Index": 192,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_mEyePos",
+        "NameIndex": -1,
+        "Index": 208,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_mOldGridOffset",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_mLpvGridOffset",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_ClearMultiplier",
+        "NameIndex": -1,
+        "Index": 252,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_LpvScale",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_OneOverLpvScale",
+        "NameIndex": -1,
+        "Index": 260,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_DirectionalOcclusionIntensity",
+        "NameIndex": -1,
+        "Index": 264,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_DirectionalOcclusionRadius",
+        "NameIndex": -1,
+        "Index": 268,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_RsmAreaIntensityMultiplier",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_RsmPixelToTexcoordMultiplier",
+        "NameIndex": -1,
+        "Index": 276,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_SecondaryOcclusionStrength",
+        "NameIndex": -1,
+        "Index": 280,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_SecondaryBounceStrength",
+        "NameIndex": -1,
+        "Index": 284,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_VplInjectionBias",
+        "NameIndex": -1,
+        "Index": 288,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_GeometryVolumeInjectionBias",
+        "NameIndex": -1,
+        "Index": 292,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_EmissiveInjectionMultiplier",
+        "NameIndex": -1,
+        "Index": 296,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LPV_PropagationIndex",
+        "NameIndex": -1,
+        "Index": 300,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowParams",
+        "NameIndex": -1,
+        "Index": 432,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "bClampToNearPlane",
+        "NameIndex": -1,
+        "Index": 448,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 1264,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "SceneTextures_SceneColorTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_SceneDepthTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferATexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferBTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferCTexture",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferDTexture",
+      "NameIndex": -1,
+      "Index": 5,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferETexture",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferFTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "NameIndex": -1,
+      "Index": 8,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "NameIndex": -1,
+      "Index": 9,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomDepthTexture",
+      "NameIndex": -1,
+      "Index": 10,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "SceneTextures_CustomStencilTexture",
+      "NameIndex": -1,
+      "Index": 11,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "SceneTextures_PointClampSampler",
+      "Sampler": 12,
+      "BindPoint": 12
+    }
+  ],
+  "Buffers": [],
+  "UAVs": [
+    {
+      "Name": "RWGvListBuffer",
+      "NameIndex": -1,
+      "Index": 13,
+      "OriginalIndex": 13
+    },
+    {
+      "Name": "RWGvListHeadBuffer",
+      "NameIndex": -1,
+      "Index": 14,
+      "OriginalIndex": 14
+    },
+    {
+      "Name": "RWVplListBuffer",
+      "NameIndex": -1,
+      "Index": 15,
+      "OriginalIndex": 15
+    },
+    {
+      "Name": "RWVplListHeadBuffer",
+      "NameIndex": -1,
+      "Index": 16,
+      "OriginalIndex": 16
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SceneTextures_SceneColorTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "SceneTextures_SceneDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SceneTextures_GBufferATexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "SceneTextures_GBufferBTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "SceneTextures_GBufferCTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "SceneTextures_GBufferDTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "SceneTextures_GBufferETexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "SceneTextures_GBufferFTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "SceneTextures_GBufferVelocityTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "SceneTextures_ScreenSpaceAOTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "SceneTextures_CustomDepthTexture",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D"
+    },
+    {
+      "Index": 11,
+      "Offset": 88,
+      "Name": "SceneTextures_CustomStencilTexture",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "Texture2D<uint2>"
+    },
+    {
+      "Index": 12,
+      "Offset": 96,
+      "Name": "SceneTextures_PointClampSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 13,
+      "Offset": 1232,
+      "Name": "RWGvListBuffer",
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<VplListEntry>"
+    },
+    {
+      "Index": 14,
+      "Offset": 1240,
+      "Name": "RWGvListHeadBuffer",
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWByteAddressBuffer"
+    },
+    {
+      "Index": 15,
+      "Offset": 1248,
+      "Name": "RWVplListBuffer",
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWStructuredBuffer<VplListEntry>"
+    },
+    {
+      "Index": 16,
+      "Offset": 1256,
+      "Name": "RWVplListHeadBuffer",
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWByteAddressBuffer"
+    }
+  ]
+}

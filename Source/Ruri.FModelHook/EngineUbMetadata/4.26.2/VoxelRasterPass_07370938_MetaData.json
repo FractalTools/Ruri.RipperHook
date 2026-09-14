@@ -1,0 +1,437 @@
+{
+  "Name": "VoxelRasterPass",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsRasterCommon.cpp",
+  "LayoutHash": "0x07370938",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "VoxelRasterPass",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "WorldToClipMatrix",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "VirtualVoxel_PageCountResolution",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_VoxelWorldSize",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_PageTextureResolution",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_PageCount",
+        "NameIndex": -1,
+        "Index": 28,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_PageResolution",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_PageIndexCount",
+        "NameIndex": -1,
+        "Index": 36,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_IndirectDispatchGroupSize",
+        "NameIndex": -1,
+        "Index": 40,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_NodeDescCount",
+        "NameIndex": -1,
+        "Index": 44,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale_AO",
+        "NameIndex": -1,
+        "Index": 52,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale_Shadow",
+        "NameIndex": -1,
+        "Index": 56,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale_Transmittance",
+        "NameIndex": -1,
+        "Index": 60,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale_Environment",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DensityScale_Raytracing",
+        "NameIndex": -1,
+        "Index": 68,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DepthBiasScale_Shadow",
+        "NameIndex": -1,
+        "Index": 72,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DepthBiasScale_Transmittance",
+        "NameIndex": -1,
+        "Index": 76,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_DepthBiasScale_Environment",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_SteppingScale_Shadow",
+        "NameIndex": -1,
+        "Index": 84,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_SteppingScale_Transmittance",
+        "NameIndex": -1,
+        "Index": 88,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_SteppingScale_Environment",
+        "NameIndex": -1,
+        "Index": 92,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_SteppingScale_Raytracing",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_HairCoveragePixelRadiusAtDepth1",
+        "NameIndex": -1,
+        "Index": 100,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_Raytracing_ShadowOcclusionThreshold",
+        "NameIndex": -1,
+        "Index": 104,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VirtualVoxel_Raytracing_SkyOcclusionThreshold",
+        "NameIndex": -1,
+        "Index": 108,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VoxelMinAABB",
+        "NameIndex": -1,
+        "Index": 224,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VoxelMaxAABB",
+        "NameIndex": -1,
+        "Index": 240,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VoxelResolution",
+        "NameIndex": -1,
+        "Index": 256,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "MacroGroupId",
+        "NameIndex": -1,
+        "Index": 268,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ViewportResolution",
+        "NameIndex": -1,
+        "Index": 272,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 304,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "VirtualVoxel_HairCoverageLUT",
+      "NameIndex": -1,
+      "Index": 4,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "VoxelizationViewInfoBuffer",
+      "NameIndex": -1,
+      "Index": 6,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [
+    {
+      "Name": "VirtualVoxel_HairCoverageSampler",
+      "Sampler": 5,
+      "BindPoint": 5
+    }
+  ],
+  "Buffers": [
+    {
+      "Name": "VirtualVoxel_PageIndexBuffer",
+      "NameIndex": -1,
+      "Index": 0,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VirtualVoxel_PageIndexOccupancyBuffer",
+      "NameIndex": -1,
+      "Index": 1,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VirtualVoxel_PageIndexCoordBuffer",
+      "NameIndex": -1,
+      "Index": 2,
+      "ArraySize": 0
+    },
+    {
+      "Name": "VirtualVoxel_NodeDescBuffer",
+      "NameIndex": -1,
+      "Index": 3,
+      "ArraySize": 0
+    }
+  ],
+  "UAVs": [
+    {
+      "Name": "DensityTexture",
+      "NameIndex": -1,
+      "Index": 7,
+      "OriginalIndex": 7
+    }
+  ],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 112,
+      "Name": "VirtualVoxel_PageIndexBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
+    },
+    {
+      "Index": 1,
+      "Offset": 120,
+      "Name": "VirtualVoxel_PageIndexOccupancyBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint2>"
+    },
+    {
+      "Index": 2,
+      "Offset": 128,
+      "Name": "VirtualVoxel_PageIndexCoordBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "Buffer<uint>"
+    },
+    {
+      "Index": 3,
+      "Offset": 136,
+      "Name": "VirtualVoxel_NodeDescBuffer",
+      "UbmtType": "UBMT_RDG_BUFFER_SRV",
+      "ShaderType": "StructuredBuffer<FPackedVirtualVoxelNodeDesc>"
+    },
+    {
+      "Index": 4,
+      "Offset": 144,
+      "Name": "VirtualVoxel_HairCoverageLUT",
+      "UbmtType": "UBMT_RDG_TEXTURE",
+      "ShaderType": "Texture2D<float>"
+    },
+    {
+      "Index": 5,
+      "Offset": 152,
+      "Name": "VirtualVoxel_HairCoverageSampler",
+      "UbmtType": "UBMT_SAMPLER",
+      "ShaderType": "SamplerState"
+    },
+    {
+      "Index": 6,
+      "Offset": 280,
+      "Name": "VoxelizationViewInfoBuffer",
+      "UbmtType": "UBMT_SRV",
+      "ShaderType": "StructuredBuffer<FVoxelizationViewInfo>"
+    },
+    {
+      "Index": 7,
+      "Offset": 288,
+      "Name": "DensityTexture",
+      "UbmtType": "UBMT_UAV",
+      "ShaderType": "RWTexture3D<uint>"
+    }
+  ]
+}

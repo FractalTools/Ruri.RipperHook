@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingDebug.cpp",
   "LayoutHash": "0x00100112",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "RayTracingDebugHitStatsUniformBuffer",
     "NameIndex": -1,

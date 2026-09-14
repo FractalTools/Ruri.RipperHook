@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp",
   "LayoutHash": "0x1150101B",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "MaterialPassParameters",
     "NameIndex": -1,

@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Plugins/Experimental/GPULightmass/Source/GPULightmass/Private/IrradianceCaching.h",
   "LayoutHash": "0x07500617",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "IrradianceCachingParameters",
     "NameIndex": -1,

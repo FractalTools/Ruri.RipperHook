@@ -45,6 +45,7 @@ public static class UeSourceScanner
         "Engine/Source/Developer",
         "Engine/Source/Editor",
         "Engine/Plugins",
+        "Engine/Shaders/Shared",
     };
 
     private static readonly string[] s_extensions = { ".h", ".cpp", ".inl" };

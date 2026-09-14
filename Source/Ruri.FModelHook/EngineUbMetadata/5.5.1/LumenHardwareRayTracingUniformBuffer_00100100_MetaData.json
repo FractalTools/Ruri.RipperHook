@@ -3,7 +3,9 @@
   "EngineVersion": "5.5.1",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenHardwareRayTracingCommon.h",
   "LayoutHash": "0x00100100",
+  "HashFormula": "SizeFlagsStaticUsage",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LumenHardwareRayTracingUniformBuffer",
     "NameIndex": -1,
