@@ -138,7 +138,7 @@ internal static class ShaderLabEmitter
             }
         }
 
-        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, pooled, splittableStages));
+        OutputFile.Write(containerBasePath + ".shader", WriteContainerShaderFile(metadata, pooled, splittableStages));
     }
 
     /// <summary>

@@ -82,7 +82,7 @@ internal sealed class VariantPool
         }
         else
         {
-            File.WriteAllText(path, text);
+            OutputFile.Write(path, text);
             Interlocked.Increment(ref written);
         }
         return FolderName + "/" + fileName;
