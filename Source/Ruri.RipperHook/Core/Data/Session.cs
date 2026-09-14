@@ -66,7 +66,10 @@ public static class Session
         Options = copy;
         if (changed)
         {
-            Datasets.ClearCache();
+            // An option may name content to read, so the layout is asked again before anything
+            // reads the roots: a source that widened its own tree here would otherwise keep
+            // answering out of the roots resolved when the install was opened.
+            Resolve();
             OptionsChanged?.Invoke();
         }
     }
