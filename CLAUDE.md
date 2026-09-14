@@ -4,7 +4,7 @@
 > 通用工程律 = skill `ruri-engineering-discipline`(写码/重构/移植前先过)。规则与用户指令冲突或规则本身错 → 先改本文,再写代码。
 > 定位:`RuriRipperImporter`(Blender 插件)的上游数据管线 —— 通用跨引擎资产格式转换工具链;对外描述中立技术化,各来源的容器格式适配住 `Source/Ruri.GameHook` 私有子模块,不进对外描述。
 
-1. **可编辑区 = 现有 `Source/Ruri.*/**`**(RipperHook/Tpk/Hook/ShaderDecompiler/FModelHook/**GameHook**);`AssetRipper/**`、`FModel/**`、`Ruri.ShaderDecompiler` 等上游子模块冻结,只读。
+1. **可编辑区 = 现有 `Source/Ruri.*/**`**(RipperHook/Tpk/Hook/ShaderDecompiler/FModelHook/**GameHook**);`AssetRipper/**`、`FModel/**` 等上游子模块冻结,只读;`Source/Ruri.ShaderDecompiler` 是**我们自己的**子模块(独立仓库,与 GameHook 同规矩:先在子模块提交推送再 bump 父仓 gitlink),可编辑。
    `Source/Ruri.GameHook` 是**我们自己的**私有子模块,按引擎分两半、各进各的 assembly:`Unity/**` 编进 `Ruri.RipperHook`,`Unreal/**` 编进 `Ruri.FModelHook`(唯一可引用 CUE4Parse 的项目)。
    **界线**:`Source/Ruri.FModelHook/FModelHook/Unreal/**` = **无任何加密的通用 UE 读取**(挂载/读取器/标题注册表/端点抓取机制);`Ruri.GameHook/Unreal/<游戏>/` = **只放该游戏特定的解密与身份**(容器方言、key/mappings 发布在哪、靠哪些文件认出它)。通用能力写进前者,游戏特例写进后者。
 2. **禁新建 assembly**:任何特性(含重型/原生 NuGet 依赖)落进现有 csproj,默认 `Ruri.RipperHook`;想为"隔离依赖"或"可扩展性"起新项目=信号错误,改为往核心加 hook。
