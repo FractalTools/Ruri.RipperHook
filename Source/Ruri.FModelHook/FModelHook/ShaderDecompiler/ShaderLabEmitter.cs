@@ -40,7 +40,7 @@ internal static class ShaderLabEmitter
 
         if (outputs.Count == 0)
         {
-            state.Skipped++;
+            System.Threading.Interlocked.Increment(ref state.Skipped);
             return;
         }
 
@@ -56,14 +56,14 @@ internal static class ShaderLabEmitter
     {
         if (result == null)
         {
-            state.Failed++;
+            System.Threading.Interlocked.Increment(ref state.Failed);
             state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}): batch worker returned no result.");
             return null;
         }
 
         if (!result.Success)
         {
-            state.Failed++;
+            System.Threading.Interlocked.Increment(ref state.Failed);
             string firstLine = result.ErrorMessage?.Split('\n', 2)[0]?.Trim() ?? "<no message>";
             state.LogError($"Shader {member.ArchiveShaderIndex} (map {map.PrimaryName}) [reached {result.FailedStage}]: {firstLine}");
             return new ContainerOutputEntry
@@ -80,7 +80,7 @@ internal static class ShaderLabEmitter
             result.FinalSymbols.UsedMaterials = new List<string>(map.Assets);
         }
 
-        state.Decompiled++;
+        System.Threading.Interlocked.Increment(ref state.Decompiled);
         return new ContainerOutputEntry
         {
             Prep = prep,

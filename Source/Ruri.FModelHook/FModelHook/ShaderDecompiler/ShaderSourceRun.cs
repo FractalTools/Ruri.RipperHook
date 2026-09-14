@@ -94,18 +94,14 @@ public static class ShaderSourceRun
             long fetchedMs = stopwatch.ElapsedMilliseconds - describedMs;
             long decompiledMs = 0, emittedMs = 0;
 
+            long beforeDecompile = stopwatch.ElapsedMilliseconds;
             using (ShaderDecompilerEngine engine = new(outputDirectory))
             {
-                foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(static one => one.PrimaryName, StringComparer.OrdinalIgnoreCase))
-                {
-                    long before = stopwatch.ElapsedMilliseconds;
-                    Decompile(state, engine, map);
-                    long between = stopwatch.ElapsedMilliseconds;
-                    ShaderLabEmitter.Emit(state, map);
-                    decompiledMs += between - before;
-                    emittedMs += stopwatch.ElapsedMilliseconds - between;
-                }
+                Decompile(state, engine);
             }
+            decompiledMs = stopwatch.ElapsedMilliseconds - beforeDecompile;
+            Parallel.ForEach(state.ShaderMaps, map => ShaderLabEmitter.Emit(state, map));
+            emittedMs = stopwatch.ElapsedMilliseconds - beforeDecompile - decompiledMs;
             stopwatch.Stop();
             ShaderLibrary library = pending[0].Placement.Library;
             log($"[ShaderSource] {archiveName}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}, read {library.BytesRead / (1024 * 1024)} MB of the archive's {library.Size / (1024 * 1024)} MB, in {stopwatch.ElapsedMilliseconds} ms (described {describedMs}, fetched {fetchedMs}, decompiled {decompiledMs}, emitted {emittedMs}) -> {outputDirectory}");
@@ -121,17 +117,28 @@ public static class ShaderSourceRun
         return new ShaderSourceSummary(maps, decompiled, skipped, failed, archives);
     }
 
-    /// <summary>One map's shaders, decompiled in one batch, skipping any another map already did.</summary>
-    private static void Decompile(ShaderSourceState state, ShaderDecompilerEngine engine, ShaderMapInfo map)
+    /// <summary>
+    /// Every shader this archive's maps name, decompiled as ONE batch.
+    ///
+    /// The batch runner spreads its queue over a worker per core, so the batch is only as wide
+    /// as what it is handed. Handing it one map at a time handed it forty-odd shaders whose
+    /// costs differ by orders of magnitude: the workers finished early and waited on the one
+    /// slow shader, and the pool, the gate and a decompiler per worker were built again for the
+    /// next map. A pass already holds every result it has decompiled until it has written them,
+    /// so batching the pass whole costs no more memory than batching it a map at a time.
+    /// </summary>
+    private static void Decompile(ShaderSourceState state, ShaderDecompilerEngine engine)
     {
-        var pending = new List<ShaderPrep>(map.Members.Count);
+        var pending = new List<ShaderPrep>(state.ShaderPrepByIndex.Count);
         var seen = new HashSet<int>();
-        foreach (ShaderMapMember member in map.Members)
+        foreach (ShaderMapInfo map in state.ShaderMaps)
         {
-            if (state.DecompileResultByIndex.ContainsKey(member.ArchiveShaderIndex)) continue;
-            if (!state.ShaderPrepByIndex.TryGetValue(member.ArchiveShaderIndex, out ShaderPrep? prep)) continue;
-            if (!seen.Add(prep.ShaderIndex)) continue;
-            pending.Add(prep);
+            foreach (ShaderMapMember member in map.Members)
+            {
+                if (!state.ShaderPrepByIndex.TryGetValue(member.ArchiveShaderIndex, out ShaderPrep? prep)) continue;
+                if (!seen.Add(prep.ShaderIndex)) continue;
+                pending.Add(prep);
+            }
         }
         if (pending.Count == 0) return;
 

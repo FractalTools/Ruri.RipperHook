@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -23,65 +24,79 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 /// of that map -- is what made identical code look different, and it is already stated by the
 /// .shader that includes the file. So the pooled file states only what is true of the shader
 /// itself, and the map states the rest.
+///
+/// Every map of an archive is written at once, so this is asked for the same file from many
+/// threads. One asker per file name does the writing and the rest wait on its answer, which is
+/// what keeps two threads off one path.
 /// </summary>
 internal sealed class VariantPool
 {
     public const string FolderName = "_Shaders";
 
+    /// <summary>
+    /// How many bytes of the text's digest name the file. Eight is what keeps two DIFFERENT
+    /// shaders off one name across an install: six left a one-in-a-thousand chance of a
+    /// collision over an install's variants, and a collision is silently the wrong shader.
+    /// </summary>
+    private const int DigestBytes = 8;
+
     private readonly string directory;
-    private readonly Dictionary<string, string> pathByProgram = new(StringComparer.Ordinal);
-    private bool created;
+    private readonly Lazy<bool> folder;
+    private readonly ConcurrentDictionary<string, Lazy<string>> pathByProgram = new(StringComparer.Ordinal);
+    private int written;
+    private int shared;
 
     public VariantPool(string archiveDirectory)
     {
         directory = Path.Combine(archiveDirectory, FolderName);
+        folder = new Lazy<bool>(CreateFolder, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>How many files this run put in the pool, and how many writes the pool absorbed.</summary>
-    public int Written { get; private set; }
+    public int Written => Volatile.Read(ref written);
 
-    public int Shared { get; private set; }
+    public int Shared => Volatile.Read(ref shared);
 
     /// <summary>
     /// The pool file holding this text, written if it is not there yet. The name carries the
-    /// variant's own keyword so a reader can still tell what it is, a short digest of the text
+    /// variant's own keyword so a reader can still tell what it is, a digest of the text
     /// so two spellings of one shader never land on the same name, and the extension of the
     /// language the text is actually in: a ray-tracing stage comes out as GLSL, and a GLSL body
     /// under an <c>.hlsl</c> name is a lie every tool downstream believes.
     /// </summary>
     public string Include(string variantKeyword, string extension, string text)
     {
-        string digest = Digest(text);
-        string fileName = variantKeyword + "_" + digest + extension;
-        if (pathByProgram.TryGetValue(fileName, out string? already))
-        {
-            return already;
-        }
+        string fileName = variantKeyword + "_" + Digest(text) + extension;
+        return pathByProgram
+            .GetOrAdd(fileName, name => new Lazy<string>(() => Write(name, text), LazyThreadSafetyMode.ExecutionAndPublication))
+            .Value;
+    }
 
+    private string Write(string fileName, string text)
+    {
+        _ = folder.Value;
         string path = Path.Combine(directory, fileName);
-        if (!created)
-        {
-            Directory.CreateDirectory(directory);
-            created = true;
-        }
         if (File.Exists(path))
         {
-            Shared++;
+            Interlocked.Increment(ref shared);
         }
         else
         {
             File.WriteAllText(path, text);
-            Written++;
+            Interlocked.Increment(ref written);
         }
+        return FolderName + "/" + fileName;
+    }
 
-        string relative = FolderName + "/" + fileName;
-        pathByProgram[fileName] = relative;
-        return relative;
+    private bool CreateFolder()
+    {
+        Directory.CreateDirectory(directory);
+        return true;
     }
 
     private static string Digest(string text)
     {
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(text));
-        return Convert.ToHexString(hash, 0, 6);
+        return Convert.ToHexString(hash, 0, DigestBytes);
     }
 }
