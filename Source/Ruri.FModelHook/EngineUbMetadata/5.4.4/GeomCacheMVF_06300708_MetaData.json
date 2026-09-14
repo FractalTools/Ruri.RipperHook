@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/GeometryCacheVertexFactory.h",
   "LayoutHash": "0x06300708",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "GeomCacheMVF",
     "NameIndex": -1,

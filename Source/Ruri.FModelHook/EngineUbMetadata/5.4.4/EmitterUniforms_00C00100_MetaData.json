@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleGpuSimulation.cpp",
   "LayoutHash": "0x00C00100",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "EmitterUniforms",
     "NameIndex": -1,

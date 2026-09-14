@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/PrimitiveUniformShaderParameters.h",
   "LayoutHash": "0x03000100",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "Primitive",
     "NameIndex": -1,

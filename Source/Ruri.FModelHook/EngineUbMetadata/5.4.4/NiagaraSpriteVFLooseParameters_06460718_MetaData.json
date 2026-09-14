@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Plugins/FX/Niagara/Source/NiagaraVertexFactories/Public/NiagaraSpriteVertexFactory.h",
   "LayoutHash": "0x06460718",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "NiagaraSpriteVFLooseParameters",
     "NameIndex": -1,

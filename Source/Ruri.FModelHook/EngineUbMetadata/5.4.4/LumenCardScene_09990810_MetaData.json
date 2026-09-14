@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/Lumen/LumenSceneData.h",
   "LayoutHash": "0x09990810",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LumenCardScene",
     "NameIndex": -1,

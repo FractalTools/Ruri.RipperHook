@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Plugins/Runtime/HairStrands/Source/HairStrandsCore/Public/GroomInstance.h",
   "LayoutHash": "0x03BE02A8",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "HairCardsVF",
     "NameIndex": -1,

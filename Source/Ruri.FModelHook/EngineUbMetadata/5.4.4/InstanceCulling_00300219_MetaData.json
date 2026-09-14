@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Renderer/Public/InstanceCulling/InstanceCullingContext.h",
   "LayoutHash": "0x00300219",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "InstanceCulling",
     "NameIndex": -1,

@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp",
   "LayoutHash": "0x0068014D",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "UYVYConvertUB",
     "NameIndex": -1,

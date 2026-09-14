@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/PostProcess/SceneFilterRendering.h",
   "LayoutHash": "0x00300100",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "DrawRectangleParameters",
     "NameIndex": -1,

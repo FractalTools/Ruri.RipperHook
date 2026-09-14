@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/CompositionLighting/PostProcessDeferredDecals.h",
   "LayoutHash": "0x00200204",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "DeferredDecal",
     "NameIndex": -1,

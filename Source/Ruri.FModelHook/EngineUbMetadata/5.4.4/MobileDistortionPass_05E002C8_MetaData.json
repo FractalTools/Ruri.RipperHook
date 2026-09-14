@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Renderer/Private/MobileDistortionPass.cpp",
   "LayoutHash": "0x05E002C8",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "MobileDistortionPass",
     "NameIndex": -1,

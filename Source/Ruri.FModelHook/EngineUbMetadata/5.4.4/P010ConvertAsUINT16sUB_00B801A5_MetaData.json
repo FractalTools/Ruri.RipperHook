@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/RenderCore/Private/MediaShaders.cpp",
   "LayoutHash": "0x00B801A5",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "P010ConvertAsUINT16sUB",
     "NameIndex": -1,

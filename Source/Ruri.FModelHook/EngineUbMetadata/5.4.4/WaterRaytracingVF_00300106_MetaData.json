@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Plugins/Experimental/Water/Source/Runtime/Public/WaterVertexFactory.h",
   "LayoutHash": "0x00300106",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "WaterRaytracingVF",
     "NameIndex": -1,

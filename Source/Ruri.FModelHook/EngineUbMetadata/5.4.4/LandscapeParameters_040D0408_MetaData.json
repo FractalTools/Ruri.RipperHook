@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Landscape/Public/LandscapeRender.h",
   "LayoutHash": "0x040D0408",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "LandscapeParameters",
     "NameIndex": -1,

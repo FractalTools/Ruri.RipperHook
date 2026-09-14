@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/GeometryCollectionRendering.h",
   "LayoutHash": "0x06460726",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Shader",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "GeometryCollectionVF",
     "NameIndex": -1,

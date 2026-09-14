@@ -3,7 +3,9 @@
   "EngineVersion": "5.4.4",
   "EngineSource": "Engine/Source/Runtime/Engine/Public/SceneTexturesConfig.h",
   "LayoutHash": "0x09700E08",
+  "HashFormula": "SizeFlagsStatic",
   "BindingFlags": "Static",
+  "UsageFlags": "",
   "ConstantBuffer": {
     "Name": "SceneTexturesStruct",
     "NameIndex": -1,
