@@ -331,7 +331,7 @@ internal static class ShaderLabEmitter
                     .ToList();
 
                 sb.AppendLine($"            // ============================================================");
-                sb.AppendLine($"            // Stage: {stageGroup.Key}");
+                sb.AppendLine($"            // Stage: {stageGroup.Key} — {stagePrograms.Count} variant(s)");
                 sb.AppendLine($"            // ============================================================");
 
                 string? stageMacro = GetShaderStageMacro(stageGroup.Key);
@@ -340,14 +340,8 @@ internal static class ShaderLabEmitter
                     sb.AppendLine($"            #ifdef {stageMacro}");
                 }
 
-                bool stageSplit = splittableStages.Contains(stageGroup.Key);
-
-                UeShaderLabProgramData primary = stagePrograms[0];
-                if (stagePrograms.Count > 1)
-                {
-                    sb.AppendLine($"            // Note: {stagePrograms.Count - 1} additional variant(s) elided (single-variant emit mode).");
-                }
-                EmitProgramBlock(sb, primary, variantFolderStem, splitInclude: stageSplit, metadata.MaterialTextureOrder);
+                EmitStageVariants(sb, stagePrograms, variantFolderStem,
+                    splitInclude: splittableStages.Contains(stageGroup.Key), metadata.MaterialTextureOrder);
 
                 if (stageMacro != null)
                 {
@@ -384,6 +378,59 @@ internal static class ShaderLabEmitter
         string vf = string.IsNullOrWhiteSpace(program.VertexFactoryTypeHash) ? "NOVF" : program.VertexFactoryTypeHash;
         string type = string.IsNullOrWhiteSpace(program.ShaderTypeHash) ? "NOTYPE" : program.ShaderTypeHash;
         return $"P{pipeline}_V{vf}_S{type}";
+    }
+
+    /// <summary>Prefix of the keyword that selects one compiled variant of a stage.</summary>
+    private const string VariantKeywordPrefix = "RURI_VARIANT_";
+
+    /// <summary>What selects one variant: its own name, which is also the name of its file.</summary>
+    private static string VariantSelectKeyword(UeShaderLabProgramData program)
+        => VariantKeywordPrefix + BuildVariantKeyword(program);
+
+    /// <summary>
+    /// Every program this stage compiled to, each reachable by a keyword of its own.
+    ///
+    /// A shader map holds one program per permutation the material was compiled for, and they are
+    /// ALTERNATIVES -- exactly one is what a given draw runs. When each is written as its own
+    /// file, naming only the first left every other file unreferenced: on one character material
+    /// that was 69 of 72 written files that nothing in the shader pointed at, which is not a
+    /// translation of anything. Each is guarded by its own keyword instead, and the first is what
+    /// a reader who names none gets, so the shader still says something on its own.
+    ///
+    /// The keywords are deliberately NOT declared as a multi_compile set: which vertex program ran
+    /// with which pixel program is a pairing the archive does not record, and declaring a set
+    /// would state one.
+    ///
+    /// Variants only exist to be selected between when they were written separately. A stage kept
+    /// inline states the one program it was asked for and says so, which is what asking for it
+    /// inline means.
+    /// </summary>
+    private static void EmitStageVariants(StringBuilder sb, List<UeShaderLabProgramData> stagePrograms,
+        string variantFolderStem, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
+    {
+        if (stagePrograms.Count == 1)
+        {
+            EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+            return;
+        }
+
+        if (!splitInclude)
+        {
+            sb.AppendLine($"            // Note: {stagePrograms.Count - 1} further variant(s) of this stage were not emitted."
+                          + " Ask for split variants to get each as its own file.");
+            EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+            return;
+        }
+
+        sb.AppendLine($"            // Define one of these to pick a variant; none defined compiles the first.");
+        for (int i = 0; i < stagePrograms.Count; i++)
+        {
+            sb.AppendLine($"            #{(i == 0 ? "if" : "elif")} defined({VariantSelectKeyword(stagePrograms[i])})");
+            EmitProgramBlock(sb, stagePrograms[i], variantFolderStem, splitInclude, materialTextureOrder);
+        }
+        sb.AppendLine("            #else");
+        EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+        sb.AppendLine("            #endif");
     }
 
     private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, string variantFolderStem, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
