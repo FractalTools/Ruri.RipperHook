@@ -91,9 +91,31 @@ internal static class ShaderLabEmitter
     }
 
     private static string BuildShaderMapStem(ShaderMapInfo map)
+        => SanitizeFileStem($"{HashPrefix(map.ShaderMapHash)}_{map.PrimaryName}");
+
+    /// <summary>
+    /// What a shader map's own folder is called wherever it lands: its hash, then the material it
+    /// was first named by. The hash prefix is what says WHICH map a folder holds, so an output
+    /// folder states for itself which maps it already carries.
+    /// </summary>
+    public static string HashPrefix(string shaderMapHash)
+        => "SM" + (shaderMapHash.Length >= 12 ? shaderMapHash[..12] : shaderMapHash);
+
+    /// <summary>The map hashes one output folder already holds source for.</summary>
+    public static HashSet<string> Written(string outputDirectory)
     {
-        string mapShort = map.ShaderMapHash.Length >= 12 ? map.ShaderMapHash[..12] : map.ShaderMapHash;
-        return SanitizeFileStem($"SM{mapShort}_{map.PrimaryName}");
+        HashSet<string> hashes = new(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(outputDirectory))
+        {
+            return hashes;
+        }
+        foreach (string file in Directory.EnumerateFiles(outputDirectory, "SM*.shader"))
+        {
+            string stem = Path.GetFileNameWithoutExtension(file);
+            int underscore = stem.IndexOf('_');
+            hashes.Add(underscore > 0 ? stem[..underscore] : stem);
+        }
+        return hashes;
     }
 
     private static void WriteShaderMapOutputs(ShaderSourceState state, ShaderMapInfo map, List<ContainerOutputEntry> outputs)
@@ -105,18 +127,18 @@ internal static class ShaderLabEmitter
 
         HashSet<string> splittableStages = ComputeSplittableStages(metadata.Programs, state.Request.SplitVariantsToHlslFiles);
 
+        Dictionary<UeShaderLabProgramData, string> pooled = new();
         if (splittableStages.Count > 0)
         {
-            Directory.CreateDirectory(containerBasePath);            foreach (UeShaderLabProgramData program in metadata.Programs)
+            foreach (UeShaderLabProgramData program in metadata.Programs)
             {
                 if (!splittableStages.Contains(program.Stage)) continue;
                 string keyword = BuildVariantKeyword(program);
-                string hlslPath = Path.Combine(containerBasePath, keyword + ".hlsl");
-                File.WriteAllText(hlslPath, WriteVariantHlslFile(metadata, program, keyword));
+                pooled[program] = state.Variants.Include(keyword, WriteVariantHlslFile(metadata, program, keyword));
             }
         }
 
-        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, containerStem, splittableStages));
+        File.WriteAllText(containerBasePath + ".shader", WriteContainerShaderFile(metadata, pooled, splittableStages));
     }
 
     /// <summary>
@@ -150,11 +172,8 @@ internal static class ShaderLabEmitter
         StringBuilder sb = new();
         sb.AppendLine("// =============================================================");
         sb.AppendLine($"// Variant: {keyword}");
-        sb.AppendLine($"// Shader: {metadata.Name}");
-        sb.AppendLine($"// ContainerKey: {metadata.ContainerKey}");
         sb.AppendLine($"// Stage: {program.Stage}");
         sb.AppendLine($"// ShaderIndex: {program.ShaderIndex}");
-        sb.AppendLine($"// ResourceIndex: {program.ResourceIndex}");
         sb.AppendLine($"// PermutationId: {program.PermutationId}");
         if (!string.IsNullOrWhiteSpace(program.ShaderHash)) sb.AppendLine($"// ShaderHash: {program.ShaderHash}");
         if (!string.IsNullOrWhiteSpace(program.ShaderTypeName)) sb.AppendLine($"// ShaderType: {program.ShaderTypeName}");
@@ -236,7 +255,7 @@ internal static class ShaderLabEmitter
         return map.ContainerByShaderIndex.GetValueOrDefault(archiveShaderIndex);
     }
 
-    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, string variantFolderStem, HashSet<string> splittableStages)
+    private static string WriteContainerShaderFile(UeShaderLabContainerMetadata metadata, IReadOnlyDictionary<UeShaderLabProgramData, string> pooled, HashSet<string> splittableStages)
     {
         StringBuilder sb = new();
         sb.AppendLine($"Shader \"{metadata.Name}\" {{");
@@ -340,7 +359,7 @@ internal static class ShaderLabEmitter
                     sb.AppendLine($"            #ifdef {stageMacro}");
                 }
 
-                EmitStageVariants(sb, stagePrograms, variantFolderStem,
+                EmitStageVariants(sb, stagePrograms, pooled,
                     splitInclude: splittableStages.Contains(stageGroup.Key), metadata.MaterialTextureOrder);
 
                 if (stageMacro != null)
@@ -406,11 +425,11 @@ internal static class ShaderLabEmitter
     /// inline means.
     /// </summary>
     private static void EmitStageVariants(StringBuilder sb, List<UeShaderLabProgramData> stagePrograms,
-        string variantFolderStem, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
+        IReadOnlyDictionary<UeShaderLabProgramData, string> pooled, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
     {
         if (stagePrograms.Count == 1)
         {
-            EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+            EmitProgramBlock(sb, stagePrograms[0], pooled, splitInclude, materialTextureOrder);
             return;
         }
 
@@ -418,7 +437,7 @@ internal static class ShaderLabEmitter
         {
             sb.AppendLine($"            // Note: {stagePrograms.Count - 1} further variant(s) of this stage were not emitted."
                           + " Ask for split variants to get each as its own file.");
-            EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+            EmitProgramBlock(sb, stagePrograms[0], pooled, splitInclude, materialTextureOrder);
             return;
         }
 
@@ -426,20 +445,18 @@ internal static class ShaderLabEmitter
         for (int i = 0; i < stagePrograms.Count; i++)
         {
             sb.AppendLine($"            #{(i == 0 ? "if" : "elif")} defined({VariantSelectKeyword(stagePrograms[i])})");
-            EmitProgramBlock(sb, stagePrograms[i], variantFolderStem, splitInclude, materialTextureOrder);
+            EmitProgramBlock(sb, stagePrograms[i], pooled, splitInclude, materialTextureOrder);
         }
         sb.AppendLine("            #else");
-        EmitProgramBlock(sb, stagePrograms[0], variantFolderStem, splitInclude, materialTextureOrder);
+        EmitProgramBlock(sb, stagePrograms[0], pooled, splitInclude, materialTextureOrder);
         sb.AppendLine("            #endif");
     }
 
-    private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, string variantFolderStem, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
+    private static void EmitProgramBlock(StringBuilder sb, UeShaderLabProgramData program, IReadOnlyDictionary<UeShaderLabProgramData, string> pooled, bool splitInclude, IReadOnlyList<string> materialTextureOrder)
     {
         if (splitInclude)
         {
-            string keyword = BuildVariantKeyword(program);
-            string includePath = $"{variantFolderStem}/{keyword}.hlsl";
-            sb.AppendLine($"            #include \"{includePath}\"");
+            sb.AppendLine($"            #include \"{pooled[program]}\"");
             return;
         }
 

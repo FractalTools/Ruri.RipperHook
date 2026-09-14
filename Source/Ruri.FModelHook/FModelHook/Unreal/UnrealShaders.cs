@@ -79,11 +79,22 @@ public static class UnrealShaders
                 packages.Add(map.CabName(id));
             }
         }
+        packages.Sort(StringComparer.OrdinalIgnoreCase);
         Say($"[ShaderSource] the map lists {packages.Count} material package(s) in this install.");
-        return Decompile(AllShadersId, request, [.. packages]);
+        return Decompile(AllShadersId, request, [.. packages], resumeFromOutput: true);
     }
 
-    private static ColumnTable Decompile(string id, DataRequest request, string[] packages)
+    /// <summary>
+    /// How many materials one run answers about at a time when the question is a whole install.
+    ///
+    /// A run holds the decompiled source of every shader it touched until it has written it, and
+    /// an install's worth of that is tens of gigabytes. Answering in passes bounds that to one
+    /// pass's worth; the maps already written are what a later pass skips, so the passes together
+    /// answer exactly what one big pass would have.
+    /// </summary>
+    private const int MaterialsPerPass = 250;
+
+    private static ColumnTable Decompile(string id, DataRequest request, string[] packages, bool resumeFromOutput = false)
     {
         TableBuilder table = new(id, "archive", "shaderMaps#", "output");
         string output = request.Text(OutputParam);
@@ -95,20 +106,43 @@ public static class UnrealShaders
         System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         long mountMs = clock.ElapsedMilliseconds;
-        ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
-        {
-            Provider = provider,
-            Subjects = Array.ConvertAll(packages, static path => (IShaderMapSubject)new PackageSubject(path)),
-            OutputDirectory = output,
-            SplitVariantsToHlslFiles = true,
-            Log = Say,
-            LogError = Complain,
-        });
-        Say($"[ShaderSource] dataset answered in {clock.ElapsedMilliseconds} ms (provider ready after {mountMs} ms).");
 
-        foreach (ShaderSourceArchive archive in summary.Archives)
+        int passSize = resumeFromOutput ? MaterialsPerPass : packages.Length;
+        Dictionary<string, (int Maps, string Output)> byArchive = new(StringComparer.OrdinalIgnoreCase);
+        int maps = 0, decompiled = 0, failed = 0;
+        for (int start = 0; start < packages.Length; start += Math.Max(1, passSize))
         {
-            table.Row(archive.Archive, archive.ShaderMaps, archive.OutputDirectory);
+            string[] pass = packages[start..Math.Min(packages.Length, start + Math.Max(1, passSize))];
+            ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
+            {
+                Provider = provider,
+                Subjects = Array.ConvertAll(pass, static path => (IShaderMapSubject)new PackageSubject(path)),
+                OutputDirectory = output,
+                SplitVariantsToHlslFiles = true,
+                ResumeFromOutput = resumeFromOutput,
+                Log = Say,
+                LogError = Complain,
+            });
+            maps += summary.ShaderMaps;
+            decompiled += summary.Decompiled;
+            failed += summary.Failed;
+            foreach (ShaderSourceArchive archive in summary.Archives)
+            {
+                byArchive.TryGetValue(archive.Archive, out (int Maps, string Output) already);
+                byArchive[archive.Archive] = (already.Maps + archive.ShaderMaps, archive.OutputDirectory);
+            }
+            if (passSize < packages.Length)
+            {
+                Say($"[ShaderSource] {Math.Min(packages.Length, start + pass.Length)}/{packages.Length} material(s) answered for, "
+                    + $"{maps} map(s) written so far, {clock.ElapsedMilliseconds / 1000} s elapsed.");
+            }
+        }
+        Say($"[ShaderSource] dataset answered in {clock.ElapsedMilliseconds} ms (provider ready after {mountMs} ms): "
+            + $"{maps} map(s), {decompiled} shader(s), {failed} failed.");
+
+        foreach ((string archive, (int count, string directory)) in byArchive.OrderBy(static one => one.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            table.Row(archive, count, directory);
         }
         return table.Build();
     }

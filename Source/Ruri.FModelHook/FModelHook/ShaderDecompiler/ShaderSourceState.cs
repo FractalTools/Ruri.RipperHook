@@ -34,6 +34,21 @@ public sealed class ShaderSourceRequest
 
     public bool SplitVariantsToHlslFiles { get; init; }
 
+    /// <summary>
+    /// Whether the source already in the output folder counts as work done.
+    ///
+    /// A shader map is compiled once and named by every material that shares it, so asking about
+    /// a whole install names the same map again and again -- one install's materials name three
+    /// times as many maps as the archives hold. Answering each time writes the same source to a
+    /// second folder under a second material's name, and a run of that size cannot be finished in
+    /// one sitting anyway. With this stated, a map whose folder is already there is left alone,
+    /// so a run adds what is missing and a stopped run resumes by being started again.
+    ///
+    /// Left unstated for a request that NAMES its materials: what was asked for is written, every
+    /// time, which is what asking for it means.
+    /// </summary>
+    public bool ResumeFromOutput { get; init; }
+
     public string? EngineUbMetadataDirectory { get; init; }
 
     /// <summary>
@@ -68,9 +83,13 @@ internal sealed class ShaderSourceState
         ArchiveName = archiveName;
         OutputDirectory = outputDirectory;
         FailuresRoot = Path.Combine(outputDirectory, "_failures");
+        Variants = new VariantPool(outputDirectory);
         Log = request.Log ?? (_ => { });
         LogError = request.LogError ?? (_ => { });
     }
+
+    /// <summary>Where this archive's shader variants land, one file per distinct text.</summary>
+    public VariantPool Variants { get; }
 
     public ShaderSourceRequest Request { get; }
     public Action<string> Log { get; }

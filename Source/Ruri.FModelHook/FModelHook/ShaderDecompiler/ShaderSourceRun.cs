@@ -65,17 +65,28 @@ public static class ShaderSourceRun
         }
         log($"[ShaderSource] timing: named maps in {resolveMs} ms, engine facts in {metadataMs} ms, placed in {phase.ElapsedMilliseconds} ms ({catalog.OpenedArchiveCount} archive(s) open, {catalog.IndexedMapCount} maps indexed).");
 
-        int maps = 0, decompiled = 0, skipped = 0, failed = 0;
+        int maps = 0, decompiled = 0, skipped = 0, failed = 0, alreadyWritten = 0;
         List<ShaderSourceArchive> archives = new(byArchive.Count);
         foreach ((string archiveName, var group) in byArchive.OrderBy(static one => one.Key, StringComparer.OrdinalIgnoreCase))
         {
             string outputDirectory = Path.Combine(request.OutputDirectory, archiveName).Replace('\\', '/');
-            ShaderSourceState state = new(request, group[0].Placement.Library, archiveName, outputDirectory);
+            List<(ShaderMapTarget Target, ShaderMapCatalog.Placement Placement)> pending = group;
+            if (request.ResumeFromOutput)
+            {
+                HashSet<string> written = ShaderLabEmitter.Written(outputDirectory);
+                pending = group.Where(one => !written.Contains(ShaderLabEmitter.HashPrefix(one.Target.ShaderMapHash))).ToList();
+                alreadyWritten += group.Count - pending.Count;
+                if (pending.Count == 0)
+                {
+                    continue;
+                }
+            }
+            ShaderSourceState state = new(request, pending[0].Placement.Library, archiveName, outputDirectory);
             state.EngineUbRegistry = metadata.UniformBuffers;
             state.ShaderTypeSeedRegistry = metadata.ShaderTypes;
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            Build(state, group, metadata);
+            Build(state, pending, metadata);
             ShaderLabProperties.Build(state);
             ShaderLabRenderState.Build(state);
             long describedMs = stopwatch.ElapsedMilliseconds;
@@ -96,7 +107,7 @@ public static class ShaderSourceRun
                 }
             }
             stopwatch.Stop();
-            ShaderLibrary library = group[0].Placement.Library;
+            ShaderLibrary library = pending[0].Placement.Library;
             log($"[ShaderSource] {archiveName}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}, read {library.BytesRead / (1024 * 1024)} MB of the archive's {library.Size / (1024 * 1024)} MB, in {stopwatch.ElapsedMilliseconds} ms (described {describedMs}, fetched {fetchedMs}, decompiled {decompiledMs}, emitted {emittedMs}) -> {outputDirectory}");
 
             archives.Add(new ShaderSourceArchive(archiveName, state.ShaderMaps.Count, state.Decompiled, outputDirectory));
@@ -105,7 +116,8 @@ public static class ShaderSourceRun
             skipped += state.Skipped;
             failed += state.Failed;
         }
-        log($"[ShaderSource] whole run {whole.ElapsedMilliseconds} ms: {maps} map(s), {decompiled} decompiled, {failed} failed.");
+        log($"[ShaderSource] whole run {whole.ElapsedMilliseconds} ms: {maps} map(s), {decompiled} decompiled, {failed} failed"
+            + (alreadyWritten > 0 ? $", {alreadyWritten} map(s) already written." : "."));
         return new ShaderSourceSummary(maps, decompiled, skipped, failed, archives);
     }
 
