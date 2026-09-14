@@ -44,13 +44,15 @@ internal sealed class VariantPool
 
     /// <summary>
     /// The pool file holding this text, written if it is not there yet. The name carries the
-    /// variant's own keyword so a reader can still tell what it is, and a short digest of the
-    /// text so two spellings of one shader never land on the same name.
+    /// variant's own keyword so a reader can still tell what it is, a short digest of the text
+    /// so two spellings of one shader never land on the same name, and the extension of the
+    /// language the text is actually in: a ray-tracing stage comes out as GLSL, and a GLSL body
+    /// under an <c>.hlsl</c> name is a lie every tool downstream believes.
     /// </summary>
-    public string Include(string variantKeyword, string text)
+    public string Include(string variantKeyword, string extension, string text)
     {
         string digest = Digest(text);
-        string fileName = variantKeyword + "_" + digest + ".hlsl";
+        string fileName = variantKeyword + "_" + digest + extension;
         if (pathByProgram.TryGetValue(fileName, out string? already))
         {
             return already;

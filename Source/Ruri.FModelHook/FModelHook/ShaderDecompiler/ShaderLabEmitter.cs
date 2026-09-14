@@ -134,7 +134,7 @@ internal static class ShaderLabEmitter
             {
                 if (!splittableStages.Contains(program.Stage)) continue;
                 string keyword = BuildVariantKeyword(program);
-                pooled[program] = state.Variants.Include(keyword, WriteVariantHlslFile(metadata, program, keyword));
+                pooled[program] = state.Variants.Include(keyword, program.SourceFileExtension, WriteVariantHlslFile(metadata, program, keyword));
             }
         }
 
