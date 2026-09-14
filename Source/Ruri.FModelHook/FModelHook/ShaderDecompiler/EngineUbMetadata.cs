@@ -13,7 +13,30 @@ internal sealed class EngineUbMetadata
     [JsonPropertyName("LayoutHash")]
     public string LayoutHashHex { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Which hash <see cref="LayoutHashHex"/> is, as the dumper read it off the engine: one that
+    /// folds the static slot's index into its low byte can only be matched around that byte,
+    /// because the index is assigned at engine start and no source states it.
+    /// </summary>
+    public string HashFormula { get; set; } = string.Empty;
+
     public string BindingFlags { get; set; } = string.Empty;
+
+    public string UsageFlags { get; set; } = string.Empty;
+
+    /// <summary>The formula whose low byte is a static-slot index rather than part of the value.</summary>
+    public const string SizeAndStaticSlot = "SizeAndStaticSlot";
+
+    /// <summary>Whether a cook's hash names this seed's layout, allowing for the slot byte where the formula carries one.</summary>
+    public bool Matches(uint cookHash)
+    {
+        uint own = ParsedHash();
+        if (own == cookHash)
+        {
+            return true;
+        }
+        return HashFormula == SizeAndStaticSlot && ((own ^ cookHash) & 0xFFFFFF00u) == 0;
+    }
 
     public ConstantBufferParameter? ConstantBuffer { get; set; }
 

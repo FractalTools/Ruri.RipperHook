@@ -64,7 +64,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
         this.provider = provider ?? throw new ArgumentNullException(nameof(provider));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.trace = trace ?? throw new ArgumentNullException(nameof(trace));
-        catalog = new Lazy<ShaderMapCatalog>(() => ShaderMapCatalog.Open(provider, log, log), LazyThreadSafetyMode.ExecutionAndPublication);
+        catalog = new Lazy<ShaderMapCatalog>(() => ShaderMapCatalog.For(provider), LazyThreadSafetyMode.ExecutionAndPublication);
         string engineFacts = ShaderSourceRequest.DefaultEngineUbMetadataDirectory;
         string cookedWith = provider.Versions.Game.ToString();
         MaterialConstantBufferReader.Opcodes = MaterialPreshaderOpcodes.LoadForGame(engineFacts, cookedWith, tryBaseFallback: true, trace);
@@ -168,7 +168,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
 
     private MaterialSemantics Analyze(string hash, FMaterialShaderMap shaderMap, string materialPath)
     {
-        if (!catalog.Value.TryPlace(hash, out ShaderMapCatalog.Placement entry))
+        if (!catalog.Value.TryPlace(hash, log, log, out ShaderMapCatalog.Placement entry))
         {
             return MaterialSemantics.Unresolved(hash, "no shipped shader library holds this shader map");
         }
@@ -537,11 +537,8 @@ public sealed class MaterialSemanticsResolver : IDisposable
         return channels;
     }
 
+    /// <summary>Nothing of this resolver's own outlives it: the catalog it reads belongs to the mounted provider and stays open with it.</summary>
     public void Dispose()
     {
-        if (catalog.IsValueCreated)
-        {
-            catalog.Value.Dispose();
-        }
     }
 }

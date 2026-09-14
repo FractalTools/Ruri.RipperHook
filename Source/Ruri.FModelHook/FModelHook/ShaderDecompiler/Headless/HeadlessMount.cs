@@ -173,7 +173,7 @@ public static class HeadlessMount
     public static List<MaterialShaderLocation> FindShaderArchivesForMaterials(AbstractVfsFileProvider provider, IReadOnlyList<string> materialPaths, Action<string> log, Action<string> logError)
     {
         var locations = new List<MaterialShaderLocation>();
-        using ShaderMapCatalog catalog = ShaderMapCatalog.Open(provider, log, logError);
+        ShaderMapCatalog catalog = ShaderMapCatalog.For(provider);
         foreach (string materialPath in materialPaths)
         {
             foreach (ShaderMapTarget target in new MaterialSubject(materialPath).Resolve(provider, log, logError))
@@ -184,7 +184,7 @@ public static class HeadlessMount
                     OwningMaterialPath = target.OwningAssetPath,
                     ResourceHash = target.ShaderMapHash,
                 };
-                if (catalog.TryPlace(target.ShaderMapHash, out ShaderMapCatalog.Placement placement))
+                if (catalog.TryPlace(target.ShaderMapHash, log, logError, out ShaderMapCatalog.Placement placement))
                 {
                     location.ArchivePaths.Add(placement.ArchivePath);
                 }

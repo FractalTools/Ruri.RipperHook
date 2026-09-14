@@ -66,7 +66,7 @@ internal static class ShaderMapIdentity
                 continue;
             }
             int shaderIndex = (int)library.ShaderIndices[offset];
-            if (shaderIndex < 0 || shaderIndex >= library.ShaderEntries.Length || shaderIndex >= library.ShaderHashes.Count)
+            if (shaderIndex < 0 || shaderIndex >= library.ShaderEntries.Length || shaderIndex >= library.ShaderCount)
             {
                 continue;
             }
@@ -88,7 +88,7 @@ internal static class ShaderMapIdentity
                 PermutationId = truth?.PermutationId ?? -1,
                 ResourceIndex = truth?.ResourceIndex ?? (int)member,
                 Frequency = library.ShaderEntries[shaderIndex].Frequency,
-                ShaderHash = library.ShaderHashes[shaderIndex],
+                ShaderHash = library.ShaderHash(shaderIndex),
             };
         }
         return result;

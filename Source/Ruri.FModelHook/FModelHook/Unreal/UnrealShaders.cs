@@ -92,15 +92,19 @@ public static class UnrealShaders
             throw new ArgumentException($"dataset '{id}' writes files; state where with '{OutputParam}'.");
         }
 
+        System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
+        long mountMs = clock.ElapsedMilliseconds;
         ShaderSourceSummary summary = ShaderSourceRun.Execute(new ShaderSourceRequest
         {
-            Provider = UnrealProviderSession.Open(request.GameRoot),
+            Provider = provider,
             Subjects = Array.ConvertAll(packages, static path => (IShaderMapSubject)new PackageSubject(path)),
             OutputDirectory = output,
             SplitVariantsToHlslFiles = true,
             Log = Say,
             LogError = Complain,
         });
+        Say($"[ShaderSource] dataset answered in {clock.ElapsedMilliseconds} ms (provider ready after {mountMs} ms).");
 
         foreach (ShaderSourceArchive archive in summary.Archives)
         {

@@ -52,7 +52,11 @@ internal static class RuntimeSymbolReader
                 EngineUbMetadata? meta = null;
                 if (IsCanonicalUniformBufferName(ubName))
                 {
-                    meta = engineUbRegistry.Lookup(ubName, h);
+                    // A buffer of constants alone binds nothing through the resource table, and
+                    // the compiler records a layout hash only for buffers that do; its slot
+                    // reads zero. Such a buffer is identified by its name, against a seed that
+                    // likewise holds no resources.
+                    meta = h != 0u ? engineUbRegistry.Lookup(ubName, h) : engineUbRegistry.LookupConstantsOnly(ubName);
                 }
                 else if (h != 0u)
                 {
@@ -241,7 +245,7 @@ internal static class ShaderResourceTableSymbolizer
             {
                 string ubName = uniformBufferNames[i];
                 if (string.IsNullOrEmpty(ubName) || string.Equals(ubName, "Material", StringComparison.Ordinal)) continue;
-                perUbEngineMeta[i] = engineUbRegistry.Lookup(ubName, hashes[i]);
+                perUbEngineMeta[i] = hashes[i] != 0u ? engineUbRegistry.Lookup(ubName, hashes[i]) : engineUbRegistry.LookupConstantsOnly(ubName);
             }
         }
 

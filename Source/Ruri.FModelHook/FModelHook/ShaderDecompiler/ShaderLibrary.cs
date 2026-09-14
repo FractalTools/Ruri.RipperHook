@@ -23,8 +23,18 @@ internal sealed class ShaderLibrary : IDisposable
     private GameFileWindow? window;
 
     public List<string> ShaderMapHashes = new();
-    public List<string> ShaderHashes = new();
+    private FSHAHash[] shaderHashes = Array.Empty<FSHAHash>();
     public ShaderMapEntry[] ShaderMapEntries = Array.Empty<ShaderMapEntry>();
+
+    /// <summary>How many shaders the archive holds; a hash is spelled out only for the ones asked about.</summary>
+    public int ShaderCount => shaderHashes.Length;
+
+    /// <summary>
+    /// One shader's hash as text. The archive holds hundreds of thousands of them; spelling every
+    /// one out on open was a hundred thousand strings nobody read, so each is spelled when named.
+    /// </summary>
+    public string ShaderHash(int index)
+        => index >= 0 && index < shaderHashes.Length ? shaderHashes[index].ToString() : string.Empty;
     public ShaderCodeEntry[] ShaderEntries = Array.Empty<ShaderCodeEntry>();
     public uint[] ShaderIndices = Array.Empty<uint>();
 
@@ -94,7 +104,7 @@ internal sealed class ShaderLibrary : IDisposable
         {
             SourceType = nameof(FIoStoreShaderCodeArchive),
             ShaderMapHashes = Hashes(archive.ShaderMapHashes),
-            ShaderHashes = Hashes(archive.ShaderHashes),
+            shaderHashes = archive.ShaderHashes,
             ShaderMapEntries = Array.ConvertAll(archive.ShaderMapEntries, map => new ShaderMapEntry
             {
                 ShaderIndicesOffset = map.ShaderIndicesOffset,
@@ -120,7 +130,7 @@ internal sealed class ShaderLibrary : IDisposable
         {
             SourceType = nameof(FSerializedShaderArchive),
             ShaderMapHashes = Hashes(archive.ShaderMapHashes),
-            ShaderHashes = Hashes(archive.ShaderHashes),
+            shaderHashes = archive.ShaderHashes,
             ShaderMapEntries = Array.ConvertAll(archive.ShaderMapEntries, map => new ShaderMapEntry
             {
                 ShaderIndicesOffset = map.ShaderIndicesOffset,

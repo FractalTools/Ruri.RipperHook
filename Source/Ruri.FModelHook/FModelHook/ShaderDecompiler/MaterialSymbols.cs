@@ -1,6 +1,7 @@
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.UObject;
 using Ruri.ShaderTools;
 
@@ -78,9 +79,18 @@ internal static class MaterialSymbols
             {
                 for (int index = 0; index < infos.Length; index++)
                 {
-                    if (infos[index].TryGetValue(out UObject collection, "ParameterCollection"))
+                    if (!infos[index].TryGetValue(out UObject collection, "ParameterCollection"))
                     {
-                        inputs.ExtraConstantBuffers.Add(Buffer($"MaterialCollection{index}", collection));
+                        continue;
+                    }
+                    // The engine binds a collection under its index in the material's list. A
+                    // build that binds it under the collection's own state id instead states the
+                    // same collection by a name the shader spells differently; both spellings
+                    // are offered and the shader takes whichever it declares.
+                    inputs.ExtraConstantBuffers.Add(Buffer($"MaterialCollection{index}", collection));
+                    if (infos[index].TryGetValue(out FGuid stateId, "StateId"))
+                    {
+                        inputs.ExtraConstantBuffers.Add(Buffer($"MaterialCollection{stateId.ToString(EGuidFormats.Digits)}", collection));
                     }
                 }
                 return;

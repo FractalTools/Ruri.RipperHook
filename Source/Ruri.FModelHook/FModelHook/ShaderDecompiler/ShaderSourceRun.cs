@@ -28,24 +28,30 @@ public static class ShaderSourceRun
         Action<string> log = request.Log ?? (_ => { });
         Action<string> logError = request.LogError ?? (_ => { });
 
+        Stopwatch whole = Stopwatch.StartNew();
+        Stopwatch phase = Stopwatch.StartNew();
         List<ShaderMapTarget> targets = Resolve(request, log, logError);
+        long resolveMs = phase.ElapsedMilliseconds;
         if (targets.Count == 0)
         {
             log("[ShaderSource] nothing named a compiled shader map.");
             return new ShaderSourceSummary(0, 0, 0, 0, []);
         }
 
+        phase.Restart();
         string gameVersion = request.Provider.Versions.Game.ToString();
-        EngineMetadata metadata = EngineMetadata.Load(request.EngineUbMetadataDirectory, gameVersion, log, logError);
+        EngineMetadata metadata = EngineMetadata.Cached(request.EngineUbMetadataDirectory, gameVersion, log, logError);
         MaterialConstantBufferReader.Opcodes = metadata.PreshaderOpcodes;
         MaterialUniformBufferRecipe.Current = metadata.MaterialUniformBuffer;
+        long metadataMs = phase.ElapsedMilliseconds;
 
-        using ShaderMapCatalog catalog = ShaderMapCatalog.Open(request.Provider, log, logError);
+        phase.Restart();
+        ShaderMapCatalog catalog = ShaderMapCatalog.For(request.Provider);
         Dictionary<string, List<(ShaderMapTarget Target, ShaderMapCatalog.Placement Placement)>> byArchive =
             new(StringComparer.OrdinalIgnoreCase);
         foreach (ShaderMapTarget target in targets)
         {
-            if (!catalog.TryPlace(target.ShaderMapHash, out ShaderMapCatalog.Placement placement))
+            if (!catalog.TryPlace(target.ShaderMapHash, log, logError, out ShaderMapCatalog.Placement placement))
             {
                 logError($"[ShaderSource] '{target.AssetPath}': no archive carries shader map {target.ShaderMapHash}.");
                 continue;
@@ -57,6 +63,7 @@ public static class ShaderSourceRun
             }
             group.Add((target, placement));
         }
+        log($"[ShaderSource] timing: named maps in {resolveMs} ms, engine facts in {metadataMs} ms, placed in {phase.ElapsedMilliseconds} ms ({catalog.OpenedArchiveCount} archive(s) open, {catalog.IndexedMapCount} maps indexed).");
 
         int maps = 0, decompiled = 0, skipped = 0, failed = 0;
         List<ShaderSourceArchive> archives = new(byArchive.Count);
@@ -71,19 +78,26 @@ public static class ShaderSourceRun
             Build(state, group, metadata);
             ShaderLabProperties.Build(state);
             ShaderLabRenderState.Build(state);
+            long describedMs = stopwatch.ElapsedMilliseconds;
             ShaderBinaries.Build(state);
+            long fetchedMs = stopwatch.ElapsedMilliseconds - describedMs;
+            long decompiledMs = 0, emittedMs = 0;
 
             using (ShaderDecompilerEngine engine = new(outputDirectory))
             {
                 foreach (ShaderMapInfo map in state.ShaderMaps.OrderBy(static one => one.PrimaryName, StringComparer.OrdinalIgnoreCase))
                 {
+                    long before = stopwatch.ElapsedMilliseconds;
                     Decompile(state, engine, map);
+                    long between = stopwatch.ElapsedMilliseconds;
                     ShaderLabEmitter.Emit(state, map);
+                    decompiledMs += between - before;
+                    emittedMs += stopwatch.ElapsedMilliseconds - between;
                 }
             }
             stopwatch.Stop();
             ShaderLibrary library = group[0].Placement.Library;
-            log($"[ShaderSource] {archiveName}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}, read {library.BytesRead / (1024 * 1024)} MB of the archive's {library.Size / (1024 * 1024)} MB, in {stopwatch.ElapsedMilliseconds} ms -> {outputDirectory}");
+            log($"[ShaderSource] {archiveName}: shader-maps={state.ShaderMaps.Count} decompiled={state.Decompiled} skipped={state.Skipped} failed={state.Failed}, read {library.BytesRead / (1024 * 1024)} MB of the archive's {library.Size / (1024 * 1024)} MB, in {stopwatch.ElapsedMilliseconds} ms (described {describedMs}, fetched {fetchedMs}, decompiled {decompiledMs}, emitted {emittedMs}) -> {outputDirectory}");
 
             archives.Add(new ShaderSourceArchive(archiveName, state.ShaderMaps.Count, state.Decompiled, outputDirectory));
             maps += state.ShaderMaps.Count;
@@ -91,6 +105,7 @@ public static class ShaderSourceRun
             skipped += state.Skipped;
             failed += state.Failed;
         }
+        log($"[ShaderSource] whole run {whole.ElapsedMilliseconds} ms: {maps} map(s), {decompiled} decompiled, {failed} failed.");
         return new ShaderSourceSummary(maps, decompiled, skipped, failed, archives);
     }
 
@@ -288,6 +303,19 @@ internal sealed class EngineMetadata
     public HashNameIndex PipelineTypes { get; }
     public MaterialPreshaderOpcodes PreshaderOpcodes { get; }
     public MaterialUniformBufferRecipe MaterialUniformBuffer { get; }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Root, string Game), EngineMetadata> Loaded = new();
+
+    /// <summary>
+    /// The engine facts for one metadata folder and game, read once per process. They are files
+    /// on disk that do not change while the process runs, and reading a few hundred of them was
+    /// paid again on every request when it need only ever be paid on the first.
+    /// </summary>
+    public static EngineMetadata Cached(string? directory, string gameVersion, Action<string> log, Action<string> logError)
+    {
+        string root = directory ?? ShaderSourceRequest.DefaultEngineUbMetadataDirectory;
+        return Loaded.GetOrAdd((root, gameVersion), key => Load(key.Root, key.Game, log, logError));
+    }
 
     public static EngineMetadata Load(string? directory, string gameVersion, Action<string> log, Action<string> logError)
     {

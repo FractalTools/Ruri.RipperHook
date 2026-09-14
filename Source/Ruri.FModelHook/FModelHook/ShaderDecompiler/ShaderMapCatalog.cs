@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
 
@@ -12,14 +13,17 @@ namespace Ruri.FModelHook.ShaderDecompiler;
 /// of the map. This is the one place that turns that hash into a place to read from.
 ///
 /// Archives are opened one at a time, as asked for, and each is opened over the shipped file
-/// itself -- header tables only, code left where it is. So a caller after one character opens
-/// the archives that carry its maps and no others, and a caller that walks many hashes pays for
-/// each archive once. Every caller that needs shader bytecode comes through here, so there is
-/// one cost model and not one per lane.
+/// itself -- header tables only, code left where it is. Those tables are the cost: an archive of
+/// half a million shaders states each one's hash, entry and index, and reading them is seconds.
+/// So a catalog lives as long as the provider it reads through: the first request after a mount
+/// opens the archives its maps live in, and every request after it finds them already open. A
+/// new mount is a new provider and gets a catalog of its own.
 /// </summary>
-internal sealed class ShaderMapCatalog : IDisposable
+internal sealed class ShaderMapCatalog
 {
     private const string ArchiveExtension = "ushaderbytecode";
+
+    private static readonly ConditionalWeakTable<AbstractFileProvider, ShaderMapCatalog> Catalogs = new();
 
     /// <summary>One shader map inside one archive: the library to read from, the map's own entry, and what the archive is.</summary>
     public readonly record struct Placement(
@@ -31,49 +35,55 @@ internal sealed class ShaderMapCatalog : IDisposable
         ShaderMapEntry Map);
 
     private readonly AbstractFileProvider provider;
-    private readonly Action<string> log;
-    private readonly Action<string> logError;
     private readonly Queue<GameFile> unopened;
     private readonly List<ShaderLibrary> opened = new();
     private readonly Dictionary<string, Placement> byMapHash = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object gate = new();
 
-    private ShaderMapCatalog(AbstractFileProvider provider, Queue<GameFile> archives, Action<string> log, Action<string> logError)
+    private ShaderMapCatalog(AbstractFileProvider provider)
     {
         this.provider = provider;
-        this.unopened = archives;
-        this.log = log;
-        this.logError = logError;
-    }
-
-    public static ShaderMapCatalog Open(AbstractFileProvider provider, Action<string> log, Action<string> logError)
-    {
-        ArgumentNullException.ThrowIfNull(provider);
-        Queue<GameFile> archives = new(provider.Files.Values
+        unopened = new Queue<GameFile>(provider.Files.Values
             .Where(static file => file.Extension.Equals(ArchiveExtension, StringComparison.OrdinalIgnoreCase))
             .OrderBy(static file => file.Path, StringComparer.OrdinalIgnoreCase));
-        return new ShaderMapCatalog(provider, archives, log, logError);
     }
 
-    public int OpenedArchiveCount => opened.Count;
+    /// <summary>The catalog of a mounted provider, made on its first request and kept for its life.</summary>
+    public static ShaderMapCatalog For(AbstractFileProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        return Catalogs.GetValue(provider, static mounted => new ShaderMapCatalog(mounted));
+    }
 
-    public int IndexedMapCount => byMapHash.Count;
+    public int OpenedArchiveCount
+    {
+        get { lock (gate) { return opened.Count; } }
+    }
+
+    public int IndexedMapCount
+    {
+        get { lock (gate) { return byMapHash.Count; } }
+    }
 
     /// <summary>Where that shader map lives, opening further archives only until it is found.</summary>
-    public bool TryPlace(string shaderMapHash, out Placement placement)
+    public bool TryPlace(string shaderMapHash, Action<string> log, Action<string> logError, out Placement placement)
     {
-        if (byMapHash.TryGetValue(shaderMapHash, out placement))
+        lock (gate)
         {
-            return true;
-        }
-        while (unopened.Count > 0)
-        {
-            IndexOne(unopened.Dequeue());
             if (byMapHash.TryGetValue(shaderMapHash, out placement))
             {
                 return true;
             }
+            while (unopened.Count > 0)
+            {
+                IndexOne(unopened.Dequeue(), log, logError);
+                if (byMapHash.TryGetValue(shaderMapHash, out placement))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
-        return false;
     }
 
     /// <summary>The library-wide shader index of a map's <paramref name="resourceIndex"/>-th shader, in the order the map lists them.</summary>
@@ -87,8 +97,9 @@ internal sealed class ShaderMapCatalog : IDisposable
         return (int)placement.Library.ShaderIndices[offset];
     }
 
-    private void IndexOne(GameFile file)
+    private void IndexOne(GameFile file, Action<string> log, Action<string> logError)
     {
+        System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
         ShaderLibrary? library;
         try
         {
@@ -112,7 +123,7 @@ internal sealed class ShaderMapCatalog : IDisposable
             byMapHash.TryAdd(library.ShaderMapHashes[mapIndex], new Placement(
                 library, file.Path, file.NameWithoutExtension, platform, mapIndex, library.ShaderMapEntries[mapIndex]));
         }
-        log($"[ShaderMapCatalog] '{file.Name}': {mapCount} shader map(s) over {library.ShaderEntries.Length} shader(s), platform {platform}, {library.SourceType}.");
+        log($"[ShaderMapCatalog] '{file.Name}': {mapCount} shader map(s) over {library.ShaderCount} shader(s), platform {platform}, {library.SourceType}, tables read in {stopwatch.ElapsedMilliseconds} ms.");
     }
 
     /// <summary>The platform token after the archive name's last dash: "ShaderArchive-Game-PCD3D_SM6" states PCD3D_SM6.</summary>
@@ -121,16 +132,5 @@ internal sealed class ShaderMapCatalog : IDisposable
         string stem = Path.GetFileNameWithoutExtension(fileName);
         int dash = stem.LastIndexOf('-');
         return dash >= 0 ? stem[(dash + 1)..] : stem;
-    }
-
-    public void Dispose()
-    {
-        foreach (ShaderLibrary library in opened)
-        {
-            library.Dispose();
-        }
-        opened.Clear();
-        byMapHash.Clear();
-        unopened.Clear();
     }
 }
