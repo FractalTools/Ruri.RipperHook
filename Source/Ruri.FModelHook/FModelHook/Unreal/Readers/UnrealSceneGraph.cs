@@ -27,8 +27,9 @@ public static class UnrealSceneGraph
     private const string RootComponentName = "RootComponent";
     private static readonly string[] ComponentListNames = ["InstanceComponents", "BlueprintCreatedComponents"];
 
-    /// <summary>One placed component: where it sits in the tree, what it is called, whether it shows.</summary>
-    public readonly record struct Placed(USceneComponent Component, int Parent, string Name, bool Active);
+    /// <summary>One placed component: where it sits in the tree, what it is called, whether it shows,
+    /// and which actor of this reading it belongs to.</summary>
+    public readonly record struct Placed(USceneComponent Component, int Parent, string Name, bool Active, int Actor);
 
     /// <summary>
     /// The components a reading states, in the order it states them, and the one ordering every
@@ -41,9 +42,21 @@ public static class UnrealSceneGraph
         private readonly List<USceneComponent?> parents = new();
         private readonly List<string> names = new();
         private readonly List<bool> actives = new();
+        private readonly List<int> actors = new();
         private readonly Dictionary<USceneComponent, int> index = new(ReferenceEqualityComparer.Instance);
 
         public int Count => components.Count;
+
+        /// <summary>
+        /// Which actor the components stated from here on belong to.
+        ///
+        /// Only the reading knows where one actor ends and the next begins: a Blueprint generated
+        /// class IS one actor, however many components it states and whatever their attachment
+        /// says, so that reading never touches this; a world states many, so its reading advances
+        /// it per actor. A consumer that has to tell "two meshes of one character" apart from "two
+        /// characters" -- which is the difference between one rig and two -- has no other way to.
+        /// </summary>
+        public int Actor { get; set; }
 
         /// <summary>State one component; the first statement of a component is the one that stands.</summary>
         public void Add(USceneComponent component, USceneComponent? parent, string name, bool active)
@@ -57,6 +70,7 @@ public static class UnrealSceneGraph
             parents.Add(parent);
             names.Add(name);
             actives.Add(active);
+            actors.Add(Actor);
         }
 
         public bool Contains(USceneComponent component) => index.ContainsKey(component);
@@ -86,7 +100,7 @@ public static class UnrealSceneGraph
                 parent = Place(parentEntry, placedAt, ordered, depth + 1);
             }
             placedAt[entry] = ordered.Count;
-            ordered.Add(new Placed(components[entry], parent, names[entry], actives[entry]));
+            ordered.Add(new Placed(components[entry], parent, names[entry], actives[entry], actors[entry]));
             return placedAt[entry];
         }
     }
@@ -175,6 +189,7 @@ public static class UnrealSceneGraph
         {
             try
             {
+                collector.Actor = actors;
                 USceneComponent? root = Root(actor);
                 foreach (USceneComponent component in Components(actor, root))
                 {

@@ -187,7 +187,11 @@ public static class UnrealDatasets
             + "component it hangs under (-1 at the top), whether it shows, its own transform in the host's "
             + "basis, the object path of the mesh it renders and of the material each slot draws with, and "
             + "-- for a light -- its kind, colour, intensity and shape. An instanced component places "
-            + "nothing itself and states one child row per instance.",
+            + "nothing itself and states one child row per instance. 'actor' is which actor of THIS reading "
+            + "the row belongs to: a Blueprint class is one actor however many components it states, a world "
+            + "states one per actor it places. Attachment cannot answer that -- a Blueprint's components can "
+            + "all sit at the top -- and it is the difference between several meshes worn on ONE skeleton "
+            + "and several characters each on their own.",
             Placements);
         Datasets.Publish(AnimationsId, DataRole.Internal, [DataParam.Text(PackageParam)],
             "Every animation sequence in one package as curves a host plays: a JSON index beside a "
@@ -388,7 +392,8 @@ public static class UnrealDatasets
         TableBuilder table = new(PlacementsId, "name", "parent#", "active",
             "px#", "py#", "pz#", "qx#", "qy#", "qz#", "qw#", "sx#", "sy#", "sz#",
             "mesh", "skinned", "materials",
-            "light", "lr#", "lg#", "lb#", "intensity#", "range#", "outer#", "inner#", "width#", "height#");
+            "light", "lr#", "lg#", "lb#", "intensity#", "range#", "outer#", "inner#", "width#", "height#",
+            "actor#");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         string package = PackageKey(provider, request.Text(PackageParam));
         if (!provider.Files.TryGetValue(package, out GameFile? file))
@@ -423,17 +428,17 @@ public static class UnrealDatasets
             }
             composed = true;
             List<UnrealSceneGraph.Placed> ordered = collector.Ordered();
-            List<(int Parent, string Name, FTransform Transform, string Mesh, string Materials)> instances = new();
+            List<(int Parent, string Name, FTransform Transform, string Mesh, string Materials, int Actor)> instances = new();
             for (int index = 0; index < ordered.Count; index++)
             {
                 UnrealSceneGraph.Placed placed = ordered[index];
                 Placement(table, basis, placed.Name, placed.Parent, placed.Active,
-                    placed.Component.GetRelativeTransform(), placed.Component, index, instances);
+                    placed.Component.GetRelativeTransform(), placed.Component, index, placed.Actor, instances);
             }
-            foreach ((int parent, string name, FTransform transform, string mesh, string materials) in instances)
+            foreach ((int parent, string name, FTransform transform, string mesh, string materials, int actor) in instances)
             {
                 Row(table, basis, name, parent, true, transform, mesh, false, materials,
-                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f, actor);
             }
         }
         if (!composed)
@@ -483,8 +488,8 @@ public static class UnrealDatasets
 
     /// <summary>One component's row: what it renders, decided by what kind of component it is.</summary>
     private static void Placement(TableBuilder table, SourceBasis basis, string name, int parent, bool active,
-        FTransform transform, USceneComponent component, int index,
-        List<(int Parent, string Name, FTransform Transform, string Mesh, string Materials)> instances)
+        FTransform transform, USceneComponent component, int index, int actor,
+        List<(int Parent, string Name, FTransform Transform, string Mesh, string Materials, int Actor)> instances)
     {
         switch (component)
         {
@@ -494,24 +499,24 @@ public static class UnrealDatasets
                 FInstancedStaticMeshInstanceData[] placed = instanced.GetInstances();
                 for (int slot = 0; slot < placed.Length; slot++)
                 {
-                    instances.Add((index, $"{name}_{slot}", placed[slot].TransformData, mesh, materials));
+                    instances.Add((index, $"{name}_{slot}", placed[slot].TransformData, mesh, materials, actor));
                 }
                 Row(table, basis, name, parent, active, transform, string.Empty, false, string.Empty,
-                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f, actor);
                 break;
             }
             case UStaticMeshComponent staticMesh:
             {
                 (string mesh, string materials) = Mesh(staticMesh.GetStaticMesh(), staticMesh.OverrideMaterials);
                 Row(table, basis, name, parent, active, transform, mesh, false, materials,
-                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f, actor);
                 break;
             }
             case USkinnedMeshComponent skinned:
             {
                 (string mesh, string materials) = Mesh(skinned.GetSkeletalMesh(), skinned.OverrideMaterials);
                 Row(table, basis, name, parent, active, transform, mesh, true, materials,
-                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f, actor);
                 break;
             }
             case ULightComponentBase light:
@@ -528,12 +533,12 @@ public static class UnrealDatasets
                     _ => (string.Empty, 0f, 0f, 0f, 0f, 0f),
                 };
                 Row(table, basis, name, parent, active, transform, string.Empty, false, string.Empty,
-                    kind, light.GetLightColor(), light.Intensity, range, outer, inner, width, height);
+                    kind, light.GetLightColor(), light.Intensity, range, outer, inner, width, height, actor);
                 break;
             }
             default:
                 Row(table, basis, name, parent, active, transform, string.Empty, false, string.Empty,
-                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f);
+                    string.Empty, default, 0f, 0f, 0f, 0f, 0f, 0f, actor);
                 break;
         }
     }
@@ -581,7 +586,7 @@ public static class UnrealDatasets
     private static void Row(TableBuilder table, SourceBasis basis, string name, int parent, bool active,
         FTransform transform, string mesh, bool skinned, string materials,
         string light, FLinearColor color, float intensity, float range, float outer, float inner,
-        float width, float height)
+        float width, float height, int actor = 0)
     {
         (Vector3 position, Quaternion rotation, Vector3 scale) = UnrealComponents.Transform(basis, transform);
         table.Row(name, parent, active ? "1" : "0",
@@ -589,7 +594,8 @@ public static class UnrealDatasets
             rotation.X, rotation.Y, rotation.Z, rotation.W,
             scale.X, scale.Y, scale.Z,
             mesh, skinned ? "1" : "0", materials,
-            light, color.R, color.G, color.B, intensity, range, outer, inner, width, height);
+            light, color.R, color.G, color.B, intensity, range, outer, inner, width, height,
+            actor);
     }
 
     /// <summary>
