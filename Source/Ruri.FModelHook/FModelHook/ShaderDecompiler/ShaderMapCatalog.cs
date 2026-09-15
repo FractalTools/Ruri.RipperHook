@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
 
@@ -87,6 +87,47 @@ internal sealed class ShaderMapCatalog
     }
 
     /// <summary>The library-wide shader index of a map's <paramref name="resourceIndex"/>-th shader, in the order the map lists them.</summary>
+    /// <summary>
+    /// Every map ONE archive states, by hash, in the archive's own order.
+    ///
+    /// A GLOBAL shader -- the tonemapper, the blurs, the depth passes -- belongs to no material
+    /// and no package, so nothing in the content tree names it and the per-asset road cannot
+    /// reach it at all. The archive is the only thing that can say what is in it, so this is the
+    /// question asked of the archive itself. Every archive is opened to answer, because which one
+    /// holds a given name is not knowable without opening them.
+    /// </summary>
+    public IReadOnlyList<string> MapHashesOf(string archiveName, Action<string> log, Action<string> logError)
+    {
+        lock (gate)
+        {
+            while (unopened.Count > 0)
+            {
+                IndexOne(unopened.Dequeue(), log, logError);
+            }
+            return byMapHash
+                .Where(pair => pair.Value.ArchiveName.Equals(archiveName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(pair => pair.Value.MapIndex)
+                .Select(pair => pair.Key)
+                .ToList();
+        }
+    }
+
+    /// <summary>The names of every archive this mount ships, once they have all been opened.</summary>
+    public IReadOnlyList<string> ArchiveNames(Action<string> log, Action<string> logError)
+    {
+        lock (gate)
+        {
+            while (unopened.Count > 0)
+            {
+                IndexOne(unopened.Dequeue(), log, logError);
+            }
+            return byMapHash.Values.Select(placement => placement.ArchiveName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
     public static int ShaderIndex(Placement placement, int resourceIndex)
     {
         long offset = placement.Map.ShaderIndicesOffset + resourceIndex;

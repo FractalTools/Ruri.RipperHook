@@ -1,4 +1,4 @@
-using CUE4Parse.FileProvider.Objects;
+﻿using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.Assets;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Material;
@@ -203,6 +203,52 @@ public sealed class PackageSubject : IShaderMapSubject
         foreach (ShaderMapTarget target in new NiagaraSubject(key).Resolve(provider, log, logError))
         {
             yield return target;
+        }
+    }
+}
+
+/// <summary>
+/// One shader ARCHIVE, as the subject: every map it states, named after the archive.
+///
+/// A GLOBAL shader -- the tonemapper, the deferred lighting, the blurs -- belongs to no
+/// material and no package, so nothing in the content tree names it and the per-asset road
+/// cannot reach it at all. The archive itself is the only thing that can say what is in it,
+/// which is why this is a subject of its own rather than a mode on another one.
+///
+/// A map here carries no material shader map (the same shape a script's does), so its shaders
+/// are named by what the archive states about them.
+/// </summary>
+public sealed class ShaderArchiveSubject : IShaderMapSubject
+{
+    private readonly string archiveName;
+
+    public ShaderArchiveSubject(string archiveName)
+    {
+        this.archiveName = archiveName ?? throw new ArgumentNullException(nameof(archiveName));
+    }
+
+    public string Named => archiveName;
+
+    public IEnumerable<ShaderMapTarget> Resolve(AbstractVfsFileProvider provider, Action<string> log, Action<string> logError)
+    {
+        ShaderMapCatalog catalog = ShaderMapCatalog.For(provider);
+        IReadOnlyList<string> hashes = catalog.MapHashesOf(archiveName, log, logError);
+        if (hashes.Count == 0)
+        {
+            IReadOnlyList<string> available = catalog.ArchiveNames(log, logError);
+            throw new InvalidOperationException(
+                $"[ShaderSource] this mount ships no shader archive named '{archiveName}'. "
+                + $"It ships: {string.Join(", ", available)}.");
+        }
+        log($"[ShaderSource] archive '{archiveName}' states {hashes.Count} shader map(s).");
+        foreach (string hash in hashes)
+        {
+            yield return new ShaderMapTarget
+            {
+                ShaderMapHash = hash,
+                AssetPath = archiveName + "/" + hash,
+                OwningAssetPath = archiveName + "/" + hash,
+            };
         }
     }
 }

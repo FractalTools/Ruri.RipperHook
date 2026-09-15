@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+﻿using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
 using Ruri.FModelHook.ShaderDecompiler;
 using Ruri.RipperHook.CabMapping;
@@ -27,19 +27,23 @@ public static class UnrealShaders
     public const string ShadersId = "unreal.shaders";
     public const string AllShadersId = "unreal.shaders.all";
     public const string PackagesParam = "packages";
+    public const string ArchivesParam = "archives";
     public const string OutputParam = "output";
 
     public static void Register()
     {
         Datasets.Publish(ShadersId, DataRole.Payload,
-            [DataParam.List(PackagesParam), DataParam.Text(OutputParam)],
+            [DataParam.List(PackagesParam), DataParam.List(ArchivesParam), DataParam.Text(OutputParam)],
             "Decompile every shader variant the stated packages compiled to, into the stated "
             + "folder: one row per archive that carried them, with how many shader maps it answered "
             + "for. A package answers as whatever it is -- a material for itself, a mesh or an actor "
             + "for every material it names, an effect for its own scripts. Unreal has no shader "
             + "asset to export -- a material's program is blobs in a shared archive -- so what lands "
             + "is the vertex and pixel stages as source, one file per variant, beside the metadata "
-            + "naming which material each came from.",
+            + "naming which material each came from. Naming ARCHIVES instead asks the archives "
+            + "themselves: a global shader -- the tonemapper, the deferred lighting, the blurs -- "
+            + "belongs to no material and no package, so nothing in the content tree names it and "
+            + "only the archive can say what is in it.",
             Shaders);
 
         Datasets.Publish(AllShadersId, DataRole.Payload,
@@ -53,11 +57,14 @@ public static class UnrealShaders
     private static ColumnTable Shaders(DataRequest request)
     {
         string[] packages = request.List(PackagesParam);
-        if (packages.Length == 0)
+        string[] archives = request.List(ArchivesParam);
+        if (packages.Length == 0 && archives.Length == 0)
         {
-            throw new ArgumentException($"dataset '{ShadersId}' answers about packages; name them with '{PackagesParam}'.");
+            throw new ArgumentException(
+                $"dataset '{ShadersId}' answers about packages or about whole archives; "
+                + $"name them with '{PackagesParam}' or '{ArchivesParam}'.");
         }
-        return Decompile(ShadersId, request, packages);
+        return Decompile(ShadersId, request, packages, archives: archives);
     }
 
     /// <summary>
@@ -94,7 +101,8 @@ public static class UnrealShaders
     /// </summary>
     private const int MaterialsPerPass = 250;
 
-    private static ColumnTable Decompile(string id, DataRequest request, string[] packages, bool resumeFromOutput = false)
+    private static ColumnTable Decompile(string id, DataRequest request, string[] packages,
+        bool resumeFromOutput = false, string[]? archives = null)
     {
         TableBuilder table = new(id, "archive", "shaderMaps#", "output");
         string output = request.Text(OutputParam);
@@ -106,6 +114,31 @@ public static class UnrealShaders
         System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         long mountMs = clock.ElapsedMilliseconds;
+
+        IShaderMapSubject[] named = [.. (archives ?? []).Select(static one => (IShaderMapSubject)new ShaderArchiveSubject(one))];
+        if (named.Length > 0)
+        {
+            ShaderSourceSummary whole = ShaderSourceRun.Execute(new ShaderSourceRequest
+            {
+                Provider = provider,
+                Subjects = named,
+                OutputDirectory = output,
+                SplitVariantsToHlslFiles = true,
+                ResumeFromOutput = resumeFromOutput,
+                Log = Say,
+                LogError = Complain,
+            });
+            foreach (ShaderSourceArchive archive in whole.Archives)
+            {
+                table.Row(archive.Archive, archive.ShaderMaps, archive.OutputDirectory);
+            }
+            Say($"[ShaderSource] archives answered in {clock.ElapsedMilliseconds} ms: "
+                + $"{whole.ShaderMaps} map(s), {whole.Decompiled} shader(s), {whole.Failed} failed.");
+            if (packages.Length == 0)
+            {
+                return table.Build();
+            }
+        }
 
         int passSize = resumeFromOutput ? MaterialsPerPass : packages.Length;
         Dictionary<string, (int Maps, string Output)> byArchive = new(StringComparer.OrdinalIgnoreCase);
