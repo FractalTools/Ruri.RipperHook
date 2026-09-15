@@ -54,6 +54,8 @@ public static class UnrealDatasets
     public const string WorldCellsId = "unreal.world.cells";
     public const string ActorsId = "unreal.actors";
     public const string CharactersId = "unreal.characters";
+    public const string CharactersAnimationsId = "unreal.characters.animations";
+    public const string KeyParam = "key";
     public const string FilesId = "unreal.files";
     public const string FileId = "unreal.file";
     public const string MatchParam = "match";
@@ -137,6 +139,12 @@ public static class UnrealDatasets
             + "opened and no package is loaded until a row is imported -- so it answers for a build "
             + "that publishes no reflection schema, which is the case an actor listing cannot serve.",
             Characters);
+        Datasets.Publish(CharactersAnimationsId, DataRole.Selection, [DataParam.Text(KeyParam)],
+            "Where the cast row keyed by 'key' plays its animations: its own animation folder, else the "
+            + "shared library of the group it belongs to, else nothing -- the family states no answer of "
+            + "its own (an engine build's own convention for filing them is a fact only the title that "
+            + "shipped it has), so this is empty until the title that claimed the install states one.",
+            CharactersAnimations);
         Datasets.Publish(DataTableId, DataRole.Selection, [DataParam.Text(PackageParam)],
             "The designer-authored data one package holds, as rows: a DataTable gives one row per entry of its "
             + "row map, and a DataAsset (or anything a game derives from one) gives a single row of its own "
@@ -954,6 +962,17 @@ public static class UnrealDatasets
         }
         return table.Build();
     }
+
+    /// <summary>
+    /// The family's own answer for where a cast row's animations live: none. A build organises its
+    /// animation content however its studio chose to, which the cabmap's shared class vocabulary says
+    /// nothing about -- a title that states its own convention replaces this (see
+    /// <see cref="UnrealTitleDatasets"/>), and one that has not yet answers with an empty table, which
+    /// <c>animation_rules</c> reads the same way it reads a row with none of its own: nothing found,
+    /// said so rather than guessed at.
+    /// </summary>
+    private static ColumnTable CharactersAnimations(DataRequest request) =>
+        new TableBuilder(CharactersAnimationsId, "anchor", "hits#", "group").Build();
 
     /// <summary>Whether the cabmap lists everything an Unreal class produces for this package -- the whole set, because any one of those ids alone is produced by half a dozen other classes.</summary>
     private static bool Holds(CabTable map, int id, int[] produced)
