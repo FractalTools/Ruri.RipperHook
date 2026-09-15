@@ -25,6 +25,14 @@ public static class Session
     /// </summary>
     public static event Action? OptionsChanged;
 
+    /// <summary>
+    /// The language the HOST is showing its user, as that host names it ("en_US", "ja_JP",
+    /// "zh_CN") -- the application's own UI language, never the machine's. A roster dataset
+    /// that takes a locale argument reads this when the caller states none, so switching the
+    /// host's language switches every roster it draws without the host naming it again per call.
+    /// </summary>
+    public static string Locale { get; private set; } = string.Empty;
+
     public static void DeclareLayout(Func<string, string[]> layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -69,6 +77,11 @@ public static class Session
             Datasets.ClearCache();
             OptionsChanged?.Invoke();
         }
+    }
+
+    public static void SetLocale(string locale)
+    {
+        Locale = locale ?? string.Empty;
     }
 
     public static string Option(string name) =>

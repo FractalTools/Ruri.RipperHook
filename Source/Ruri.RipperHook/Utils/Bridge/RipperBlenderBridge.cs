@@ -122,6 +122,13 @@ public static class RipperBlenderBridge
     }
 
     /// <summary>
+    /// State the language the host is showing its user, as that host names it ("en_US",
+    /// "ja_JP", "zh_CN") -- see <see cref="Data.Session.Locale"/>. Pushed once when the host
+    /// opens or its user switches language; pushing the same value again is free.
+    /// </summary>
+    public static void SetLocale(string locale) => Data.Session.SetLocale(locale);
+
+    /// <summary>
     /// Load one more hook assembly -- a module built into another host's output, with its
     /// dependencies beside it -- so every decoder and install probe it declares answers
     /// <see cref="ListDecoders"/>, <see cref="ReadInstall"/> and <see cref="ResolveDecoder"/>
