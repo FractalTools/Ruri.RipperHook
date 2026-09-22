@@ -17,6 +17,10 @@ public sealed class CabTable
     public required int[] DistinctFileOffsets { get; init; }    public required int[] FileIndex { get; init; }
     public required byte[] EntryFileNameBlob { get; init; }
     public required int[] EntryFileNameOffsets { get; init; }
+    public required byte[] FactBlob { get; init; }
+    public required int[] FactOffsets { get; init; }
+    public required int[] FactStarts { get; init; }
+
     public required byte[] ContainerPathBlob { get; init; }
     public required int[] ContainerPathOffsets { get; init; }    public required int[] ContainerPathStarts { get; init; }
     public required int[] ClassIdsFlat { get; init; }
@@ -41,6 +45,18 @@ public sealed class CabTable
 
     public ReadOnlySpan<byte> DistinctFileUtf8(int fileIndex)
         => DistinctFileBlob.AsSpan(DistinctFileOffsets[fileIndex], DistinctFileOffsets[fileIndex + 1] - DistinctFileOffsets[fileIndex]);
+
+    /// <summary>How many facts a decoder stated about this archive.</summary>
+    public int FactCount(int id) => FactStarts[id + 1] - FactStarts[id];
+
+    /// <summary>One fact, exactly as the decoder that harvested it wrote it.</summary>
+    public string Fact(int id, int factIndex) => Utf8(FactBlob, FactOffsets, FactStarts[id] + factIndex);
+
+    public ReadOnlySpan<byte> FactUtf8(int id, int factIndex)
+    {
+        int row = FactStarts[id] + factIndex;
+        return FactBlob.AsSpan(FactOffsets[row], FactOffsets[row + 1] - FactOffsets[row]);
+    }
 
     public int ContainerPathCount(int id) => ContainerPathStarts[id + 1] - ContainerPathStarts[id];
 
@@ -250,6 +266,8 @@ public sealed class CabTable
         BlobBuilder nameBlob = new(count);
         BlobBuilder pathBlob = new(count);
         int[] pathStarts = new int[count + 1];
+        BlobBuilder factBlob = new(count);
+        int[] factStarts = new int[count + 1];
         List<int> classFlat = new();
         int[] classStarts = new int[count + 1];
         List<int> depsFlat = new();
@@ -268,6 +286,11 @@ public sealed class CabTable
             foreach (string path in entry.ContainerPaths)
             {
                 pathBlob.Add(path);
+            }
+            factStarts[id + 1] = factStarts[id] + entry.Facts.Count;
+            foreach (string fact in entry.Facts)
+            {
+                factBlob.Add(fact);
             }
             classStarts[id + 1] = classStarts[id] + entry.ClassIds.Count;
             classFlat.AddRange(entry.ClassIds);
@@ -297,6 +320,9 @@ public sealed class CabTable
             ContainerPathBlob = pathBlob.Blob(),
             ContainerPathOffsets = pathBlob.Offsets(),
             ContainerPathStarts = WithPhantoms(pathStarts, total),
+            FactBlob = factBlob.Blob(),
+            FactOffsets = factBlob.Offsets(),
+            FactStarts = WithPhantoms(factStarts, total),
             ClassIdsFlat = classFlat.ToArray(),
             ClassIdStarts = WithPhantoms(classStarts, total),
             DependenciesFlat = depFlatArray,
@@ -328,7 +354,7 @@ public sealed class CabTable
     }
 
 
-    internal const uint Magic6 = 0x52434D36;
+    internal const uint Magic7 = 0x52434D37;
     public void Save(string outPath)
     {
         string outDir = Path.GetDirectoryName(Path.GetFullPath(outPath))!;
@@ -337,14 +363,15 @@ public sealed class CabTable
 
         using FileStream stream = new(outPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20);
         using BinaryWriter writer = new(stream, Encoding.UTF8, leaveOpen: false);
-        writer.Write(Magic6);
-        writer.Write(6);
+        writer.Write(Magic7);
+        writer.Write(7);
         writer.Write(baseUtf8.Length);
         writer.Write(baseUtf8);
         writer.Write(Count);
         writer.Write(PhantomCount);
         writer.Write(FileCount);
         writer.Write(ContainerPathOffsets.Length - 1);
+        writer.Write(FactOffsets.Length - 1);
         writer.Write(ClassIdsFlat.Length);
         writer.Write(DependenciesFlat.Length);
 
@@ -361,6 +388,9 @@ public sealed class CabTable
         WriteInts(writer, ContainerPathStarts, Count + 1);
         WriteInts(writer, ContainerPathOffsets);
         WriteBlob(writer, ContainerPathBlob);
+        WriteInts(writer, FactStarts, Count + 1);
+        WriteInts(writer, FactOffsets);
+        WriteBlob(writer, FactBlob);
         WriteInts(writer, ClassIdStarts, Count + 1);
         WriteInts(writer, ClassIdsFlat);
         WriteInts(writer, DependencyStarts, Count + 1);
@@ -374,12 +404,12 @@ public sealed class CabTable
         Span<byte> header = stackalloc byte[8];
         if (stream.Length < header.Length)
         {
-            throw new InvalidDataException($"'{path}' is not an RCM6 cabmap -- rebuild it (Build writes RCM6 only).");
+            throw new InvalidDataException($"'{path}' is not an RCM7 cabmap -- rebuild it (Build writes RCM7 only).");
         }
         stream.ReadExactly(header);
-        if (BinaryPrimitives.ReadUInt32LittleEndian(header) != Magic6)
+        if (BinaryPrimitives.ReadUInt32LittleEndian(header) != Magic7)
         {
-            throw new InvalidDataException($"'{path}' is not an RCM6 cabmap -- rebuild it (Build writes RCM6 only).");
+            throw new InvalidDataException($"'{path}' is not an RCM7 cabmap -- rebuild it (Build writes RCM7 only).");
         }
 
         int baseLen = ReadInt(stream);
@@ -391,6 +421,7 @@ public sealed class CabTable
         int phantomCount = ReadInt(stream);
         int fileCount = ReadInt(stream);
         int pathCount = ReadInt(stream);
+        int factCount = ReadInt(stream);
         int classTotal = ReadInt(stream);
         int depTotal = ReadInt(stream);
 
@@ -422,6 +453,9 @@ public sealed class CabTable
         int[] pathStarts = ReadInts(stream, count + 1);
         int[] pathOffsets = ReadInts(stream, pathCount + 1);
         byte[] pathBlob = ReadBlob(stream);
+        int[] factStarts = ReadInts(stream, count + 1);
+        int[] factOffsets = ReadInts(stream, factCount + 1);
+        byte[] factBlob = ReadBlob(stream);
         int[] classStarts = ReadInts(stream, count + 1);
         int[] classFlat = ReadInts(stream, classTotal);
         int[] depStarts = ReadInts(stream, count + 1);
@@ -445,6 +479,9 @@ public sealed class CabTable
             ContainerPathBlob = pathBlob,
             ContainerPathOffsets = pathOffsets,
             ContainerPathStarts = WithPhantoms(pathStarts, total),
+            FactBlob = factBlob,
+            FactOffsets = factOffsets,
+            FactStarts = WithPhantoms(factStarts, total),
             ClassIdsFlat = classFlat,
             ClassIdStarts = WithPhantoms(classStarts, total),
             DependenciesFlat = depFlat,

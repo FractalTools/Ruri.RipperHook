@@ -1,4 +1,4 @@
-using Ruri.RipperHook.BundleExport;
+﻿using Ruri.RipperHook.BundleExport;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using Ruri.RipperHook.Tables;
@@ -116,7 +116,8 @@ public static class CoreDatasets
         CabTable map = request.Map;
         TableBuilder table = new(SelectId, CabPathQuery.CabField, CabPathQuery.ContainerField,
             CabPathQuery.FolderField, CabPathQuery.LeafField, CabPathQuery.StemField,
-            CabPathQuery.ExtensionField, CabPathQuery.TypeNamesField, CabPathQuery.BundleField,
+            CabPathQuery.ExtensionField, CabPathQuery.TypeNamesField, CabPathQuery.FactsField,
+            CabPathQuery.BundleField,
             CabPathQuery.SourceField, CabPathQuery.DependencyCountField + "#");
         // What each column ANSWERS, so a host draws this list through the same view
         // engine as every other one and never restates which column is the name.
@@ -135,6 +136,7 @@ public static class CoreDatasets
                 CabPathQuery.Field(map, row, CabPathQuery.StemField),
                 CabPathQuery.Field(map, row, CabPathQuery.ExtensionField),
                 CabPathQuery.Field(map, row, CabPathQuery.TypeNamesField),
+                CabPathQuery.Field(map, row, CabPathQuery.FactsField),
                 map.EntryFileName(row.CabId), map.RelativePath(row.CabId),
                 map.DependencyCount(row.CabId));
         }

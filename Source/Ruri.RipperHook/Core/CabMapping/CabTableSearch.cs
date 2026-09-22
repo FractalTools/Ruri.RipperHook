@@ -283,6 +283,7 @@ public sealed class CabTableSearch
         "name" => DeriveName(id),
         "container" => DeriveContainer(id),
         "type_names" => DeriveTypeNames(id),
+        "facts" => DeriveFacts(id),
         "source" => _table.RelativePath(id),
         "bundle" => _table.EntryFileName(id),
         "cab" => _table.CabName(id),
@@ -328,6 +329,33 @@ public sealed class CabTableSearch
             }
             joined.Append(path);
             length += path.Length;
+        }
+        return joined.ToString();
+    }
+
+    /// <summary>
+    /// Every fact stated about this archive, joined. Opaque text: the kernel stores what a decoder
+    /// harvested and lets a query match on it, and does not interpret it.
+    /// </summary>
+    private string DeriveFacts(int id)
+    {
+        int count = _table.FactCount(id);
+        if (count == 0)
+        {
+            return string.Empty;
+        }
+        if (count == 1)
+        {
+            return _table.Fact(id, 0);
+        }
+        System.Text.StringBuilder joined = new();
+        for (int index = 0; index < count; index++)
+        {
+            if (index > 0)
+            {
+                joined.Append('\n');
+            }
+            joined.Append(_table.Fact(id, index));
         }
         return joined.ToString();
     }

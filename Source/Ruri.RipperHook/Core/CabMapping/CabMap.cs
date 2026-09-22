@@ -1,4 +1,4 @@
-using AssetRipper.Assets.Bundles;
+﻿using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.SerializedFiles;
@@ -11,7 +11,8 @@ namespace Ruri.RipperHook.CabMapping;
 
 public static class CabMap
 {
-    public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies, List<int> ClassIds, List<string> ContainerPaths);
+    public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies,
+        List<int> ClassIds, List<string> ContainerPaths, List<string> Facts);
 
     public static int Build(string rootFolder, string outPath)
     {
@@ -31,7 +32,7 @@ public static class CabMap
 
         Func<string, bool>? includeBefore = GameBundleHook.ScanIncludeFile;
         GameBundleHook.ScanIncludeFile = GameBundleHook.CabScanIncludeFile;
-        List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)>?[] perFile = new List<(string, string, List<string>, List<int>, List<string>)>?[files.Length];
+        List<CabRow>?[] perFile = new List<CabRow>?[files.Length];
         ConcurrentDictionary<string, int> failures = new(StringComparer.Ordinal);
         try
         {
@@ -46,15 +47,16 @@ public static class CabMap
         Dictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < files.Length; i++)
         {
-            List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)>? rows = perFile[i];
+            List<CabRow>? rows = perFile[i];
             if (rows is null || rows.Count == 0)
             {
                 continue;
             }
             string relativeFilePath = Path.GetRelativePath(fullRoot, files[i]);
-            foreach ((string cab, string entryFileName, List<string> deps, List<int> classIds, List<string> paths) in rows)
+            foreach (CabRow row in rows)
             {
-                entries[cab] = new Entry(relativeFilePath, entryFileName, deps, classIds, paths);
+                entries[row.Cab] = new Entry(relativeFilePath, row.FileName, row.Dependencies,
+                    row.ClassIds, row.ContainerPaths, row.Facts);
             }
             perFile[i] = null;
         }
@@ -78,7 +80,7 @@ public static class CabMap
     /// by message, so a build that yields nothing can say why; the generic path's failures are
     /// not, since every file that is no bundle fails it by design.
     /// </summary>
-    internal static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanFullMetadata(string file, ConcurrentDictionary<string, int> failures)
+    internal static List<CabRow> ScanFullMetadata(string file, ConcurrentDictionary<string, int> failures)
     {
         if (GameBundleHook.ScanChunkFull is { } scanChunk)
         {
@@ -94,7 +96,7 @@ public static class CabMap
             }
         }
 
-        List<(string, string, List<string>, List<int>, List<string>)> result = new();
+        List<CabRow> result = new();
         List<FileBase> fileStack = new();
 
         try

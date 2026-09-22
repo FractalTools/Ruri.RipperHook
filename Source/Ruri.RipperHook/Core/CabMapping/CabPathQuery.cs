@@ -1,4 +1,4 @@
-using Ruri.RipperHook.Tables;
+﻿using Ruri.RipperHook.Tables;
 
 namespace Ruri.RipperHook.CabMapping;
 
@@ -13,13 +13,16 @@ public static class CabPathQuery
     public const string StemField = "stem";
     public const string ExtensionField = "extension";
     public const string TypeNamesField = "type_names";
+
+    /// <summary>What the decoder harvested out of this archive while the scan had it open.</summary>
+    public const string FactsField = "facts";
     public const string SourceField = "source";
     public const string BundleField = "bundle";
     public const string DependencyCountField = "deps";
 
     public static readonly string[] Fields =
         [CabField, ContainerField, FolderField, LeafField, StemField, ExtensionField,
-         TypeNamesField, SourceField, BundleField, DependencyCountField];
+         TypeNamesField, FactsField, SourceField, BundleField, DependencyCountField];
 
     public static CabPathRow[] Rows(CabTable table, string query, IReadOnlyList<FilterRule>? rules)
     {

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
@@ -121,33 +121,43 @@ public class GameBundleHook : CommonHook, IHookModule
     public delegate List<(string Cab, string FileName, List<string> Paths)> ScanChunkNamesDelegate(string path);
     public static ScanChunkNamesDelegate? ScanChunkNames;
 
-    public delegate List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanChunkFullDelegate(string path);
+    public delegate List<CabRow> ScanChunkFullDelegate(string path);
     public static ScanChunkFullDelegate? ScanChunkFull;
 
-    public static (string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths) ReadFullMetadata(SerializedFile sf, string fallbackName)
+    /// <summary>
+    /// What a decoder can say about an archive's contents while the archive is open.
+    ///
+    /// A question like "which characters does this install carry" is answered by fields inside the
+    /// assets, and reading those again later means re-opening the archives that hold them -- for one
+    /// title, 1.2GB of them. The scan already has every archive open and parsed, so a decoder states
+    /// its facts here and the map keeps them. Unset, nothing is harvested and nothing is stored.
+    /// </summary>
+    public delegate List<string> HarvestFactsDelegate(SerializedFile file);
+    public static HarvestFactsDelegate? HarvestFacts;
+
+    public static CabRow ReadFullMetadata(SerializedFile sf, string fallbackName)
     {
         (string cab, List<string> deps, List<int> classIds) = ReadSerializedMetadata(sf, fallbackName);
         (_, _, List<string> paths) = ReadContainerNames(sf, fallbackName);
-        return (cab, fallbackName, deps, classIds, paths);
+        List<string> facts = HarvestFacts is { } harvest ? harvest(sf) : new List<string>();
+        return new CabRow(cab, fallbackName, deps, classIds, paths, facts);
     }
 
     public const string AssetRowSeparator = "::";
 
-    public static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ReadFullMetadataRows(SerializedFile sf, string fallbackName)
+    public static List<CabRow> ReadFullMetadataRows(SerializedFile sf, string fallbackName)
     {
-        (string cab, string fileName, List<string> deps, List<int> classIds, List<string> paths) =
-            ReadFullMetadata(sf, fallbackName);
-        List<(string, string, List<string>, List<int>, List<string>)> rows = new()
+        CabRow row = ReadFullMetadata(sf, fallbackName);
+        List<CabRow> rows = new() { row };
+        if (row.ContainerPaths.Count > 0)
         {
-            (cab, fileName, deps, classIds, paths),
-        };
-        if (paths.Count > 0)
-        {
-            return rows;        }
+            return rows;
+        }
         foreach ((long pathId, int classId, string name) in HarvestAssetNames(sf))
         {
-            rows.Add(($"{cab}{AssetRowSeparator}{pathId}", fileName,
-                new List<string> { cab }, new List<int> { classId }, new List<string> { name }));
+            rows.Add(new CabRow($"{row.Cab}{AssetRowSeparator}{pathId}", row.FileName,
+                new List<string> { row.Cab }, new List<int> { classId }, new List<string> { name },
+                new List<string>()));
         }
         return rows;
     }
@@ -304,6 +314,7 @@ public class GameBundleHook : CommonHook, IHookModule
         ScanChunk = null;
         ScanChunkNames = null;
         ScanChunkFull = null;
+        HarvestFacts = null;
         NameScanVersion = default;
         CustomFilePreInitialize = null;
     }

@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+﻿using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
 using CUE4Parse.FileProvider;
 using CUE4Parse.FileProvider.Objects;
@@ -9,6 +9,7 @@ using CUE4Parse.UE4.IO.Objects;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse.UE4.Pak.Objects;
 using CUE4Parse.UE4.VirtualFileSystem;
+using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Collections.Concurrent;
 
 namespace Ruri.FModelHook.Unreal;
@@ -24,9 +25,9 @@ public static class UnrealArchiveScan
 {
     private const int HeaderParallelism = 8;
 
-    public static List<(string Cab, string FileName, List<string> Deps, List<int> ClassIds, List<string> Paths)> ScanFull(string archivePath)
+    public static List<CabRow> ScanFull(string archivePath)
     {
-        List<(string, string, List<string>, List<int>, List<string>)> rows = new();
+        List<CabRow> rows = new();
         if (!UnrealInstall.IsArchive(archivePath))
         {
             return rows;
@@ -57,7 +58,7 @@ public static class UnrealArchiveScan
             : null;
         TypeMappings? mappings = provider.MappingsForGame;
 
-        (string, string, List<string>, List<int>, List<string>)?[] results = new (string, string, List<string>, List<int>, List<string>)?[packages.Count];
+        CabRow?[] results = new CabRow?[packages.Count];
         ParallelOptions options = new() { MaxDegreeOfParallelism = HeaderParallelism };
         Parallel.For(0, packages.Count, options, index =>
         {
@@ -106,7 +107,7 @@ public static class UnrealArchiveScan
         return index;
     }
 
-    private static (string, string, List<string>, List<int>, List<string>) Row(UnrealFileProvider provider, IAesVfsReader reader,
+    private static CabRow Row(UnrealFileProvider provider, IAesVfsReader reader,
         Dictionary<FPackageId, int>? storeIndex, TypeMappings? mappings, GameFile file)
     {
         List<string> dependencies = new();
@@ -164,7 +165,8 @@ public static class UnrealArchiveScan
         {
             containerPaths.Add(UnrealPaths.PrefabPath(file.Path));
         }
-        return (file.Path, file.Path, dependencies, classIds.ToList(), containerPaths);
+        return new CabRow(file.Path, file.Path, dependencies, classIds.ToList(), containerPaths,
+            new List<string>());
     }
 
     private static void AddClasses(HashSet<int> classIds, string? className, TypeMappings? mappings)
