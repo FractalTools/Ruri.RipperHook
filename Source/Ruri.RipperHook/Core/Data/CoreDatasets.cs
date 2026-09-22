@@ -15,6 +15,7 @@ public static class CoreDatasets
     public const string BundlesId = "core.bundles";
     public const string BundleRawId = "core.bundle.raw";
     public const string BundleStandardId = "core.bundle.standard";
+    public const string AssetTextId = "core.assets.text";
 
     public const string Query = "query";
     public const string Rule = "rule";
@@ -22,6 +23,7 @@ public static class CoreDatasets
     public const string Depth = "depth";
     public const string Closure = "closure";
     public const string Bundle = "bundle";
+    public const string Cab = "cab";
 
     private static bool _registered;
 
@@ -59,6 +61,10 @@ public static class CoreDatasets
             + string.Join(", ", CabPathQuery.Fields) + ".",
             Select);
 
+        Datasets.Publish(AssetTextId, DataRole.Internal, [DataParam.List(Cab, required: true)],
+            "The serialized text of the scripted data assets these archives carry -- what a "
+            + "title's own table readers parse.", AssetText);
+
         Datasets.Publish(DepsId, DataRole.Selection,
             [
                 DataParam.Text(Query, required: false), DataParam.List(Rule),
@@ -87,6 +93,22 @@ public static class CoreDatasets
             "One bundle repacked as a stock uncompressed UnityFS AssetBundle that vanilla readers accept. "
             + "Lossy: the original compression and any custom header obfuscation are dropped.",
             StandardBundle);
+    }
+
+    /// <summary>
+    /// The serialized text of the scripted data assets a set of archives carries. A title's
+    /// designer-authored tables are read from that text by the readers this build already has;
+    /// stating it as a dataset is what lets one of those readers live outside the kernel without
+    /// a second way to open an archive.
+    /// </summary>
+    private static ColumnTable AssetText(DataRequest request)
+    {
+        TableBuilder table = new(AssetTextId, "text");
+        foreach (string text in Statements.UnityAssetText.MonoBehaviours(request.Map, request.List(Cab)))
+        {
+            table.Row(text);
+        }
+        return table.Build();
     }
 
     private static ColumnTable Select(DataRequest request)

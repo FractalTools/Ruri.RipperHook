@@ -108,12 +108,19 @@ public static class UnrealSceneGraph
     /// <summary>Every actor of a world's persistent level; none, with a line saying so, when the level does not load.</summary>
     public static IEnumerable<UObject> Actors(UWorld world, string package)
     {
-        if (world.PersistentLevel.Load<ULevel>() is not { } level)
+        // A world that names no persistent level, or a level that states no actor
+        // array, is a world with nothing placed in it -- said once, rather than
+        // thrown at whoever asked. An empty package name reaches here too: the
+        // panel greys the button out, a script or a keymap does not have to.
+        if (world is null
+            || world.PersistentLevel is not { } persistent
+            || persistent.Load<ULevel>() is not { } level
+            || level.Actors is not { } actors)
         {
             Logger.Warning(LogCategory.Import, $"[Unreal] {package}: the persistent level did not load; no actors placed.");
             yield break;
         }
-        foreach (FPackageIndex? pointer in level.Actors)
+        foreach (FPackageIndex? pointer in actors)
         {
             if (pointer?.Load() is { } actor)
             {
