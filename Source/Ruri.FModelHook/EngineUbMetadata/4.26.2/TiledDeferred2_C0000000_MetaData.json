@@ -1,0 +1,54 @@
+{
+  "Name": "TiledDeferred2",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/TiledDeferredLightRendering.cpp",
+  "LayoutHash": "0xC0000000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "TiledDeferred2",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LightDirectionAndSpotlightMaskAndSpecularScale",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 1024,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SpotAnglesAndSourceRadiusAndSimpleLighting",
+        "NameIndex": -1,
+        "Index": 16384,
+        "ArraySize": 1024,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ShadowMapChannelMask",
+        "NameIndex": -1,
+        "Index": 32768,
+        "ArraySize": 1024,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 49152,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

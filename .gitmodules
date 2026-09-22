@@ -1,0 +1,12 @@
+[submodule "AssetRipper"]
+	path = AssetRipper
+	url = https://github.com/AssetRipper/AssetRipper
+[submodule "Source/Ruri.ShaderDecompiler"]
+	path = Source/Ruri.ShaderDecompiler
+	url = https://github.com/ShiyumeMeguri/Ruri.ShaderDecompiler.git
+[submodule "FModel"]
+	path = FModel
+	url = https://github.com/4sval/FModel
+[submodule "Source/Ruri.GameHook"]
+	path = Source/Ruri.GameHook
+	url = https://github.com/FractalTools/Ruri.GameHook.git

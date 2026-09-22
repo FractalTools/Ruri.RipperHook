@@ -1,0 +1,158 @@
+{
+  "Name": "FLpvWriteShaderCSBase",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "LightPropagationVolume.cpp",
+  "LayoutHash": "0xFEF3C0F6EAD119C7",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "LpvVolumeTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VplListHeadBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "VplListHeadBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "VplListBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "VplListBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "GvListBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "GvListBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "GvListHeadBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "GvListHeadBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "AOVolumeTextureUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "AOVolumeTextureSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "LpvVolumeTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "VplListHeadBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "VplListHeadBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "VplListBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "VplListBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "GvListBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "GvListBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "GvListHeadBufferSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "GvListHeadBufferUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 9,
+      "Offset": 72,
+      "Name": "AOVolumeTextureUAV",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 10,
+      "Offset": 80,
+      "Name": "AOVolumeTextureSRV",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}

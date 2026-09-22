@@ -1,0 +1,44 @@
+{
+  "Name": "ParticleCurveInjection",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Engine/Private/Particles/ParticleCurveTexture.cpp",
+  "LayoutHash": "0x00100000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "ParticleCurveInjection",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "PixelScale",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CurveOffset",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

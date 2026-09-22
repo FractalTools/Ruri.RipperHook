@@ -1,0 +1,215 @@
+{
+  "Name": "LpvWrite",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/LightPropagationVolume.h",
+  "LayoutHash": "0x00C00000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "LpvWrite",
+    "NameIndex": -1,
+    "MatrixParameters": [
+      {
+        "Name": "mRsmToWorld",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 4,
+        "IsMatrix": true
+      }
+    ],
+    "VectorParameters": [
+      {
+        "Name": "mLightColour",
+        "NameIndex": -1,
+        "Index": 64,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GeometryVolumeCaptureLightDirection",
+        "NameIndex": -1,
+        "Index": 80,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "mEyePos",
+        "NameIndex": -1,
+        "Index": 96,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "mOldGridOffset",
+        "NameIndex": -1,
+        "Index": 112,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "mLpvGridOffset",
+        "NameIndex": -1,
+        "Index": 128,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "ClearMultiplier",
+        "NameIndex": -1,
+        "Index": 140,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LpvScale",
+        "NameIndex": -1,
+        "Index": 144,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "OneOverLpvScale",
+        "NameIndex": -1,
+        "Index": 148,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalOcclusionIntensity",
+        "NameIndex": -1,
+        "Index": 152,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DirectionalOcclusionRadius",
+        "NameIndex": -1,
+        "Index": 156,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RsmAreaIntensityMultiplier",
+        "NameIndex": -1,
+        "Index": 160,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RsmPixelToTexcoordMultiplier",
+        "NameIndex": -1,
+        "Index": 164,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SecondaryOcclusionStrength",
+        "NameIndex": -1,
+        "Index": 168,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "SecondaryBounceStrength",
+        "NameIndex": -1,
+        "Index": 172,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "VplInjectionBias",
+        "NameIndex": -1,
+        "Index": 176,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "GeometryVolumeInjectionBias",
+        "NameIndex": -1,
+        "Index": 180,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "EmissiveInjectionMultiplier",
+        "NameIndex": -1,
+        "Index": 184,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "PropagationIndex",
+        "NameIndex": -1,
+        "Index": 188,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 192,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

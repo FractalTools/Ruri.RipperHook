@@ -1,0 +1,85 @@
+{
+  "Name": "FOpenColorIOPixelShader",
+  "EngineVersion": "5.0.3",
+  "EngineSource": "OpenColorIOShader.h",
+  "LayoutHash": "0x70F4C9B81892AE5F",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Gamma",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "InputTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "InputTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "OCIO3dTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "OCIO3dTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "InputTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "InputTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "OCIO3dTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "OCIO3dTextureSampler",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}

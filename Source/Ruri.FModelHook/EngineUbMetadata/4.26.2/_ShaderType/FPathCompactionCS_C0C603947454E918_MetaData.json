@@ -1,0 +1,134 @@
+{
+  "Name": "FPathCompactionCS",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "PathCompactionCompute.cpp",
+  "LayoutHash": "0xC0C603947454E918",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [],
+    "StructParameters": [],
+    "Size": 0,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "ViewParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "RadianceTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SampleCountTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "PixelPositionTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "RadianceSortedRedUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "RadianceSortedGreenUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "RadianceSortedBlueUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "RadianceSortedAlphaUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "SampleCountSortedUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "ViewParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "RadianceTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "SampleCountTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 3,
+      "Offset": 24,
+      "Name": "PixelPositionTextureParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 4,
+      "Offset": 32,
+      "Name": "RadianceSortedRedUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 5,
+      "Offset": 40,
+      "Name": "RadianceSortedGreenUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 6,
+      "Offset": 48,
+      "Name": "RadianceSortedBlueUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 7,
+      "Offset": 56,
+      "Name": "RadianceSortedAlphaUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 8,
+      "Offset": 64,
+      "Name": "SampleCountSortedUAVParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}

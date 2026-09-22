@@ -1,0 +1,83 @@
+{
+  "Name": "FComplexMultiplyImagesCS",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "GPUFastFourierTransform.cpp",
+  "LayoutHash": "0x4364D27DFFD524B7",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SrcRect",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "DataLayout",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SrcROTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "KnlROTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "DstRWTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "SrcROTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 1,
+      "Offset": 8,
+      "Name": "KnlROTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    },
+    {
+      "Index": 2,
+      "Offset": 16,
+      "Name": "DstRWTexture",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}

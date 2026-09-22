@@ -1,0 +1,154 @@
+{
+  "Name": "SceneLightsData",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/PathTracingUniformBuffers.h",
+  "LayoutHash": "0xC0100000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "SceneLightsData",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "Count",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Type",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 256,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Position",
+        "NameIndex": -1,
+        "Index": 4112,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Normal",
+        "NameIndex": -1,
+        "Index": 8208,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "dPdu",
+        "NameIndex": -1,
+        "Index": 12304,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "dPdv",
+        "NameIndex": -1,
+        "Index": 16400,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Color",
+        "NameIndex": -1,
+        "Index": 20496,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Dimensions",
+        "NameIndex": -1,
+        "Index": 24592,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 3,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Attenuation",
+        "NameIndex": -1,
+        "Index": 28688,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RectLightBarnCosAngle",
+        "NameIndex": -1,
+        "Index": 32784,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "RectLightBarnLength",
+        "NameIndex": -1,
+        "Index": 36880,
+        "ArraySize": 256,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Flags",
+        "NameIndex": -1,
+        "Index": 40976,
+        "ArraySize": 256,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "Mobility",
+        "NameIndex": -1,
+        "Index": 45072,
+        "ArraySize": 256,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 49168,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

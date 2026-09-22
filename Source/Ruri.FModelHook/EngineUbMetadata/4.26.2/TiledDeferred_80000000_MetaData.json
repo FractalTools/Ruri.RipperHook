@@ -1,0 +1,44 @@
+{
+  "Name": "TiledDeferred",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/TiledDeferredLightRendering.cpp",
+  "LayoutHash": "0x80000000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "TiledDeferred",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "LightPositionAndInvRadius",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 1024,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "LightColorAndFalloffExponent",
+        "NameIndex": -1,
+        "Index": 16384,
+        "ArraySize": 1024,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 32768,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

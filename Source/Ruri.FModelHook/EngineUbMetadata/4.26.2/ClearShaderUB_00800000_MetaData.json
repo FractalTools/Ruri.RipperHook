@@ -1,0 +1,34 @@
+{
+  "Name": "ClearShaderUB",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/RenderCore/Private/OneColorShader.cpp",
+  "LayoutHash": "0x00800000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "ClearShaderUB",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "DrawColorMRT",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 8,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 128,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

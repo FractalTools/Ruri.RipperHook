@@ -1,0 +1,32 @@
+{
+  "Name": "PSVariables",
+  "EngineVersion": "5.2.1",
+  "EngineSource": "Engine/Plugins/Runtime/Oculus/OculusVR/Source/OculusHMD/Private/OculusHMD_StressTester.cpp",
+  "LayoutHash": "0x00100100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "PSVariables",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "IterationsMultiplier",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 16,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

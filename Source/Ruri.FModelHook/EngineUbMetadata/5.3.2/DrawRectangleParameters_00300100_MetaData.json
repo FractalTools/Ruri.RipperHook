@@ -1,0 +1,52 @@
+{
+  "Name": "DrawRectangleParameters",
+  "EngineVersion": "5.3.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/PostProcess/SceneFilterRendering.h",
+  "LayoutHash": "0x00300100",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "DrawRectangleParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "PosScaleBias",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "UVScaleBias",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InvTargetSizeAndTextureSize",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

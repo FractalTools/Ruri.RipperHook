@@ -1,0 +1,120 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AssemblyName>Ruri.RipperHook</AssemblyName>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<InternalsAssemblyNames>AssetRipper.SourceGenerated;AssetRipper.Export.Modules.Models;Ruri.ShaderDecompiler</InternalsAssemblyNames>
+		<CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
+		<Configurations>Debug;Release</Configurations>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(PureRelease)' == 'true'">
+		<Optimize>true</Optimize>
+		<DefineConstants>$(DefineConstants);TRACE;RURI_PURE_RELEASE</DefineConstants>
+	</PropertyGroup>
+
+	<!-- The per-source container adapters, out of the private Ruri.GameHook submodule. That
+	     submodule is split by ENGINE because an engine's half belongs to whichever assembly can
+	     read it: the Unity half compiles into this kernel, which needs nothing beyond the
+	     framework to read it, while the Unreal half compiles into Ruri.FModelHook, the only
+	     project that may reference CUE4Parse. Included rather than removed, so a PureRelease
+	     build simply never names them. -->
+	<ItemGroup Condition="'$(PureRelease)' != 'true'">
+		<Compile Include="..\Ruri.GameHook\Unity\**\*.cs" Link="Ruri.GameHook\Unity\%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AsmResolver.DotNet" Version="6.0.1" />
+		<PackageReference Include="AsmResolver.PE.File" Version="6.0.1" />
+		<PackageReference Include="AssetRipper.Checksum" Version="1.1.0" />
+		<!-- Pins the whole graph to the tpk container format the packer writes. AssetRipper's own
+		     projects still ask for 1.2.0 while its AssemblyDumper is already on 2.0.0; NuGet resolves
+		     to the highest, and declaring it here rather than editing the submodule keeps AssetRipper
+		     at a pristine upstream checkout. The two payloads that the published SourceGenerated
+		     package froze at format 1 are served from our own files instead: see TypeTreeFallbackHook
+		     and EngineAssetsTpkHook. -->
+		<PackageReference Include="AssetRipper.Tpk" Version="2.0.0" />
+		<!-- Pins the graph to the tensor library CUE4Parse compiles against (its own central
+		     version is 10.0.10 = assembly 10.0.0.10). AssetRipper's graph pulls 10.0.0, and .NET
+		     binds by NAME then refuses a LOWER version than the reference asks for: the Unreal
+		     reader's per-studio decryption is the one caller of it, so what the runtime threw was
+		     a FileLoadException inside the decrypt of every encrypted archive, swallowed as
+		     "this archive did not open" with correct keys in hand. The kernel's output is the
+		     folder both hosts load from, so the higher version is declared here. -->
+		<PackageReference Include="System.Numerics.Tensors" Version="10.0.10" />
+		<!-- IL2CPP native-method disassembly (AR_Il2CppMethodDump). Same versions AssetRipper.Import / .Export pull. -->
+		<PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.9" />
+		<PackageReference Include="AssetRipper.ICSharpCode.Decompiler" Version="11.0.0.9495" />
+		<!-- Real Iced (x86 decode for the loc_ listing). Aliased: MonoMod.Iced (via MonoMod.RuntimeDetour) also exposes Iced.Intel. -->
+		<PackageReference Include="Iced" Version="1.21.0" Aliases="icedreal" />
+		<PackageReference Include="AssetsTools.NET" Version="3.0.2" />
+		<PackageReference Include="IgnoresAccessChecksToGenerator" Version="0.8.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
+		<PackageReference Include="Oodle.NET" Version="2.2.0" />
+		<PackageReference Include="Google.FlatBuffers" Version="25.2.10" />
+		<!-- MessagePack-CSharp, CURRENT. Illusion's games wrote their tables and character cards
+		     with a 1.x of it; the wire format is the MessagePack spec and has not moved, so the
+		     current release reads those streams while we get its fixes and its security options
+		     (see KoikatuPack) instead of pinning ourselves to whatever the game shipped in 2018. -->
+		<PackageReference Include="MessagePack" Version="3.1.8" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+	</ItemGroup>
+
+	<ItemDefinitionGroup Condition="'$(PureRelease)' == 'true'">
+		<ProjectReference>
+			<SetConfiguration>Configuration=Release</SetConfiguration>
+		</ProjectReference>
+	</ItemDefinitionGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Assets\AssetRipper.Assets.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Export.UnityProjects\AssetRipper.Export.UnityProjects.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.GUI.Web\AssetRipper.GUI.Web.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.IO.Files\AssetRipper.IO.Files.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Numerics\AssetRipper.Numerics.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SerializationLogic\AssetRipper.SerializationLogic.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
+		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.Yaml\AssetRipper.Yaml.csproj" />
+		<ProjectReference Include="..\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj" />
+		<ProjectReference Include="..\Ruri.Hook\Ruri.Hook.csproj" />
+		<ProjectReference Include="..\Ruri.ACL\Ruri.ACL.csproj" />
+	</ItemGroup>
+
+	<!-- The game type trees, interpreted at runtime by Ruri.RipperHook.Core.TypeTree. They live with
+	     the game hooks they describe, so PureRelease leaves them unnamed along with the rest of that
+	     tree (see the Ruri.GameHook include above). Rebuild with the Ruri.Tpk project. -->
+	<ItemGroup Condition="'$(PureRelease)' != 'true'">
+		<EmbeddedResource Include="..\Ruri.GameHook\Unity\TypeTree\RuriTypeTree.tpk">
+			<LogicalName>RuriTypeTree.tpk</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<!-- Unity's built-in engine resources, straight from the Tpk repo's own CI (the same artifact
+	     AssetRipper.AssemblyDumper.Downloader fetches). It replaces the copy frozen into the published
+	     AssetRipper.SourceGenerated package, which is stale enough to predate the current container
+	     format. Not game-specific, so it survives PureRelease. See EngineAssetsTpkHook. -->
+	<ItemGroup>
+		<EmbeddedResource Include="AssetRipperHook\EngineAssets\EngineAssets.tpk">
+			<LogicalName>EngineAssets.tpk</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<!-- Which material property is which surface input, for Unity's own standard-shader
+	     vocabulary: the default layer under a title's own layer and the user's. -->
+	<ItemGroup>
+		<EmbeddedResource Include="Core\Statement\TextureRoles.json">
+			<LogicalName>TextureRoles.json</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,79 @@
+{
+  "Name": "FTestBrdfIntegrateHemispherePatchCS",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "PathTracingTestbed.cpp",
+  "LayoutHash": "0x9489C5178729B8ED",
+  "BindingFlags": "Shader",
+  "ConstantBuffer": {
+    "Name": "$Globals",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "BrdfTypeParameter",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "WoParameter",
+        "NameIndex": -1,
+        "Index": 16,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumThetaStepsParameter",
+        "NameIndex": -1,
+        "Index": 32,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "NumPhiStepsParameter",
+        "NameIndex": -1,
+        "Index": 48,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 64,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "WisBinDistributionResultsParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 0,
+      "Name": "WisBinDistributionResultsParameter",
+      "UbmtType": "UBMT_TEXTURE"
+    }
+  ],
+  "Debug": {
+    "Note": "Source-declared LAYOUT_FIELD names with placeholder offsets. Decompile-side TryReconcileGlobalsCB pairs these names with cook-side ParameterMapInfo.LooseParameterBuffers[0].Parameters[] real byte offsets."
+  }
+}

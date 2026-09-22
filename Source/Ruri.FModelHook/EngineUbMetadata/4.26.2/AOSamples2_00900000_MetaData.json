@@ -1,0 +1,34 @@
+{
+  "Name": "AOSamples2",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/DistanceFieldAmbientOcclusion.h",
+  "LayoutHash": "0x00900000",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "AOSamples2",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "SampleDirections",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 9,
+        "Type": "Float",
+        "RowCount": 4,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 144,
+    "IsPartialCB": false
+  },
+  "Textures": [],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": []
+}

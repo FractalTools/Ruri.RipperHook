@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure utility library after UI removal: no WinForms / WPF. Hosts
+       (Ruri.FModelHook, Ruri.RipperHook, Ruri.RipperHook.GUI) own their
+       own UI and reference this assembly only for the hook-attribute /
+       config / utility infrastructure. Targeting net8.0 (vs net8.0-windows)
+       lets non-Windows hosts in the future link without dragging
+       WindowsDesktop refs along. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>Ruri.Hook</AssemblyName>
+    <RootNamespace>Ruri.Hook</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <!-- The baseline of what every hooked upstream method looked like when its hook was written.
+       It lives next to the source so it is reviewed in diffs, and travels with the build so a
+       shipped copy can still check itself. -->
+  <ItemGroup>
+    <Content Include="HookBaselines.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('HookBaselines.json')" />
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RuriHookBaselineSourcePath</_Parameter1>
+      <_Parameter2>$(MSBuildProjectDirectory)\HookBaselines.json</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

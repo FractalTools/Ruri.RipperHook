@@ -1,0 +1,116 @@
+{
+  "Name": "MaterialGBufferPassParameters",
+  "EngineVersion": "4.26.2",
+  "EngineSource": "Engine/Source/Runtime/Renderer/Private/HairStrands/HairStrandsVisibility.cpp",
+  "LayoutHash": "0x05350505",
+  "HashFormula": "SizeAndStaticSlot",
+  "BindingFlags": "Shader",
+  "UsageFlags": "",
+  "ConstantBuffer": {
+    "Name": "MaterialGBufferPassParameters",
+    "NameIndex": -1,
+    "MatrixParameters": [],
+    "VectorParameters": [
+      {
+        "Name": "MaxResolution",
+        "NameIndex": -1,
+        "Index": 0,
+        "ArraySize": 0,
+        "Type": "Int",
+        "RowCount": 2,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "InputType",
+        "NameIndex": -1,
+        "Index": 8,
+        "ArraySize": 0,
+        "Type": "UInt",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      },
+      {
+        "Name": "CoverageThreshold",
+        "NameIndex": -1,
+        "Index": 12,
+        "ArraySize": 0,
+        "Type": "Float",
+        "RowCount": 1,
+        "ColumnCount": 1,
+        "IsMatrix": false
+      }
+    ],
+    "StructParameters": [],
+    "Size": 48,
+    "IsPartialCB": false
+  },
+  "Textures": [
+    {
+      "Name": "InTransmittanceTexture",
+      "NameIndex": -1,
+      "Index": 0,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "InRasterOutputVisibilityTexture",
+      "NameIndex": -1,
+      "Index": 1,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "InMSAAIDTexture",
+      "NameIndex": -1,
+      "Index": 2,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    },
+    {
+      "Name": "InMSAADepthTexture",
+      "NameIndex": -1,
+      "Index": 3,
+      "SamplerIndex": -1,
+      "MultiSampled": false,
+      "Dim": 2
+    }
+  ],
+  "Samplers": [],
+  "Buffers": [],
+  "UAVs": [],
+  "Resources": [
+    {
+      "Index": 0,
+      "Offset": 16,
+      "Name": "InTransmittanceTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float>"
+    },
+    {
+      "Index": 1,
+      "Offset": 24,
+      "Name": "InRasterOutputVisibilityTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
+    },
+    {
+      "Index": 2,
+      "Offset": 32,
+      "Name": "InMSAAIDTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<uint>"
+    },
+    {
+      "Index": 3,
+      "Offset": 40,
+      "Name": "InMSAADepthTexture",
+      "UbmtType": "UBMT_TEXTURE",
+      "ShaderType": "Texture2D<float>"
+    }
+  ]
+}
