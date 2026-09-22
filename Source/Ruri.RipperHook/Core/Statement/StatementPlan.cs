@@ -1,4 +1,4 @@
-using AssetRipper.Assets;
+﻿using AssetRipper.Assets;
 using AssetRipper.Processing;
 using System.Numerics;
 using Ruri.RipperHook.CabMapping;
@@ -61,6 +61,12 @@ public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Posi
 
 /// <summary>What one seed resolves to: which archives to read and how to read what is in
 /// them. Inert on purpose -- resolving touches no closure.</summary>
+/// <summary>One light a plan states: what it is, where it points, and how bright, in the
+/// engine's own frame. The direction is a forward vector because that is what the source states;
+/// turning it into a rotation is the statement's job, done once.</summary>
+public sealed record PlanLight(string Name, int Type, System.Numerics.Vector3 Forward,
+    float Red, float Green, float Blue, float Intensity);
+
 public sealed class StatementPlan
 {
     public required string Seed { get; init; }
@@ -87,6 +93,11 @@ public sealed class StatementPlan
     public IReadOnlyList<string> WindowPaths { get; init; } = [];
 
     public IReadOnlyList<WindowPlacement> Placements { get; init; } = [];
+
+    /// <summary>The lights this selection states of its own, for a selection whose lighting does
+    /// not sit on any of its placements. A streaming level is the case: its placement data states
+    /// renderers only, and the level's light lives beside them in its environment volumes.</summary>
+    public IReadOnlyList<PlanLight> Lights { get; init; } = [];
 
     public IReadOnlyList<string> Missing { get; init; } = [];
 

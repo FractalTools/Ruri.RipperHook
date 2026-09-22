@@ -1,4 +1,4 @@
-using AssetRipper.Assets;
+﻿using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
@@ -359,9 +359,62 @@ public sealed class UnityStatement
 
         int firstNode = _statement.Nodes.Count;
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, _plan.Label, "window"));
+
+        static System.Numerics.Quaternion Aimed(System.Numerics.Vector3 forward)
+        {
+            System.Numerics.Vector3 target = System.Numerics.Vector3.Normalize(forward);
+            if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z))
+            {
+                return System.Numerics.Quaternion.Identity;
+            }
+            System.Numerics.Vector3 source = System.Numerics.Vector3.UnitZ;
+            float dot = System.Numerics.Vector3.Dot(source, target);
+            if (dot > 0.999999f)
+            {
+                return System.Numerics.Quaternion.Identity;
+            }
+            if (dot < -0.999999f)
+            {
+                return new System.Numerics.Quaternion(0f, 1f, 0f, 0f);
+            }
+            System.Numerics.Vector3 axis = System.Numerics.Vector3.Cross(source, target);
+            return System.Numerics.Quaternion.Normalize(
+                new System.Numerics.Quaternion(axis.X, axis.Y, axis.Z, 1f + dot));
+        }
         Dictionary<string, WindowSource> sources = new(StringComparer.Ordinal);
         HashSet<string> unresolved = new(StringComparer.Ordinal);
         HashSet<string> empty = new(StringComparer.Ordinal);
+        foreach (PlanLight light in _plan.Lights)
+        {
+            _statement.Nodes.Add(new StatementNode
+            {
+                Index = _statement.Nodes.Count,
+                Parent = -1,
+                Name = light.Name,
+                Path = light.Name,
+                Kind = "light",
+                Active = true,
+                Position = System.Numerics.Vector3.Zero,
+                Rotation = Aimed(light.Forward),
+                Scale = System.Numerics.Vector3.One,
+                Light = new UnityLightInfo
+                {
+                    Node = null!,
+                    Name = light.Name,
+                    Type = light.Type,
+                    Red = light.Red,
+                    Green = light.Green,
+                    Blue = light.Blue,
+                    Intensity = light.Intensity,
+                    Range = 0f,
+                    SpotAngle = 0f,
+                    InnerSpotAngle = 0f,
+                    AreaWidth = 0f,
+                    AreaHeight = 0f,
+                    Disabled = false,
+                },
+            });
+        }
         int placed = 0;
         int builtins = 0;
         foreach (WindowPlacement placement in _plan.Placements)
