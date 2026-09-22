@@ -79,6 +79,23 @@ public static class Session
         }
     }
 
+    /// <summary>
+    /// How THIS game turns the host's locale into one of the languages it ships. Declared once
+    /// by the game when it publishes its datasets, because the set of languages and the mapping
+    /// are the game's facts; the locale is the host's. Nothing else may spell either half.
+    /// </summary>
+    public static void DeclareLanguage(Func<string, string> resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _language = resolver;
+    }
+
+    /// <summary>The game language the host's current display language reads as, or "" when the
+    /// active game declares no language rule.</summary>
+    public static string Language => _language is null ? string.Empty : _language(Locale);
+
+    private static Func<string, string>? _language;
+
     public static void SetLocale(string locale)
     {
         string stated = locale ?? string.Empty;

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Ruri.RipperHook.CabMapping;
 
 namespace Ruri.RipperHook.Data;
@@ -45,6 +45,16 @@ public readonly struct DataRequest
     {
         string[] values = Values(name, ParamKind.Text);
         return values.Length == 0 ? string.Empty : values[0];
+    }
+
+    /// <summary>The game language this request reads text in: the one it stated, else the one
+    /// the host's own display language reads as. The ONE place "unstated" is answered -- a
+    /// dataset that answered it itself would be a second rule, and the two drift silently
+    /// (measured: one scene dataset returned NO display names at all when unstated).</summary>
+    public string Language(string name)
+    {
+        string[] values = Values(name, ParamKind.Language);
+        return values.Length > 0 && values[0].Length > 0 ? values[0] : Session.Language;
     }
 
     public int Integer(string name)
