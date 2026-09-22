@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -105,13 +105,24 @@ public static class Bootstrap
         return module;
     }
 
-    public static void ApplyHooks(HookConfig config)
+    /// <summary>
+    /// Load the assemblies this configuration names, so the catalog knows their decoders. Split
+    /// out of <see cref="ApplyHooks"/> for the host that must resolve a decoder BEFORE it can say
+    /// which hooks to enable; loading the same module twice returns the assembly already loaded.
+    /// </summary>
+    public static void LoadModules(HookConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
         foreach (string module in config.Modules)
         {
             LoadModule(module);
         }
+    }
+
+    public static void ApplyHooks(HookConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        LoadModules(config);
         Hook.RuriHook.ApplyHooks(config);
     }
 

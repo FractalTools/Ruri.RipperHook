@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Reflection;
 using System.Text;
 using AssetRipper.IO.Files;
@@ -123,6 +123,28 @@ public static class InstallProbe
             return unity[0];
         }
         return NamedByCompany(unity) ?? PrefixOwner(unity);
+    }
+
+    /// <summary>
+    /// The decoder id the install under <paramref name="gameRoot"/> is read through, or "" when
+    /// the identity it states is one no decoder claims (a plain Unity build needs none).
+    ///
+    /// <para>The two facts a host must never spell for itself, composed once: which player the
+    /// install IS (<see cref="Project"/>), and which decoder that identity resolves to
+    /// (<see cref="HookCatalog.Resolve(string, string, string, string)"/>). Every host that
+    /// opens a folder resolves it the same way because they all end up here -- a host that
+    /// composes these two itself is a second answer to "which game is this", and the two drift
+    /// the moment either rule changes.</para>
+    /// </summary>
+    public static string ResolveDecoder(string gameRoot)
+    {
+        PlayerIdentity? project = Project(gameRoot);
+        if (project is null)
+        {
+            return string.Empty;
+        }
+        return HookCatalog.Resolve(project.Product, project.GameVersion, project.EngineVersion, project.Engine)?.Id
+               ?? string.Empty;
     }
 
     private static PlayerIdentity? ReadPlayer(string dataFolder)
