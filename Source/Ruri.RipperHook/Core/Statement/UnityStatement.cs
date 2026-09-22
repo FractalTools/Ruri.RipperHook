@@ -1684,7 +1684,8 @@ public sealed class UnityStatement
                     continue;
                 }
                 (string statedMeta, byte[] statedCurves) = ClipCurveBlob.Build(named);
-                _statement.Clips.Add(new StatementClip(KeyOf(named), label, string.Empty, statedMeta, statedCurves));
+                _statement.Clips.Add(new StatementClip(KeyOf(named), label, string.Empty, statedMeta, statedCurves,
+                    named.Collection.Name));
             }
             return;
         }
@@ -1695,7 +1696,8 @@ public sealed class UnityStatement
                 continue;
             }
             (string meta, byte[] curves) = ClipCurveBlob.Build(clip);
-            _statement.Clips.Add(new StatementClip(KeyOf(clip), clip.Name.String, string.Empty, meta, curves));
+            _statement.Clips.Add(new StatementClip(KeyOf(clip), clip.Name.String, string.Empty, meta, curves,
+                clip.Collection.Name));
         }
     }
 

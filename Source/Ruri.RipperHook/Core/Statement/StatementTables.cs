@@ -285,11 +285,11 @@ public static class StatementTables
 
     public static ColumnTable Clips(string id, IEnumerable<StatementClip> clips)
     {
-        TableBuilder table = new(id, "clip", "name", "skeleton", "meta", "curves@");
+        TableBuilder table = new(id, "clip", "name", "skeleton", "meta", "curves@", "cab");
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key | ColumnRole.Payload, "clip");
         foreach (StatementClip clip in clips)
         {
-            table.Row(clip.Key, clip.Name, clip.Skeleton, clip.MetaJson, clip.Curves);
+            table.Row(clip.Key, clip.Name, clip.Skeleton, clip.MetaJson, clip.Curves, clip.Archive);
         }
         return table.Build();
     }

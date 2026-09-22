@@ -26,6 +26,7 @@ public static class StatementDatasets
     public const string TextureId = "core.statement.texture";
     public const string ClipsId = "core.statement.clips";
     public const string ReportId = "core.statement.report";
+    public const string ArchivesId = "core.statement.archives";
     public const string BasesId = "core.bases";
 
     public const string Seed = "seed";
@@ -103,6 +104,9 @@ public static class StatementDatasets
             + "payload. paths... are the target skeleton's bone paths, onto which every curve is re-anchored; avatar "
             + "is that skeleton's avatar statement, against which a muscle-encoded clip is solved into bone curves; "
             + "skeleton is the key written on every row." + CommonText, Clips);
+        Datasets.Publish(ArchivesId, DataRole.Internal, [DataParam.List(Seed, required: true)],
+            "Where each seed lives: every archive loading it would read, with the container path "
+            + "that archive files first -- answered by the same resolution a load makes.", Archives);
         Datasets.Publish(BasesId, DataRole.Introspection, [],
             "Every basis a statement can be asked in: its name, whether it reverses triangle "
             + "winding and flips texture coordinates, the conversion itself as a row-major 4x4, "
@@ -202,6 +206,23 @@ public static class StatementDatasets
     private static ColumnTable Report(DataRequest request) => StatementTables.Report(ReportId, Flatten(request));
 
     private static ColumnTable Bases(DataRequest request) => StatementTables.Bases(BasesId);
+
+    private static ColumnTable Archives(DataRequest request)
+    {
+        CabTable map = request.Map;
+        TableBuilder table = new(ArchivesId, "seed", "cab", "container");
+        foreach (string seed in request.List(Seed))
+        {
+            foreach (string cab in StatementSources.Archives([seed], map))
+            {
+                string container = map.TryGetId(cab, out int id) && map.ContainerPathCount(id) > 0
+                    ? map.ContainerPath(id, 0)
+                    : string.Empty;
+                table.Row(seed, cab, container);
+            }
+        }
+        return table.Build();
+    }
 
     private static ColumnTable Clips(DataRequest request)
     {
