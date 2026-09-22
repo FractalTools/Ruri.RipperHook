@@ -1,4 +1,4 @@
-using Ruri.RipperHook.CabMapping;
+﻿using Ruri.RipperHook.CabMapping;
 
 namespace Ruri.RipperHook.Statements;
 
@@ -18,6 +18,18 @@ public static class StatementFlattener
         {
             cancellation.ThrowIfCancellationRequested();
             Append(merged, FlattenOne(map, plan, options));
+        }
+        return merged;
+    }
+
+    /// <summary>Several statements as one, nodes re-based as they land -- for a source whose one
+    /// seed is read as several parts.</summary>
+    public static Statement Merge(IEnumerable<Statement> statements)
+    {
+        Statement merged = new();
+        foreach (Statement statement in statements)
+        {
+            Append(merged, statement);
         }
         return merged;
     }

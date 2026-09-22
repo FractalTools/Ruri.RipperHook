@@ -146,6 +146,31 @@ public static class StatementSources
 
     public static void Clear() => Sources.Clear();
 
+    /// <summary>Every archive these seeds read, each once -- what a question about a selection's
+    /// archives is asked of, so that the shaders it shades with or the shapes its meshes carry are
+    /// read out of exactly what loading the seeds would load.</summary>
+    public static string[] Archives(IEnumerable<string> seeds, CabTable map)
+    {
+        StatementOptions options = new();
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<string> cabs = [];
+        foreach (string seed in seeds)
+        {
+            if (string.IsNullOrWhiteSpace(seed))
+            {
+                continue;
+            }
+            foreach (string cab in Resolve(seed, map, options).Cabs)
+            {
+                if (seen.Add(cab))
+                {
+                    cabs.Add(cab);
+                }
+            }
+        }
+        return cabs.ToArray();
+    }
+
     /// <summary>The plan for a seed: what the registered sources state it is, else what the
     /// loaded map files under it -- an archive by name, the asset at a container path, or
     /// everything under a container folder -- read by the engine's own flattening.</summary>

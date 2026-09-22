@@ -39,27 +39,32 @@ public static class UnrealStatementSource
         return UnrealBasis.Basis.Direction(declared.X, declared.Y, declared.Z);
     }
 
+    /// <summary>A seed is one package, or several joined by the list separator -- a row that is a
+    /// body and what it wears is one thing to load. Every package must be one this install ships.</summary>
     private static StatementPlan? Resolve(string seed, CabTable map, StatementOptions options)
     {
-        string package = seed.StartsWith(PackagePrefix, StringComparison.OrdinalIgnoreCase) ? seed[PackagePrefix.Length..] : seed;
-        if (package.Length == 0 || !map.TryGetId(package, out _))
+        string named = seed.StartsWith(PackagePrefix, StringComparison.OrdinalIgnoreCase) ? seed[PackagePrefix.Length..] : seed;
+        string[] packages = named.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (packages.Length == 0 || !packages.All(package => map.TryGetId(package, out _)))
         {
             return null;
-        }
-        string label = package[(package.Replace('\\', '/').LastIndexOf('/') + 1)..];
-        int dot = label.LastIndexOf('.');
-        if (dot > 0)
-        {
-            label = label[..dot];
         }
         return new StatementPlan
         {
             Seed = seed,
-            Label = label,
+            Label = Label(packages[0]),
             Kind = StatementKind.Placements,
-            Cabs = [package],
-            Flatten = requested => Flatten(seed, package, label, map, requested),
+            Cabs = packages,
+            Flatten = requested => StatementFlattener.Merge(
+                packages.Select(package => Flatten(seed, package, Label(package), map, requested))),
         };
+    }
+
+    private static string Label(string package)
+    {
+        string label = package[(package.Replace('\\', '/').LastIndexOf('/') + 1)..];
+        int dot = label.LastIndexOf('.');
+        return dot > 0 ? label[..dot] : label;
     }
 
     private sealed record LibraryEntry(DecodedMesh Geometry, IReadOnlyList<string> OwnMaterials, IReadOnlyList<string> Bones,
@@ -90,7 +95,7 @@ public static class UnrealStatementSource
         {
             Forward = CharacterForward(UnrealTitles.Of(Session.GameRoot)),
         });
-        Dictionary<int, string> skeletonOf = Skeletons(seed, statement, rows, library);
+        Dictionary<int, string> skeletonOf = Skeletons(seed + "|" + package, statement, rows, library);
         for (int row = 0; row < rows.RowCount; row++)
         {
             string meshPath = mesh.Text(row);

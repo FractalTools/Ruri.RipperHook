@@ -1,4 +1,4 @@
-using AssetRipper.Assets;
+﻿using AssetRipper.Assets;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
@@ -28,7 +28,8 @@ public static class ShaderDatasets
     {
         Datasets.Publish(ShadersId, DataRole.Diagnostic, [DataParam.List(Seed), DataParam.Text(Output)],
             "Every shader the seeds' materials shade with, written as source under output: one row "
-            + "per (material, shader, variant), with where it landed and how big it came out.", Shaders);
+            + "per (material, shader, variant), with where it landed and how big it came out. A seed "
+            + "is read as a load reads it, so these are the shaders loading it would shade with.", Shaders);
         Datasets.Publish(AllShadersId, DataRole.Diagnostic, [DataParam.Text(Output)],
             "Every shader the install ships, written as source under output. A shader no material "
             + "references is still a shader the install ships; reached this way it states no variant.", AllShaders);
@@ -39,7 +40,8 @@ public static class ShaderDatasets
         string output = request.Text(Output);
         ArgumentException.ThrowIfNullOrWhiteSpace(output);
         ShaderWriter writer = new(output, ShadersId);
-        GameData? loaded = ClosureReader.Read(request.Map, request.List(Seed), reachThroughDependents: true);
+        GameData? loaded = ClosureReader.Read(request.Map, StatementSources.Archives(request.List(Seed), request.Map),
+            reachThroughDependents: true);
         if (loaded is null)
         {
             return writer.Build();
