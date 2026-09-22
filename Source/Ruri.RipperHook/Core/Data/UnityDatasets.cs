@@ -6,6 +6,7 @@ using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.MeshBlendShapeChannel;
 using Ruri.RipperHook.Bridge;
 using Ruri.RipperHook.CabMapping;
+using Ruri.RipperHook.Statements;
 using Ruri.RipperHook.Tables;
 using System.Globalization;
 
@@ -30,7 +31,7 @@ public static class UnityDatasets
     public const string IdPrefix = "unity.";
     public const string BlendShapesId = "unity.blendshapes";
 
-    private const string Cab = "cab";
+    private const string Seed = "seed";
 
     private static bool _registered;
 
@@ -42,12 +43,13 @@ public static class UnityDatasets
         }
         _registered = true;
 
-        // The archives are REQUIRED: this answers about a model somebody picked, and with none
+        // The seeds are REQUIRED: this answers about a model somebody picked, and with none
         // picked it has nothing to say -- which is a list a surface offers rather than opens.
-        Datasets.Publish(BlendShapesId, DataRole.ExpressionCatalog, [DataParam.List(Cab, required: true)],
-            "Every named blend shape the given archives reach, as the MESH itself states it -- "
-            + "the expression vocabulary a model was built with, which every Unity build stores "
-            + "beside the deltas. Each row carries the mesh and the shape's index in it.",
+        Datasets.Publish(BlendShapesId, DataRole.ExpressionCatalog, [DataParam.List(Seed, required: true)],
+            "Every named blend shape the given seeds reach, as the MESH itself states it -- the "
+            + "expression vocabulary a model was built with, which every Unity build stores beside "
+            + "the deltas. A seed is read as a load reads it. Each row carries the mesh and the "
+            + "shape's index in it.",
             BlendShapes);
     }
 
@@ -60,12 +62,13 @@ public static class UnityDatasets
             .Role(ColumnRole.Facet | ColumnRole.Group, "mesh")
             .Role(ColumnRole.Key | ColumnRole.Payload, "key");
 
-        GameData? loaded = ClosureReader.Read(request.Map, request.List(Cab));
+        string[] archives = StatementSources.Archives(request.List(Seed), request.Map);
+        GameData? loaded = ClosureReader.Read(request.Map, archives);
         if (loaded is null)
         {
             return table.Build();
         }
-        HashSet<string> reached = Reached(request);
+        HashSet<string> reached = new(CabMap.ResolveClosureCabNames(request.Map, archives), StringComparer.OrdinalIgnoreCase);
         Dictionary<AssetCollection, string> identities = ClosureGraphBlob.CollectionIdentities(loaded);
         foreach (IUnityObjectBase asset in loaded.GameBundle.FetchAssets())
         {
@@ -89,17 +92,11 @@ public static class UnityDatasets
         return table.Build();
     }
 
-    /// <summary>The archives the selection actually REACHES, as the map states it.
-    ///
-    /// Loading is gated by FILE, and a build that pools dozens of unrelated archives into one
-    /// file therefore loads strangers alongside what was asked for -- a character's closure
-    /// co-hosting another character's face. The map knows which archives the seeds reach, so
-    /// that is the answer, and an asset from a co-tenant is left out rather than reported as
-    /// this row's.</summary>
-    private static HashSet<string> Reached(DataRequest request) =>
-        new(CabMap.ResolveClosureCabNames(request.Map, request.List(Cab)),
-            StringComparer.OrdinalIgnoreCase);
-
+    /// <summary>Whether an asset sits in an archive the selection actually REACHES, as the map
+    /// states it. Loading is gated by FILE, and a build that pools dozens of unrelated archives
+    /// into one file loads strangers alongside what was asked for -- a character's closure
+    /// co-hosting another character's face -- so an asset from a co-tenant is left out rather
+    /// than reported as this row's.</summary>
     private static bool Reaches(HashSet<string> reached, IUnityObjectBase asset) =>
         reached.Count == 0 || reached.Contains(asset.Collection.Name);
 

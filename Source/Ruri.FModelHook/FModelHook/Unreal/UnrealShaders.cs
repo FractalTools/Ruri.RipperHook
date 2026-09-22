@@ -26,18 +26,19 @@ public static class UnrealShaders
 {
     public const string ShadersId = "unreal.shaders";
     public const string AllShadersId = "unreal.shaders.all";
-    public const string PackagesParam = "packages";
+    public const string SeedParam = "seed";
     public const string ArchivesParam = "archives";
     public const string OutputParam = "output";
 
     public static void Register()
     {
         Datasets.Publish(ShadersId, DataRole.Payload,
-            [DataParam.List(PackagesParam), DataParam.List(ArchivesParam), DataParam.Text(OutputParam)],
-            "Decompile every shader variant the stated packages compiled to, into the stated "
-            + "folder: one row per archive that carried them, with how many shader maps it answered "
-            + "for. A package answers as whatever it is -- a material for itself, a mesh or an actor "
-            + "for every material it names, an effect for its own scripts. Unreal has no shader "
+            [DataParam.List(SeedParam), DataParam.List(ArchivesParam), DataParam.Text(OutputParam)],
+            "Decompile every shader variant the stated seeds compiled to, into the stated folder: "
+            + "one row per archive that carried them, with how many shader maps it answered for. A "
+            + "seed is read as a load reads it, and each package it names answers as whatever it is "
+            + "-- a material for itself, a mesh or an actor for every material it names, an effect "
+            + "for its own scripts. Unreal has no shader "
             + "asset to export -- a material's program is blobs in a shared archive -- so what lands "
             + "is the vertex and pixel stages as source, one file per variant, beside the metadata "
             + "naming which material each came from. Naming ARCHIVES instead asks the archives "
@@ -56,13 +57,13 @@ public static class UnrealShaders
 
     private static ColumnTable Shaders(DataRequest request)
     {
-        string[] packages = request.List(PackagesParam);
+        string[] packages = Ruri.RipperHook.Statements.StatementSources.Archives(request.List(SeedParam), request.Map);
         string[] archives = request.List(ArchivesParam);
         if (packages.Length == 0 && archives.Length == 0)
         {
             throw new ArgumentException(
-                $"dataset '{ShadersId}' answers about packages or about whole archives; "
-                + $"name them with '{PackagesParam}' or '{ArchivesParam}'.");
+                $"dataset '{ShadersId}' answers about seeds or about whole archives; "
+                + $"name them with '{SeedParam}' or '{ArchivesParam}'.");
         }
         return Decompile(ShadersId, request, packages, archives: archives);
     }

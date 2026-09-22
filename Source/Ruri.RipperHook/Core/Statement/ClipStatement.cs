@@ -132,7 +132,7 @@ public static class ClipStatement
             Solve(clip, meta, channels, paths, suffixes, avatarJson, note);
         }
         (string metaJson, byte[] curves) = Write(meta, channels);
-        return new StatementClip(clip.Key, clip.Name, skeletonKey, metaJson, curves);
+        return new StatementClip(clip.Key, clip.Name, skeletonKey, metaJson, curves, clip.Archive);
     }
 
     private static void Solve(StatementClip clip, ClipIndex meta, List<Channel> channels, HashSet<string> paths,

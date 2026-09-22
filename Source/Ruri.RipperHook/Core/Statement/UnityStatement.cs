@@ -131,6 +131,10 @@ public sealed class UnityStatement
             default:
                 throw new NotSupportedException($"statement kind {_plan.Kind} is not flattened by the engine path.");
         }
+        foreach (string missing in _plan.Missing)
+        {
+            _statement.Note(_plan.Seed, "named by the plan but resolved to nothing", 1, missing);
+        }
         Clips();
         EncodeTextures();
     }
@@ -296,11 +300,6 @@ public sealed class UnityStatement
                 _statement.Note(_plan.Seed, "recipe mesh carries no bind data and is placed unskinned", 1, part.Name);
             }
         }
-        foreach (string missing in _plan.Missing)
-        {
-            _statement.Note(_plan.Seed, "recipe slot resolved to nothing", 1, missing);
-        }
-
         StatementSkeleton skeleton = new() { Key = skeletonKey, AvatarJson = AvatarStatement.ToJson(AvatarRigInput.FromAvatar(avatar)) };
         Dictionary<string, int> indexOfBone = new(StringComparer.Ordinal);
         foreach (SharedSkeleton.Bone bone in rig.Bones)
@@ -676,8 +675,8 @@ public sealed class UnityStatement
         UnityRendererSkips skips = new();
         HashSet<IRenderer> discard = UnityRenderers.LodDiscardSet(lodGroups, _options.Detail);
         Dictionary<IRenderer, int> lodOf = LodLevels(lodGroups);
-        foreach (UnityRendererInfo info in UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips,
-                     (renderer, _) => !discard.Contains(renderer)))
+        foreach (UnityRendererInfo info in Filled(UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips,
+                     (renderer, _) => !discard.Contains(renderer))))
         {
             (DecodedMesh? decoded, string meshKey, string builtin) = ResolveMesh(info);
             if (decoded is null)
@@ -897,8 +896,8 @@ public sealed class UnityStatement
         UnityRendererSkips skips = new();
         HashSet<IRenderer> discard = UnityRenderers.LodDiscardSet(lodGroups, _options.Detail);
         Dictionary<IRenderer, int> lodOf = LodLevels(lodGroups);
-        foreach (UnityRendererInfo info in UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips,
-                     AtLevel(discard)))
+        foreach (UnityRendererInfo info in Filled(UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips,
+                     AtLevel(discard))))
         {
             FlattenRenderer(info, hierarchy, rows, skeleton, lodOf);
         }
@@ -939,45 +938,44 @@ public sealed class UnityStatement
         return new RootFlattening(hierarchy, skeleton, firstNode, rows);
     }
 
-    /// <summary>Whether a renderer is at the wanted detail level. A title that lists its
-    /// renderers' meshes beside the rig states the level there, and a level the list does not
-    /// author contributes its nearest one; a renderer the list does not mention is at no level
-    /// and always kept. Everyone else is judged by the engine's own LODGroups.</summary>
+    /// <summary>Whether a renderer is at the wanted detail level. A title that fills its
+    /// renderers at run time states the level of each fill, and a level no fill authors
+    /// contributes its nearest one; a renderer no fill mentions is at no level and always kept.
+    /// Everyone else is judged by the engine's own LODGroups.</summary>
     private Func<IRenderer, string, bool> AtLevel(HashSet<IRenderer> discard)
     {
-        IReadOnlyDictionary<string, (string Mesh, int Lod)> manifest = _plan.RendererMeshes;
-        HashSet<int> stated = manifest.Values.Where(entry => entry.Lod >= 0).Select(entry => entry.Lod).ToHashSet();
+        IReadOnlyDictionary<string, RendererFill> fills = Fills;
+        HashSet<int> stated = fills.Values.Where(fill => fill.Lod >= 0).Select(fill => fill.Lod).ToHashSet();
         if (stated.Count == 0)
         {
             return (renderer, _) => !discard.Contains(renderer);
         }
         int wanted = stated.OrderBy(level => Math.Abs(level - _options.Detail)).ThenBy(level => level).First();
-        return (_, name) => !manifest.TryGetValue(name, out (string Mesh, int Lod) declared) || declared.Lod < 0 || declared.Lod == wanted;
+        return (_, name) => !fills.TryGetValue(name, out RendererFill? fill) || fill.Lod < 0 || fill.Lod == wanted;
     }
 
-    private Dictionary<string, IMesh>? _meshesByName;
+    private IReadOnlyDictionary<string, RendererFill>? _fills;
 
-    /// <summary>The mesh a title's own list says a renderer draws, by the name the mesh
-    /// carries -- the one identity the list and the closure share.</summary>
-    private IMesh? ListedMesh(string rendererName)
+    /// <summary>What the title fills its empty renderers with, asked once of the loaded closure.</summary>
+    private IReadOnlyDictionary<string, RendererFill> Fills =>
+        _fills ??= _plan.Fills?.Invoke(_gameData) ?? new Dictionary<string, RendererFill>(StringComparer.Ordinal);
+
+    /// <summary>Every renderer as it draws at run time: a fill's mesh replaces the renderer's own,
+    /// and a fill that states materials or bones replaces the renderer's -- what the title assigns wins.</summary>
+    private IEnumerable<UnityRendererInfo> Filled(IEnumerable<UnityRendererInfo> renderers)
     {
-        if (!_plan.RendererMeshes.TryGetValue(rendererName, out (string Mesh, int Lod) declared) || declared.Mesh.Length == 0)
+        IReadOnlyDictionary<string, RendererFill> fills = Fills;
+        foreach (UnityRendererInfo info in renderers)
         {
-            return null;
-        }
-        if (_meshesByName is null)
-        {
-            _meshesByName = new Dictionary<string, IMesh>(StringComparer.OrdinalIgnoreCase);
-            foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets()
-                         .OrderBy(asset => _identities[asset.Collection], StringComparer.Ordinal).ThenBy(asset => asset.PathID))
-            {
-                if (asset is IMesh mesh)
+            yield return fills.TryGetValue(info.Name, out RendererFill? fill)
+                ? info with
                 {
-                    _meshesByName.TryAdd(mesh.Name.String, mesh);
+                    Mesh = fill.Mesh,
+                    Materials = fill.Materials.Count > 0 ? fill.Materials : info.Materials,
+                    Bones = fill.Bones ?? info.Bones,
                 }
-            }
+                : info;
         }
-        return _meshesByName.GetValueOrDefault(declared.Mesh);
     }
 
     /// <summary>Several prefabs joined into ONE rigged character: the piece marked as the rig
@@ -1099,7 +1097,7 @@ public sealed class UnityStatement
         UnityRendererFilters filters = new() { DetailLevel = _options.Detail, ShadowProxies = _options.ShadowProxies, Inactive = _options.Inactive };
         UnityRendererSkips skips = new();
         HashSet<IRenderer> discard = UnityRenderers.LodDiscardSet(lodGroups, _options.Detail);
-        List<UnityRendererInfo> renderers = UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips, AtLevel(discard)).ToList();
+        List<UnityRendererInfo> renderers = Filled(UnityRenderers.Renderers(skinned, meshRenderers, hierarchy, filters, skips, AtLevel(discard))).ToList();
 
         HashSet<string> weighted = new(StringComparer.Ordinal);
         foreach (UnityRendererInfo info in renderers.Where(info => info.Skinned))
@@ -1451,7 +1449,7 @@ public sealed class UnityStatement
 
     private (DecodedMesh? Decoded, string Key, string Builtin) ResolveMesh(UnityRendererInfo info)
     {
-        IMesh? mesh = info.Mesh ?? ListedMesh(info.Name);
+        IMesh? mesh = info.Mesh;
         if (mesh is null)
         {
             string? primitive = BuiltinPrimitive(info);
@@ -1686,7 +1684,8 @@ public sealed class UnityStatement
                     continue;
                 }
                 (string statedMeta, byte[] statedCurves) = ClipCurveBlob.Build(named);
-                _statement.Clips.Add(new StatementClip(KeyOf(named), label, string.Empty, statedMeta, statedCurves));
+                _statement.Clips.Add(new StatementClip(KeyOf(named), label, string.Empty, statedMeta, statedCurves,
+                    named.Collection.Name));
             }
             return;
         }
@@ -1697,7 +1696,8 @@ public sealed class UnityStatement
                 continue;
             }
             (string meta, byte[] curves) = ClipCurveBlob.Build(clip);
-            _statement.Clips.Add(new StatementClip(KeyOf(clip), clip.Name.String, string.Empty, meta, curves));
+            _statement.Clips.Add(new StatementClip(KeyOf(clip), clip.Name.String, string.Empty, meta, curves,
+                clip.Collection.Name));
         }
     }
 

@@ -70,7 +70,7 @@ public static class UnrealDatasets
     public const string MaterialsId = "unreal.materials";
     public const string TexturesId = "unreal.textures";
     public const string PackageParam = "package";
-    public const string PackagesParam = "packages";
+    public const string SeedParam = "seed";
     public const string MaterialParam = "material";
     public const string TextureParam = "texture";
     public const string WorldParam = "world";
@@ -199,10 +199,11 @@ public static class UnrealDatasets
             + "sequence's own compression tolerance justifies, bone paths in the reference skeleton's "
             + "own naming, coordinates in the host's basis. No AnimationClip asset is created.",
             Animations);
-        Datasets.Publish(MorphTargetsId, DataRole.ExpressionCatalog, [DataParam.List(PackagesParam, required: true)],
-            "Every named morph target the skeletal meshes of the given packages carry -- the "
-            + "expression vocabulary a model was built with, as the MESH itself states it. One row "
-            + "per (mesh, shape), carrying the shape's index in that mesh's own order.",
+        Datasets.Publish(MorphTargetsId, DataRole.ExpressionCatalog, [DataParam.List(SeedParam, required: true)],
+            "Every named morph target the skeletal meshes of the given seeds carry -- the "
+            + "expression vocabulary a model was built with, as the MESH itself states it. A seed is "
+            + "read as a load reads it. One row per (mesh, shape), carrying the shape's index in that "
+            + "mesh's own order.",
             MorphTargets);
 
         Datasets.Publish(MaterialsId, DataRole.Internal, [DataParam.List(MaterialParam)],
@@ -832,7 +833,7 @@ public static class UnrealDatasets
             .Role(ColumnRole.Facet | ColumnRole.Group, "mesh")
             .Role(ColumnRole.Key | ColumnRole.Payload, "key");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
-        foreach (string stated in request.List(PackagesParam))
+        foreach (string stated in Ruri.RipperHook.Statements.StatementSources.Archives(request.List(SeedParam), request.Map))
         {
             string package = PackageKey(provider, stated);
             if (!provider.Files.TryGetValue(package, out GameFile? file))
