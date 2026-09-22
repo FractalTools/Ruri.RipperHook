@@ -1,5 +1,8 @@
 ﻿using AssetRipper.Assets;
 using AssetRipper.Processing;
+using AssetRipper.SourceGenerated.Classes.ClassID_21;
+using AssetRipper.SourceGenerated.Classes.ClassID_4;
+using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using System.Numerics;
 using Ruri.RipperHook.CabMapping;
 
@@ -59,14 +62,20 @@ public sealed record PartsSkeleton(string Cab, string AvatarNameStem);
 public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Position, Quaternion Rotation,
     Vector3 Scale, IReadOnlyList<string> MaterialPaths, bool IsPrefab, string Stem, string MeshName);
 
-/// <summary>What one seed resolves to: which archives to read and how to read what is in
-/// them. Inert on purpose -- resolving touches no closure.</summary>
+/// <summary>What a renderer the prefab ships empty draws at run time: the mesh and the materials
+/// the title puts on it, the bones that mesh's weights index when the title rebinds them, and the
+/// detail level that fill is (-1 unstated). Materials left empty and bones left null keep whatever
+/// the renderer carries of its own.</summary>
+public sealed record RendererFill(IMesh Mesh, IReadOnlyList<IMaterial?> Materials, IReadOnlyList<ITransform?>? Bones, int Lod);
+
 /// <summary>One light a plan states: what it is, where it points, and how bright, in the
 /// engine's own frame. The direction is a forward vector because that is what the source states;
 /// turning it into a rotation is the statement's job, done once.</summary>
 public sealed record PlanLight(string Name, int Type, System.Numerics.Vector3 Forward,
     float Red, float Green, float Blue, float Intensity);
 
+/// <summary>What one seed resolves to: which archives to read and how to read what is in
+/// them. Inert on purpose -- resolving touches no closure of its own.</summary>
 public sealed class StatementPlan
 {
     public required string Seed { get; init; }
@@ -101,11 +110,10 @@ public sealed class StatementPlan
 
     public IReadOnlyList<string> Missing { get; init; } = [];
 
-    /// <summary>A prefab whose renderers carry no mesh of their own: the mesh each renderer's
-    /// transform draws, and the detail level the list states for it (-1 unstated), as the
-    /// title keeps it beside the rig.</summary>
-    public IReadOnlyDictionary<string, (string Mesh, int Lod)> RendererMeshes { get; init; } =
-        new Dictionary<string, (string Mesh, int Lod)>(StringComparer.Ordinal);
+    /// <summary>A prefab whose renderers the title fills at run time: what each renderer, by
+    /// name, draws. Asked once the closure is loaded, because what a renderer draws is an object
+    /// of the closure rather than a name -- two parts may name their meshes alike.</summary>
+    public Func<GameData, IReadOnlyDictionary<string, RendererFill>>? Fills { get; init; }
 
     /// <summary>A flattening of the plan's own, for an engine the Unity path does not read.</summary>
     public Func<StatementOptions, Statement>? Flatten { get; init; }
@@ -117,7 +125,7 @@ public sealed class StatementPlan
     public Func<GameData, IReadOnlyDictionary<IUnityObjectBase, string>>? Clips { get; init; }
 
     public string Signature => string.Join('|', Seed, Kind, string.Join(';', Cabs), SeededOnly ? 1 : 0,
-        string.Join(';', NamedRoots), Meshes.Count, Parts.Count, Placements.Count, RendererMeshes.Count);
+        string.Join(';', NamedRoots), Meshes.Count, Parts.Count, Placements.Count, Fills is null ? 0 : 1);
 }
 
 /// <summary>Where a seed that is not an archive of the loaded map is explained: a hook
@@ -138,8 +146,9 @@ public static class StatementSources
 
     public static void Clear() => Sources.Clear();
 
-    /// <summary>The plan for a seed: what the registered sources state it is, else an archive
-    /// name or container path of the loaded map read by the engine's own flattening.</summary>
+    /// <summary>The plan for a seed: what the registered sources state it is, else what the
+    /// loaded map files under it -- an archive by name, the asset at a container path, or
+    /// everything under a container folder -- read by the engine's own flattening.</summary>
     public static StatementPlan Resolve(string seed, CabTable map, StatementOptions options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(seed);
@@ -152,31 +161,38 @@ public static class StatementSources
         }
         if (map.TryGetId(seed, out int cabId))
         {
-            return ForCab(map, cabId, seed);
+            return ForCabs(map, [map.CabName(cabId)], seed,
+                map.ContainerPathCount(cabId) > 0 ? map.ContainerPath(cabId, 0) : seed);
         }
         string[] cabs = CabMap.ResolveCabsForPaths(map, [seed]);
-        if (cabs.Length > 0 && map.TryGetId(cabs[0], out int pathCab))
+        if (cabs.Length == 0)
         {
-            return ForCab(map, pathCab, seed);
+            cabs = CabMap.ResolveCabsUnderFolder(map, seed);
+        }
+        if (cabs.Length > 0)
+        {
+            return ForCabs(map, cabs, seed, seed);
         }
         throw new ArgumentException(
-            $"seed '{seed}' is neither an archive nor a container path of the loaded map, and no "
-            + "registered statement source claims it.");
+            $"seed '{seed}' is neither an archive, a container path nor a container folder of the loaded "
+            + "map, and no registered statement source claims it.");
     }
 
-    private static StatementPlan ForCab(CabTable map, int cabId, string seed)
+    private static StatementPlan ForCabs(CabTable map, string[] cabs, string seed, string named)
     {
-        ReadOnlySpan<int> classIds = map.ClassIds(cabId);
-        bool hasObjects = classIds.Contains((int)AssetRipper.SourceGenerated.ClassIDType.GameObject);
-        StatementKind kind = hasObjects ? StatementKind.Prefab : StatementKind.Loose;
-        string cab = map.CabName(cabId);
-        string container = map.ContainerPathCount(cabId) > 0 ? map.ContainerPath(cabId, 0) : cab;
+        bool hasObjects = false;
+        foreach (string cab in cabs)
+        {
+            hasObjects |= map.TryGetId(cab, out int cabId)
+                && map.ClassIds(cabId).Contains((int)AssetRipper.SourceGenerated.ClassIDType.GameObject);
+        }
+        string path = named.Replace('\\', '/').TrimEnd('/');
         return new StatementPlan
         {
             Seed = seed,
-            Label = Path.GetFileNameWithoutExtension(container),
-            Kind = kind,
-            Cabs = [cab],
+            Label = Path.GetFileNameWithoutExtension(path[(path.LastIndexOf('/') + 1)..]),
+            Kind = hasObjects ? StatementKind.Prefab : StatementKind.Loose,
+            Cabs = cabs,
             SeededOnly = true,
         };
     }

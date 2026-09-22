@@ -1,4 +1,4 @@
-using AssetRipper.Import.Structure.Assembly.Serializable;
+﻿using AssetRipper.Import.Structure.Assembly.Serializable;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_108;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
@@ -26,7 +26,7 @@ namespace Ruri.RipperHook.Statements;
 /// now but is routinely a runtime-toggled variant, so it is kept and said so unless the
 /// request excludes it. Static batching gives a renderer a window into a shared mesh, and the
 /// window travels with it. Skinned renderers come first, then mesh renderers, in file order.</summary>
-public sealed class UnityRendererInfo
+public sealed record UnityRendererInfo
 {
     public required IRenderer Renderer { get; init; }
 

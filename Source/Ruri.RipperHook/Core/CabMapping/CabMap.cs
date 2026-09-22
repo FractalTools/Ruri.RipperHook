@@ -326,4 +326,116 @@ public static class CabMap
         cabs.Sort(StringComparer.OrdinalIgnoreCase);
         return cabs.ToArray();
     }
+
+    /// <summary>Every archive that files something at or under a folder of container paths -- the
+    /// folder a tree of the map shows, read as the one thing it holds.</summary>
+    public static string[] ResolveCabsUnderFolder(CabTable table, string folder)
+    {
+        string prefix = folder.Replace('\\', '/').TrimEnd('/') + "/";
+        if (prefix.Length == 1)
+        {
+            return [];
+        }
+        ConcurrentBag<int> matched = new();
+        Parallel.ForEach(Partitioner.Create(0, table.Count), range =>
+        {
+            char[] buffer = ArrayPool<char>.Shared.Rent(Math.Max(1, table.MaxContainerPathUtf8Length));
+            try
+            {
+                for (int id = range.Item1; id < range.Item2; id++)
+                {
+                    for (int index = 0; index < table.ContainerPathCount(id); index++)
+                    {
+                        int written = Encoding.UTF8.GetChars(table.ContainerPathUtf8(id, index), buffer);
+                        if (buffer.AsSpan(0, written).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matched.Add(id);
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(buffer);
+            }
+        });
+        return matched.Select(table.CabName).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>Every container path that files one of these RELATIVE paths, keyed by the relative
+    /// path -- what a title's own tables state when they address an asset under a resource root they
+    /// never spell. A relative path matches whole trailing segments only, so a caller sees every
+    /// root that files it and can tell one from several. Keyed by the caller's own spelling.</summary>
+    public static Dictionary<string, List<string>> ResolveContainerPathsForTails(CabTable table, IEnumerable<string> tails)
+    {
+        Dictionary<string, List<string>> byLeaf = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> spelled = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<string>> found = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string tail in tails)
+        {
+            string normalized = tail.Replace('\\', '/').Trim('/');
+            if (normalized.Length == 0 || found.ContainsKey(tail) || spelled.ContainsKey(normalized))
+            {
+                continue;
+            }
+            found[tail] = [];
+            spelled[normalized] = tail;
+            string leaf = normalized[(normalized.LastIndexOf('/') + 1)..];
+            if (!byLeaf.TryGetValue(leaf, out List<string>? sharing))
+            {
+                byLeaf[leaf] = sharing = [];
+            }
+            sharing.Add(normalized);
+        }
+        if (byLeaf.Count == 0)
+        {
+            return found;
+        }
+        Dictionary<string, List<string>>.AlternateLookup<ReadOnlySpan<char>> leaves = byLeaf.GetAlternateLookup<ReadOnlySpan<char>>();
+        ConcurrentBag<(string Tail, string Path)> matches = new();
+        Parallel.ForEach(Partitioner.Create(0, table.Count), range =>
+        {
+            char[] buffer = ArrayPool<char>.Shared.Rent(Math.Max(1, table.MaxContainerPathUtf8Length));
+            try
+            {
+                for (int id = range.Item1; id < range.Item2; id++)
+                {
+                    for (int index = 0; index < table.ContainerPathCount(id); index++)
+                    {
+                        ReadOnlySpan<char> path = buffer.AsSpan(0, Encoding.UTF8.GetChars(table.ContainerPathUtf8(id, index), buffer));
+                        if (!leaves.TryGetValue(path[(path.LastIndexOf('/') + 1)..], out List<string>? sharing))
+                        {
+                            continue;
+                        }
+                        foreach (string tail in sharing)
+                        {
+                            if (path.Length > tail.Length && path[^(tail.Length + 1)] == '/'
+                                && path.EndsWith(tail, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matches.Add((tail, path.ToString()));
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(buffer);
+            }
+        });
+        foreach ((string tail, string path) in matches)
+        {
+            List<string> paths = found[spelled[tail]];
+            if (!paths.Contains(path, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(path);
+            }
+        }
+        foreach (List<string> paths in found.Values)
+        {
+            paths.Sort(StringComparer.OrdinalIgnoreCase);
+        }
+        return found;
+    }
 }
