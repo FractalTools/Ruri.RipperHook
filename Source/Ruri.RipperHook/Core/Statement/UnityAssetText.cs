@@ -20,7 +20,30 @@ namespace Ruri.RipperHook.Statements;
 /// </summary>
 public static class UnityAssetText
 {
+    /// <summary>The same texts with the path each was written under, for a reader that wants
+    /// ONE of them: which asset a text is cannot be read out of the text itself without knowing
+    /// the game's own spelling, and the path already says it.</summary>
+    public static List<(string Path, string Text)> Entries(CabTable map, IEnumerable<string> cabs)
+    {
+        List<(string, string)> entries = [];
+        foreach ((string path, string text) in Read(map, cabs))
+        {
+            entries.Add((path, text));
+        }
+        return entries;
+    }
+
     public static List<string> MonoBehaviours(CabTable map, IEnumerable<string> cabs)
+    {
+        List<string> only = [];
+        foreach ((string _path, string text) in Read(map, cabs))
+        {
+            only.Add(text);
+        }
+        return only;
+    }
+
+    private static List<(string Path, string Text)> Read(CabTable map, IEnumerable<string> cabs)
     {
         CabClosure closure = ClosureReader.Resolve(map, cabs, reachThroughDependents: true);
         if (closure.Files.Length == 0)
@@ -40,13 +63,13 @@ public static class UnityAssetText
         handler.Process(gameData);
         InMemoryFileSystem memory = new();
         handler.Export(gameData, "mem:/text", memory);
-        List<string> texts = [];
+        List<(string, string)> texts = [];
         foreach ((string path, byte[] bytes) in memory.Files)
         {
             if (path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
             {
-                texts.Add(System.Text.Encoding.UTF8.GetString(bytes));
+                texts.Add((path, System.Text.Encoding.UTF8.GetString(bytes)));
             }
         }
         return texts;

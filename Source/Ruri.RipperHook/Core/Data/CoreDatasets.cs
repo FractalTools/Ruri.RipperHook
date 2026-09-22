@@ -1,4 +1,4 @@
-﻿using Ruri.RipperHook.BundleExport;
+using Ruri.RipperHook.BundleExport;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using Ruri.RipperHook.Tables;
@@ -103,10 +103,10 @@ public static class CoreDatasets
     /// </summary>
     private static ColumnTable AssetText(DataRequest request)
     {
-        TableBuilder table = new(AssetTextId, "text");
-        foreach (string text in Statements.UnityAssetText.MonoBehaviours(request.Map, request.List(Cab)))
+        TableBuilder table = new(AssetTextId, "path", "text");
+        foreach ((string path, string text) in Statements.UnityAssetText.Entries(request.Map, request.List(Cab)))
         {
-            table.Row(text);
+            table.Row(path, text);
         }
         return table.Build();
     }
