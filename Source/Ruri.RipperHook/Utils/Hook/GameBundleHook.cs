@@ -87,6 +87,14 @@ public class GameBundleHook : CommonHook, IHookModule
     /// </summary>
     public static Func<string, bool>? LoadSeedFile;
 
+    /// <summary>
+    /// Whether the map driving the load files any asset under a file, by its full path. A file it
+    /// files nothing under holds no asset -- an archive index, a catalog -- so a reader looking for
+    /// one among thousands of archives asks this before opening any. Null when no map drives the
+    /// load, which is what building one is, and then nothing is known.
+    /// </summary>
+    public static Func<string, bool>? LoadMappedFile;
+
 
     public delegate IEnumerable<(string FileName, long FileNameHash, string BlockType, long Length, string ChkPath)> EnumerateVfsFilesDelegate(string[] vfsRoots, string[]? blockTypeFilter);
     public static EnumerateVfsFilesDelegate? EnumerateVfsFiles;
@@ -309,6 +317,7 @@ public class GameBundleHook : CommonHook, IHookModule
         ScanIncludeFile = null;
         LoadIncludeFile = null;
         LoadSeedFile = null;
+        LoadMappedFile = null;
         EnumerateVfsFiles = null;
         ExtractVfsFile = null;
         ScanChunk = null;

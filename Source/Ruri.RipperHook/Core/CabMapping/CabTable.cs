@@ -43,6 +43,28 @@ public sealed class CabTable
     public string RelativePath(int id) => FileIndex[id] < 0 ? string.Empty : DistinctFile(FileIndex[id]);
     public string EntryFileName(int id) => Utf8(EntryFileNameBlob, EntryFileNameOffsets, id);
 
+    /// <summary>A distinct file, where it is on disk.</summary>
+    public string FullPath(int fileIndex) => Path.GetFullPath(Path.Combine(BaseFolder, DistinctFile(fileIndex)));
+
+    /// <summary>Whether this map files at least one asset under a file, by its full path. A file
+    /// the map files nothing under holds no asset -- an archive index, a catalog -- which is the one
+    /// thing a reader looking for such a file among thousands of archives can ask without opening
+    /// any of them.</summary>
+    public bool HoldsAssets(string fullPath) =>
+        LazyInitializer.EnsureInitialized(ref _mappedFiles, MappedFiles).Contains(fullPath);
+
+    private HashSet<string>? _mappedFiles;
+
+    private HashSet<string> MappedFiles()
+    {
+        HashSet<string> files = new(FileCount, StringComparer.OrdinalIgnoreCase);
+        for (int fileIndex = 0; fileIndex < FileCount; fileIndex++)
+        {
+            files.Add(FullPath(fileIndex));
+        }
+        return files;
+    }
+
     public ReadOnlySpan<byte> DistinctFileUtf8(int fileIndex)
         => DistinctFileBlob.AsSpan(DistinctFileOffsets[fileIndex], DistinctFileOffsets[fileIndex + 1] - DistinctFileOffsets[fileIndex]);
 
