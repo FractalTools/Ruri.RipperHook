@@ -1,4 +1,7 @@
+using System.Buffers;
+using System.Globalization;
 using System.Text;
+using System.Text.Unicode;
 using AssetRipper.SourceGenerated;
 using Ruri.RipperHook.Tables;
 
@@ -17,17 +20,23 @@ public static class CabRows
 {
     public const string Id = "cab.rows";
 
-    /// <summary>How long the joined container display may get before it says "and N more"
-    /// instead. A row addressed under hundreds of names is real; printing all of them is not
+    /// <summary>How long, in bytes, the joined container display may get before it says "and N
+    /// more" instead. A row addressed under hundreds of names is real; printing all of them is not
     /// a list any more.</summary>
-    private const int MaxJoinChars = 16384;
+    private const int MaxJoinBytes = 16384;
 
-    private const string JoinSeparator = "  |  ";
+    /// <summary>The longest "...(+N more names)" an int can make.</summary>
+    private const int MaxMoreBytes = 40;
+
+    private static ReadOnlySpan<byte> JoinSeparator => "  |  "u8;
+
+    private static ReadOnlySpan<byte> TypeSeparator => ", "u8;
+
+    private static ReadOnlySpan<byte> AssetBundleName => "AssetBundle"u8;
 
     /// <summary>The fewest rows worth a piece of their own: below this, handing a piece to another
     /// core costs more than building it.</summary>
     private const int RowsPerPiece = 4096;
-    private const string AssetBundleName = "AssetBundle";
 
     /// <summary>Every row, built on every core: the rows are independent, so each core builds a
     /// piece by the same rules one row always followed, and the pieces are joined column by
@@ -44,66 +53,104 @@ public static class CabRows
         return ColumnTable.Concatenate(Id, built);
     }
 
+    /// <summary>One piece of rows, each word written straight into its column's bytes.</summary>
     private static ColumnTable Piece(CabTable map, int start, int end)
     {
-        TableBuilder table = new(Id,
-            "name|Name", "cab|Cab", "container|Container", "type_names|Type", "source|Source",
-            "deps#|Deps");
-        table.Role(ColumnRole.Label, "name", "cab")
-            .Role(ColumnRole.Key | ColumnRole.Payload, "cab")
-            .Role(ColumnRole.Detail, "type_names");
-        Dictionary<int, string> classNames = [];
+        int rows = end - start;
+        ColumnBuilder names = new(ColumnKind.Text, rows);
+        ColumnBuilder cabs = new(ColumnKind.Text, rows);
+        ColumnBuilder containers = new(ColumnKind.Text, rows);
+        ColumnBuilder types = new(ColumnKind.Text, rows);
+        ColumnBuilder sources = new(ColumnKind.Text, rows);
+        ColumnBuilder dependencies = new(ColumnKind.Real, rows);
+        Dictionary<int, byte[]> classNames = [];
+        ArrayBufferWriter<byte> scratch = new(256);
         for (int id = start; id < end; id++)
         {
-            table.Row(CabFolders.Name(map, id), map.CabName(id), Container(map, id),
-                TypeNames(map, id, classNames), map.RelativePath(id), map.DependencyCount(id));
+            scratch.ResetWrittenCount();
+            CabFolders.WriteName(map, id, scratch);
+            names.Add(scratch.WrittenSpan);
+            cabs.Add(map.CabNameUtf8(id));
+            scratch.ResetWrittenCount();
+            WriteContainer(map, id, scratch);
+            containers.Add(scratch.WrittenSpan);
+            scratch.ResetWrittenCount();
+            WriteTypeNames(map, id, classNames, scratch);
+            types.Add(scratch.WrittenSpan);
+            int file = map.FileIndex[id];
+            sources.Add(file < 0 ? ReadOnlySpan<byte>.Empty : map.DistinctFileUtf8(file));
+            dependencies.Add((double)map.DependencyCount(id));
         }
-        return table.Build();
+        return new ColumnTable
+        {
+            Name = Id,
+            RowCount = rows,
+            Columns =
+            [
+                names.Build("name", ColumnRole.Label, "Name"),
+                cabs.Build("cab", ColumnRole.Label | ColumnRole.Key | ColumnRole.Payload, "Cab"),
+                containers.Build("container", ColumnRole.None, "Container"),
+                types.Build("type_names", ColumnRole.Detail, "Type"),
+                sources.Build("source", ColumnRole.None, "Source"),
+                dependencies.Build("deps", ColumnRole.None, "Deps"),
+            ],
+        };
     }
 
     /// <summary>Every container path a row answers to, as ONE display string. A label, never a
     /// path: a caller that wants the folder an asset lives in asks the folder tree instead.</summary>
-    public static string Container(CabTable map, int id)
+    private static void WriteContainer(CabTable map, int id, ArrayBufferWriter<byte> into)
     {
         int paths = map.ContainerPathCount(id);
-        StringBuilder joined = new();
+        int start = into.WrittenCount;
         for (int path = 0; path < paths; path++)
         {
             if (path > 0)
             {
-                joined.Append(JoinSeparator);
+                into.Write(JoinSeparator);
             }
             ReadOnlySpan<byte> value = map.ContainerPathUtf8(id, path);
-            if (joined.Length + value.Length > MaxJoinChars)
+            if (into.WrittenCount - start + value.Length > MaxJoinBytes)
             {
-                joined.Append('…').Append("(+").Append(paths - path).Append(" more names)");
+                Utf8.TryWrite(into.GetSpan(MaxMoreBytes), CultureInfo.InvariantCulture,
+                    $"…(+{paths - path} more names)", out int written);
+                into.Advance(written);
                 break;
             }
-            joined.Append(Encoding.UTF8.GetString(value));
+            into.Write(value);
         }
-        return joined.ToString();
     }
 
     /// <summary>What a row CARRIES, in the engine's own class names. The bundle class itself is
     /// not information -- every row has one -- so it is the answer only for a row that carries
     /// nothing else.</summary>
-    public static string TypeNames(CabTable map, int id, Dictionary<int, string> names)
+    private static void WriteTypeNames(CabTable map, int id, Dictionary<int, byte[]> names,
+        ArrayBufferWriter<byte> into)
     {
-        List<string> carried = [];
+        bool carried = false;
         foreach (int classId in map.ClassIds(id))
         {
-            if (!names.TryGetValue(classId, out string? name))
+            if (classId == (int)ClassIDType.AssetBundle)
             {
-                name = Enum.IsDefined(typeof(ClassIDType), classId)
+                continue;
+            }
+            if (!names.TryGetValue(classId, out byte[]? name))
+            {
+                name = Encoding.UTF8.GetBytes(Enum.IsDefined(typeof(ClassIDType), classId)
                     ? ((ClassIDType)classId).ToString()
-                    : classId.ToString();
+                    : classId.ToString(CultureInfo.InvariantCulture));
                 names[classId] = name;
             }
-            if (name != AssetBundleName)
+            if (carried)
             {
-                carried.Add(name);
+                into.Write(TypeSeparator);
             }
+            into.Write(name);
+            carried = true;
         }
-        return carried.Count == 0 ? AssetBundleName : string.Join(", ", carried);
+        if (!carried)
+        {
+            into.Write(AssetBundleName);
+        }
     }
 }

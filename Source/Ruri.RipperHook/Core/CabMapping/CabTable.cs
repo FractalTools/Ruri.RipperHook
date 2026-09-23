@@ -65,6 +65,8 @@ public sealed class CabTable
         return files;
     }
 
+    public ReadOnlySpan<byte> CabNameUtf8(int id) => CabBlob.AsSpan(CabOffsets[id], CabOffsets[id + 1] - CabOffsets[id]);
+
     public ReadOnlySpan<byte> DistinctFileUtf8(int fileIndex)
         => DistinctFileBlob.AsSpan(DistinctFileOffsets[fileIndex], DistinctFileOffsets[fileIndex + 1] - DistinctFileOffsets[fileIndex]);
 

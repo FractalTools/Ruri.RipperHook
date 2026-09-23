@@ -1,4 +1,7 @@
+using System.Buffers;
+using System.Globalization;
 using System.Text;
+using System.Text.Unicode;
 
 namespace Ruri.RipperHook.CabMapping;
 
@@ -221,16 +224,32 @@ public sealed class CabFolders
     /// many other names it also answers to.</summary>
     public static string Name(CabTable table, int id)
     {
+        ArrayBufferWriter<byte> name = new(64);
+        WriteName(table, id, name);
+        return Encoding.UTF8.GetString(name.WrittenSpan);
+    }
+
+    /// <summary><see cref="Name"/>, written as UTF-8 -- what a list of millions of rows is built
+    /// from without a string per row.</summary>
+    public static void WriteName(CabTable table, int id, IBufferWriter<byte> into)
+    {
         int paths = table.ContainerPathCount(id);
         if (paths == 0)
         {
-            return string.Empty;
+            return;
         }
-        string first = table.ContainerPath(id, 0);
-        int slash = first.LastIndexOf('/');
-        string leaf = slash < 0 ? first : first[(slash + 1)..];
-        return paths > 1 ? $"{leaf} (+{paths - 1})" : leaf;
+        ReadOnlySpan<byte> first = table.ContainerPathUtf8(id, 0);
+        int slash = first.LastIndexOf((byte)'/');
+        into.Write(slash < 0 ? first : first[(slash + 1)..]);
+        if (paths > 1)
+        {
+            Utf8.TryWrite(into.GetSpan(MaxSuffixBytes), CultureInfo.InvariantCulture, $" (+{paths - 1})", out int written);
+            into.Advance(written);
+        }
     }
+
+    /// <summary>The longest " (+N)" an int can make.</summary>
+    private const int MaxSuffixBytes = 16;
 
     public static string[] Segments(string path)
     {
