@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.Tables;
 
@@ -11,12 +12,15 @@ public static class FolderDatasets
     public const string RowsId = "core.rows";
     public const string ChildrenId = "core.folders.children";
     public const string FilesId = "core.folders.files";
+    public const string OrderId = "core.rows.order";
     public const string OfId = "core.folders.of";
     public const string ExistsId = "core.folders.exists";
 
     public const string Folder = "folder";
     public const string Row = "row";
     public const string Query = "query";
+    public const string Column = "column";
+    public const string Direction = "direction";
 
     public static void Register()
     {
@@ -25,8 +29,13 @@ public static class FolderDatasets
             request => CabRows.Table(request.Map));
         Datasets.Publish(ChildrenId, DataRole.Internal, [DataParam.Text(Folder, required: false)],
             "One virtual folder's child folders, with how many rows live at or below each.", Children);
-        Datasets.Publish(FilesId, DataRole.Internal, [DataParam.Text(Folder, required: false)],
-            "The rows listed IN one virtual folder, by row id.", Files);
+        Datasets.PublishBlob(FilesId, DataRole.Internal, [DataParam.Text(Folder, required: false)],
+            "The rows listed IN one virtual folder, as little-endian int32 row ids -- a folder can hold "
+            + "millions, and a list of numbers crosses as the numbers.", Files);
+        Datasets.PublishBlob(OrderId, DataRole.Internal,
+            [DataParam.Text(Column, required: false), DataParam.Integer(Direction, required: false)],
+            "The row ids the payload carries (little-endian int32), in the order one display column puts "
+            + "them -- direction 1 up, 2 down -- or in load order when no column is sorted.", Order);
         Datasets.Publish(OfId, DataRole.Internal,
             [DataParam.Integer(Row), DataParam.Text(Query, required: false), DataParam.Text(Folder, required: false)],
             "The folder one row is shown under and what it is called there -- the two questions "
@@ -47,14 +56,17 @@ public static class FolderDatasets
         return table.Build();
     }
 
-    private static ColumnTable Files(DataRequest request)
+    private static byte[] Files(DataRequest request) =>
+        MemoryMarshal.AsBytes(CabFolders.Of(request.Map).Files(CabFolders.Segments(request.Text(Folder))).AsSpan())
+            .ToArray();
+
+    private static byte[] Order(DataRequest request)
     {
-        TableBuilder table = new(FilesId, "row#");
-        foreach (int row in CabFolders.Of(request.Map).Files(CabFolders.Segments(request.Text(Folder))))
-        {
-            table.Row(row);
-        }
-        return table.Build();
+        int[] ids = MemoryMarshal.Cast<byte, int>(request.Payload.Span).ToArray();
+        int[] ordered = CabTableSearch.For(request.Map).SortIds(ids,
+            request.Given(Column) ? request.Text(Column) : string.Empty,
+            request.Given(Direction) ? request.Integer(Direction) : 0);
+        return MemoryMarshal.AsBytes(ordered.AsSpan()).ToArray();
     }
 
     private static ColumnTable Of(DataRequest request)
