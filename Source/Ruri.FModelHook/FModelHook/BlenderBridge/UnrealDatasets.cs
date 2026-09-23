@@ -659,7 +659,8 @@ public static class UnrealDatasets
     /// </summary>
     private static ColumnTable Textures(DataRequest request)
     {
-        TableBuilder table = new(TexturesId, "texture", "name", "width#", "height#", "srgb", "normal", "image@");
+        TableBuilder table = new(TexturesId, "texture", "name", "width#", "height#", "srgb", "normal", "image@",
+            "wrap_u", "wrap_v", "filter");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         ETexturePlatform platform = UnrealSourceOptions.TexturePlatformChoice();
         List<(string Path, UTexture Source)> loaded = new();
@@ -677,10 +678,31 @@ public static class UnrealDatasets
         {
             (string path, UTexture source) = loaded[index];
             (int width, int height, byte[] image) = images[index];
-            table.Row(path, source.Name, width, height, source.SRGB ? "1" : "0", source.IsNormalMap ? "1" : "0", image);
+            table.Row(path, source.Name, width, height, source.SRGB ? "1" : "0", source.IsNormalMap ? "1" : "0", image,
+                AddressName(source.GetTextureAddressX()), AddressName(source.GetTextureAddressY()), FilterName(source.Filter));
         }
         return table.Build();
     }
+
+    /// <summary>A texture's own addressing along one axis, by the statement's engine-neutral name.</summary>
+    private static string AddressName(TextureAddress address) => address switch
+    {
+        TextureAddress.TA_Wrap => "repeat",
+        TextureAddress.TA_Clamp => "clamp",
+        TextureAddress.TA_Mirror => "mirror",
+        _ => throw new InvalidDataException($"texture address {address} is not one a sampler takes"),
+    };
+
+    /// <summary>A texture's own filter by the statement's name; a texture that leaves it to its texture group
+    /// states that, since the group's setting lives in the project's configuration rather than on the texture.</summary>
+    private static string FilterName(TextureFilter filter) => filter switch
+    {
+        TextureFilter.TF_Nearest => "point",
+        TextureFilter.TF_Bilinear => "bilinear",
+        TextureFilter.TF_Trilinear => "trilinear",
+        TextureFilter.TF_Default => "default",
+        _ => throw new InvalidDataException($"texture filter {filter} is not one a sampler takes"),
+    };
 
     /// <summary>
     /// One texture's pixels in a PNG, through the same encoder every exported texture goes

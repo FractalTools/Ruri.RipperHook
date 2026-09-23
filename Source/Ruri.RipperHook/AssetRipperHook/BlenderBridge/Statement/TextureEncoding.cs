@@ -3,9 +3,15 @@ using AssetRipper.Export.Modules.Textures;
 using AssetRipper.Export.UnityProjects.Textures;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Enums;
+using AssetRipper.SourceGenerated.Subclasses.GLTextureSettings;
 using AssetRipper.TextureDecoder.Rgb.Formats;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
+
+/// <summary>A texture's own sampler state: wrap along u, wrap along v, and filter, each by its engine-neutral
+/// name (repeat / clamp / mirror / mirroronce; point / bilinear / trilinear, or default where the engine
+/// leaves the filter to a group setting the texture does not carry).</summary>
+public readonly record struct TextureSampling(string WrapU, string WrapV, string Filter);
 
 /// <summary>A texture's pixels in a container a host loads directly: the format the asset
 /// itself would export as, unless the requester only accepts others. Whether the asset
@@ -39,6 +45,23 @@ public static class TextureEncoding
 
     public static bool DeclaresSrgb(ITexture2D texture) => texture.ColorSpace_C28E == ColorSpace.Linear;
 
+    private static readonly string[] Addresses = ["repeat", "clamp", "mirror", "mirroronce"];
+    private static readonly string[] Filters = ["point", "bilinear", "trilinear"];
+
+    /// <summary>The sampler state a texture carries of its own: the engine's per-axis wrap modes, or the
+    /// single wrap mode of a build that stores only that, and its filter mode.</summary>
+    public static TextureSampling Sampling(ITexture2D texture)
+    {
+        IGLTextureSettings settings = texture.TextureSettings_C28;
+        int u = settings.Has_WrapU() ? settings.WrapU : settings.WrapMode;
+        int v = settings.Has_WrapV() ? settings.WrapV : settings.WrapMode;
+        return new TextureSampling(Named(Addresses, u), Named(Addresses, v), Named(Filters, settings.FilterMode));
+    }
+
+    private static string Named(string[] names, int value) =>
+        value >= 0 && value < names.Length ? names[value] : throw new InvalidDataException(
+            $"texture sampler value {value} is none of {string.Join('/', names)}");
+
     public static StatementTexture? Encode(ITexture2D texture, string key, ImageExportFormat[] accepted)
     {
         if (!TextureConverter.TryConvertToBitmap(texture, out DirectBitmap bitmap))
@@ -55,6 +78,7 @@ public static class TextureEncoding
             Srgb = DeclaresSrgb(texture),
             Container = negotiated.GetFileExtension().TrimStart('.'),
             Image = stream.ToArray(),
+            Sampling = Sampling(texture),
         };
     }
 }

@@ -281,12 +281,12 @@ public static class StatementTables
         // The pixels are NOT a column here. One selection's images run to gigabytes -- more than a
         // single array can hold and more than a host wants resident at once -- and a host loads them
         // one at a time regardless, so the bytes are their own per-texture answer.
-        TableBuilder table = new(id, "texture", "name", "srgb#", "container", "bytes#");
+        TableBuilder table = new(id, "texture", "name", "srgb#", "container", "bytes#", "wrap_u", "wrap_v", "filter");
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "texture");
         foreach (StatementTexture texture in statement.Textures)
         {
             table.Row(texture.Key, texture.Name, texture.Srgb ? 1 : 0, texture.Container,
-                texture.Image?.Length ?? 0);
+                texture.Image?.Length ?? 0, texture.Sampling.WrapU, texture.Sampling.WrapV, texture.Sampling.Filter);
         }
         return table.Build();
     }

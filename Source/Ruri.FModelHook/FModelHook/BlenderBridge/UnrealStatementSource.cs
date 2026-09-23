@@ -484,12 +484,16 @@ public static class UnrealStatementSource
             Column textureName = decoded["name"];
             Column srgb = decoded["srgb"];
             Column image = decoded["image"];
+            Column wrapU = decoded["wrap_u"];
+            Column wrapV = decoded["wrap_v"];
+            Column filter = decoded["filter"];
             for (int row = 0; row < decoded.RowCount; row++)
             {
                 statement.Add(new StatementTexture
                 {
                     Key = key.Text(row), Name = textureName.Text(row), Srgb = srgb.Truthy(row), Container = "png",
                     Image = image.Bytes(row).ToArray(),
+                    Sampling = new TextureSampling(wrapU.Text(row), wrapV.Text(row), filter.Text(row)),
                 });
             }
         }

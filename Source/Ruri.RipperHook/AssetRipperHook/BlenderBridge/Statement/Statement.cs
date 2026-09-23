@@ -155,6 +155,11 @@ public sealed class StatementTexture
     public required string Container { get; init; }
 
     public required byte[] Image { get; init; }
+
+    /// <summary>How the texture's own sampler addresses it along u and v, and filters it
+    /// (<see cref="TextureEncoding.Sampling"/>): what a shader that samples it through its own
+    /// sampler gets, rather than a sampler state the shader states inline.</summary>
+    public required TextureSampling Sampling { get; init; }
 }
 
 public sealed record StatementClip(string Key, string Name, string MetaJson, byte[] Curves, string Archive);
