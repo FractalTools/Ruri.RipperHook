@@ -92,6 +92,7 @@ public static class UnrealStatementSource
         Column[] trs = TrsColumns.Select(column => rows[column]).ToArray();
         Column[] lightColumns = new[] { "lr", "lg", "lb", "intensity", "range", "outer", "inner", "width", "height" }.Select(column => rows[column]).ToArray();
         Column shadows = rows["shadows"];
+        Column volume = rows["volume"];
         statement.Roots.Add(new StatementRoot(seed, 0, label, "placements")
         {
             Forward = CharacterForward(UnrealTitles.Of(Session.GameRoot)),
@@ -131,6 +132,7 @@ public static class UnrealStatementSource
                     AreaWidth = (float)lightColumns[7].Real(row),
                     AreaHeight = (float)lightColumns[8].Real(row),
                     Shadows = shadows.Truthy(row),
+                    VolumeFactor = (float)volume.Real(row),
                     Disabled = !active.Truthy(row),
                 };
             }

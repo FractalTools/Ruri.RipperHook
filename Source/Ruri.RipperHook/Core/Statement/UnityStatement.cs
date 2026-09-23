@@ -421,6 +421,7 @@ public sealed class UnityStatement
                     AreaWidth = 0f,
                     AreaHeight = 0f,
                     Shadows = light.Shadows,
+                    VolumeFactor = light.VolumeFactor,
                     Disabled = false,
                 },
             });

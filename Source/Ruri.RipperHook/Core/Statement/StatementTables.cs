@@ -36,7 +36,8 @@ public static class StatementTables
         [
             "node#", "parent#", "name", "path", "kind", "active#", "mesh", "skeleton", "materials", "anchor", .. TrsColumns,
             "light_kind#", "light_r#", "light_g#", "light_b#", "light_intensity#", "light_range#", "light_angle#",
-            "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "fov#", "near#", "far#", "ortho#",
+            "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_volume#", "fov#", "near#",
+            "far#", "ortho#",
             "ortho_size#", "tag",
         ]);
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "path");
@@ -52,7 +53,7 @@ public static class StatementTables
                 scale.X, scale.Y, scale.Z,
                 light?.Type ?? -1, light?.Red ?? 0f, light?.Green ?? 0f, light?.Blue ?? 0f, light?.Intensity ?? 0f,
                 light?.Range ?? 0f, light?.SpotAngle ?? 0f, light?.InnerSpotAngle ?? 0f, light?.AreaWidth ?? 0f,
-                light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0,
+                light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0, light?.VolumeFactor ?? 0f,
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
                 camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty);
         }
