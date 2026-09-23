@@ -27,7 +27,7 @@
 		<!-- The Unreal lane restates a .usmap as this custom engine's type trees with the very
 		     builder the runtime registers the mounted schema through, so the packed file and the
 		     live lineage can never disagree. -->
-		<Compile Include="..\Ruri.FModelHook\FModelHook\Unreal\TypeTree\UsmapTypeTreeBuilder.cs" Link="Unreal\UsmapTypeTreeBuilder.cs" />
+		<Compile Include="..\Ruri.FModelHook\FModelHook\BlenderBridge\TypeTree\UsmapTypeTreeBuilder.cs" Link="Unreal\UsmapTypeTreeBuilder.cs" />
 	</ItemGroup>
 
 	<ItemGroup>

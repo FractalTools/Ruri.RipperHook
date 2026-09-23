@@ -33,7 +33,7 @@
        where it publishes the keys that open it, and which files on disk prove an install is
        that title. It compiles HERE and not into the kernel because reading an Unreal archive is
        CUE4Parse's job and this is the only project that may reference it. Everything an
-       unencrypted stock Unreal build needs lives in FModelHook/Unreal instead. -->
+       unencrypted stock Unreal build needs lives in FModelHook/BlenderBridge instead. -->
   <ItemGroup Condition="'$(PureRelease)' != 'true'">
     <Compile Include="..\Ruri.GameHook\Unreal\**\*.cs" Link="Ruri.GameHook\Unreal\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

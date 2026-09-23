@@ -2,7 +2,7 @@ using AssetRipper.Tpk;
 using AssetRipper.Tpk.TypeTrees;
 using CUE4Parse.MappingsProvider.Usmap;
 using Ruri.RipperHook.Core.TypeTree;
-using Ruri.FModelHook.Unreal.TypeTree;
+using Ruri.FModelHook.BlenderBridge.TypeTree;
 using System.Globalization;
 
 namespace Ruri.Tpk.Unreal;

@@ -12,7 +12,7 @@ using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.IO.Objects;
 using CUE4Parse.FileProvider.Vfs;
-using Ruri.FModelHook.Unreal;
+using Ruri.FModelHook.BlenderBridge;
 using Ruri.Hook.Core;
 using CUE4Parse.FileProvider;
 using Ruri.FModelHook.Attributes;

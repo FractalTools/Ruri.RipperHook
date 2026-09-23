@@ -4,8 +4,8 @@ using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.Niagara;
 using CUE4Parse.FileProvider.Vfs;
-using Ruri.FModelHook.Unreal;
-using Ruri.FModelHook.Unreal.Readers;
+using Ruri.FModelHook.BlenderBridge;
+using Ruri.FModelHook.BlenderBridge.Readers;
 
 namespace Ruri.FModelHook.ShaderDecompiler;
 
