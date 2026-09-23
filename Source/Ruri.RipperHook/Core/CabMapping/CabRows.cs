@@ -23,11 +23,29 @@ public static class CabRows
     private const int MaxJoinChars = 16384;
 
     private const string JoinSeparator = "  |  ";
+
+    /// <summary>The fewest rows worth a piece of their own: below this, handing a piece to another
+    /// core costs more than building it.</summary>
+    private const int RowsPerPiece = 4096;
     private const string AssetBundleName = "AssetBundle";
 
+    /// <summary>Every row, built on every core: the rows are independent, so each core builds a
+    /// piece by the same rules one row always followed, and the pieces are joined column by
+    /// column -- a map of millions of rows is otherwise one core decoding and re-encoding five
+    /// strings per row while the load waits.</summary>
     public static ColumnTable Table(CabTable map)
     {
         ArgumentNullException.ThrowIfNull(map);
+        int count = map.Count;
+        int pieces = Math.Clamp(count / RowsPerPiece, 1, Environment.ProcessorCount * 4);
+        ColumnTable[] built = new ColumnTable[pieces];
+        Parallel.For(0, pieces, piece => built[piece] = Piece(map,
+            (int)((long)count * piece / pieces), (int)((long)count * (piece + 1) / pieces)));
+        return ColumnTable.Concatenate(Id, built);
+    }
+
+    private static ColumnTable Piece(CabTable map, int start, int end)
+    {
         TableBuilder table = new(Id,
             "name|Name", "cab|Cab", "container|Container", "type_names|Type", "source|Source",
             "deps#|Deps");
@@ -35,7 +53,7 @@ public static class CabRows
             .Role(ColumnRole.Key | ColumnRole.Payload, "cab")
             .Role(ColumnRole.Detail, "type_names");
         Dictionary<int, string> classNames = [];
-        for (int id = 0; id < map.Count; id++)
+        for (int id = start; id < end; id++)
         {
             table.Row(CabFolders.Name(map, id), map.CabName(id), Container(map, id),
                 TypeNames(map, id, classNames), map.RelativePath(id), map.DependencyCount(id));

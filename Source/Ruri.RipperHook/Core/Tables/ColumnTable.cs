@@ -192,6 +192,51 @@ public sealed class ColumnTable
         return new ColumnTable { Name = name, RowCount = rows, Columns = built.ToArray() };
     }
 
+    /// <summary>Tables of one shape as ONE, their rows in part order -- what a table built in
+    /// pieces on several cores is put back together from. Every part states the same columns in
+    /// the same order, because every part was built by the same code.</summary>
+    public static ColumnTable Concatenate(string name, IReadOnlyList<ColumnTable> parts)
+    {
+        ColumnTable first = parts[0];
+        int rows = parts.Sum(part => part.RowCount);
+        Column[] columns = new Column[first.Columns.Length];
+        for (int index = 0; index < columns.Length; index++)
+        {
+            Column shape = first.Columns[index];
+            long bytes = parts.Sum(part => (long)part.Columns[index].Data.Length);
+            if (bytes > ColumnBuilder.MaximumBytes)
+            {
+                throw new InvalidOperationException(
+                    $"column '{shape.Name}' of '{name}' would hold {bytes} bytes, past the "
+                    + $"{ColumnBuilder.MaximumBytes} a single array can carry.");
+            }
+            byte[] data = new byte[bytes];
+            int[] offsets = shape.Sliced ? new int[rows + 1] : [];
+            int written = 0;
+            int row = 0;
+            foreach (ColumnTable part in parts)
+            {
+                Column column = part.Columns[index];
+                column.Data.CopyTo(data, written);
+                if (shape.Sliced)
+                {
+                    for (int local = 1; local <= part.RowCount; local++)
+                    {
+                        offsets[row + local] = written + column.Offsets[local];
+                    }
+                }
+                written += column.Data.Length;
+                row += part.RowCount;
+            }
+            columns[index] = new Column
+            {
+                Name = shape.Name, Kind = shape.Kind, Data = data, Offsets = offsets, Role = shape.Role,
+                Title = shape.Title,
+            };
+        }
+        return new ColumnTable { Name = name, RowCount = rows, Columns = columns };
+    }
+
     public ColumnTable DistinctBy(string distinctColumn, string preferColumn)
     {
         Column key = this[distinctColumn];
