@@ -23,7 +23,7 @@ using Ruri.FModelHook.ShaderDecompiler.Semantics;
 using CUE4Parse_Conversion.Dto;
 using CUE4Parse_Conversion.Options;
 using Ruri.FModelHook.Unreal.Readers;
-using Ruri.RipperHook.Conversion;
+using Ruri.RipperHook.BlenderBridge.Conversion;
 using System.Numerics;
 using CUE4Parse.UE4.IO;
 using CUE4Parse.UE4.Objects.Core.Math;
@@ -33,11 +33,11 @@ using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse.UE4.Pak;
 using CUE4Parse.UE4.VirtualFileSystem;
-using Ruri.RipperHook.Bridge;
+using Ruri.RipperHook.BlenderBridge;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Data;
-using Ruri.RipperHook.Statements;
-using Ruri.RipperHook.Tables;
+using Ruri.RipperHook.BlenderBridge.Data;
+using Ruri.RipperHook.BlenderBridge.Statements;
+using Ruri.RipperHook.BlenderBridge.Tables;
 
 namespace Ruri.FModelHook.Unreal;
 
@@ -844,7 +844,7 @@ public static class UnrealDatasets
             .Role(ColumnRole.Facet | ColumnRole.Group, "mesh")
             .Role(ColumnRole.Key | ColumnRole.Payload, "key");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
-        foreach (string stated in Ruri.RipperHook.Statements.StatementSources.Archives(request.List(SeedParam), request.Map))
+        foreach (string stated in Ruri.RipperHook.BlenderBridge.Statements.StatementSources.Archives(request.List(SeedParam), request.Map))
         {
             string package = PackageKey(provider, stated);
             if (!provider.Files.TryGetValue(package, out GameFile? file))

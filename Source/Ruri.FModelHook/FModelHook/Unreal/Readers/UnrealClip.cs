@@ -5,7 +5,7 @@ using CUE4Parse.UE4.Objects.Engine;
 using CUE4Parse_Conversion.Animations;
 using CUE4Parse_Conversion.Dto;
 using CUE4Parse_Conversion.Writers.ActorX.Structs.Animations;
-using Ruri.RipperHook.Conversion;
+using Ruri.RipperHook.BlenderBridge.Conversion;
 using System.Numerics;
 
 namespace Ruri.FModelHook.Unreal.Readers;

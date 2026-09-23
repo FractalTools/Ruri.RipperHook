@@ -1,7 +1,7 @@
 using System.Text;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Data;
-using Ruri.RipperHook.Tables;
+using Ruri.RipperHook.BlenderBridge.Data;
+using Ruri.RipperHook.BlenderBridge.Tables;
 
 namespace Ruri.RipperHook.CLI;
 

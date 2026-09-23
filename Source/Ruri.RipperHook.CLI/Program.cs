@@ -8,7 +8,7 @@ using Ruri.Hook.Config;
 using Ruri.Hook.Core;
 using Ruri.RipperHook;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Core.Install;
+using Ruri.RipperHook.BlenderBridge.Install;
 
 namespace Ruri.RipperHook.CLI;
 
@@ -110,10 +110,10 @@ internal static class Program
             config.EnabledHooks.Add("TypeFilterExport");
         }
         Console.Error.WriteLine($"[Ruri.CLI] hooks: {string.Join(", ", config.EnabledHooks)}");
-        Data.CoreDatasets.Register();
-        Data.Session.SetOptions(ParseSourceOptions(opts.SourceOptions));
+        BlenderBridge.Data.CoreDatasets.Register();
+        BlenderBridge.Data.Session.SetOptions(ParseSourceOptions(opts.SourceOptions));
         Bootstrap.ApplyHooks(config);
-        Data.Session.Open(gameRoot, config.EnabledHooks);
+        BlenderBridge.Data.Session.Open(gameRoot, config.EnabledHooks);
     }
 
     /// <summary>

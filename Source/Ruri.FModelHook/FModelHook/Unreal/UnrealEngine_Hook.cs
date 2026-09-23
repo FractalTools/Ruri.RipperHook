@@ -1,6 +1,6 @@
 using Ruri.RipperHook;
 using Ruri.RipperHook.Attributes;
-using Ruri.RipperHook.Data;
+using Ruri.RipperHook.BlenderBridge.Data;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.FModelHook.Unreal;

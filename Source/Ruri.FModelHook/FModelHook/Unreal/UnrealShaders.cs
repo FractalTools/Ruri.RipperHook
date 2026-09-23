@@ -2,8 +2,8 @@
 using AssetRipper.SourceGenerated;
 using Ruri.FModelHook.ShaderDecompiler;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Data;
-using Ruri.RipperHook.Tables;
+using Ruri.RipperHook.BlenderBridge.Data;
+using Ruri.RipperHook.BlenderBridge.Tables;
 
 namespace Ruri.FModelHook.Unreal;
 
@@ -57,7 +57,7 @@ public static class UnrealShaders
 
     private static ColumnTable Shaders(DataRequest request)
     {
-        string[] packages = Ruri.RipperHook.Statements.StatementSources.Archives(request.List(SeedParam), request.Map);
+        string[] packages = Ruri.RipperHook.BlenderBridge.Statements.StatementSources.Archives(request.List(SeedParam), request.Map);
         string[] archives = request.List(ArchivesParam);
         if (packages.Length == 0 && archives.Length == 0)
         {

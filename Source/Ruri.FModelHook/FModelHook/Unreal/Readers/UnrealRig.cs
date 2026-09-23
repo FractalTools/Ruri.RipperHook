@@ -2,7 +2,7 @@ using CUE4Parse.UE4.Assets.Exports.Animation;
 using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse_Conversion.Dto;
-using Ruri.RipperHook.Conversion;
+using Ruri.RipperHook.BlenderBridge.Conversion;
 using System.Numerics;
 
 namespace Ruri.FModelHook.Unreal.Readers;

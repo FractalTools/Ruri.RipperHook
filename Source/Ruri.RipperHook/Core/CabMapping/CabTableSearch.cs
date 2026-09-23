@@ -1,5 +1,4 @@
 ﻿using AssetRipper.SourceGenerated;
-using Ruri.RipperHook.Tables;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Numerics;

@@ -3,7 +3,7 @@ using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.Core.Serialization;
 using CUE4Parse.UE4.Versions;
-using Ruri.RipperHook.Data;
+using Ruri.RipperHook.BlenderBridge.Data;
 
 namespace Ruri.FModelHook.Unreal;
 

@@ -1,6 +1,6 @@
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Tables;
+using Ruri.RipperHook.BlenderBridge.Tables;
 using Ruri.RipperHook.GUI.Services;
 
 namespace Ruri.RipperHook.GUI;
@@ -166,9 +166,9 @@ public partial class MainForm
 		}
 	}
 
-	private List<Tables.FilterRule> CabRulesForEngine()
+	private List<CabMapping.FilterRule> CabRulesForEngine()
 	{
-		List<Tables.FilterRule> rules = new(_filterRules.Count);
+		List<CabMapping.FilterRule> rules = new(_filterRules.Count);
 		foreach (FilterRule rule in _filterRules)
 		{
 			string field = rule.Column switch
@@ -194,7 +194,7 @@ public partial class MainForm
 				FilterRelation.NotMatches => "not_matches_regex",
 				_ => "contains",
 			};
-			rules.Add(new Tables.FilterRule(field, relation, rule.Value, rule.Include, rule.Enabled));
+			rules.Add(new CabMapping.FilterRule(field, relation, rule.Value, rule.Include, rule.Enabled));
 		}
 		return rules;
 	}

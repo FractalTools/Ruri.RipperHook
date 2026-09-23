@@ -112,7 +112,7 @@
 	<!-- Which material property is which surface input, for Unity's own standard-shader
 	     vocabulary: the default layer under a title's own layer and the user's. -->
 	<ItemGroup>
-		<EmbeddedResource Include="Core\Statement\TextureRoles.json">
+		<EmbeddedResource Include="AssetRipperHook\BlenderBridge\Statement\TextureRoles.json">
 			<LogicalName>TextureRoles.json</LogicalName>
 		</EmbeddedResource>
 	</ItemGroup>

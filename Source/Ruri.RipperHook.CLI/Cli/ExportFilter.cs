@@ -10,7 +10,7 @@ using AssetRipper.IO.Files;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Extensions;
-using Ruri.RipperHook.Bridge;
+using Ruri.RipperHook.BlenderBridge;
 using MonoModHook = MonoMod.RuntimeDetour.Hook;
 
 namespace Ruri.RipperHook.CLI;

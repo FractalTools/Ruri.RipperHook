@@ -8,7 +8,7 @@ using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
 using Ruri.FModelHook.ShaderDecompiler.Semantics;
 using CUE4Parse.UE4.Versions;
-using Ruri.RipperHook.Conversion;
+using Ruri.RipperHook.BlenderBridge.Conversion;
 using System.Numerics;
 
 namespace Ruri.FModelHook.Unreal.Readers;

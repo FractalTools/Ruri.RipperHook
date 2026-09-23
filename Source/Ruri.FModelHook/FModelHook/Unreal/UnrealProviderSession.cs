@@ -4,7 +4,7 @@ using CUE4Parse.FileProvider;
 using CUE4Parse.MappingsProvider.Usmap;
 using CUE4Parse.UE4.Versions;
 using CUE4Parse_Conversion.Textures.BC;
-using Ruri.RipperHook.Data;
+using Ruri.RipperHook.BlenderBridge.Data;
 
 namespace Ruri.FModelHook.Unreal;
 

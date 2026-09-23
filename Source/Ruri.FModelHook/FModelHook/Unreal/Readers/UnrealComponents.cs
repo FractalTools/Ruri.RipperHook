@@ -4,7 +4,7 @@ using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
-using Ruri.RipperHook.Conversion;
+using Ruri.RipperHook.BlenderBridge.Conversion;
 using System.Numerics;
 
 namespace Ruri.FModelHook.Unreal.Readers;

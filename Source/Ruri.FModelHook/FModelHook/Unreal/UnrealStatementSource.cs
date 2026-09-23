@@ -1,9 +1,9 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Ruri.RipperHook.CabMapping;
-using Ruri.RipperHook.Data;
-using Ruri.RipperHook.Statements;
-using Ruri.RipperHook.Tables;
+using Ruri.RipperHook.BlenderBridge.Data;
+using Ruri.RipperHook.BlenderBridge.Statements;
+using Ruri.RipperHook.BlenderBridge.Tables;
 
 namespace Ruri.FModelHook.Unreal;
 

@@ -1,5 +1,4 @@
-﻿using Ruri.RipperHook.Tables;
-
+﻿
 namespace Ruri.RipperHook.CabMapping;
 
 public readonly record struct CabPathRow(int CabId, int PathIndex);

@@ -1,7 +1,7 @@
 using AssetRipper.Import.Logging;
 using CUE4Parse.FileProvider;
 using Ruri.RipperHook.Attributes;
-using Ruri.RipperHook.Core.Install;
+using Ruri.RipperHook.BlenderBridge.Install;
 using UE4Config.Parsing;
 
 namespace Ruri.FModelHook.Unreal;

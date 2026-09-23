@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Ruri.RipperHook.Data;
+using Ruri.RipperHook.BlenderBridge.Data;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.CLI;
