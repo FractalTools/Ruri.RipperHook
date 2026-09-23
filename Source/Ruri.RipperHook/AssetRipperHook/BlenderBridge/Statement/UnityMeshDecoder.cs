@@ -14,8 +14,10 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// to four streams; each of the fixed channels describes one VertexAttribute by stream, byte
 /// offset, format and dimension. Unity 2017 and older serialize exactly eight channels in an
 /// older order, told apart by the channel COUNT the file declares. A packed normal (one
-/// component where three are needed) is offered in every known bit layout and the layout that
-/// agrees with the geometry is kept; nothing else is guessed at.
+/// component where three are needed) is the title's own packing first: a title whose vertex shaders
+/// unpack one word per vertex into a normal and a tangent says so through
+/// <see cref="UnpackTitleNormals"/>. Without one it is offered in every known bit layout and the layout
+/// that agrees with the geometry is kept; nothing else is guessed at.
 /// </summary>
 public static class UnityMeshDecoder
 {
@@ -69,6 +71,12 @@ public static class UnityMeshDecoder
     };
 
     private static int RealDimension(int dimension) => dimension > 15 ? dimension & 0x0F : dimension;
+
+    /// <summary>A normal channel of one 32-bit word per vertex as the title's own vertex shaders unpack it:
+    /// the normals (three floats a vertex) and tangents (four, handedness in w) the GPU ends up with, given
+    /// the tangent channel as stored (null when the mesh has none). Null when no title packing is known --
+    /// a title's hook retargets this with the unpack its shaders run.</summary>
+    public static (float[] Normals, float[]? Tangents)? UnpackTitleNormals(uint[] words, float[]? channelTangents) => null;
 
     public static DecodedMesh Decode(IMesh mesh)
     {
@@ -372,6 +380,18 @@ public static class UnityMeshDecoder
             decoded.Positions = FirstComponents(DecodeChannel(blob, streamOffsets, streamStrides, positionChannel!.Value, count, out _), DimensionOf(positionChannel), 3, count);
         }
 
+        Channel? tangentChannel = ChannelOf(Tangent);
+        int tangentDimension = DimensionOf(tangentChannel);
+        float[]? tangents = null;
+        if (tangentDimension >= 3)
+        {
+            float[] read = DecodeChannel(blob, streamOffsets, streamStrides, tangentChannel!.Value, count, out _);
+            if (PredominantlyUnit(read, tangentDimension))
+            {
+                tangents = tangentDimension == 4 ? read : PadComponents(read, tangentDimension, 4, count, 1f);
+            }
+        }
+
         Channel? normalChannel = ChannelOf(Normal);
         if (DimensionOf(normalChannel) > 0)
         {
@@ -390,7 +410,15 @@ public static class UnityMeshDecoder
                 {
                     words[index] = integerFormat ? unchecked((uint)integers![index]) : BitConverter.SingleToUInt32Bits(read[index]);
                 }
-                candidates.AddRange(UnpackNormal101010(words));
+                if (UnpackTitleNormals(words, tangents) is { } title)
+                {
+                    decoded.Normals = title.Normals;
+                    tangents = title.Tangents;
+                }
+                else
+                {
+                    candidates.AddRange(UnpackNormal101010(words));
+                }
             }
             foreach (float[] candidate in candidates)
             {
@@ -406,16 +434,7 @@ public static class UnityMeshDecoder
             }
         }
 
-        Channel? tangentChannel = ChannelOf(Tangent);
-        int tangentDimension = DimensionOf(tangentChannel);
-        if (tangentDimension >= 3)
-        {
-            float[] read = DecodeChannel(blob, streamOffsets, streamStrides, tangentChannel!.Value, count, out _);
-            if (PredominantlyUnit(read, tangentDimension))
-            {
-                decoded.Tangents = tangentDimension == 4 ? read : PadComponents(read, tangentDimension, 4, count, 1f);
-            }
-        }
+        decoded.Tangents = tangents;
 
         Channel? colorChannel = ChannelOf(Color);
         int colorDimension = DimensionOf(colorChannel);
