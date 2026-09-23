@@ -91,6 +91,8 @@ public static class StatementFlattener
                 Scale = node.Scale,
                 Light = node.Light,
                 Camera = node.Camera,
+                Shadows = node.Shadows,
+                MainLightShadows = node.MainLightShadows,
             });
         }
         foreach (StatementMesh mesh in source.Meshes)

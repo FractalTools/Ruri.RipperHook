@@ -174,6 +174,7 @@ public static class UnrealStatementSource
                 Rotation = new Quaternion((float)trs[3].Real(row), (float)trs[4].Real(row), (float)trs[5].Real(row), (float)trs[6].Real(row)),
                 Scale = new Vector3((float)trs[7].Real(row), (float)trs[8].Real(row), (float)trs[9].Real(row)),
                 Light = lightInfo,
+                Shadows = null,
             });
         }
         return statement;

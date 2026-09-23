@@ -219,6 +219,7 @@ public sealed class UnityStatement
             Position = System.Numerics.Vector3.Zero,
             Rotation = System.Numerics.Quaternion.Identity,
             Scale = System.Numerics.Vector3.One,
+            Shadows = null,
         };
         _statement.Nodes.Add(rootRow);
         _statement.Roots.Add(new StatementRoot(_plan.Seed, rootIndex, _plan.Label, "parts"));
@@ -305,6 +306,7 @@ public sealed class UnityStatement
                 Position = System.Numerics.Vector3.Zero,
                 Rotation = System.Numerics.Quaternion.Identity,
                 Scale = System.Numerics.Vector3.One,
+                Shadows = null,
             });
             if (!baked)
             {
@@ -407,6 +409,7 @@ public sealed class UnityStatement
                 Position = light.Position,
                 Rotation = Aimed(light.Forward),
                 Scale = System.Numerics.Vector3.One,
+                Shadows = null,
                 Light = new UnityLightInfo
                 {
                     Node = null!,
@@ -433,8 +436,19 @@ public sealed class UnityStatement
         }
         int placed = 0;
         int builtins = 0;
+        int proxies = 0;
         foreach (WindowPlacement placement in _plan.Placements)
         {
+            if (placement.IsPrefab && placement.Shadows is not null)
+            {
+                throw new InvalidDataException(
+                    $"prefab placement '{placement.AssetPath}' states how it casts shadows; its own renderers do.");
+            }
+            if (placement.Shadows == ShadowCastingMode.ShadowsOnly && !_options.ShadowProxies)
+            {
+                proxies++;
+                continue;
+            }
             string key = placement.IsPrefab
                 ? placement.AssetPath
                 : placement.AssetPath + "\n" + string.Join("\n", placement.MaterialPaths);
@@ -469,6 +483,8 @@ public sealed class UnityStatement
                     Position = placement.Position,
                     Rotation = placement.Rotation,
                     Scale = placement.Scale,
+                    Shadows = placement.Shadows,
+                    MainLightShadows = placement.MainLightShadows,
                 });
                 continue;
             }
@@ -484,6 +500,7 @@ public sealed class UnityStatement
                 Position = placement.Position,
                 Rotation = placement.Rotation,
                 Scale = placement.Scale,
+                Shadows = null,
             });
             foreach (WindowPiece piece in source.Pieces)
             {
@@ -505,10 +522,15 @@ public sealed class UnityStatement
                     Scale = scale,
                     Light = piece.Light,
                     Camera = piece.Camera,
+                    Shadows = piece.Shadows,
                 });
             }
         }
         _statement.Note(_plan.Seed, "placements stated", _plan.Placements.Count, _plan.Label);
+        if (proxies > 0)
+        {
+            _statement.Note(_plan.Seed, "shadow proxies left out", proxies, _plan.Label);
+        }
         _statement.Note(_plan.Seed, "placements placed", placed, _plan.Label);
         if (unresolved.Count > 0)
         {
@@ -538,6 +560,7 @@ public sealed class UnityStatement
         public IReadOnlyList<string> MaterialKeys { get; init; } = [];
         public UnityLightInfo? Light { get; init; }
         public UnityCameraInfo? Camera { get; init; }
+        public ShadowCastingMode? Shadows { get; init; }
     }
 
     private sealed class WindowSource
@@ -726,7 +749,6 @@ public sealed class UnityStatement
                     Name = decoded.Name,
                     Geometry = decoded,
                     Lod = lodOf.GetValueOrDefault(info.Renderer, -1),
-                    ShadowOnly = info.Renderer.GetShadowCastingMode() == ShadowCastingMode.ShadowsOnly,
                     Baked = baked,
                 };
                 _statement.Add(row);
@@ -741,6 +763,7 @@ public sealed class UnityStatement
                 Hidden = info.Disabled,
                 MeshKey = meshKey,
                 MaterialKeys = materialKeys,
+                Shadows = info.Renderer.GetShadowCastingMode(),
             });
         }
         foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters))
@@ -890,6 +913,7 @@ public sealed class UnityStatement
                 Position = node.LocalPosition,
                 Rotation = node.LocalRotation,
                 Scale = node.LocalScale,
+                Shadows = null,
             };
             rows[node] = row;
             _statement.Nodes.Add(row);
@@ -1033,6 +1057,7 @@ public sealed class UnityStatement
             Index = rigRow.Index, Parent = rigRow.Parent, Name = _plan.Label, Path = rigRow.Path, Kind = rigRow.Kind,
             Active = rigRow.Active, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
+            Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows,
         };
         _statement.Roots[^1] = _statement.Roots[^1] with { Label = _plan.Label, Kind = "assembly" };
 
@@ -1217,6 +1242,7 @@ public sealed class UnityStatement
                     Kind = bakedNow ? "skinned" : "mesh", Active = !info.Disabled, Mesh = key, Skeleton = rig.Skeleton.Key,
                     Materials = materialKeys, Anchor = bakedNow ? string.Empty : anchor,
                     Position = System.Numerics.Vector3.Zero, Rotation = System.Numerics.Quaternion.Identity, Scale = System.Numerics.Vector3.One,
+                    Shadows = info.Renderer.GetShadowCastingMode(),
                 });
                 continue;
             }
@@ -1233,6 +1259,7 @@ public sealed class UnityStatement
                 Index = _statement.Nodes.Count, Parent = rig.RootIndex, Name = info.Name, Path = info.Node?.Path ?? string.Empty,
                 Kind = "mesh", Active = !info.Disabled, Mesh = meshKey, Materials = materialKeys, Anchor = anchor,
                 Position = position, Rotation = rotation, Scale = scale,
+                Shadows = info.Renderer.GetShadowCastingMode(),
             });
             if (builtin.Length > 0)
             {
@@ -1399,7 +1426,7 @@ public sealed class UnityStatement
                 : info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info));
         }
         int lod = lodOf.GetValueOrDefault(info.Renderer, -1);
-        bool shadowOnly = info.Renderer.GetShadowCastingMode() == ShadowCastingMode.ShadowsOnly;
+        ShadowCastingMode shadows = info.Renderer.GetShadowCastingMode();
 
         if (info.Skinned)
         {
@@ -1422,7 +1449,6 @@ public sealed class UnityStatement
                 BonePaths = bonePaths,
                 Skeleton = skeleton.Key,
                 Lod = lod,
-                ShadowOnly = shadowOnly,
                 Baked = bakedNow,
             };
             _statement.Add(mesh);
@@ -1433,6 +1459,7 @@ public sealed class UnityStatement
                 row.Active = !info.Disabled;
                 row.Mesh = key;
                 row.Materials = materialKeys;
+                row.Shadows = shadows;
             }
             if (!bakedNow)
             {
@@ -1453,7 +1480,6 @@ public sealed class UnityStatement
                 Name = decoded.Name,
                 Geometry = decoded,
                 Lod = lod,
-                ShadowOnly = shadowOnly,
             };
             _statement.Add(mesh);
             Morphs(mesh);
@@ -1468,6 +1494,7 @@ public sealed class UnityStatement
             row.Active = !info.Disabled;
             row.Mesh = meshKey;
             row.Materials = materialKeys;
+            row.Shadows = shadows;
         }
     }
 

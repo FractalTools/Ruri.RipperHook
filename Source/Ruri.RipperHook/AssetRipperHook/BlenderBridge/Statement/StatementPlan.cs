@@ -4,6 +4,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_21;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
+using AssetRipper.SourceGenerated.Enums;
 using System.Numerics;
 using Ruri.RipperHook.CabMapping;
 
@@ -59,9 +60,12 @@ public sealed record PartsSkeleton(string Cab, string AvatarNameStem);
 
 /// <summary>One placement of a scene window: what it draws, where, and with which materials --
 /// and what the path IS under the title's own addressable convention: a prefab (placed as its
-/// pieces under one anchor) or a loose mesh, and the name it is shown under.</summary>
+/// pieces under one anchor) or a loose mesh, and the name it is shown under. A loose mesh states
+/// how its renderer draws into shadow maps and whether that shadow falls in the directional
+/// light's cascades; a prefab states neither, because its own renderers do.</summary>
 public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Position, Quaternion Rotation,
-    Vector3 Scale, IReadOnlyList<string> MaterialPaths, bool IsPrefab, string Stem, string MeshName);
+    Vector3 Scale, IReadOnlyList<string> MaterialPaths, bool IsPrefab, string Stem, string MeshName,
+    ShadowCastingMode? Shadows, bool MainLightShadows);
 
 /// <summary>What a material write sets through the engine's own material setters.</summary>
 public enum MaterialWriteKind

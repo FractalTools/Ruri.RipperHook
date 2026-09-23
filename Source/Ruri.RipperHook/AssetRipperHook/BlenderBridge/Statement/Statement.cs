@@ -1,4 +1,5 @@
 using System.Numerics;
+using AssetRipper.SourceGenerated.Enums;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
 
@@ -104,6 +105,16 @@ public sealed class StatementNode
     public UnityLightInfo? Light { get; set; }
 
     public UnityCameraInfo? Camera { get; set; }
+
+    /// <summary>How the node's renderer draws into shadow maps, in Unity's own terms: off, on,
+    /// two-sided, or into shadow maps and nothing else. It is the renderer's fact, not its mesh's --
+    /// one mesh can be drawn by a renderer that casts and by one that does not. Null where the
+    /// source states nothing: a node without a renderer, or a reader that does not read it.</summary>
+    public required ShadowCastingMode? Shadows { get; set; }
+
+    /// <summary>Whether a casting renderer's shadow falls in the directional light's cascades. A
+    /// Unity renderer casts for every light; a streamed renderer can cast for local lights only.</summary>
+    public bool MainLightShadows { get; set; } = true;
 }
 
 public sealed class StatementMesh
@@ -120,7 +131,6 @@ public sealed class StatementMesh
 
     public int Lod { get; init; } = -1;
 
-    public bool ShadowOnly { get; init; }
 
     public bool Baked { get; init; }
 }

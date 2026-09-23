@@ -38,7 +38,7 @@ public static class StatementTables
             "light_kind#", "light_r#", "light_g#", "light_b#", "light_intensity#", "light_range#", "light_angle#",
             "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_volume#", "fov#", "near#",
             "far#", "ortho#",
-            "ortho_size#", "tag",
+            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#",
         ]);
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "path");
         foreach (StatementNode node in statement.Nodes)
@@ -55,7 +55,8 @@ public static class StatementTables
                 light?.Range ?? 0f, light?.SpotAngle ?? 0f, light?.InnerSpotAngle ?? 0f, light?.AreaWidth ?? 0f,
                 light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0, light?.VolumeFactor ?? 0f,
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
-                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty);
+                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty,
+                node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0);
         }
         return table.Build();
     }
@@ -63,7 +64,7 @@ public static class StatementTables
     public static ColumnTable Meshes(string id, Statement statement, Basis basis)
     {
         TableBuilder table = new(id, "key", "name", "positions@", "normals@", "tangents@", "colors@", "uv@", "uvSets",
-            "indices@", "sections@", "skin@", "bones", "bindposes@", "skeleton", "lod#", "shadow_only#", "baked#");
+            "indices@", "sections@", "skin@", "bones", "bindposes@", "skeleton", "lod#", "baked#");
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "key");
         foreach (StatementMesh mesh in statement.Meshes)
         {
@@ -84,7 +85,7 @@ public static class StatementTables
                 Bytes<float>(colors), Bytes<float>(CollectionsMarshal.AsSpan(uv)), string.Join(Separator, uvSets),
                 Bytes<uint>(indices), Bytes<int>(Sections(geometry.TriangleMaterial)), Skin(geometry),
                 string.Join(Separator, mesh.BonePaths), Bytes<float>(BindPoses(geometry, basis)), mesh.Skeleton,
-                mesh.Lod, mesh.ShadowOnly ? 1 : 0, mesh.Baked ? 1 : 0);
+                mesh.Lod, mesh.Baked ? 1 : 0);
         }
         return table.Build();
     }
