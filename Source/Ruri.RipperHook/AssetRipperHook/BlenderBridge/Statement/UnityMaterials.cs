@@ -1,11 +1,13 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
+using AssetRipper.Primitives;
 using AssetRipper.SourceGenerated.Classes.ClassID_21;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.ColorRGBAf;
 using AssetRipper.SourceGenerated.Subclasses.FastPropertyName;
+using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
 using AssetRipper.SourceGenerated.Subclasses.UnityPropertySheet;
 using AssetRipper.SourceGenerated.Subclasses.UnityTexEnv;
 
@@ -40,6 +42,10 @@ public sealed class UnityMaterialProperties
 
     public required IReadOnlyList<string> DisabledPasses { get; init; }
 
+    /// <summary>The passes its shader draws with (<see cref="UnityMaterials.PassesOf"/>); empty
+    /// where the source engine has no shader passes to state.</summary>
+    public required IReadOnlyList<UnityShaderPass> ShaderPasses { get; init; }
+
     public IReadOnlyDictionary<string, float> Floats => _floats ??= Fold(FloatEntries);
 
     public IReadOnlyDictionary<string, float[]> Colors => _colors ??= Fold(ColorEntries);
@@ -61,8 +67,58 @@ public sealed class UnityMaterialProperties
     }
 }
 
+/// <summary>One pass of a shader: the name it declares and its LightMode tag, empty when it
+/// declares none. The engine finds a tagged pass by the tag and an untagged one by its name;
+/// a material disables either by that same word.</summary>
+public readonly record struct UnityShaderPass(string Name, string LightMode);
+
 public static class UnityMaterials
 {
+    private const string LightModeTag = "LightMode";
+
+    /// <summary>The passes of the SubShader the engine draws with, which is the first: the engine
+    /// takes the first SubShader the target can run, and every SubShader these shaders ship runs on
+    /// the desktop target. A pass borrowed from another shader (<c>UsePass "Shader/NAME"</c>) is
+    /// stated by the name it borrows.</summary>
+    public static IReadOnlyList<UnityShaderPass> PassesOf(IShader? shader)
+    {
+        if (shader is null || !shader.Has_ParsedForm() || shader.ParsedForm.SubShaders.Count == 0)
+        {
+            return [];
+        }
+        List<UnityShaderPass> passes = [];
+        foreach (ISerializedPass pass in shader.ParsedForm.SubShaders[0].Passes)
+        {
+            string borrowed = pass.UseName.String;
+            if (borrowed.Length > 0)
+            {
+                passes.Add(new UnityShaderPass(borrowed[(borrowed.LastIndexOf('/') + 1)..], string.Empty));
+                continue;
+            }
+            passes.Add(new UnityShaderPass(pass.State.Name.String, LightModeOf(pass)));
+        }
+        return passes;
+    }
+
+    private static string LightModeOf(ISerializedPass pass)
+    {
+        foreach ((Utf8String key, Utf8String value) in pass.State.Tags.Tags)
+        {
+            if (key.String == LightModeTag)
+            {
+                return value.String;
+            }
+        }
+        foreach ((Utf8String key, Utf8String value) in pass.Tags.Tags)
+        {
+            if (key.String == LightModeTag)
+            {
+                return value.String;
+            }
+        }
+        return string.Empty;
+    }
+
     public static string ShaderNameOf(IShader? shader)
     {
         if (shader is null)
@@ -193,6 +249,7 @@ public static class UnityMaterials
             ColorEntries = colors,
             KeywordList = keywords,
             DisabledPasses = disabledPasses,
+            ShaderPasses = PassesOf(material.Shader_C21P),
         };
     }
 

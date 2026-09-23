@@ -208,6 +208,7 @@ public static class StatementTables
     public const string RoleRow = "r";
     public const string UnclaimedRow = "u";
     public const string PassRow = "p";
+    public const string ShaderPassRow = "s";
     public const string EncodingRow = "n";
 
     public static ColumnTable Materials(string id, Statement statement)
@@ -225,6 +226,10 @@ public static class StatementTables
             foreach (string pass in properties.DisabledPasses)
             {
                 table.Row(material.Key, PassRow, pass, string.Empty, 0, 0, 0, 0);
+            }
+            foreach (UnityShaderPass pass in properties.ShaderPasses)
+            {
+                table.Row(material.Key, ShaderPassRow, pass.Name, pass.LightMode, 0, 0, 0, 0);
             }
             foreach ((string name, string texture) in properties.Textures)
             {

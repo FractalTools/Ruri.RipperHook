@@ -462,6 +462,7 @@ public static class UnrealStatementSource
                 ColorEntries = entry.Colors,
                 KeywordList = entry.Keywords,
                 DisabledPasses = [],
+                ShaderPasses = [],
             };
             statement.Add(new StatementMaterial { Key = path, Properties = properties, Roles = roles.Resolve(properties) });
             keys[path] = path;

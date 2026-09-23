@@ -84,7 +84,8 @@ public static class StatementDatasets
             + "stamps on the rig and hands to core.statement.clips as its avatar argument." + CommonText, Avatars);
         Datasets.Publish(MaterialsId, DataRole.Statement, Common(),
             "Every material the seeds wear, one row per entry told apart by kind: m the material (name, shader), "
-            + "k a keyword, p a disabled pass, t a texture property (texture key, tiling and offset), f a number, c a "
+            + "k a keyword, p a disabled pass, s a pass its shader draws with (its name; texture holds its LightMode "
+            + "tag, empty when untagged), t a texture property (texture key, tiling and offset), f a number, c a "
             + "vector, n the decode a role layer states for one texture, r a resolved surface role (a colour role "
             + "names its texture; a channel role names the texture and the channel in x; a value role carries the "
             + "value), u a texture property no role layer names." + CommonText, Materials);
