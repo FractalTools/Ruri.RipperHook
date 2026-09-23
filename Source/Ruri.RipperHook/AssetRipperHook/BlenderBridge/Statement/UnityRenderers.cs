@@ -42,6 +42,9 @@ public sealed record UnityRendererInfo
 
     public required IReadOnlyList<IMaterial?> Materials { get; init; }
 
+    /// <summary>What the title writes onto the materials at run time, in its order (<see cref="RendererFill"/>).</summary>
+    public IReadOnlyList<MaterialWrite> Writes { get; init; } = [];
+
     public required IReadOnlyList<ITransform?> Bones { get; init; }
 
     public (int First, int Count)? SubMeshWindow { get; init; }

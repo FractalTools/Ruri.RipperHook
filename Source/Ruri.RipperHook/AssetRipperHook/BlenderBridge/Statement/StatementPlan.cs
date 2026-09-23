@@ -1,6 +1,7 @@
 ﻿using AssetRipper.Assets;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated.Classes.ClassID_21;
+using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using System.Numerics;
@@ -62,11 +63,27 @@ public sealed record PartsSkeleton(string Cab, string AvatarNameStem);
 public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Position, Quaternion Rotation,
     Vector3 Scale, IReadOnlyList<string> MaterialPaths, bool IsPrefab, string Stem, string MeshName);
 
+/// <summary>What a material write sets through the engine's own material setters.</summary>
+public enum MaterialWriteKind
+{
+    Color,
+    Float,
+    Texture,
+    Keyword,
+}
+
+/// <summary>One value a title writes onto a renderer's materials at run time: the property or
+/// keyword it names and what it writes -- four components for a colour, one for a float, one for a
+/// keyword (non-zero enables it), and for a texture slot the texture, where null clears the slot.</summary>
+public sealed record MaterialWrite(string Property, MaterialWriteKind Kind, float[] Value, ITexture2D? Texture);
+
 /// <summary>What a renderer the prefab ships empty draws at run time: the mesh and the materials
-/// the title puts on it, the bones that mesh's weights index when the title rebinds them, and the
-/// detail level that fill is (-1 unstated). Materials left empty and bones left null keep whatever
-/// the renderer carries of its own.</summary>
-public sealed record RendererFill(IMesh Mesh, IReadOnlyList<IMaterial?> Materials, IReadOnlyList<ITransform?>? Bones, int Lod);
+/// the title puts on it, the bones that mesh's weights index when the title rebinds them, the
+/// detail level that fill is (-1 unstated), and what the title writes onto every material the
+/// renderer draws with once they are on, in the order it writes. Materials left empty and bones
+/// left null keep whatever the renderer carries of its own.</summary>
+public sealed record RendererFill(IMesh Mesh, IReadOnlyList<IMaterial?> Materials, IReadOnlyList<ITransform?>? Bones, int Lod,
+    IReadOnlyList<MaterialWrite> Writes);
 
 /// <summary>One light a plan states: what it is, where it stands and points, and how bright, in the
 /// engine's own frame -- the colour linear as the engine emits it, the intensity the component's own,

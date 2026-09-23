@@ -52,6 +52,7 @@ public sealed class UnityStatement
     private readonly HashSet<string> _seedCabs;
     private readonly Dictionary<IMesh, DecodedMesh> _decodedMeshes = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ITexture2D, string> _textureKeys = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, string> _writtenNames = new(StringComparer.Ordinal);
     private readonly List<ITexture2D> _texturesToEncode = [];
 
     public Statement Result => _statement;
@@ -979,7 +980,8 @@ public sealed class UnityStatement
         _fills ??= _plan.Fills?.Invoke(_gameData) ?? new Dictionary<string, RendererFill>(StringComparer.Ordinal);
 
     /// <summary>Every renderer as it draws at run time: a fill's mesh replaces the renderer's own,
-    /// and a fill that states materials or bones replaces the renderer's -- what the title assigns wins.</summary>
+    /// a fill that states materials or bones replaces the renderer's -- what the title assigns wins --
+    /// and what the title writes onto those materials travels with them.</summary>
     private IEnumerable<UnityRendererInfo> Filled(IEnumerable<UnityRendererInfo> renderers)
     {
         IReadOnlyDictionary<string, RendererFill> fills = Fills;
@@ -990,6 +992,7 @@ public sealed class UnityStatement
                 {
                     Mesh = fill.Mesh,
                     Materials = fill.Materials.Count > 0 ? fill.Materials : info.Materials,
+                    Writes = fill.Writes,
                     Bones = fill.Bones ?? info.Bones,
                 }
                 : info;
@@ -1392,7 +1395,8 @@ public sealed class UnityStatement
         List<string> materialKeys = [];
         foreach (IMaterial? material in info.Materials)
         {
-            materialKeys.Add(material is null ? string.Empty : Material(material));
+            materialKeys.Add(material is null ? string.Empty
+                : info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info));
         }
         int lod = lodOf.GetValueOrDefault(info.Renderer, -1);
         bool shadowOnly = info.Renderer.GetShadowCastingMode() == ShadowCastingMode.ShadowsOnly;
@@ -1620,11 +1624,33 @@ public sealed class UnityStatement
     private string Material(IMaterial material)
     {
         string key = KeyOf(material);
+        return _statement.HasMaterial(key) ? key : Register(key, UnityMaterials.Read(material, TextureKey));
+    }
+
+    /// <summary>The material a renderer draws with once the title has written onto it. The engine
+    /// gives each renderer its own instance of a material it writes onto, so the written material is
+    /// a record of its own, named after the material and the renderer it belongs to; renderers the
+    /// title writes the same values onto share one.</summary>
+    private string WrittenMaterial(IMaterial material, UnityRendererInfo info)
+    {
+        string key = string.Create(CultureInfo.InvariantCulture,
+            $"{KeyOf(material)}|{UnityMaterials.WriteSignature(info.Writes, TextureKey)}");
         if (_statement.HasMaterial(key))
         {
             return key;
         }
-        UnityMaterialProperties properties = UnityMaterials.Read(material, TextureKey);
+        string stem = string.Create(CultureInfo.InvariantCulture, $"{material.Name.String}@{info.Name}");
+        string name = stem;
+        for (int ordinal = 2; _writtenNames.TryGetValue(name, out string? taken) && taken != key; ordinal++)
+        {
+            name = string.Create(CultureInfo.InvariantCulture, $"{stem}#{ordinal}");
+        }
+        _writtenNames[name] = key;
+        return Register(key, UnityMaterials.Written(UnityMaterials.Read(material, TextureKey), name, info.Writes, TextureKey));
+    }
+
+    private string Register(string key, UnityMaterialProperties properties)
+    {
         TextureRoles.Resolution roles = _roles.Resolve(properties);
         _statement.Add(new StatementMaterial { Key = key, Properties = properties, Roles = roles });
         foreach (string unmapped in roles.Unmapped)

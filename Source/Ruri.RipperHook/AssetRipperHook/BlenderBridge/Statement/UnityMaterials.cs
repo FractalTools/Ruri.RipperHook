@@ -261,4 +261,93 @@ public static class UnityMaterials
         }
         merged[name] = value;
     }
+
+    /// <summary>A material as a title leaves it after writing onto it at run time, under the name its
+    /// instance is stated by. Each write, in order, does what the engine's own setter does to the
+    /// material's tables: a colour or a float replaces the stored value or joins the table, a texture
+    /// fills its slot or, being null, empties it, and a keyword is enabled or disabled.</summary>
+    public static UnityMaterialProperties Written(UnityMaterialProperties material, string name,
+        IReadOnlyList<MaterialWrite> writes, Func<IUnityObjectBase, string> keyOf)
+    {
+        List<KeyValuePair<string, float>> floats = [.. material.FloatEntries];
+        List<KeyValuePair<string, float[]>> colors = [.. material.ColorEntries];
+        List<KeyValuePair<string, string>> textures = [.. material.Textures];
+        List<KeyValuePair<string, ITexture2D>> textureAssets = [.. material.TextureAssets];
+        List<string> keywords = [.. material.KeywordList];
+        foreach (MaterialWrite write in writes)
+        {
+            switch (write.Kind)
+            {
+                case MaterialWriteKind.Color:
+                    Set(colors, write.Property, write.Value);
+                    break;
+                case MaterialWriteKind.Float:
+                    Set(floats, write.Property, write.Value[0]);
+                    break;
+                case MaterialWriteKind.Texture:
+                    if (write.Texture is { } texture)
+                    {
+                        Set(textures, write.Property, keyOf(texture));
+                        Set(textureAssets, write.Property, texture);
+                    }
+                    else
+                    {
+                        textures.RemoveAll(entry => entry.Key == write.Property);
+                        textureAssets.RemoveAll(entry => entry.Key == write.Property);
+                    }
+                    break;
+                case MaterialWriteKind.Keyword:
+                    keywords.RemoveAll(keyword => keyword == write.Property);
+                    if (write.Value[0] != 0.0f)
+                    {
+                        keywords.Add(write.Property);
+                    }
+                    break;
+            }
+        }
+        return new UnityMaterialProperties
+        {
+            Name = name,
+            ShaderName = material.ShaderName,
+            Textures = textures,
+            TextureAssets = textureAssets,
+            TextureScaleOffset = material.TextureScaleOffset,
+            FloatEntries = floats,
+            ColorEntries = colors,
+            KeywordList = keywords,
+            DisabledPasses = material.DisabledPasses,
+            ShaderPasses = material.ShaderPasses,
+        };
+    }
+
+    /// <summary>What tells one list of writes from another: every write's property, kind, value and
+    /// texture, hashed -- two renderers written alike draw the same material.</summary>
+    public static string WriteSignature(IReadOnlyList<MaterialWrite> writes, Func<IUnityObjectBase, string> keyOf)
+    {
+        System.Text.StringBuilder text = new();
+        foreach (MaterialWrite write in writes)
+        {
+            text.Append(write.Property).Append('\u001f').Append((int)write.Kind).Append('\u001f');
+            foreach (float component in write.Value)
+            {
+                text.Append(BitConverter.SingleToInt32Bits(component).ToString("x8", System.Globalization.CultureInfo.InvariantCulture)).Append(',');
+            }
+            text.Append('\u001f').Append(write.Texture is null ? string.Empty : keyOf(write.Texture)).Append('\u001e');
+        }
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text.ToString()));
+        return Convert.ToHexString(hash, 0, 8);
+    }
+
+    private static void Set<T>(List<KeyValuePair<string, T>> entries, string name, T value)
+    {
+        int index = entries.FindIndex(entry => entry.Key == name);
+        if (index < 0)
+        {
+            entries.Add(new KeyValuePair<string, T>(name, value));
+        }
+        else
+        {
+            entries[index] = new KeyValuePair<string, T>(name, value);
+        }
+    }
 }
