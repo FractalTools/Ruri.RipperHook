@@ -30,6 +30,7 @@ internal sealed class UnrealMaterialParameters
     private const string ParametersName = "Parameters";
     private const string RuntimeEntriesName = "RuntimeEntries";
     private const string ParameterInfoSetName = "ParameterInfoSet";
+    private const string ParameterInfosName = "ParameterInfos";
     private const string ParameterInfoName = "ParameterInfo";
     private const string ParameterValueName = "ParameterValue";
     private const string ConnectedMaskName = "PropertyConnectedMask";
@@ -62,21 +63,39 @@ internal sealed class UnrealMaterialParameters
     private const string ValuesSuffix = "Values";
 
     /// <summary>
-    /// The runtime parameter kinds in the order the engine indexes its cached entries by, per
-    /// engine version. EMaterialParameterType is a plain C++ enum with no reflection, and the
-    /// cached data does not declare its value tables in that order (5.5 declares StaticSwitchValues
-    /// second), so the order is stated per version from Epic's own API reference for that version
-    /// and verified against every material's own tables -- the entry count and each kind's value
-    /// count -- before a value is read. 5.1 is the six kinds whose value tables the 5.1 schema
-    /// declares beside a six-entry RuntimeEntries, in the order those six keep in 5.4, and every
-    /// material of a 5.1 build validated against it.
+    /// How one engine version writes the base material's cached parameter tables: the runtime
+    /// parameter kinds in the order it indexes its cached entries by, the name an entry gives its
+    /// parameter list, and whether its texture table holds object references or soft paths.
     /// </summary>
-    private static readonly IReadOnlyDictionary<EGame, string[]> KindLayouts = new Dictionary<EGame, string[]>
+    private sealed record CachedLayout(string[] Kinds, string InfosName, bool TexturesByReference);
+
+    /// <summary>
+    /// The cached-table layout per engine version. EMaterialParameterType is a plain C++ enum with
+    /// no reflection, and the cached data does not declare its value tables in that order (5.5
+    /// declares StaticSwitchValues second), so the order is stated per version from Epic's own API
+    /// reference for that version and verified against every material's own tables -- each kind's
+    /// parameter count against its value count -- before a value is read. 5.1 is the six kinds whose
+    /// value tables the 5.1 schema declares beside a six-entry RuntimeEntries, in the order those six
+    /// keep in 5.4, and every material of a 5.1 build validated against it. 4.26 is the five kinds of
+    /// its runtime range, each entry listing its parameters as ParameterInfos and the texture table
+    /// holding object references -- as a 4.26 build's own tables state them (a character master of
+    /// 639 scalars, 136 vectors and 46 textures, every count matching its value table).
+    /// </summary>
+    private static readonly IReadOnlyDictionary<EGame, CachedLayout> CachedLayouts = new Dictionary<EGame, CachedLayout>
     {
-        [EGame.GAME_UE5_1] = ["Scalar", "Vector", "DoubleVector", "Texture", "Font", "RuntimeVirtualTexture"],
-        [EGame.GAME_UE5_4] = ["Scalar", "Vector", "DoubleVector", "Texture", "Font", "RuntimeVirtualTexture", "SparseVolumeTexture", "StaticSwitch"],
-        [EGame.GAME_UE5_5] = ["Scalar", "Vector", "DoubleVector", "Texture", "TextureCollection", "Font", "RuntimeVirtualTexture", "SparseVolumeTexture", "StaticSwitch"],
+        [EGame.GAME_UE4_26] = new(["Scalar", "Vector", "Texture", "Font", "RuntimeVirtualTexture"], ParameterInfosName, true),
+        [EGame.GAME_UE5_1] = new(["Scalar", "Vector", "DoubleVector", "Texture", "Font", "RuntimeVirtualTexture"], ParameterInfoSetName, false),
+        [EGame.GAME_UE5_4] = new(["Scalar", "Vector", "DoubleVector", "Texture", "Font", "RuntimeVirtualTexture", "SparseVolumeTexture", "StaticSwitch"], ParameterInfoSetName, false),
+        [EGame.GAME_UE5_5] = new(["Scalar", "Vector", "DoubleVector", "Texture", "TextureCollection", "Font", "RuntimeVirtualTexture", "SparseVolumeTexture", "StaticSwitch"], ParameterInfoSetName, false),
     };
+
+    /// <summary>CUE4Parse numbers a title as its engine version plus a variant in these low bits.</summary>
+    private const int EngineVariantBits = 0xFFFF;
+
+    /// <summary>The layout a build's cached tables follow: its own when it states one, else its
+    /// engine version's -- a title built on 4.26 writes them as 4.26 does.</summary>
+    private static CachedLayout? LayoutFor(EGame game) =>
+        CachedLayouts.GetValueOrDefault(game) ?? CachedLayouts.GetValueOrDefault((EGame)((int)game & ~EngineVariantBits));
 
     private readonly UnrealFileProvider provider;
     private readonly TypeMappings? mappings;
@@ -368,18 +387,20 @@ internal sealed class UnrealMaterialParameters
     /// <summary>
     /// The cached parameter tables -- on the cached data itself, or under its Parameters member
     /// in the engines that nest them: one entry per runtime parameter kind, in the engine's
-    /// declared order, each listing its parameters beside a value table.
+    /// declared order, each listing its parameters beside a value table. An entry the cook left out
+    /// is an empty one: tagged serialization writes no element equal to its default, so a material
+    /// with no font parameter carries no font entry at all.
     /// </summary>
     private void ReadCached(FStructFallback parameters, string owner)
     {
         EGame game = provider.Versions.Game;
-        if (!KindLayouts.TryGetValue(game, out string[]? layout))
+        if (LayoutFor(game) is not { } layout)
         {
             Logger.Warning(LogCategory.Import, $"[Unreal] {owner}: no cached-parameter kind layout is declared for {game}; parameter defaults not read.");
             return;
         }
-        FMaterialParameterInfo[]?[] entries = new FMaterialParameterInfo[]?[layout.Length];
-        int count = 0;
+        string[] kinds = layout.Kinds;
+        FMaterialParameterInfo[]?[] entries = new FMaterialParameterInfo[]?[kinds.Length];
         foreach (FPropertyTag tag in parameters.Properties)
         {
             if (!string.Equals(tag.Name.Text, RuntimeEntriesName, StringComparison.Ordinal)
@@ -387,24 +408,20 @@ internal sealed class UnrealMaterialParameters
             {
                 continue;
             }
-            count++;
-            if (tag.ArrayIndex < layout.Length)
+            if (tag.ArrayIndex >= kinds.Length)
             {
-                entries[tag.ArrayIndex] = entry.GetOrDefault<FMaterialParameterInfo[]>(ParameterInfoSetName, []);
+                Logger.Warning(LogCategory.Import, $"[Unreal] {owner}: cached parameter entry {tag.ArrayIndex} lies beyond the {kinds.Length} kinds declared for {game}; parameter defaults not read.");
+                return;
             }
-        }
-        if (count != layout.Length)
-        {
-            Logger.Warning(LogCategory.Import, $"[Unreal] {owner}: {count} cached parameter entries beside the {layout.Length} kinds declared for {game}; parameter defaults not read.");
-            return;
+            entries[tag.ArrayIndex] = entry.GetOrDefault<FMaterialParameterInfo[]>(layout.InfosName, []);
         }
         if (Logger.AllowVerbose)
         {
-            Logger.Verbose(LogCategory.Import, $"[Unreal] {owner}: cached parameter counts {string.Join(", ", layout.Select((kind, index) => kind + "=" + (entries[index]?.Length ?? 0)))}.");
+            Logger.Verbose(LogCategory.Import, $"[Unreal] {owner}: cached parameter counts {string.Join(", ", kinds.Select((kind, index) => kind + "=" + (entries[index]?.Length ?? 0)))}.");
         }
-        for (int kindIndex = 0; kindIndex < layout.Length; kindIndex++)
+        for (int kindIndex = 0; kindIndex < kinds.Length; kindIndex++)
         {
-            string kind = layout[kindIndex];
+            string kind = kinds[kindIndex];
             FMaterialParameterInfo[] infos = entries[kindIndex] ?? [];
             string table = kind + ValuesSuffix;
             switch (kind)
@@ -418,18 +435,30 @@ internal sealed class UnrealMaterialParameters
                 case "DoubleVector":
                     Read(owner, kind, infos, parameters.GetOrDefault<TIntVector4<double>[]>(table, []), (name, value) => colors[name] = Vector(value));
                     break;
+                case "Texture" when layout.TexturesByReference:
+                    Read(owner, kind, infos, parameters.GetOrDefault<FPackageIndex[]>(table, []), (name, value) =>
+                        TextureDefault(name, value.IsNull ? null : value.ResolvedObject?.GetPathName()));
+                    break;
                 case "Texture":
                     Read(owner, kind, infos, parameters.GetOrDefault<FSoftObjectPath[]>(table, []), (name, value) =>
-                    {
-                        parameterDefaults.Add(value.AssetPathName.Text);
-                        textures[name] = value.AssetPathName.Text;
-                    });
+                        TextureDefault(name, value.AssetPathName.Text));
                     break;
                 case "StaticSwitch":
                     Read(owner, kind, infos, parameters.GetOrDefault<bool[]>(table, []), (name, value) => floats[name] = value ? 1f : 0f);
                     break;
             }
         }
+    }
+
+    /// <summary>A texture parameter's default: the path it names, which is also one the graph's
+    /// constants are told apart from.</summary>
+    private void TextureDefault(string name, string? path)
+    {
+        if (path is not null)
+        {
+            parameterDefaults.Add(path);
+        }
+        textures[name] = path;
     }
 
     /// <summary>One kind's parameters beside its value table; a count mismatch means the layout is not this cook's, and nothing is read.</summary>
