@@ -43,6 +43,7 @@
     "CUE4Parse.UE4.Assets.Exports.Material.FMaterialScalarParameterInfo::.ctor(FMemoryImageArchive)": "3bfadaa5571b09aa",
     "CUE4Parse.UE4.Assets.Exports.Material.FMemoryImageMaterialParameterInfo::.ctor(FMemoryImageArchive)": "e953d4a42c3028cb",
     "CUE4Parse.UE4.Assets.Exports.SkeletalMesh.FSkelMeshSection::SerializeRenderItem(FAssetArchive)": "0dac40f055e36afe",
+    "Cpp2IL.Core.Cpp2IlApi::InitializeLibCpp2Il(String,String,UnityVersion,Boolean)": "eaa07c4179e4a70b",
     "ICSharpCode.Decompiler.CSharp.ProjectDecompiler.WholeProjectDecompiler::CreateDecompiler(DecompilerTypeSystem)": "b8718fd7483f4ece",
     "LibCpp2IL.Metadata.Il2CppTypeDefinition::Read(ClassReadingBinaryReader)": "f2b090d41c0d90ed"
   },

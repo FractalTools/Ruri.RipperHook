@@ -112,8 +112,9 @@ namespace Ruri.Hook.Core
             if (Unbaselined.Count > 0)
             {
                 HookLogger.Log(
-                    $"{Unbaselined.Count} hooked upstream method(s) have no baseline for their build configuration. " +
-                    $"Run once with RURI_HOOK_BASELINE=1 to record them.");
+                    $"{Unbaselined.Count} hooked upstream method(s) have no baseline for their build configuration: " +
+                    $"{string.Join("; ", Unbaselined)}. Read each one's upstream history, then run once with " +
+                    $"RURI_HOOK_BASELINE=1 to record them.");
             }
         }
 
