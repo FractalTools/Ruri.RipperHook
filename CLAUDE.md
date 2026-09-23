@@ -6,7 +6,7 @@
 
 1. **可编辑区 = 现有 `Source/Ruri.*/**`**(RipperHook/Tpk/Hook/ShaderDecompiler/FModelHook/**GameHook**);`AssetRipper/**`、`FModel/**` 等上游子模块冻结,只读;`Source/Ruri.ShaderDecompiler` 是**我们自己的**子模块(独立仓库,与 GameHook 同规矩:先在子模块提交推送再 bump 父仓 gitlink),可编辑。
    `Source/Ruri.GameHook` 是**我们自己的**私有子模块,按引擎分两半、各进各的 assembly:`Unity/**` 编进 `Ruri.RipperHook`,`Unreal/**` 编进 `Ruri.FModelHook`(唯一可引用 CUE4Parse 的项目)。
-   **界线**:`Source/Ruri.FModelHook/FModelHook/Unreal/**` = **无任何加密的通用 UE 读取**(挂载/读取器/标题注册表/端点抓取机制);`Ruri.GameHook/Unreal/<游戏>/` = **只放该游戏特定的解密与身份**(容器方言、key/mappings 发布在哪、靠哪些文件认出它)。通用能力写进前者,游戏特例写进后者。
+   **界线**:`Source/Ruri.FModelHook/FModelHook/BlenderBridge/**` = **无任何加密的通用 UE 读取**(挂载/读取器/标题注册表/端点抓取机制);`Ruri.GameHook/Unreal/<游戏>/` = **只放该游戏特定的解密与身份**(容器方言、key/mappings 发布在哪、靠哪些文件认出它)。通用能力写进前者,游戏特例写进后者。
 2. **禁新建 assembly**:任何特性(含重型/原生 NuGet 依赖)落进现有 csproj,默认 `Ruri.RipperHook`;想为"隔离依赖"或"可扩展性"起新项目=信号错误,改为往核心加 hook。
 3. **只用 AOP**:游戏行为走 `[RipperHook(GameType.X,"游戏版本","引擎版本")]`,宿主能力走 `[RipperFeature("Name")]`(两者正交,FRAMEWORK §7);禁在子模块里子类化/monkey-patch,禁共享代码里 `if(game==X)`,禁 ProjectReference 上游再改它。临时探查可改子模块,收工 `git checkout` 还原。
 4. **hook 只走 Ruri.Hook** 的 `[RetargetMethod]`/`[RetargetMethodFunc]`/`[RetargetMethodCtorFunc]` + `Initialize()`;禁裸 `new MonoMod...Hook/ILHook`(唯一例外=`Ruri.Hook` 自身的 `ReflectionExtensions.RetargetCall*`)。
@@ -26,3 +26,4 @@
 15. **两个反汇编 GameType 可叠加**:`Il2CppMethodDump`(把原生 asm 注释注入反编译脚本)、`DisassemblyExporter`(只出代码、跳过资产、全程序集强制反编译);模型来自加载期 `Cpp2IlApi.CurrentAppContext`,仅 IL2CPP、opt-in,**禁在导出/哑 DLL 保存阶段 dump**;架构/坑/迭代探针见 FRAMEWORK §12。
 17. 🛑 **片段不许单独读,先读骨架再读片段**:片段的绑定只存骨骼路径的 CRC32,对着骨架才叫得出名字;不给目标骨架,读出来的骨骼曲线全是 `path_0x<crc>_` 占位符,对不上任何骨骼(判成没脸 / 动画不动 / 曲线全丢,先查这个)。所以 `core.statement.clips` 的 `paths` 与 `avatar` 是必填参数(解析在 `ClipStatement.Restate` / `UnitySkinning.SuffixTable`)。Unity 里不存在没有 avatar 的动画目标:运行时就是把目标对象层级的可逆路径字符串算一次哈希来绑定的,`paths` 就是这份层级。
 16. **FModelHook 唯一入口 = 无头 CLI,绝不 `new FModel.App()`**;导出级别全由命令行参数控制;架构/桥/缓存/native 依赖见 FRAMEWORK §15。
+18. 🛑 **分层(2026-09-23 钦定)**:`Source/Ruri.RipperHook/Core/` 只放 cabmap 级的根本功能(`CabMapping`/`TypeTree`/`Attributes`/`Capabilities`/hook 分发)——没有它 AR 读取、cabmap 或 hook 体系就不成立的才配进。服务 `RuriRipperImporter` 插件的一切(数据集/陈述/表/视图/安装探测/转换/关卡资源)住 `Source/Ruri.RipperHook/AssetRipperHook/BlenderBridge/`(命名空间 `Ruri.RipperHook.BlenderBridge.*`),虚幻侧对应 `Source/Ruri.FModelHook/FModelHook/BlenderBridge/`;AR 特性各住 `AssetRipperHook/<特性>/`(如 `BundleRepack`);只有一个游戏用的放那个游戏的 GameHook。**禁往 Core 丢**。
