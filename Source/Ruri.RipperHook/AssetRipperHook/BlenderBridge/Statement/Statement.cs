@@ -80,7 +80,9 @@ public sealed class StatementNode
 
     public required string Kind { get; set; }
 
-    public required bool Active { get; init; }
+    /// <summary>Whether the node draws right now: its object is active in the hierarchy and, for a
+    /// node that carries a renderer, that renderer is enabled.</summary>
+    public required bool Active { get; set; }
 
     public string Mesh { get; set; } = string.Empty;
 

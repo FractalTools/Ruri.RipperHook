@@ -923,6 +923,7 @@ public sealed class UnityStatement
             if (row.Kind == "empty")
             {
                 row.Kind = "camera";
+                row.Active = !camera.Disabled;
                 row.Camera = camera;
             }
         }
@@ -932,6 +933,7 @@ public sealed class UnityStatement
             if (row.Kind == "empty")
             {
                 row.Kind = "light";
+                row.Active = !light.Disabled;
                 row.Light = light;
             }
         }
@@ -1424,6 +1426,7 @@ public sealed class UnityStatement
             if (row is not null)
             {
                 row.Kind = bakedNow ? "skinned" : "mesh";
+                row.Active = !info.Disabled;
                 row.Mesh = key;
                 row.Materials = materialKeys;
             }
@@ -1458,6 +1461,7 @@ public sealed class UnityStatement
         if (row is not null)
         {
             row.Kind = "mesh";
+            row.Active = !info.Disabled;
             row.Mesh = meshKey;
             row.Materials = materialKeys;
         }
