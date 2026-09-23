@@ -40,14 +40,25 @@ public static class UnrealStatementSource
     }
 
     /// <summary>A seed is one package, or several joined by the list separator -- a row that is a
-    /// body and what it wears is one thing to load. Every package must be one this install ships.</summary>
+    /// body and what it wears is one thing to load. Every package must be one this install ships,
+    /// named by its own path or by the container path the map files it under -- the form every cast
+    /// table of this engine states as a row's payload.</summary>
     private static StatementPlan? Resolve(string seed, CabTable map, StatementOptions options)
     {
         string named = seed.StartsWith(PackagePrefix, StringComparison.OrdinalIgnoreCase) ? seed[PackagePrefix.Length..] : seed;
-        string[] packages = named.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (packages.Length == 0 || !packages.All(package => map.TryGetId(package, out _)))
+        string[] stated = named.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (stated.Length == 0)
         {
             return null;
+        }
+        string[] packages = new string[stated.Length];
+        for (int i = 0; i < stated.Length; i++)
+        {
+            if (Package(stated[i], map) is not { } package)
+            {
+                return null;
+            }
+            packages[i] = package;
         }
         return new StatementPlan
         {
@@ -58,6 +69,18 @@ public static class UnrealStatementSource
             Flatten = requested => StatementFlattener.Merge(
                 packages.Select(package => Flatten(seed, package, Label(package), map, requested))),
         };
+    }
+
+    /// <summary>The package one stated name is: itself when the map lists a package by that name,
+    /// else the one package the map files under that container path; null when it is neither.</summary>
+    private static string? Package(string stated, CabTable map)
+    {
+        if (map.TryGetId(stated, out int id))
+        {
+            return map.CabName(id);
+        }
+        string[] filed = CabMap.ResolveCabsForPaths(map, [stated]);
+        return filed.Length == 1 ? filed[0] : null;
     }
 
     private static string Label(string package)
