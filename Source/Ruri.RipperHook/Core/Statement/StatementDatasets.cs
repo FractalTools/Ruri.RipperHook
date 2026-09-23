@@ -41,6 +41,7 @@ public static class StatementDatasets
     public const string Avatar = "avatar";
 
     private static readonly object Gate = new();
+    private static string _cachedRequest = string.Empty;
     private static string _cachedSignature = string.Empty;
     private static Statement? _cached;
 
@@ -131,7 +132,12 @@ public static class StatementDatasets
     };
 
     /// <summary>The flattening every table of one request is cut from. One is kept: the tables
-    /// of a request are asked one after another, and a different request replaces it.</summary>
+    /// of a request are asked one after another, and a different request replaces it.
+    ///
+    /// Found by the REQUEST first -- its seeds, options and map -- because resolving a seed can
+    /// read archives, and every table and every texture of one request asks again. Only a request
+    /// not seen last resolves its seeds, and then the plans' own signature is what decides whether
+    /// the flattening it would make is the one already kept.</summary>
     public static Statement Flatten(DataRequest request)
     {
         CabTable map = request.Map;
@@ -141,17 +147,27 @@ public static class StatementDatasets
             throw new ArgumentException("a statement needs at least one seed.");
         }
         StatementOptions options = Options(request);
+        string mapIdentity = RuntimeHelpers.GetHashCode(map).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string asked = string.Join("\n", seeds) + "\n" + options.Signature + "\n" + mapIdentity;
+        lock (Gate)
+        {
+            if (_cached is not null && _cachedRequest == asked)
+            {
+                return _cached;
+            }
+        }
         List<StatementPlan> plans = new(seeds.Length);
         foreach (string seed in seeds)
         {
             plans.Add(StatementSources.Resolve(seed, map, options));
         }
         string signature = string.Join("\n", plans.Select(plan => plan.Signature)) + "\n" + options.Signature + "\n"
-            + RuntimeHelpers.GetHashCode(map).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            + mapIdentity;
         lock (Gate)
         {
             if (_cached is not null && _cachedSignature == signature)
             {
+                _cachedRequest = asked;
                 return _cached;
             }
         }
@@ -160,6 +176,7 @@ public static class StatementDatasets
         {
             _cached = statement;
             _cachedSignature = signature;
+            _cachedRequest = asked;
         }
         return statement;
     }
@@ -170,6 +187,7 @@ public static class StatementDatasets
         {
             _cached = null;
             _cachedSignature = string.Empty;
+            _cachedRequest = string.Empty;
         }
     }
 
