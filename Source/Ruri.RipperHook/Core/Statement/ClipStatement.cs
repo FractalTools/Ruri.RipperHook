@@ -7,6 +7,11 @@ using Ruri.RipperHook.Humanoid;
 namespace Ruri.RipperHook.Statements;
 
 /// <summary>
+/// THERE IS NO READING A CLIP ON ITS OWN: READ THE TARGET'S SKELETON FIRST, THEN THE CLIP. A clip
+/// stores every binding as the CRC32 of a bone path, so it names bones only against a skeleton:
+/// without the target's paths every bone curve would be a <c>path_0x&lt;crc&gt;_</c> placeholder
+/// that matches no bone anywhere -- which reads exactly like a clip that animates nothing.
+///
 /// A clip's curves re-anchored onto the skeleton a host holds, and its muscle encoding
 /// solved into ordinary bone curves against that skeleton's avatar. The blob layout is the
 /// one every clip producer writes -- per curve, times then values then both tangents -- so a
@@ -109,30 +114,23 @@ public static class ClipStatement
     /// <summary>The clip as the given skeleton plays it. <paramref name="skeletonPaths"/>
     /// re-anchors every curve; <paramref name="avatarJson"/>, when stated, solves a
     /// muscle-encoded clip into bone curves that replace whatever rode on those paths.</summary>
-    public static StatementClip Restate(StatementClip clip, string skeletonKey, IReadOnlyList<string> skeletonPaths,
+    public static StatementClip Restate(StatementClip clip, IReadOnlyList<string> skeletonPaths,
         string avatarJson, Action<string> note)
     {
-        if (skeletonPaths.Count == 0 && avatarJson.Length == 0)
-        {
-            return clip;
-        }
         (ClipIndex meta, List<Channel> channels) = Parse(clip.MetaJson, clip.Curves);
         HashSet<string> paths = new(skeletonPaths, StringComparer.Ordinal);
         Dictionary<uint, string> suffixes = UnitySkinning.SuffixTable(skeletonPaths);
-        if (skeletonPaths.Count > 0)
+        (int repaired, int unmatched) = Repair(channels, paths, suffixes);
+        if (unmatched > 0)
         {
-            (int repaired, int unmatched) = Repair(channels, paths, suffixes);
-            if (unmatched > 0)
-            {
-                note($"{clip.Name}: {unmatched} curve path(s) matched no bone of the target skeleton ({repaired} re-anchored)");
-            }
+            note($"{clip.Name}: {unmatched} curve path(s) matched no bone of the target skeleton ({repaired} re-anchored)");
         }
         if (avatarJson.Length > 0)
         {
             Solve(clip, meta, channels, paths, suffixes, avatarJson, note);
         }
         (string metaJson, byte[] curves) = Write(meta, channels);
-        return new StatementClip(clip.Key, clip.Name, skeletonKey, metaJson, curves, clip.Archive);
+        return clip with { MetaJson = metaJson, Curves = curves };
     }
 
     private static void Solve(StatementClip clip, ClipIndex meta, List<Channel> channels, HashSet<string> paths,

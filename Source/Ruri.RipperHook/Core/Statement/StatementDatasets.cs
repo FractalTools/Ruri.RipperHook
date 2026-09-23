@@ -36,7 +36,6 @@ public static class StatementDatasets
     public const string ShadowProxies = "shadow_proxies";
     public const string Roles = "roles";
     public const string Containers = "containers";
-    public const string Skeleton = "skeleton";
     public const string Texture = "texture";
     public const string Paths = "paths";
     public const string Avatar = "avatar";
@@ -99,11 +98,14 @@ public static class StatementDatasets
             + "than one array can hold and far more than a host wants resident to load them one at a time."
             + CommonText, TextureBytes);
         Datasets.Publish(ClipsId, DataRole.Statement,
-            Common(DataParam.Text(Skeleton, required: false), DataParam.List(Paths), DataParam.Text(Avatar, required: false)),
-            "Every animation clip the seeds themselves carry as curves a host plays: a JSON index beside a float32 "
-            + "payload. paths... are the target skeleton's bone paths, onto which every curve is re-anchored; avatar "
-            + "is that skeleton's avatar statement, against which a muscle-encoded clip is solved into bone curves; "
-            + "skeleton is the key written on every row." + CommonText, Clips);
+            Common(DataParam.List(Paths, required: true), DataParam.Text(Avatar)),
+            "Every animation clip the seeds themselves carry, as the target it plays on reads it: a JSON index "
+            + "beside a float32 payload. There is no reading a clip on its own -- read the target's skeleton FIRST: "
+            + "a clip stores its bindings as CRC32 hashes, and without the target's paths every bone curve would be "
+            + "a path_0x<crc>_ placeholder that matches no bone. paths+ are the target's object hierarchy -- the "
+            + "reversible strings Unity itself hashes once to bind a clip -- onto which every curve is re-anchored; "
+            + "avatar is the avatar that hierarchy was built with, against which a muscle-encoded clip is solved into "
+            + "bone curves." + CommonText, Clips);
         Datasets.Publish(ArchivesId, DataRole.Internal, [DataParam.List(Seed, required: true)],
             "Where each seed lives: every archive loading it would read, with the container path "
             + "that archive files first -- answered by the same resolution a load makes.", Archives);
@@ -227,14 +229,13 @@ public static class StatementDatasets
     private static ColumnTable Clips(DataRequest request)
     {
         Statement statement = Flatten(request);
-        string skeleton = request.Text(Skeleton);
         string[] paths = request.List(Paths);
         string avatar = request.Text(Avatar);
         List<StatementClip> restated = new(statement.Clips.Count);
         List<string> notes = [];
         foreach (StatementClip clip in statement.Clips)
         {
-            restated.Add(ClipStatement.Restate(clip, skeleton, paths, avatar, notes.Add));
+            restated.Add(ClipStatement.Restate(clip, paths, avatar, notes.Add));
         }
         ColumnTable table = StatementTables.Clips(ClipsId, restated);
         foreach (string entry in notes)

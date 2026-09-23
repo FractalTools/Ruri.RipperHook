@@ -24,4 +24,5 @@
     **原生库是依赖不是缓存**:加载器只认路径,所以落在加载它们的程序集旁(`CUE4Parse-Natives.dll` 本来就在那儿),且先问已内置的 natives、能不下就不下。
     判据:连跑两轮,第二轮的 `keys.json` 时间戳必须前进(证明确实重取并覆盖),且 `%LOCALAPPDATA%` 下该标题的目录文件数不增。
 15. **两个反汇编 GameType 可叠加**:`Il2CppMethodDump`(把原生 asm 注释注入反编译脚本)、`DisassemblyExporter`(只出代码、跳过资产、全程序集强制反编译);模型来自加载期 `Cpp2IlApi.CurrentAppContext`,仅 IL2CPP、opt-in,**禁在导出/哑 DLL 保存阶段 dump**;架构/坑/迭代探针见 FRAMEWORK §12。
+17. 🛑 **片段不许单独读,先读骨架再读片段**:片段的绑定只存骨骼路径的 CRC32,对着骨架才叫得出名字;不给目标骨架,读出来的骨骼曲线全是 `path_0x<crc>_` 占位符,对不上任何骨骼(判成没脸 / 动画不动 / 曲线全丢,先查这个)。所以 `core.statement.clips` 的 `paths` 与 `avatar` 是必填参数(解析在 `ClipStatement.Restate` / `UnitySkinning.SuffixTable`)。Unity 里不存在没有 avatar 的动画目标:运行时就是把目标对象层级的可逆路径字符串算一次哈希来绑定的,`paths` 就是这份层级。
 16. **FModelHook 唯一入口 = 无头 CLI,绝不 `new FModel.App()`**;导出级别全由命令行参数控制;架构/桥/缓存/native 依赖见 FRAMEWORK §15。

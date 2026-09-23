@@ -157,7 +157,7 @@ public sealed class StatementTexture
     public required byte[] Image { get; init; }
 }
 
-public sealed record StatementClip(string Key, string Name, string Skeleton, string MetaJson, byte[] Curves, string Archive);
+public sealed record StatementClip(string Key, string Name, string MetaJson, byte[] Curves, string Archive);
 
 public sealed record StatementMorph(string Mesh, string Name, uint[] Vertices, float[] DeltaPositions,
     float[] DeltaNormals, float[] DeltaTangents, float Weight, int Frames);
