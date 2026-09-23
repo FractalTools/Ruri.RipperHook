@@ -68,6 +68,10 @@ public sealed class UnityCameraInfo
     public required bool Disabled { get; init; }
 }
 
+/// <summary>One light as the engine emits it. The colour is LINEAR -- the component serializes it
+/// gamma-encoded and the engine lights with its linear value -- and the intensity is the component's
+/// own, so a host scales the colour by the intensity in its own units. Angles are full cone angles in
+/// degrees.</summary>
 public sealed class UnityLightInfo
 {
     public required UnityNode Node { get; init; }
@@ -93,6 +97,8 @@ public sealed class UnityLightInfo
     public required float AreaWidth { get; init; }
 
     public required float AreaHeight { get; init; }
+
+    public required bool Shadows { get; init; }
 
     public required bool Disabled { get; init; }
 }
@@ -333,15 +339,16 @@ public static class UnityRenderers
                 Node = node,
                 Name = node.Name,
                 Type = (int)light.Type,
-                Red = light.Color.R,
-                Green = light.Color.G,
-                Blue = light.Color.B,
+                Red = SrgbColor.Decode(light.Color.R),
+                Green = SrgbColor.Decode(light.Color.G),
+                Blue = SrgbColor.Decode(light.Color.B),
                 Intensity = light.Intensity,
                 Range = light.Range,
                 SpotAngle = light.SpotAngle,
                 InnerSpotAngle = light.Has_InnerSpotAngle() ? light.InnerSpotAngle : 0f,
                 AreaWidth = light.AreaSize.X,
                 AreaHeight = light.AreaSize.Y,
+                Shadows = light.Shadows.Type != 0,
                 Disabled = disabled,
             };
         }

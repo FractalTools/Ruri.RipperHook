@@ -36,6 +36,7 @@ using CUE4Parse.UE4.VirtualFileSystem;
 using Ruri.RipperHook.Bridge;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.Data;
+using Ruri.RipperHook.Statements;
 using Ruri.RipperHook.Tables;
 
 namespace Ruri.FModelHook.Unreal;
@@ -394,7 +395,7 @@ public static class UnrealDatasets
             "px#", "py#", "pz#", "qx#", "qy#", "qz#", "qw#", "sx#", "sy#", "sz#",
             "mesh", "skinned", "materials",
             "light", "lr#", "lg#", "lb#", "intensity#", "range#", "outer#", "inner#", "width#", "height#",
-            "actor#");
+            "shadows#", "actor#");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
         string package = PackageKey(provider, request.Text(PackageParam));
         if (!provider.Files.TryGetValue(package, out GameFile? file))
@@ -533,8 +534,12 @@ public static class UnrealDatasets
                     UDirectionalLightComponent => (DirectionalLight, 0f, 0f, 0f, 0f, 0f),
                     _ => (string.Empty, 0f, 0f, 0f, 0f, 0f),
                 };
+                FLinearColor encoded = light.GetLightColor();
+                FLinearColor decoded = new(SrgbColor.Decode(encoded.R), SrgbColor.Decode(encoded.G),
+                    SrgbColor.Decode(encoded.B), encoded.A);
                 Row(table, basis, name, parent, active, transform, string.Empty, false, string.Empty,
-                    kind, light.GetLightColor(), light.Intensity, range, outer, inner, width, height, actor);
+                    kind, decoded, light.Intensity, range, outer, inner, width, height, actor,
+                    light.GetOrDefault(nameof(ULightComponentBase.CastShadows), true));
                 break;
             }
             default:
@@ -584,10 +589,13 @@ public static class UnrealDatasets
             : (path, string.Empty);
     }
 
+    /// <summary>One placement row. A light's colour goes out sRGB-decoded; <paramref name="shadows"/>
+    /// is whether it casts, the engine's own default being that it does -- a light that states
+    /// nothing about it casts.</summary>
     private static void Row(TableBuilder table, SourceBasis basis, string name, int parent, bool active,
         FTransform transform, string mesh, bool skinned, string materials,
         string light, FLinearColor color, float intensity, float range, float outer, float inner,
-        float width, float height, int actor = 0)
+        float width, float height, int actor = 0, bool shadows = false)
     {
         (Vector3 position, Quaternion rotation, Vector3 scale) = UnrealComponents.Transform(basis, transform);
         table.Row(name, parent, active ? "1" : "0",
@@ -596,7 +604,7 @@ public static class UnrealDatasets
             scale.X, scale.Y, scale.Z,
             mesh, skinned ? "1" : "0", materials,
             light, color.R, color.G, color.B, intensity, range, outer, inner, width, height,
-            actor);
+            shadows ? 1 : 0, actor);
     }
 
     /// <summary>

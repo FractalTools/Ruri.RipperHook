@@ -403,7 +403,7 @@ public sealed class UnityStatement
                 Path = light.Name,
                 Kind = "light",
                 Active = true,
-                Position = System.Numerics.Vector3.Zero,
+                Position = light.Position,
                 Rotation = Aimed(light.Forward),
                 Scale = System.Numerics.Vector3.One,
                 Light = new UnityLightInfo
@@ -415,14 +415,19 @@ public sealed class UnityStatement
                     Green = light.Green,
                     Blue = light.Blue,
                     Intensity = light.Intensity,
-                    Range = 0f,
-                    SpotAngle = 0f,
-                    InnerSpotAngle = 0f,
+                    Range = light.Range,
+                    SpotAngle = light.SpotAngle,
+                    InnerSpotAngle = light.InnerSpotAngle,
                     AreaWidth = 0f,
                     AreaHeight = 0f,
+                    Shadows = light.Shadows,
                     Disabled = false,
                 },
             });
+        }
+        foreach (PlanNote note in _plan.Notes)
+        {
+            _statement.Note(_plan.Seed, note.What, note.Count, note.Detail);
         }
         int placed = 0;
         int builtins = 0;

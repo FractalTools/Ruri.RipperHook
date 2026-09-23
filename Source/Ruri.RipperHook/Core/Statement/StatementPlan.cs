@@ -68,11 +68,17 @@ public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Posi
 /// the renderer carries of its own.</summary>
 public sealed record RendererFill(IMesh Mesh, IReadOnlyList<IMaterial?> Materials, IReadOnlyList<ITransform?>? Bones, int Lod);
 
-/// <summary>One light a plan states: what it is, where it points, and how bright, in the
-/// engine's own frame. The direction is a forward vector because that is what the source states;
-/// turning it into a rotation is the statement's job, done once.</summary>
-public sealed record PlanLight(string Name, int Type, System.Numerics.Vector3 Forward,
-    float Red, float Green, float Blue, float Intensity);
+/// <summary>One light a plan states: what it is, where it stands and points, and how bright, in the
+/// engine's own frame -- the colour linear as the engine emits it, the intensity the component's own,
+/// the range and cone angles (full angles, degrees) as it states them. The direction is a forward
+/// vector because that is what the source states; turning it into a rotation is the statement's job,
+/// done once.</summary>
+public sealed record PlanLight(string Name, int Type, System.Numerics.Vector3 Position,
+    System.Numerics.Vector3 Forward, float Red, float Green, float Blue, float Intensity, float Range,
+    float SpotAngle, float InnerSpotAngle, bool Shadows);
+
+/// <summary>One thing a plan states short of its source: what, how many, and which.</summary>
+public sealed record PlanNote(string What, int Count, string Detail);
 
 /// <summary>What one seed resolves to: which archives to read and how to read what is in
 /// them. Inert on purpose -- resolving touches no closure of its own.</summary>
@@ -107,6 +113,10 @@ public sealed class StatementPlan
     /// not sit on any of its placements. A streaming level is the case: its placement data states
     /// renderers only, and the level's light lives beside them in its environment volumes.</summary>
     public IReadOnlyList<PlanLight> Lights { get; init; } = [];
+
+    /// <summary>What the plan knows it states short of the source, reported with the statement rather
+    /// than dropped: something the source carries that the plan could not reproduce exactly.</summary>
+    public IReadOnlyList<PlanNote> Notes { get; init; } = [];
 
     public IReadOnlyList<string> Missing { get; init; } = [];
 
