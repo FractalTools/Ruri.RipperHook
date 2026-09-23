@@ -94,10 +94,20 @@ public sealed class UnityStatement
 
     public static Statement Flatten(CabTable map, StatementPlan plan, StatementOptions options)
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         GameData gameData = LoadClosure(map, plan.Cabs);
+        long read = System.Diagnostics.Stopwatch.GetTimestamp();
         UnityStatement flattening = new(map, plan, options, gameData);
         flattening.Run();
-        return flattening.Result;
+        TimeSpan total = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+        TimeSpan reading = System.Diagnostics.Stopwatch.GetElapsedTime(started, read);
+        Statement result = flattening.Result;
+        AssetRipper.Import.Logging.Logger.Info(AssetRipper.Import.Logging.LogCategory.Import,
+            $"[statement] {plan.Label}: read {plan.Cabs.Count} archive(s) in {reading.TotalMilliseconds:F0} ms, "
+            + $"flattened {result.Nodes.Count} node(s) and {result.Meshes.Count} mesh(es) in "
+            + $"{(total - reading - flattening._encoding).TotalMilliseconds:F0} ms, encoded "
+            + $"{result.Textures.Count} texture(s) in {flattening._encoding.TotalMilliseconds:F0} ms");
+        return result;
     }
 
     public string KeyOf(IUnityObjectBase asset) =>
@@ -1701,8 +1711,11 @@ public sealed class UnityStatement
         }
     }
 
+    private TimeSpan _encoding;
+
     private void EncodeTextures()
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         ImageExportFormat[] accepted = _options.Containers
             .Select(name => Enum.TryParse(name, ignoreCase: true, out ImageExportFormat format) ? format : ImageExportFormat.Png)
             .ToArray();
@@ -1723,5 +1736,6 @@ public sealed class UnityStatement
             }
             _statement.Add(row);
         }
+        _encoding = System.Diagnostics.Stopwatch.GetElapsedTime(started);
     }
 }
