@@ -369,8 +369,26 @@ public sealed class UnityStatement
                 : [];
         }
 
-        int firstNode = _statement.Nodes.Count;
-        _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, _plan.Label, "window"));
+        // The window's one root: the level itself. Every placement and light hangs under it, so the frame a
+        // root carries (the host's top-level turn) lands on the whole level once -- the same frame a
+        // character's root carries and every shading stack computes world space in. Placements stated as
+        // roots of their own would sit in the bare basis while the stacks, the sun and the viewer all sit
+        // in the turned one.
+        int levelNode = _statement.Nodes.Count;
+        _statement.Roots.Add(new StatementRoot(_plan.Seed, levelNode, _plan.Label, "window"));
+        _statement.Nodes.Add(new StatementNode
+        {
+            Index = levelNode,
+            Parent = -1,
+            Name = _plan.Label,
+            Path = _plan.Label,
+            Kind = "empty",
+            Active = true,
+            Position = System.Numerics.Vector3.Zero,
+            Rotation = System.Numerics.Quaternion.Identity,
+            Scale = System.Numerics.Vector3.One,
+            Shadows = null,
+        });
 
         static System.Numerics.Quaternion Aimed(System.Numerics.Vector3 forward)
         {
@@ -401,7 +419,7 @@ public sealed class UnityStatement
             _statement.Nodes.Add(new StatementNode
             {
                 Index = _statement.Nodes.Count,
-                Parent = -1,
+                Parent = levelNode,
                 Name = light.Name,
                 Path = light.Name,
                 Kind = "light",
@@ -473,7 +491,7 @@ public sealed class UnityStatement
                 _statement.Nodes.Add(new StatementNode
                 {
                     Index = _statement.Nodes.Count,
-                    Parent = -1,
+                    Parent = levelNode,
                     Name = source.Name,
                     Path = placement.Name,
                     Kind = "mesh",
@@ -492,7 +510,7 @@ public sealed class UnityStatement
             _statement.Nodes.Add(new StatementNode
             {
                 Index = anchor,
-                Parent = -1,
+                Parent = levelNode,
                 Name = source.Name,
                 Path = placement.Name,
                 Kind = "empty",
