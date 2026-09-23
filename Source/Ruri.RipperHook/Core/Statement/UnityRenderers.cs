@@ -15,6 +15,8 @@ using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.LOD;
 using AssetRipper.SourceGenerated.Subclasses.LODRenderer;
+using Ruri.RipperHook.Core.Install;
+using Ruri.RipperHook.Data;
 
 namespace Ruri.RipperHook.Statements;
 
@@ -68,10 +70,10 @@ public sealed class UnityCameraInfo
     public required bool Disabled { get; init; }
 }
 
-/// <summary>One light as the engine emits it. The colour is LINEAR -- the component serializes it
-/// gamma-encoded and the engine lights with its linear value -- and the intensity is the component's
-/// own, so a host scales the colour by the intensity in its own units. Angles are full cone angles in
-/// degrees.</summary>
+/// <summary>One light as the engine emits it. The colour is what the light emits per unit of its
+/// intensity, LINEAR (<see cref="UnityLightColor"/>) -- the component serializes it gamma-encoded,
+/// with any colour temperature apart -- and the intensity is the component's own, so a host scales
+/// the colour by the intensity in its own units. Angles are full cone angles in degrees.</summary>
 public sealed class UnityLightInfo
 {
     public required UnityNode Node { get; init; }
@@ -334,14 +336,18 @@ public static class UnityRenderers
             {
                 continue;
             }
+            (float red, float green, float blue) = UnityLightColor.PerIntensity(light.Color.R, light.Color.G,
+                light.Color.B, light.Intensity, light.Has_UseColorTemperature() && light.UseColorTemperature,
+                light.Has_ColorTemperature() ? light.ColorTemperature : 0f,
+                UnityGraphicsSettings.LightsUseLinearIntensity(Session.GameRoot));
             yield return new UnityLightInfo
             {
                 Node = node,
                 Name = node.Name,
                 Type = (int)light.Type,
-                Red = SrgbColor.Decode(light.Color.R),
-                Green = SrgbColor.Decode(light.Color.G),
-                Blue = SrgbColor.Decode(light.Color.B),
+                Red = red,
+                Green = green,
+                Blue = blue,
                 Intensity = light.Intensity,
                 Range = light.Range,
                 SpotAngle = light.SpotAngle,

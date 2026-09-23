@@ -1,9 +1,9 @@
 namespace Ruri.RipperHook.Statements;
 
-/// <summary>A colour component a source keeps sRGB-encoded, the way an engine that lights in linear
-/// space decodes it: the piecewise sRGB curve (Unity's <c>Color.linear</c>, Unreal's
-/// <c>FLinearColor(FColor)</c>). A statement states light colours decoded, so a host scales linear
-/// values in its own units.</summary>
+/// <summary>A colour component a source keeps sRGB-encoded, the way Unreal decodes it: the
+/// piecewise sRGB curve of <c>FLinearColor(FColor)</c>. A statement states light colours decoded,
+/// so a host scales linear values in its own units. A Unity light decodes by its own rule,
+/// <see cref="UnityLightColor"/>.</summary>
 public static class SrgbColor
 {
     public static float Decode(float encoded) => encoded <= 0.04045f
