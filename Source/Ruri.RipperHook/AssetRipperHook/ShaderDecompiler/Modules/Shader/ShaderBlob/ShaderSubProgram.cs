@@ -248,7 +248,10 @@ public sealed class ShaderSubProgram
 			}
 			else if (type == 4 && samplers is not null)
 			{
-				SamplerParameter sampler = new SamplerParameter((uint)extraValue, index);
+				SamplerParameter sampler = new SamplerParameter((uint)extraValue, index)
+				{
+					InlineState = InlineSamplerState.FromUnityFlags((uint)extraValue),
+				};
 				samplers.Add(sampler);
 			}
 			else

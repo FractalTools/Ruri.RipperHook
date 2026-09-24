@@ -462,6 +462,7 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
             {
                 Sampler = sampler.Sampler,
                 BindPoint = sampler.BindPoint,
+                InlineState = InlineSamplerState.FromUnityFlags(sampler.Sampler),
             });
         }
 
@@ -932,6 +933,11 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
         foreach (TextureParameter texture in source.TextureParameters)
         {
             target.TextureParameters.Add(texture);
+        }
+
+        foreach (SamplerParameter sampler in source.SamplerParameters)
+        {
+            target.SamplerParameters.Add(sampler);
         }
 
         foreach (VectorParameter vector in source.VectorParameters)
