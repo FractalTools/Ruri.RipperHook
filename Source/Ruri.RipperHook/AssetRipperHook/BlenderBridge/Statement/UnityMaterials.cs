@@ -5,9 +5,11 @@ using AssetRipper.SourceGenerated.Classes.ClassID_21;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
+using AssetRipper.SourceGenerated.Extensions.Enums.Shader.SerializedShader;
 using AssetRipper.SourceGenerated.Subclasses.ColorRGBAf;
 using AssetRipper.SourceGenerated.Subclasses.FastPropertyName;
 using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
+using AssetRipper.SourceGenerated.Subclasses.SerializedProperty;
 using AssetRipper.SourceGenerated.Subclasses.UnityPropertySheet;
 using AssetRipper.SourceGenerated.Subclasses.UnityTexEnv;
 
@@ -17,8 +19,10 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// A Unity Material's property tables, normalised. Unity has spelled these several ways:
 /// integer-typed shader properties moved out of m_Floats into m_Ints in 2021 (a toggle that
 /// moved reads as absent otherwise), and shader keywords have had three serialisations, of
-/// which only the valid list is enabled. Which property is which surface input is not decided
-/// here -- that is a mapping, and a mapping is configuration (<see cref="TextureRoles"/>).
+/// which only the valid list is enabled. The number and colour tables are what the engine
+/// reads: a property the material's sheet does not hold reads its shader's Properties default.
+/// Which property is which surface input is not decided here -- that is a mapping, and a
+/// mapping is configuration (<see cref="TextureRoles"/>).
 /// </summary>
 public sealed class UnityMaterialProperties
 {
@@ -175,12 +179,6 @@ public static class UnityMaterials
                 Put(merged, order, pair.Key.Name.String, pair.Value);
             }
         }
-        List<KeyValuePair<string, float>> floats = new(order.Count);
-        foreach (string name in order)
-        {
-            floats.Add(new KeyValuePair<string, float>(name, merged[name]));
-        }
-
         List<KeyValuePair<string, float[]>> colors = [];
         if (sheet.Has_Colors_AssetDictionary_Utf8String_ColorRGBAf())
         {
@@ -195,6 +193,12 @@ public static class UnityMaterials
             {
                 colors.Add(new KeyValuePair<string, float[]>(pair.Key.Name.String, [pair.Value.R, pair.Value.G, pair.Value.B, pair.Value.A]));
             }
+        }
+        PutShaderDefaults(material.Shader_C21P, merged, order, colors);
+        List<KeyValuePair<string, float>> floats = new(order.Count);
+        foreach (string name in order)
+        {
+            floats.Add(new KeyValuePair<string, float>(name, merged[name]));
         }
 
         List<string> keywords = [];
@@ -251,6 +255,47 @@ public static class UnityMaterials
             DisabledPasses = disabledPasses,
             ShaderPasses = PassesOf(material.Shader_C21P),
         };
+    }
+
+    /// <summary>A sheet only holds what was set while the material used a shader that declared it, so a
+    /// property its current shader declares and its sheet lacks reads that shader's own default (the engine's
+    /// Properties block): a number its first default component, a colour or vector all four. Textures are not
+    /// filled here -- an empty slot samples the shader's default texture, which a host states per slot.</summary>
+    private static void PutShaderDefaults(IShader? shader, Dictionary<string, float> merged, List<string> order,
+        List<KeyValuePair<string, float[]>> colors)
+    {
+        if (shader is null || !shader.Has_ParsedForm())
+        {
+            return;
+        }
+        HashSet<string> coloured = new(StringComparer.Ordinal);
+        foreach ((string name, float[] _) in colors)
+        {
+            coloured.Add(name);
+        }
+        foreach (ISerializedProperty property in shader.ParsedForm.PropInfo.Props)
+        {
+            string name = property.Name.String;
+            switch (property.GetType_())
+            {
+                case SerializedPropertyType.Float:
+                case SerializedPropertyType.Range:
+                case SerializedPropertyType.Int:
+                    if (!merged.ContainsKey(name))
+                    {
+                        Put(merged, order, name, property.DefValue_0_);
+                    }
+                    break;
+                case SerializedPropertyType.Color:
+                case SerializedPropertyType.Vector:
+                    if (coloured.Add(name))
+                    {
+                        colors.Add(new KeyValuePair<string, float[]>(name,
+                            [property.DefValue_0_, property.DefValue_1_, property.DefValue_2_, property.DefValue_3_]));
+                    }
+                    break;
+            }
+        }
     }
 
     private static void Put(Dictionary<string, float> merged, List<string> order, string name, float value)
