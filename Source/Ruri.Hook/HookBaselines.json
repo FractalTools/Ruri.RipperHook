@@ -45,7 +45,8 @@
     "CUE4Parse.UE4.Assets.Exports.SkeletalMesh.FSkelMeshSection::SerializeRenderItem(FAssetArchive)": "0dac40f055e36afe",
     "Cpp2IL.Core.Cpp2IlApi::InitializeLibCpp2Il(String,String,UnityVersion,Boolean)": "eaa07c4179e4a70b",
     "ICSharpCode.Decompiler.CSharp.ProjectDecompiler.WholeProjectDecompiler::CreateDecompiler(DecompilerTypeSystem)": "b8718fd7483f4ece",
-    "LibCpp2IL.Metadata.Il2CppTypeDefinition::Read(ClassReadingBinaryReader)": "f2b090d41c0d90ed"
+    "LibCpp2IL.Metadata.Il2CppTypeDefinition::Read(ClassReadingBinaryReader)": "f2b090d41c0d90ed",
+    "Ruri.RipperHook.BlenderBridge.Statements.UnityMeshDecoder::UnpackTitleNormals(UInt32[],Single[])": "063690e1e3b0cb2f"
   },
   "unoptimized": {
     "AssetRipper.Assets.Bundles.GameBundle::InitializeFromPaths(IEnumerable\u00601,AssetFactoryBase,FileSystem,IGameInitializer)": "58388187e16434e8",
