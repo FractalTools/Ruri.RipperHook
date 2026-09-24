@@ -2,6 +2,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Reflection.Emit;
 using AssetRipper.Export.Modules.Textures;
+using AssetRipper.Primitives;
+using AssetRipper.SourceGenerated.Classes.ClassID_187;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
@@ -10,7 +12,7 @@ using AssetRipper.TextureDecoder.Rgb.Formats;
 namespace Ruri.RipperHook.BlenderBridge.Data;
 
 /// <summary>
-/// Every image and mip level of a texture, decoded to 32-bit float RGBA.
+/// Every image and mip level of a texture or a texture array, decoded to 32-bit float RGBA.
 ///
 /// <para>AssetRipper's public conversion answers mip 0 of each image in a colour type picked per format,
 /// and it picks 8-bit RGBA for the block formats it does not list -- BC6H among them -- so an HDR
@@ -43,36 +45,48 @@ public static class TextureLevels
             throw new NotSupportedException(
                 $"{texture.GetBestName()}: crunched {format} has no per-level layout to walk");
         }
-        int images = Math.Max(1, texture.ImageCount_C28);
+        return Walk(texture.GetBestName(), format, default, texture.Width_C28, texture.Height_C28,
+            Math.Max(1, texture.MipCount_C28), texture.GetImageData(), texture.ActualImageSize,
+            Math.Max(1, texture.ImageCount_C28), image, texture.Collection.Version);
+    }
+
+    /// <summary>Every level of slice <paramref name="slice"/> of a texture array. An array states its format as
+    /// a graphics format and stores each slice's whole mip chain in turn, as AssetRipper slices it.</summary>
+    public static Level[] Decode(ITexture2DArray texture, int slice) =>
+        Walk(texture.GetBestName(), default, (GraphicsFormat)texture.Format, texture.Width, texture.Height,
+            Math.Max(1, texture.MipCount), texture.GetImageData(), texture.GetCompleteImageSize(),
+            Math.Max(1, texture.Depth), slice, texture.Collection.Version);
+
+    private static Level[] Walk(string name, TextureFormat format, GraphicsFormat graphicsFormat, int width0,
+        int height0, int mips, byte[] data, int imageSize, int images, int image, UnityVersion version)
+    {
         if (image < 0 || image >= images)
         {
-            throw new ArgumentOutOfRangeException(nameof(image), image, $"{texture.GetBestName()} holds {images} image(s)");
+            throw new ArgumentOutOfRangeException(nameof(image), image, $"{name} holds {images} image(s)");
         }
-        byte[] data = texture.GetImageData();
-        int imageSize = texture.ActualImageSize;
         if (data.Length < (long)imageSize * images)
         {
             throw new InvalidDataException(
-                $"{texture.GetBestName()}: {data.Length} bytes of image data for {images} image(s) of {imageSize}");
+                $"{name}: {data.Length} bytes of image data for {images} image(s) of {imageSize}");
         }
-        int mips = Math.Max(1, texture.MipCount_C28);
         (Type optionsType, LevelDecoder decode) = Decoder.Value;
         Level[] levels = new Level[mips];
         int offset = image * imageSize;
         int end = offset + imageSize;
         for (int mip = 0; mip < mips; mip++)
         {
-            int width = Math.Max(1, texture.Width_C28 >> mip);
-            int height = Math.Max(1, texture.Height_C28 >> mip);
+            int width = Math.Max(1, width0 >> mip);
+            int height = Math.Max(1, height0 >> mip);
             float[] rgba = new float[width * height * 4];
-            object options = Activator.CreateInstance(optionsType, format, default(GraphicsFormat), width, height, 1,
-                end - offset, texture.Collection.Version)!;
+            object options = Activator.CreateInstance(optionsType, format, graphicsFormat, width, height, 1,
+                end - offset, version)!;
             int read = decode(options, data.AsSpan(offset, end - offset),
                 System.Runtime.InteropServices.MemoryMarshal.AsBytes(rgba.AsSpan()));
             if (read <= 0 || offset + read > end)
             {
                 throw new InvalidDataException(
-                    $"{texture.GetBestName()}: level {mip} of image {image} ({format} {width}x{height}) did not decode");
+                    $"{name}: level {mip} of image {image} ({(format != default ? format.ToString() : graphicsFormat.ToString())} "
+                    + $"{width}x{height}) did not decode");
             }
             levels[mip] = new Level(width, height, rgba);
             offset += read;

@@ -1,6 +1,7 @@
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.Modules.Textures;
 using AssetRipper.Export.UnityProjects.Textures;
+using AssetRipper.SourceGenerated.Classes.ClassID_187;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Subclasses.GLTextureSettings;
@@ -44,6 +45,9 @@ public static class TextureEncoding
     }
 
     public static bool DeclaresSrgb(ITexture2D texture) => texture.ColorSpace_C28E == ColorSpace.Linear;
+
+    /// <summary>A texture array states its encoding the same way, in its own colour space field.</summary>
+    public static bool DeclaresSrgb(ITexture2DArray texture) => (ColorSpace)texture.ColorSpace == ColorSpace.Linear;
 
     private static readonly string[] Addresses = ["repeat", "clamp", "mirror", "mirroronce"];
     private static readonly string[] Filters = ["point", "bilinear", "trilinear"];
