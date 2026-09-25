@@ -110,6 +110,16 @@ public sealed class UnityLightInfo
     public required float VolumeFactor { get; init; }
 
     public required bool Disabled { get; init; }
+
+    /// <summary>The camera-distance fade the engine's light list gives this light, as four coefficients
+    /// (a, k, b, m): the light's colour is scaled by saturate(1 + a - d²k) · saturate(1 + d²m - b), d the camera's
+    /// distance to the light, which reaches zero where the engine stops drawing it. All zero = no fade.</summary>
+    public System.Numerics.Vector4 Fade { get; init; }
+
+    /// <summary>What the engine's light list carries for this light beyond its geometry and radiance, for a
+    /// shading stack that lights through the engine's own light model: four-float vectors in the order that
+    /// stack declares them, every vector zero for a plain light. Empty = the light carries none.</summary>
+    public float[] Parameters { get; init; } = [];
 }
 
 public sealed class UnityRendererFilters

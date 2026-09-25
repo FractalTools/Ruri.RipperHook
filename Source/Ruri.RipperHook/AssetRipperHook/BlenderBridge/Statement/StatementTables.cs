@@ -38,7 +38,7 @@ public static class StatementTables
             "light_kind#", "light_r#", "light_g#", "light_b#", "light_intensity#", "light_range#", "light_angle#",
             "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_volume#", "fov#", "near#",
             "far#", "ortho#",
-            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#",
+            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#", "light_fade@", "light_parameters@",
         ]);
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "path");
         foreach (StatementNode node in statement.Nodes)
@@ -56,7 +56,9 @@ public static class StatementTables
                 light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0, light?.VolumeFactor ?? 0f,
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
                 camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty,
-                node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0);
+                node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0,
+                Bytes<float>(light is null ? [] : [light.Fade.X, light.Fade.Y, light.Fade.Z, light.Fade.W]),
+                Bytes<float>(light?.Parameters ?? []));
         }
         return table.Build();
     }

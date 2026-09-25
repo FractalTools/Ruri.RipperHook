@@ -390,27 +390,6 @@ public sealed class UnityStatement
             Shadows = null,
         });
 
-        static System.Numerics.Quaternion Aimed(System.Numerics.Vector3 forward)
-        {
-            System.Numerics.Vector3 target = System.Numerics.Vector3.Normalize(forward);
-            if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z))
-            {
-                return System.Numerics.Quaternion.Identity;
-            }
-            System.Numerics.Vector3 source = System.Numerics.Vector3.UnitZ;
-            float dot = System.Numerics.Vector3.Dot(source, target);
-            if (dot > 0.999999f)
-            {
-                return System.Numerics.Quaternion.Identity;
-            }
-            if (dot < -0.999999f)
-            {
-                return new System.Numerics.Quaternion(0f, 1f, 0f, 0f);
-            }
-            System.Numerics.Vector3 axis = System.Numerics.Vector3.Cross(source, target);
-            return System.Numerics.Quaternion.Normalize(
-                new System.Numerics.Quaternion(axis.X, axis.Y, axis.Z, 1f + dot));
-        }
         Dictionary<string, WindowSource> sources = new(StringComparer.Ordinal);
         HashSet<string> unresolved = new(StringComparer.Ordinal);
         HashSet<string> empty = new(StringComparer.Ordinal);
@@ -425,7 +404,7 @@ public sealed class UnityStatement
                 Kind = "light",
                 Active = true,
                 Position = light.Position,
-                Rotation = Aimed(light.Forward),
+                Rotation = light.Rotation,
                 Scale = System.Numerics.Vector3.One,
                 Shadows = null,
                 Light = new UnityLightInfo
@@ -445,6 +424,8 @@ public sealed class UnityStatement
                     Shadows = light.Shadows,
                     VolumeFactor = light.VolumeFactor,
                     Disabled = false,
+                    Fade = light.Fade,
+                    Parameters = light.Parameters,
                 },
             });
         }
