@@ -185,9 +185,37 @@ jobs:
           path: Source/0Bins/Release/**
           if-no-files-found: error
 
+  publish-latest:
+    name: Publish latest release
+    needs: [build-pure-ripperhook]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # The rolling release is what the Blender and Painter plugins download: a workflow
+      # artifact is served only to a signed-in account, a release asset to anyone. It is
+      # replaced rather than versioned, so "latest" is always the build of the newest commit.
+      - name: Download Pure RipperHook artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: RipperHook-PureRelease
+          path: bundle
+
+      - name: Zip the bin folder
+        run: cd bundle && zip -qr ../RipperHook-PureRelease.zip .
+
+      - name: Replace the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest RipperHook-PureRelease.zip --target "$GITHUB_SHA" --title "Latest build" --notes "Pure RipperHook build of $GITHUB_SHA"
+
   prune-runs:
     name: Prune older runs
-    needs: [build-fmodelhook, build-pure-ripperhook]
+    needs: [build-fmodelhook, build-pure-ripperhook, publish-latest]
     if: always()
     runs-on: ubuntu-latest
 
