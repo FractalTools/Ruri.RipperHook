@@ -42,6 +42,14 @@ public sealed class CabSelection
     /// </summary>
     public bool ReachThroughDependents { get; init; }
 
+    /// <summary>
+    /// Whether the archives a seed depends on stay unread unless they hold scripted data alone. The seeds load whole;
+    /// of everything they reach only the archives exporting nothing but MonoBehaviour and MonoScript do -- the scripts a
+    /// component is read through, the data assets and volume profiles it points at -- and the art (meshes, textures,
+    /// materials) is not. A prefab's components can then be read without loading the picture they sit in.
+    /// </summary>
+    public bool ScriptedDependenciesOnly { get; init; }
+
     public bool IsEmpty =>
         NamePatterns.Length == 0 && ClassIds is null && FileScopes.Length == 0 && SeedCabNames.Length == 0;
 
@@ -122,7 +130,13 @@ public sealed class CabSelection
         bool[] fileSeen = new bool[table.FileCount];
         HashSet<string> loadFilter = new(StringComparer.OrdinalIgnoreCase);
         int closureCount = 0;
-        foreach (int id in table.ClosureIds(seeds))
+        int[] reached = table.ClosureIds(seeds);
+        if (ScriptedDependenciesOnly)
+        {
+            HashSet<int> seedIds = new(seeds);
+            reached = reached.Where(id => seedIds.Contains(id) || id >= table.Count || ScriptedOnly(table, id)).ToArray();
+        }
+        foreach (int id in reached)
         {
             if (id >= table.Count)
             {
@@ -185,6 +199,21 @@ public sealed class CabSelection
             seeds.AddRange(next);
             frontier = next;
         }
+    }
+
+    /// <summary>Whether one archive holds scripted data alone: scripts, the components and data assets built on them,
+    /// and the bundle manifest every archive carries.</summary>
+    private static bool ScriptedOnly(CabTable table, int id)
+    {
+        foreach (int classId in table.ClassIds(id))
+        {
+            if (classId != (int)ClassIDType.MonoBehaviour && classId != (int)ClassIDType.MonoScript
+                && classId != (int)ClassIDType.AssetBundle)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>Whether every row of a closure exports scripted data alone.</summary>

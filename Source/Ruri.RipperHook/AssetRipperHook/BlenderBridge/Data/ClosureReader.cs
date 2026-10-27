@@ -16,7 +16,7 @@ namespace Ruri.RipperHook.BlenderBridge.Data;
 public static class ClosureReader
 {
     public static CabClosure Resolve(CabTable table, IEnumerable<string> seedCabNames,
-        bool reachThroughDependents = false)
+        bool reachThroughDependents = false, bool scriptedDependenciesOnly = false)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(seedCabNames);
@@ -24,6 +24,7 @@ public static class ClosureReader
         {
             SeedCabNames = seedCabNames.ToArray(),
             ReachThroughDependents = reachThroughDependents,
+            ScriptedDependenciesOnly = scriptedDependenciesOnly,
         }.Resolve(table);
     }
 

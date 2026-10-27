@@ -74,9 +74,10 @@ public sealed class UnityStatement
 
     /// <summary>Load the plan's closure the way an import loads it: gated to the closure,
     /// scripts at level zero, static batching separated, then processed.</summary>
-    public static GameData LoadClosure(CabTable map, IEnumerable<string> cabs)
+    public static GameData LoadClosure(CabTable map, IEnumerable<string> cabs, bool scriptedDependenciesOnly = false)
     {
-        CabClosure closure = ClosureReader.Resolve(map, cabs, reachThroughDependents: true);
+        CabClosure closure = ClosureReader.Resolve(map, cabs, reachThroughDependents: true,
+            scriptedDependenciesOnly: scriptedDependenciesOnly);
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
         settings.ExportSettings.ShaderExportMode = ShaderExportMode.Dummy;
