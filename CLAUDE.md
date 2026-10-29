@@ -21,3 +21,4 @@ Ruri-RipperHook 内核约束(唯一常驻):RuriRipperImporter 的上游数据管
 20. 片段不许单独读,先读骨架再读片段:片段绑定只存骨骼路径的 CRC32,不给目标骨架读出来全是 path_0x{crc}_ 占位符(判成没脸/动画不动/曲线全丢先查这个),所以 core.statement.clips 的 paths 与 avatar 必填(解析在 ClipStatement.Restate / UnitySkinning.SuffixTable)。
 21. 分层:Source/Ruri.RipperHook/Core/ 只放 cabmap 级根本功能(CabMapping/TypeTree/Attributes/Capabilities/hook 分发),服务 RuriRipperImporter 的一切住 AssetRipperHook/BlenderBridge/(虚幻侧 FModelHook/BlenderBridge/),AR 特性各住 AssetRipperHook/{特性}/,只有一个游戏用的放该游戏 GameHook,禁往 Core 丢。
 22. 钩子源方法在任何调用方被 JIT 之前就禁内联:运行时切游戏时后装的 hook 够不到已被 JIT 内联进调用方的原方法体(MonoMod 无法反内联,表现是晚装的游戏读不出任何资产),所以 Ruri.Hook 在 LoadDeclaredModules 与每次 ApplyHooks 前把全部声明的源方法一次性 HookInlining.ReserveDeclared;代码里装钩的目标必须经 [RetargetSources] 声明,漏声明会在 RetargetCall* 打「hooked without being reserved」警告,看到它就是漏了。
+23. RuriRipperImporter 的 Game 目录禁止含游戏逻辑、只作为 UI 面板调用器,实际逻辑全部依赖反转到 Source\Ruri.GameHook 以顶级性能实现。
