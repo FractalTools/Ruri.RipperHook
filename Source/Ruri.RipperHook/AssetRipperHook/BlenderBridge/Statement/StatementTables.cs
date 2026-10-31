@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using AssetRipper.SourceGenerated.Enums;
 using Ruri.RipperHook.BlenderBridge.Tables;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
@@ -39,7 +40,7 @@ public static class StatementTables
             "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_shadow_resolution#",
             "light_volume#", "light_specular#", "fov#", "near#",
             "far#", "ortho#",
-            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#", "light_fade@", "light_parameters@",
+            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#", "two_sided_shadows#", "light_fade@", "light_parameters@",
             "object_parameter_names", "object_parameters@", "collection",
         ]);
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "path");
@@ -69,6 +70,7 @@ public static class StatementTables
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
                 camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty,
                 node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0,
+                node.TwoSidedShadows || node.Shadows == ShadowCastingMode.TwoSided ? 1 : 0,
                 Bytes<float>(light is null ? [] : [light.Fade.X, light.Fade.Y, light.Fade.Z, light.Fade.W]),
                 Bytes<float>(light?.Parameters ?? []),
                 string.Join(Separator, node.ObjectParameters.Select(parameter => parameter.Key)),

@@ -487,6 +487,7 @@ public sealed class UnityStatement
                     Scale = placement.Scale,
                     Shadows = placement.Shadows,
                     MainLightShadows = placement.MainLightShadows,
+                    TwoSidedShadows = placement.TwoSidedShadows,
                 });
                 continue;
             }
@@ -1108,7 +1109,7 @@ public sealed class UnityStatement
             Index = rigRow.Index, Parent = rigRow.Parent, Name = _plan.Label, Path = rigRow.Path, Kind = rigRow.Kind,
             Active = rigRow.Active, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
-            Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows,
+            Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
         };
         _statement.Roots[^1] = _statement.Roots[^1] with { Label = _plan.Label, Kind = "assembly" };
 

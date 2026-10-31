@@ -116,6 +116,10 @@ public sealed class StatementNode
     /// Unity renderer casts for every light; a streamed renderer can cast for local lights only.</summary>
     public bool MainLightShadows { get; set; } = true;
 
+    /// <summary>Whether both faces of the renderer cast whatever its material's shadow culling says. Unity states this
+    /// as <see cref="ShadowCastingMode.TwoSided"/>; a streamed renderer states it apart, shadows-only ones included.</summary>
+    public bool TwoSidedShadows { get; set; }
+
     /// <summary>What the pipeline binds for this renderer's own draw beyond its materials: named
     /// four-component values, each under the name the pipeline's shaders read it by, that the engine
     /// sets per draw from the renderer itself rather than from any material. Empty where it binds none.</summary>

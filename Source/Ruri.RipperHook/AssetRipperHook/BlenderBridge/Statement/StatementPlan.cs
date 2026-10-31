@@ -62,10 +62,10 @@ public sealed record PartsSkeleton(string Cab, string AvatarNameStem);
 /// and what the path IS under the title's own addressable convention: a prefab (placed as its
 /// pieces under one anchor) or a loose mesh, and the name it is shown under. A loose mesh states
 /// how its renderer draws into shadow maps and whether that shadow falls in the directional
-/// light's cascades; a prefab states neither, because its own renderers do.</summary>
+/// light's cascades, and whether both its faces cast; a prefab states neither, because its own renderers do.</summary>
 public sealed record WindowPlacement(string AssetPath, string Name, Vector3 Position, Quaternion Rotation,
     Vector3 Scale, IReadOnlyList<string> MaterialPaths, bool IsPrefab, string Stem, string MeshName,
-    ShadowCastingMode? Shadows, bool MainLightShadows);
+    ShadowCastingMode? Shadows, bool MainLightShadows, bool TwoSidedShadows = false);
 
 /// <summary>One draw the pipeline makes of its own rather than through a renderer's material: a mesh the
 /// closure holds (under the path the game files it, <c>##</c> naming the mesh within), drawn with one of the
