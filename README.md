@@ -2,7 +2,9 @@
 
 一个面向跨引擎资产管线的 AOP Hook 框架。在不修改上游源码的前提下,扩展 AssetRipper、FModel 等 Unity / UE 数据处理工具链的读取、转换与导出能力,把来源各异的资产——不同引擎版本、不同项目自定义的容器与序列化格式——收敛成统一的 Unity 数据表示(YAML / Unity 对象语义)。Shader 链路是这条转换通路当前最明确的先行落点。
 
-## 下游:面向 Blender 的技术美术管线
+## 下游:面向 Blender 的技术美术管线 打通我的建模工作流全链路 建模好直接导入终末地场景进行渲染
+
+<img width="1920" height="1080" alt="58f27578a945943a9a703534d638284b" src="https://github.com/user-attachments/assets/87db9e03-ece3-4086-9e6c-23e0c33930c1" />
 
 本仓库的构建产物是 [RuriRipperImporter](https://github.com/ShiyumeMeguri/RuriRipperImporter) Blender 插件的直接依赖——插件指向游戏安装目录,经 cabmap 浏览资源并在内存里直接导入,把网格、真实骨架、材质与动画 clip 原样重建进 Blender,不经过 FBX 转换、不先导出 Unity 工程、不重新绑骨、不丢顶点流。这条管线服务于角色建模、绑骨、MMD 风格动画等 3D 内容创作与技术美术研究工作流:Ruri-RipperHook 负责让来源各异的资产最终都能落成同一种干净的 Unity 数据表示(UE 来源则以 `unreal.*` 数据集交付),Blender 插件只需要认识这一种形态。
 
