@@ -129,6 +129,13 @@ public sealed class StatementNode
     /// for none. The pipeline's own draws are gathered by the shader that draws them: what a host renders them
     /// through (a layer of their own, a pass left out of the scene) is decided per collection.</summary>
     public string Collection { get; set; } = string.Empty;
+
+    /// <summary>The engine's layer number of the object this node is, zero where the source states none.</summary>
+    public int Layer { get; set; }
+
+    /// <summary>The key of the avatar the node's animator is built with, which makes the node the root of a rig;
+    /// empty for a node that animates nothing.</summary>
+    public string Avatar { get; set; } = string.Empty;
 }
 
 public sealed class StatementMesh

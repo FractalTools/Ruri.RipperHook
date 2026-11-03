@@ -68,7 +68,8 @@ public static class StatementDatasets
         Datasets.Publish(NodesId, DataRole.Statement, Common(),
             "Every transform of every seed, parents before children: name, the engine's own transform path, what "
             + "sits on it (empty, mesh, skinned, light, camera), the local transform in the basis, and for a renderer "
-            + "the mesh, skeleton and material keys it draws with. A skinned node's mesh is already baked to its rest "
+            + "the mesh, skeleton and material keys it draws with, its layer, and for the root of a rig the avatar it is "
+            + "built with. A skinned node's mesh is already baked to its rest "
             + "pose in the statement's own frame, so a host places it at the skeleton and not at the node." + CommonText, Nodes);
         Datasets.Publish(MeshesId, DataRole.Statement, Common(),
             "Every mesh the seeds draw as raw buffers in the basis: positions, normals, tangents, colours, every "

@@ -115,6 +115,8 @@ public sealed class UnityStatement
     public string KeyOf(IUnityObjectBase asset) =>
         string.Create(CultureInfo.InvariantCulture, $"{_identities[asset.Collection]}|{asset.PathID}");
 
+    private static int LayerOf(IGameObject? gameObject) => gameObject is null ? 0 : (int)gameObject.Layer;
+
     private bool IsSeedCollection(AssetCollection collection) => _seedCabs.Contains(collection.Name);
 
     private void Run()
@@ -526,6 +528,7 @@ public sealed class UnityStatement
                     Light = piece.Light,
                     Camera = piece.Camera,
                     Shadows = piece.Shadows,
+                    Layer = piece.Layer,
                 });
             }
         }
@@ -613,6 +616,7 @@ public sealed class UnityStatement
         public UnityLightInfo? Light { get; init; }
         public UnityCameraInfo? Camera { get; init; }
         public ShadowCastingMode? Shadows { get; init; }
+        public int Layer { get; init; }
     }
 
     private sealed class WindowSource
@@ -816,6 +820,7 @@ public sealed class UnityStatement
                 MeshKey = meshKey,
                 MaterialKeys = materialKeys,
                 Shadows = info.Renderer.GetShadowCastingMode(),
+                Layer = LayerOf(info.Node?.GameObject),
             });
         }
         foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters))
@@ -823,7 +828,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = camera.Name, Path = camera.Node.Path, Kind = "camera", Local = camera.Node.World,
-                Hidden = camera.Disabled, Camera = camera,
+                Hidden = camera.Disabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject),
             });
         }
         foreach (UnityLightInfo light in UnityRenderers.Lights(lights, hierarchy, filters))
@@ -831,7 +836,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = light.Name, Path = light.Node.Path, Kind = "light", Local = light.Node.World,
-                Hidden = light.Disabled, Light = light,
+                Hidden = light.Disabled, Light = light, Layer = LayerOf(light.Node.GameObject),
             });
         }
         return pieces;
@@ -929,6 +934,7 @@ public sealed class UnityStatement
         List<ILight> lights = [];
         List<IMonoBehaviour> behaviours = [];
         IAvatar? avatar = null;
+        List<(UnityNode Holder, IAvatar Built)> rigRoots = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
         {
             if (node.GameObject is null)
@@ -945,7 +951,10 @@ public sealed class UnityStatement
                     case ICamera camera: cameras.Add(camera); break;
                     case ILight light: lights.Add(light); break;
                     case IMonoBehaviour behaviour: behaviours.Add(behaviour); break;
-                    case IAnimator animator when avatar is null && animator.AvatarP is { } found: avatar = found; break;
+                    case IAnimator animator when animator.AvatarP is { } built:
+                        avatar ??= built;
+                        rigRoots.Add((node, built));
+                        break;
                 }
             }
         }
@@ -966,9 +975,14 @@ public sealed class UnityStatement
                 Rotation = node.LocalRotation,
                 Scale = node.LocalScale,
                 Shadows = null,
+                Layer = LayerOf(node.GameObject),
             };
             rows[node] = row;
             _statement.Nodes.Add(row);
+        }
+        foreach ((UnityNode holder, IAvatar built) in rigRoots)
+        {
+            rows[holder].Avatar = KeyOf(built);
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, rootObject.Name,
             _plan.Kind.ToString().ToLowerInvariant()));
@@ -1294,7 +1308,7 @@ public sealed class UnityStatement
                     Kind = bakedNow ? "skinned" : "mesh", Active = !info.Disabled, Mesh = key, Skeleton = rig.Skeleton.Key,
                     Materials = materialKeys, Anchor = bakedNow ? string.Empty : anchor,
                     Position = System.Numerics.Vector3.Zero, Rotation = System.Numerics.Quaternion.Identity, Scale = System.Numerics.Vector3.One,
-                    Shadows = info.Renderer.GetShadowCastingMode(),
+                    Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
                 });
                 continue;
             }
@@ -1311,7 +1325,7 @@ public sealed class UnityStatement
                 Index = _statement.Nodes.Count, Parent = rig.RootIndex, Name = info.Name, Path = info.Node?.Path ?? string.Empty,
                 Kind = "mesh", Active = !info.Disabled, Mesh = meshKey, Materials = materialKeys, Anchor = anchor,
                 Position = position, Rotation = rotation, Scale = scale,
-                Shadows = info.Renderer.GetShadowCastingMode(),
+                Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
             });
             if (builtin.Length > 0)
             {
