@@ -1,7 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
-using AssetRipper.Import.Logging;
-using AssetRipper.IO.Files;
-using AssetRipper.IO.Files.SerializedFiles;
+﻿using AssetRipper.Import.Logging;
 using Ruri.RipperHook.HookUtils.GameBundleHook;
 using System.Buffers;
 using System.Collections.Concurrent;
@@ -12,7 +9,10 @@ namespace Ruri.RipperHook.CabMapping;
 public static class CabMap
 {
     public sealed record Entry(string RelativePath, string EntryFileName, List<string> Dependencies,
-        List<int> ClassIds, List<string> ContainerPaths, List<string> Facts);
+        List<int> ClassIds, List<string> ContainerPaths, List<string> Facts)
+    {
+        public IReadOnlyList<string> References { get; init; } = [];
+    }
 
     public static int Build(string rootFolder, string outPath)
     {
@@ -69,6 +69,10 @@ public static class CabMap
         {
             throw new InvalidOperationException($"No CAB could be scanned under '{fullRoot}': {failures.Keys.First()}");
         }
+        foreach ((string cab, List<string> references) in AssetReferenceScan.Run(fullRoot, entries))
+        {
+            entries[cab] = entries[cab] with { References = references };
+        }
         CabTable.FromEntries(fullRoot, entries).Save(fullOut);
         int named = entries.Values.Count(static e => e.ContainerPaths.Count > 0);
         Console.Error.WriteLine($"[CabMap] {files.Length} files scanned, {entries.Count} CABs ({named} with addressable paths) → {fullOut}");
@@ -97,68 +101,10 @@ public static class CabMap
         }
 
         List<CabRow> result = new();
-        List<FileBase> fileStack = new();
-
-        try
-        {
-            GameBundleHook.FilePreInitializeDelegate? preInitialize = GameBundleHook.CustomFilePreInitialize;
-            if (preInitialize is not null)
-            {
-                preInitialize(new GameBundle(), new[] { file }, fileStack, LocalFileSystem.Instance, null);
-            }
-            else
-            {
-                fileStack.Add(SchemeReader.LoadFile(file, LocalFileSystem.Instance));
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Verbose(LogCategory.Import, $"[CabMap] Unpack '{file}': {ex.GetType().Name}: {ex.Message}");
-            return result;
-        }
-
-        string fallbackName = Path.GetFileName(file);
-        foreach (FileBase fileBase in fileStack)
-        {
-            // WHICH ARCHIVE this came out of, not which file was opened to get at it. A
-            // decoder whose archives carry other archives puts each of them on the stack
-            // under its own name, and naming them all after the file on disk threw that
-            // away -- so a closure could only ever say "open this container", never "open
-            // this archive out of it", and one wanted archive dragged in every tenant of
-            // its container. The file on disk is kept separately (Entry.RelativePath) and
-            // is still what gets opened; this is the name the load is gated by.
-            string archiveName = fileBase.Name is { Length: > 0 } ? fileBase.Name : fallbackName;
-            try
-            {
-                IEnumerable<SerializedFile> serializedFiles;
-                if (fileBase is SerializedFile single)
-                {
-                    serializedFiles = [single];
-                }
-                else if (fileBase is FileContainer container)
-                {
-                    container.ReadContentsRecursively();
-                    serializedFiles = container.FetchSerializedFiles();
-                }
-                else
-                {
-                    continue;                }
-
-                foreach (SerializedFile sf in serializedFiles)
-                {
-                    result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, archiveName));
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Verbose(LogCategory.Import, $"[CabMap] Read '{file}': {ex.GetType().Name}: {ex.Message}");
-            }
-            finally
-            {
-                (fileBase as IDisposable)?.Dispose();
-            }
-        }
-
+        SerializedFileOpener.Visit(file,
+            (archiveName, sf) => result.AddRange(GameBundleHook.ReadFullMetadataRows(sf, archiveName)),
+            (stage, exception) => Logger.Verbose(LogCategory.Import,
+                $"[CabMap] {stage} '{file}': {exception.GetType().Name}: {exception.Message}"));
         return result;
     }
 

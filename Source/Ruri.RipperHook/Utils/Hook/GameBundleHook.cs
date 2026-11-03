@@ -2,9 +2,7 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
-using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.IO;
-using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.AssetCreation;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly.Managers;
@@ -153,6 +151,15 @@ public class GameBundleHook : CommonHook, IHookModule
 
     public const string AssetRowSeparator = "::";
 
+    public static string AssetRowName(string fileCab, long pathId) => $"{fileCab}{AssetRowSeparator}{pathId}";
+
+    public static bool TryGetAssetRowFile(string cab, out string fileCab)
+    {
+        int separator = cab.LastIndexOf(AssetRowSeparator, StringComparison.Ordinal);
+        fileCab = separator > 0 ? cab[..separator] : string.Empty;
+        return separator > 0;
+    }
+
     public static List<CabRow> ReadFullMetadataRows(SerializedFile sf, string fallbackName)
     {
         CabRow row = ReadFullMetadata(sf, fallbackName);
@@ -163,7 +170,7 @@ public class GameBundleHook : CommonHook, IHookModule
         }
         foreach ((long pathId, int classId, string name) in HarvestAssetNames(sf))
         {
-            rows.Add(new CabRow($"{row.Cab}{AssetRowSeparator}{pathId}", row.FileName,
+            rows.Add(new CabRow(AssetRowName(row.Cab, pathId), row.FileName,
                 new List<string> { row.Cab }, new List<int> { classId }, new List<string> { name },
                 new List<string>()));
         }
@@ -253,25 +260,9 @@ public class GameBundleHook : CommonHook, IHookModule
 
     private static readonly System.Text.UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
 
-    private sealed class AssetBundleOnlyFactory : AssetFactoryBase
-    {
-        private readonly GameAssetFactory _inner;
-
-        public AssetBundleOnlyFactory(IAssemblyManager assemblyManager)
-        {
-            _inner = new GameAssetFactory(assemblyManager);
-        }
-
-        public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType, IReadOnlyList<SerializedTypeReference> referenceTypes)
-        {
-            return assetInfo.ClassID == (int)ClassIDType.AssetBundle
-                ? _inner.ReadAsset(assetInfo, assetData, assetType, referenceTypes)
-                : null;
-        }
-    }
-
     private static readonly IAssemblyManager NameScanAssemblyManager = new BaseManager(static _ => { });
-    private static readonly AssetBundleOnlyFactory NameScanFactory = new(NameScanAssemblyManager);
+    private static readonly ClassFilterAssetFactory NameScanFactory =
+        new(new GameAssetFactory(NameScanAssemblyManager), (int)ClassIDType.AssetBundle);
 
     public static (string Cab, string FileName, List<string> Paths) ReadContainerNames(SerializedFile sf, string fallbackName)
     {

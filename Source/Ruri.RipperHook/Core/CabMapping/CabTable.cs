@@ -318,11 +318,13 @@ public sealed class CabTable
             }
             classStarts[id + 1] = classStarts[id] + entry.ClassIds.Count;
             classFlat.AddRange(entry.ClassIds);
-            depStarts[id + 1] = depStarts[id] + entry.Dependencies.Count;
+            int dependencyStart = depsFlat.Count;
             foreach (string dep in entry.Dependencies)
             {
                 depsFlat.Add(idOf[dep]);
             }
+            AddReferences(cabs[id], id, entry, idOf, depsFlat, dependencyStart);
+            depStarts[id + 1] = depsFlat.Count;
         }
 
         int[] depFlatArray = depsFlat.ToArray();
@@ -354,6 +356,34 @@ public sealed class CabTable
             ReverseFlat = reverseFlat,
             ReverseStarts = reverseStarts,
         };
+    }
+
+    private static void AddReferences(string cab, int id, CabMap.Entry entry, Dictionary<string, int> idOf,
+        List<int> depsFlat, int dependencyStart)
+    {
+        if (entry.References.Count == 0)
+        {
+            return;
+        }
+        HashSet<int> present = [id];
+        for (int index = dependencyStart; index < depsFlat.Count; index++)
+        {
+            present.Add(depsFlat[index]);
+        }
+        List<int> added = new();
+        foreach (string reference in entry.References)
+        {
+            if (!idOf.TryGetValue(reference, out int target))
+            {
+                throw new InvalidDataException($"'{cab}' references '{reference}', which no entry or dependency names.");
+            }
+            if (present.Add(target))
+            {
+                added.Add(target);
+            }
+        }
+        added.Sort();
+        depsFlat.AddRange(added);
     }
 
     private sealed class BlobBuilder
