@@ -14,25 +14,6 @@ public sealed class AvatarMuscleReferential
 
     private static readonly Dictionary<string, (int Slot, int Axis)> MuscleDofTable = BuildMuscleDofTable();
 
-    private static readonly Dictionary<BoneType, (BoneType Neighbor, float Weight)[]> MassCenterFormula = new()
-    {
-        [BoneType.Hips] = new[] { (BoneType.LeftUpperLeg, 1f / 3f), (BoneType.RightUpperLeg, 1f / 3f), (BoneType.Spine, 1f / 3f) },
-        [BoneType.LeftUpperLeg] = new[] { (BoneType.LeftUpperLeg, 0.5f), (BoneType.LeftLowerLeg, 0.5f) },
-        [BoneType.RightUpperLeg] = new[] { (BoneType.RightUpperLeg, 0.5f), (BoneType.RightLowerLeg, 0.5f) },
-        [BoneType.LeftLowerLeg] = new[] { (BoneType.LeftLowerLeg, 0.5f), (BoneType.LeftFoot, 0.5f) },
-        [BoneType.RightLowerLeg] = new[] { (BoneType.RightLowerLeg, 0.5f), (BoneType.RightFoot, 0.5f) },
-        [BoneType.Spine] = new[] { (BoneType.Spine, 0.5f), (BoneType.Chest, 0.5f) },
-        [BoneType.Chest] = new[] { (BoneType.Chest, 0.5f), (BoneType.UpperChest, 0.5f) },
-        [BoneType.UpperChest] = new[] { (BoneType.UpperChest, 0.25f), (BoneType.Neck, 0.25f), (BoneType.LeftShoulder, 0.25f), (BoneType.RightShoulder, 0.25f) },
-        [BoneType.Neck] = new[] { (BoneType.Neck, 0.5f), (BoneType.Head, 0.5f) },
-        [BoneType.LeftShoulder] = new[] { (BoneType.LeftShoulder, 0.5f), (BoneType.LeftUpperArm, 0.5f) },
-        [BoneType.RightShoulder] = new[] { (BoneType.RightShoulder, 0.5f), (BoneType.RightUpperArm, 0.5f) },
-        [BoneType.LeftUpperArm] = new[] { (BoneType.LeftUpperArm, 0.5f), (BoneType.LeftLowerArm, 0.5f) },
-        [BoneType.RightUpperArm] = new[] { (BoneType.RightUpperArm, 0.5f), (BoneType.RightLowerArm, 0.5f) },
-        [BoneType.LeftLowerArm] = new[] { (BoneType.LeftLowerArm, 0.5f), (BoneType.LeftHand, 0.5f) },
-        [BoneType.RightLowerArm] = new[] { (BoneType.RightLowerArm, 0.5f), (BoneType.RightHand, 0.5f) },
-    };
-
     private static readonly (BoneType Parent, BoneType Child, Func<AvatarMuscleReferential, float> Factor)[] TwistSolvePairs =
     {
         (BoneType.LeftLowerArm, BoneType.LeftHand, r => r._foreArmTwist),
@@ -407,18 +388,58 @@ public sealed class AvatarMuscleReferential
         return fk;
     }
 
+    /// <summary>mecanim::human::HumanComputeBoneMassCenter, case for case, including the left lower arm taking the upper arm.</summary>
     private static Vector3 MassCenterOf(BoneType type, (Vector3 Pos, Quaternion Rot)?[] fk)
     {
-        if (!MassCenterFormula.TryGetValue(type, out (BoneType Neighbor, float Weight)[]? formula))
+        Vector3 At(BoneType bone) => fk[(int)bone]!.Value.Pos;
+        bool Has(BoneType bone) => fk[(int)bone] is not null;
+        bool ShouldersAndNeck() => Has(BoneType.Neck) && Has(BoneType.LeftShoulder) && Has(BoneType.RightShoulder);
+        const float Third = 1f / 3f;
+        switch (type)
         {
-            return fk[(int)type]!.Value.Pos;
+            case BoneType.Hips:
+                return (At(BoneType.LeftUpperLeg) + At(BoneType.RightUpperLeg) + At(BoneType.Spine)) * Third;
+            case BoneType.LeftUpperLeg:
+                return (At(BoneType.LeftUpperLeg) + At(BoneType.LeftLowerLeg)) * 0.5f;
+            case BoneType.RightUpperLeg:
+                return (At(BoneType.RightUpperLeg) + At(BoneType.RightLowerLeg)) * 0.5f;
+            case BoneType.LeftLowerLeg:
+                return (At(BoneType.LeftLowerLeg) + At(BoneType.LeftFoot)) * 0.5f;
+            case BoneType.RightLowerLeg:
+                return (At(BoneType.RightLowerLeg) + At(BoneType.RightFoot)) * 0.5f;
+            case BoneType.Spine:
+                return Has(BoneType.Chest)
+                    ? (At(BoneType.Chest) + At(BoneType.Spine)) * 0.5f
+                    : (At(BoneType.LeftUpperArm) + At(BoneType.RightUpperArm)) * 0.45f + At(BoneType.Spine) * 0.1f;
+            case BoneType.Chest:
+                if (Has(BoneType.UpperChest))
+                {
+                    return (At(BoneType.Chest) + At(BoneType.UpperChest)) * 0.5f;
+                }
+                return ShouldersAndNeck()
+                    ? (At(BoneType.Chest) + At(BoneType.Neck) + At(BoneType.LeftShoulder) + At(BoneType.RightShoulder)) * 0.25f
+                    : (At(BoneType.Chest) + At(BoneType.LeftUpperArm) + At(BoneType.RightUpperArm)) * Third;
+            case BoneType.UpperChest:
+                return ShouldersAndNeck()
+                    ? (At(BoneType.UpperChest) + At(BoneType.Neck) + At(BoneType.LeftShoulder) + At(BoneType.RightShoulder)) * 0.25f
+                    : (At(BoneType.UpperChest) + At(BoneType.LeftUpperArm) + At(BoneType.RightUpperArm)) * Third;
+            case BoneType.Neck:
+                return (At(BoneType.Neck) + At(BoneType.Head)) * 0.5f;
+            case BoneType.LeftShoulder:
+                return (At(BoneType.LeftShoulder) + At(BoneType.LeftUpperArm)) * 0.5f;
+            case BoneType.RightShoulder:
+                return (At(BoneType.RightShoulder) + At(BoneType.RightUpperArm)) * 0.5f;
+            case BoneType.LeftUpperArm:
+                return (At(BoneType.LeftUpperArm) + At(BoneType.LeftLowerArm)) * 0.5f;
+            case BoneType.RightUpperArm:
+                return (At(BoneType.RightUpperArm) + At(BoneType.RightLowerArm)) * 0.5f;
+            case BoneType.LeftLowerArm:
+                return (At(BoneType.LeftUpperArm) + At(BoneType.LeftHand)) * 0.5f;
+            case BoneType.RightLowerArm:
+                return (At(BoneType.RightLowerArm) + At(BoneType.RightHand)) * 0.5f;
+            default:
+                return At(type);
         }
-        Vector3 total = Vector3.Zero;
-        foreach ((BoneType neighbor, float weight) in formula)
-        {
-            total += fk[(int)neighbor]!.Value.Pos * weight;
-        }
-        return total;
     }
 
     private Vector3 ComputeMassCenter((Vector3 Pos, Quaternion Rot)?[] fk)
