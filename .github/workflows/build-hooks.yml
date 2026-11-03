@@ -59,6 +59,16 @@ jobs:
             }
           }
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        # The SamboyDev feed serves its packages at a few kilobytes a second and drops the connection under
+        # load; restored from here a package it already gave is never asked of it again.
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
       - name: Assert nothing private is checked out
         shell: pwsh
         # What actually makes a published build pure is that the private tree is NOT HERE:
@@ -138,6 +148,16 @@ jobs:
               if ($line -match '^-') { throw "submodule '$path' was not checked out: $line" }
             }
           }
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        # The SamboyDev feed serves its packages at a few kilobytes a second and drops the connection under
+        # load; restored from here a package it already gave is never asked of it again.
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Assert nothing private is checked out
         shell: pwsh
