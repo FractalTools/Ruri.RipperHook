@@ -94,6 +94,10 @@ public static class StatementFlattener
                 Shadows = node.Shadows,
                 MainLightShadows = node.MainLightShadows,
                 TwoSidedShadows = node.TwoSidedShadows,
+                ObjectParameters = node.ObjectParameters,
+                Collection = node.Collection,
+                Layer = node.Layer,
+                Avatar = node.Avatar,
             });
         }
         foreach (StatementMesh mesh in source.Meshes)

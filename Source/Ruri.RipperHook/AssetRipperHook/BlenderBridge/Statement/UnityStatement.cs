@@ -1124,6 +1124,7 @@ public sealed class UnityStatement
             Active = rigRow.Active, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
             Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
+            ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Avatar = rigRow.Avatar,
         };
         _statement.Roots[^1] = _statement.Roots[^1] with { Label = _plan.Label, Kind = "assembly" };
 
