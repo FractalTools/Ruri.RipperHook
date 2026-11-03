@@ -892,13 +892,15 @@ public sealed class UnityStatement
         return cut < 0 ? string.Empty : normalized[..cut];
     }
 
+    private bool Keeps(IUnityObjectBase asset) => _plan.Assets.Count == 0 || _plan.Assets.Contains(asset.PathID);
+
     private IEnumerable<IGameObject> Roots()
     {
         HashSet<string> named = new(_plan.NamedRoots, StringComparer.OrdinalIgnoreCase);
         List<IGameObject> roots = [];
         foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
         {
-            if (asset is not IGameObject gameObject || !gameObject.IsRoot())
+            if (asset is not IGameObject gameObject || (_plan.Assets.Count == 0 ? !gameObject.IsRoot() : !Keeps(gameObject)))
             {
                 continue;
             }
@@ -1795,7 +1797,7 @@ public sealed class UnityStatement
     {
         foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
         {
-            if (!IsSeedCollection(asset.Collection))
+            if (!IsSeedCollection(asset.Collection) || !Keeps(asset))
             {
                 continue;
             }
@@ -1852,7 +1854,7 @@ public sealed class UnityStatement
         }
         foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
         {
-            if (asset is not IAnimationClip clip || !IsSeedCollection(asset.Collection))
+            if (asset is not IAnimationClip clip || !IsSeedCollection(asset.Collection) || !Keeps(asset))
             {
                 continue;
             }

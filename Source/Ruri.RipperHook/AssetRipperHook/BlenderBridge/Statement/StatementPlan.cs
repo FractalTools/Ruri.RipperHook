@@ -5,8 +5,10 @@ using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Enums;
+using System.Globalization;
 using System.Numerics;
 using Ruri.RipperHook.CabMapping;
+using Ruri.RipperHook.HookUtils.GameBundleHook;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
 
@@ -132,6 +134,10 @@ public sealed class StatementPlan
 
     public IReadOnlyList<string> NamedRoots { get; init; } = [];
 
+    /// <summary>The path ids of the objects of <see cref="Cabs"/> this plan keeps; empty keeps every object. A seed
+    /// that names one asset row of an archive states it here.</summary>
+    public IReadOnlyList<long> Assets { get; init; } = [];
+
     public IReadOnlyList<PartMesh> Meshes { get; init; } = [];
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Dressing { get; init; } =
@@ -175,7 +181,7 @@ public sealed class StatementPlan
     public Func<GameData, IReadOnlyDictionary<IUnityObjectBase, string>>? Clips { get; init; }
 
     public string Signature => string.Join('|', Seed, Kind, string.Join(';', Cabs), SeededOnly ? 1 : 0,
-        string.Join(';', NamedRoots), Meshes.Count, Parts.Count, Placements.Count, PipelineDraws.Count, Fills is null ? 0 : 1);
+        string.Join(';', NamedRoots), string.Join(',', Assets), Meshes.Count, Parts.Count, Placements.Count, PipelineDraws.Count, Fills is null ? 0 : 1);
 }
 
 /// <summary>Where a seed that is not an archive of the loaded map is explained: a hook
@@ -255,7 +261,7 @@ public static class StatementSources
     {
         if (map.TryGetId(location, out int cabId))
         {
-            return ForCabs(map, [map.CabName(cabId)], seed,
+            return AssetRow(seed, map, cabId, location) ?? ForCabs(map, [map.CabName(cabId)], seed,
                 map.ContainerPathCount(cabId) > 0 ? map.ContainerPath(cabId, 0) : location, roots);
         }
         string[] cabs = CabMap.ResolveCabsForPaths(map, [location]);
@@ -264,6 +270,29 @@ public static class StatementSources
             cabs = CabMap.ResolveCabsUnderFolder(map, location);
         }
         return cabs.Length > 0 ? ForCabs(map, cabs, seed, location, roots) : null;
+    }
+
+    /// <summary>A row that is one asset of an archive -- <c>archive::pathId</c> -- is that archive read for that
+    /// asset alone: the object it names with everything below it, or the loose asset it is.</summary>
+    private static StatementPlan? AssetRow(string seed, CabTable map, int rowId, string location)
+    {
+        string row = map.CabName(rowId);
+        if (!GameBundleHook.TryGetAssetRowFile(row, out string archive) || !map.TryGetId(archive, out _)
+            || !long.TryParse(row.AsSpan(archive.Length + GameBundleHook.AssetRowSeparator.Length),
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out long pathId))
+        {
+            return null;
+        }
+        return new StatementPlan
+        {
+            Seed = seed,
+            Label = map.ContainerPathCount(rowId) > 0 ? map.ContainerPath(rowId, 0) : location,
+            Kind = map.ClassIds(rowId).Contains((int)AssetRipper.SourceGenerated.ClassIDType.GameObject)
+                ? StatementKind.Prefab : StatementKind.Loose,
+            Cabs = [archive],
+            SeededOnly = true,
+            Assets = [pathId],
+        };
     }
 
     private static StatementPlan ForCabs(CabTable map, string[] cabs, string seed, string named,
