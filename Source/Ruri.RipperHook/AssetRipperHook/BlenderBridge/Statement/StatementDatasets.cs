@@ -19,6 +19,7 @@ public static class StatementDatasets
     public const string NodesId = "core.statement.nodes";
     public const string MeshesId = "core.statement.meshes";
     public const string MorphsId = "core.statement.morphs";
+    public const string CollidersId = "core.statement.colliders";
     public const string SkeletonsId = "core.statement.skeletons";
     public const string AvatarsId = "core.statement.avatars";
     public const string MaterialsId = "core.statement.materials";
@@ -34,6 +35,7 @@ public static class StatementDatasets
     public const string Detail = "detail";
     public const string Inactive = "inactive";
     public const string ShadowProxies = "shadow_proxies";
+    public const string CollidersFlag = "colliders";
     public const string Roles = "roles";
     public const string Containers = "containers";
     public const string Texture = "texture";
@@ -48,7 +50,8 @@ public static class StatementDatasets
     private static DataParam[] Common(params DataParam[] extra) =>
     [
         DataParam.List(Seed), DataParam.Text(BasisParam, required: false), DataParam.Integer(Detail, required: false),
-        DataParam.Flag(Inactive, required: false), DataParam.Flag(ShadowProxies, required: false), DataParam.List(Roles),
+        DataParam.Flag(Inactive, required: false), DataParam.Flag(ShadowProxies, required: false), DataParam.Flag(CollidersFlag, required: false),
+        DataParam.List(Roles),
         DataParam.List(Containers), .. extra,
     ];
 
@@ -57,7 +60,8 @@ public static class StatementDatasets
     public const string CommonText =
         " seed... are payloads of published rows (archives, container paths, or what a hook states); basis is unity, "
         + "blender or gltf (geometry and transforms both come out in it); detail is the level to keep, -1 every level; "
-        + "inactive keeps disabled renderers (on unless stated 0); shadow_proxies keeps shadow-only renderers; roles are "
+        + "inactive keeps disabled renderers (on unless stated 0); shadow_proxies keeps shadow-only renderers; colliders "
+        + "states the collision volumes of the objects (core.statement.colliders; off states none); roles are "
         + "texture-role layer files, later overriding earlier; containers are the image containers accepted.";
 
     public static void Register()
@@ -77,6 +81,11 @@ public static class StatementDatasets
             + "paths they index, and bind poses." + CommonText, Meshes);
         Datasets.Publish(MorphsId, DataRole.Statement, Common(),
             "Every blend shape of every mesh as sparse deltas in the basis, one row per shape." + CommonText, Morphs);
+        Datasets.Publish(CollidersId, DataRole.Statement, Common(),
+            "Every collision volume the seeds put on their nodes, one row per component, in the node's own space and "
+            + "the requester's basis: a box (centre, size), a sphere (centre, radius), a capsule (centre, radius, height, "
+            + "axis) or a mesh (a key of core.statement.meshes), with whether it is a trigger, whether it is enabled, the "
+            + "layer of its object and the physics material it names. Empty unless colliders is asked." + CommonText, Colliders);
         Datasets.Publish(SkeletonsId, DataRole.Statement, Common(),
             "Every seed's transform tree as a skeleton, parents before children: name, path, the identity a rig "
             + "carries for it, the rest local transform in the basis, and the humanoid slot it fills." + CommonText, Skeletons);
@@ -129,6 +138,7 @@ public static class StatementDatasets
         Detail = request.Given(Detail) ? request.Integer(Detail) : 0,
         Inactive = !request.Given(Inactive) || request.Flag(Inactive),
         ShadowProxies = request.Flag(ShadowProxies),
+        Colliders = request.Flag(CollidersFlag),
         RoleLayers = request.List(Roles),
         Containers = request.List(Containers),
     };
@@ -231,6 +241,9 @@ public static class StatementDatasets
     private static ColumnTable Meshes(DataRequest request) => StatementTables.Meshes(MeshesId, Flatten(request), BasisOf(request));
 
     private static ColumnTable Morphs(DataRequest request) => StatementTables.Morphs(MorphsId, Flatten(request), BasisOf(request));
+
+    private static ColumnTable Colliders(DataRequest request) =>
+        StatementTables.Colliders(CollidersId, Flatten(request), BasisOf(request));
 
     private static ColumnTable Skeletons(DataRequest request) => StatementTables.Skeletons(SkeletonsId, Flatten(request), BasisOf(request));
 

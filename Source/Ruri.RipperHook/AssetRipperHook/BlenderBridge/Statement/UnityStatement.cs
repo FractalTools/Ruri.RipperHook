@@ -19,9 +19,14 @@ using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_33;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
+using AssetRipper.SourceGenerated.Classes.ClassID_64;
+using AssetRipper.SourceGenerated.Classes.ClassID_65;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
 using AssetRipper.SourceGenerated.Classes.ClassID_95;
+using AssetRipper.SourceGenerated.Classes.ClassID_134;
+using AssetRipper.SourceGenerated.Classes.ClassID_135;
+using AssetRipper.SourceGenerated.Classes.ClassID_136;
 using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
 using Ruri.RipperHook.BlenderBridge;
@@ -935,6 +940,7 @@ public sealed class UnityStatement
         List<ICamera> cameras = [];
         List<ILight> lights = [];
         List<IMonoBehaviour> behaviours = [];
+        List<(UnityNode Node, IComponent Component)> colliders = [];
         IAvatar? avatar = null;
         List<(UnityNode Holder, IAvatar Built)> rigRoots = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
@@ -953,6 +959,9 @@ public sealed class UnityStatement
                     case ICamera camera: cameras.Add(camera); break;
                     case ILight light: lights.Add(light); break;
                     case IMonoBehaviour behaviour: behaviours.Add(behaviour); break;
+                    case IBoxCollider or ISphereCollider or ICapsuleCollider or IMeshCollider when _options.Colliders:
+                        colliders.Add((node, component!));
+                        break;
                     case IAnimator animator when animator.AvatarP is { } built:
                         avatar ??= built;
                         rigRoots.Add((node, built));
@@ -1030,6 +1039,7 @@ public sealed class UnityStatement
                 row.Light = light;
             }
         }
+        FlattenColliders(colliders, rows, rootObject.Name);
         if (skips.Lod > 0)
         {
             _statement.Note(_plan.Seed, "renderers below the wanted detail level", skips.Lod, rootObject.Name);
@@ -1047,6 +1057,110 @@ public sealed class UnityStatement
             _statement.Note(_plan.Seed, "inactive renderers included", skips.InactiveIncluded, rootObject.Name);
         }
         return new RootFlattening(hierarchy, skeleton, firstNode, rows);
+    }
+
+    private void FlattenColliders(List<(UnityNode Node, IComponent Component)> colliders,
+        Dictionary<UnityNode, StatementNode> rows, string rootName)
+    {
+        int skipped = 0;
+        foreach ((UnityNode node, IComponent component) in colliders)
+        {
+            bool enabled = component switch
+            {
+                IBoxCollider box => box.Enabled,
+                ISphereCollider sphere => sphere.Enabled,
+                ICapsuleCollider capsule => capsule.Enabled,
+                IMeshCollider mesh => mesh.Enabled,
+                _ => true,
+            };
+            if ((!enabled || !node.ActiveInHierarchy) && !_options.Inactive)
+            {
+                skipped++;
+                continue;
+            }
+            StatementNode row = rows[node];
+            StatementCollider? stated = component switch
+            {
+                IBoxCollider box => ColliderRow(row, "box", box.Enabled, box.IsTrigger, box.MaterialP,
+                    new System.Numerics.Vector3(box.Center.X, box.Center.Y, box.Center.Z),
+                    new System.Numerics.Vector3(box.Size.X, box.Size.Y, box.Size.Z)),
+                ISphereCollider sphere => ColliderRow(row, "sphere", sphere.Enabled, sphere.IsTrigger, sphere.MaterialP,
+                    new System.Numerics.Vector3(sphere.Center.X, sphere.Center.Y, sphere.Center.Z), System.Numerics.Vector3.Zero)
+                    with { Radius = sphere.Radius },
+                ICapsuleCollider capsule => ColliderRow(row, "capsule", capsule.Enabled, capsule.IsTrigger, capsule.MaterialP,
+                    new System.Numerics.Vector3(capsule.Center.X, capsule.Center.Y, capsule.Center.Z), System.Numerics.Vector3.Zero)
+                    with { Radius = capsule.Radius, Height = capsule.Height, Axis = capsule.Direction },
+                IMeshCollider mesh => MeshColliderRow(row, mesh),
+                _ => null,
+            };
+            if (stated is not null)
+            {
+                _statement.Colliders.Add(stated);
+            }
+        }
+        if (skipped > 0)
+        {
+            _statement.Note(_plan.Seed, "inactive colliders left out", skipped, rootName);
+        }
+    }
+
+    private static StatementCollider ColliderRow(StatementNode row, string kind, bool enabled, bool trigger,
+        IPhysicsMaterial? material, System.Numerics.Vector3 center, System.Numerics.Vector3 size) =>
+        new(row.Index, kind, trigger, enabled, row.Layer, center, size, 0f, 0f, 0, false, string.Empty,
+            material?.Name.String ?? string.Empty);
+
+    private StatementCollider? MeshColliderRow(StatementNode row, IMeshCollider collider)
+    {
+        string key = ColliderMesh(collider, row.Name);
+        return key.Length == 0 ? null : new StatementCollider(row.Index, "mesh", collider.IsTrigger, collider.Enabled, row.Layer,
+            System.Numerics.Vector3.Zero, System.Numerics.Vector3.Zero, 0f, 0f, 0, collider.Convex, key,
+            collider.MaterialP?.Name.String ?? string.Empty);
+    }
+
+    /// <summary>The key of the mesh a mesh collider collides with, stated as a mesh of the statement when no renderer has.</summary>
+    private string ColliderMesh(IMeshCollider collider, string name)
+    {
+        DecodedMesh? decoded;
+        string key;
+        if (collider.MeshP is { } mesh)
+        {
+            if (!_decodedMeshes.TryGetValue(mesh, out decoded))
+            {
+                try
+                {
+                    decoded = UnityMeshDecoder.Decode(mesh);
+                }
+                catch (Exception exception)
+                {
+                    _statement.Note(_plan.Seed, "collider mesh could not be decoded", 1, $"{name}: {exception.Message}");
+                    return string.Empty;
+                }
+                _decodedMeshes[mesh] = decoded;
+            }
+            key = KeyOf(mesh);
+        }
+        else
+        {
+            string? primitive = BuiltinPrimitiveAt(collider.Collection,
+                new AssetRipper.Assets.Metadata.PPtr(collider.Mesh.FileID, collider.Mesh.PathID));
+            decoded = primitive is null ? null : BuiltinMeshes.Build(primitive);
+            if (decoded is null)
+            {
+                _statement.Note(_plan.Seed, "collider without a mesh", 1, name);
+                return string.Empty;
+            }
+            key = "builtin:" + primitive;
+        }
+        if (!decoded.HasGeometry)
+        {
+            _statement.Note(_plan.Seed, "collider mesh decoded to zero vertices", 1, $"{name}: {decoded.Name}");
+            return string.Empty;
+        }
+        if (!_statement.HasMesh(key))
+        {
+            _statement.Add(new StatementMesh { Key = key, Name = decoded.Name, Geometry = decoded });
+        }
+        return key;
     }
 
     /// <summary>Whether a renderer is at the wanted detail level. A title that fills its
@@ -1631,6 +1745,11 @@ public sealed class UnityStatement
             }
             pointer = new AssetRipper.Assets.Metadata.PPtr(filter.Mesh.FileID, filter.Mesh.PathID);
         }
+        return BuiltinPrimitiveAt(collection, pointer);
+    }
+
+    private static string? BuiltinPrimitiveAt(AssetCollection collection, AssetRipper.Assets.Metadata.PPtr pointer)
+    {
         if (pointer.FileID <= 0 || pointer.FileID > collection.Dependencies.Count)
         {
             return null;

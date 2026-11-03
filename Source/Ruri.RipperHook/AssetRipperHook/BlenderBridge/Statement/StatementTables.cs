@@ -310,6 +310,23 @@ public static class StatementTables
         return table.Build();
     }
 
+    public static ColumnTable Colliders(string id, Statement statement, Basis basis)
+    {
+        TableBuilder table = new(id, "node#", "kind", "trigger#", "enabled#", "layer#", "center_x#", "center_y#", "center_z#",
+            "size_x#", "size_y#", "size_z#", "radius#", "height#", "axis#", "convex#", "mesh", "material");
+        table.Role(ColumnRole.Label, "kind");
+        foreach (StatementCollider collider in statement.Colliders)
+        {
+            Vector3 center = basis.ConvertPoint(collider.Center);
+            Vector3 size = basis.ConvertScale(collider.Size);
+            table.Row(collider.Node, collider.Kind, collider.Trigger ? 1 : 0, collider.Enabled ? 1 : 0, collider.Layer,
+                center.X, center.Y, center.Z, size.X, size.Y, size.Z, collider.Radius, collider.Height,
+                collider.Kind == "capsule" ? basis.ConvertAxis(collider.Axis) : 0, collider.Convex ? 1 : 0, collider.Mesh,
+                collider.Material);
+        }
+        return table.Build();
+    }
+
     public static ColumnTable Clips(string id, IEnumerable<StatementClip> clips)
     {
         TableBuilder table = new(id, "clip", "name", "meta", "curves@", "cab");

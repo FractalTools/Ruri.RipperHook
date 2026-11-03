@@ -257,6 +257,9 @@ public sealed class Basis
         return new Vector3(source[_permutation[0]], source[_permutation[1]], source[_permutation[2]]);
     }
 
+    /// <summary>The axis of this basis a source axis (0 x, 1 y, 2 z) lies along.</summary>
+    public int ConvertAxis(int axis) => Array.IndexOf(_permutation, axis);
+
     /// <summary>A rotation restated under the reflection: C R C is the proper rotation P R Pᵀ
     /// with P = -C, and a signed permutation P carries a quaternion by permuting its vector
     /// part -- negated here because P is minus the reflection.</summary>

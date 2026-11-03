@@ -23,6 +23,8 @@ public sealed class Statement
 
     public List<StatementMorph> Morphs { get; } = [];
 
+    public List<StatementCollider> Colliders { get; } = [];
+
     public List<StatementReport> Report { get; } = [];
 
     private readonly Dictionary<string, StatementMesh> _meshByKey = new(StringComparer.Ordinal);
@@ -194,6 +196,11 @@ public sealed class StatementTexture
     /// sampler gets, rather than a sampler state the shader states inline.</summary>
     public required TextureSampling Sampling { get; init; }
 }
+
+/// <summary>A collision volume on a node, in the node's own space: a box (centre, size), a sphere (centre, radius), a capsule
+/// (centre, radius, height, axis) or a mesh (the key of one of the statement's meshes).</summary>
+public sealed record StatementCollider(int Node, string Kind, bool Trigger, bool Enabled, int Layer, Vector3 Center,
+    Vector3 Size, float Radius, float Height, int Axis, bool Convex, string Mesh, string Material);
 
 public sealed record StatementClip(string Key, string Name, string MetaJson, byte[] Curves, string Archive);
 
