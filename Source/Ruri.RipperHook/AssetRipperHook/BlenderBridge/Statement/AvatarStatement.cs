@@ -18,7 +18,7 @@ public static class AvatarStatement
 
     private sealed class Document
     {
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 2;
         public int[] NodeParent { get; set; } = [];
         public int[] NodeAxesId { get; set; } = [];
         public uint[] NodeId { get; set; } = [];
@@ -34,6 +34,8 @@ public static class AvatarStatement
         public float UpperLegTwist { get; set; }
         public float LegTwist { get; set; }
         public float[][] SkeletonPose { get; set; } = [];
+        public float HumanScale { get; set; } = 1f;
+        public float[] RootParent { get; set; } = [];
     }
 
     public static string ToJson(AvatarRigInput input)
@@ -65,6 +67,13 @@ public static class AvatarStatement
             {
                 pose.T.X, pose.T.Y, pose.T.Z, pose.Q.X, pose.Q.Y, pose.Q.Z, pose.Q.W,
             }).ToArray(),
+            HumanScale = input.HumanScale,
+            RootParent =
+            [
+                input.RootParent.T.X, input.RootParent.T.Y, input.RootParent.T.Z,
+                input.RootParent.Q.X, input.RootParent.Q.Y, input.RootParent.Q.Z, input.RootParent.Q.W,
+                input.RootParent.S.X, input.RootParent.S.Y, input.RootParent.S.Z,
+            ],
         };
         return JsonSerializer.Serialize(document, Options);
     }
@@ -73,9 +82,13 @@ public static class AvatarStatement
     {
         Document document = JsonSerializer.Deserialize<Document>(json, Options)
             ?? throw new InvalidDataException("avatar statement deserialised to nothing.");
-        if (document.Version != 1)
+        if (document.Version != 2)
         {
-            throw new InvalidDataException($"avatar statement version {document.Version} is not the one this build reads (1).");
+            throw new InvalidDataException($"avatar statement version {document.Version} is not the one this build reads (2).");
+        }
+        if (document.RootParent.Length != 10)
+        {
+            throw new InvalidDataException("avatar statement carries no root parent pose.");
         }
         Dictionary<uint, string> tos = new(document.Tos.Count);
         foreach ((string key, string path) in document.Tos)
@@ -108,6 +121,10 @@ public static class AvatarStatement
             SkeletonPose = document.SkeletonPose.Select(values =>
                 (new Vector3(values[0], values[1], values[2]),
                     new Quaternion(values[3], values[4], values[5], values[6]))).ToArray(),
+            HumanScale = document.HumanScale,
+            RootParent = (new Vector3(document.RootParent[0], document.RootParent[1], document.RootParent[2]),
+                new Quaternion(document.RootParent[3], document.RootParent[4], document.RootParent[5], document.RootParent[6]),
+                new Vector3(document.RootParent[7], document.RootParent[8], document.RootParent[9])),
         };
     }
 }

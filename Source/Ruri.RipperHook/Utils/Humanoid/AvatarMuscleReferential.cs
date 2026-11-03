@@ -31,6 +31,8 @@ public sealed class AvatarMuscleReferential
 
     private float[] _humanBoneMass = Array.Empty<float>();
     private Quaternion _qRest = Quaternion.Identity;
+    private float _humanScale = 1f;
+    private (Vector3 T, Quaternion Q, Vector3 S) _rootParent = (Vector3.Zero, Quaternion.Identity, Vector3.One);
     private int[] _nodeParent = Array.Empty<int>();
     private Vector3[] _nodeRestT = Array.Empty<Vector3>();
     private Quaternion[] _nodeRestQ = Array.Empty<Quaternion>();
@@ -65,12 +67,6 @@ public sealed class AvatarMuscleReferential
 
     public static AvatarMuscleReferential? TryCreate(IAvatar avatar) =>
         TryCreate(AvatarRigInput.FromAvatar(avatar));
-
-    public static AvatarMuscleReferential? TryCreateFromDocument(string avatarDocumentJson)
-    {
-        AvatarRigInput? input = AvatarRigInput.FromDocumentJson(avatarDocumentJson);
-        return input is null ? null : TryCreate(input);
-    }
 
     public static AvatarMuscleReferential? TryCreate(AvatarRigInput input)
     {
@@ -112,6 +108,8 @@ public sealed class AvatarMuscleReferential
 
         referential._humanBoneMass = input.HumanBoneMass;
         referential._qRest = input.RootRestQ;
+        referential._humanScale = input.HumanScale;
+        referential._rootParent = input.RootParent;
         referential._armTwist = input.ArmTwist;
         referential._foreArmTwist = input.ForeArmTwist;
         referential._upperLegTwist = input.UpperLegTwist;
@@ -320,14 +318,14 @@ public sealed class AvatarMuscleReferential
                 motionQ = twistY;
             }
         }
-        Vector3 rootT = Vector3.Transform(rootTSimple, Quaternion.Inverse(motionQ));
+        Vector3 rootT = Vector3.Transform(rootTSimple, Quaternion.Inverse(motionQ)) * _humanScale;
         (Vector3, Quaternion) motion = (motionT, motionQ);
 
         (Vector3 Pos, Quaternion Rot)?[] fk = ProvisionalFk(bodyQuats, driven);
         if (fk[(int)BoneType.LeftUpperArm] is null || fk[(int)BoneType.RightUpperArm] is null
             || fk[(int)BoneType.LeftUpperLeg] is null || fk[(int)BoneType.RightUpperLeg] is null)
         {
-            return (rootT, rootQ, motion);
+            return (HipsLocalPosition(rootT), HipsLocalRotation(rootQ), motion);
         }
 
         Quaternion qProvisional = ComputeOrientation(fk);
@@ -335,8 +333,15 @@ public sealed class AvatarMuscleReferential
 
         Quaternion rHips = Quaternion.Normalize(rootQ * _qRest * Quaternion.Inverse(qProvisional));
         Vector3 tHips = rootT - Vector3.Transform(massCenterProvisional, rHips);
-        return (tHips, rHips, motion);
+        return (HipsLocalPosition(tHips), HipsLocalRotation(rHips), motion);
     }
+
+    /// <summary>The hips are solved in animator space; the transform they drive is local to the parent they really have.</summary>
+    private Vector3 HipsLocalPosition(Vector3 position)
+        => Vector3.Transform(position - _rootParent.T, Quaternion.Inverse(_rootParent.Q)) / _rootParent.S;
+
+    private Quaternion HipsLocalRotation(Quaternion rotation)
+        => Quaternion.Normalize(Quaternion.Inverse(_rootParent.Q) * rotation);
 
     private (Vector3 Pos, Quaternion Rot)?[] ProvisionalFk(ReadOnlySpan<Quaternion> bodyQuats,
         ReadOnlySpan<bool> driven)
