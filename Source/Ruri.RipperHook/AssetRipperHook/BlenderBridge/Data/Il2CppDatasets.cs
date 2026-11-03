@@ -38,7 +38,9 @@ public static class Il2CppDatasets
             "The machine code of the install's methods whose type and name contain the given texts, one file per type "
             + "under output, headed by the type's layout: each method with its signature, then every instruction at its "
             + "address under the names the metadata gives calls, fields, type infos, strings and constants, then the "
-            + "cold chunks that belong to it. Addresses name the functions to list instead, runtime helpers included. "
+            + "cold chunks that belong to it. A type the type text names that has no code of its own (an enum, a plain "
+            + "struct) is listed by its layout alone, constants with their values. "
+            + "Addresses name the functions to list instead, runtime helpers included. "
             + "One row per function with the file it landed in and whether it listed. Naming no type, method or "
             + "address needs a limit: the whole install is half a million listings.",
             Listing);
@@ -93,13 +95,19 @@ public static class Il2CppDatasets
                 }
                 List<MethodAnalysisContext> chosen = [.. type.Methods.Where(method => method.UnderlyingPointer != 0
                     && (methodName.Length == 0 || method.Name.Contains(methodName, StringComparison.OrdinalIgnoreCase)))];
-                if (chosen.Count == 0)
+                bool layoutOnly = chosen.Count == 0 && typeName.Length > 0 && methodName.Length == 0;
+                if (chosen.Count == 0 && !layoutOnly)
                 {
                     continue;
                 }
                 string file = FileOf(output, assembly.CleanAssemblyName + "." + type.FullName, taken);
                 using StreamWriter writer = new(file, false, new UTF8Encoding(false));
                 WriteLayout(writer, assembly, type);
+                if (layoutOnly)
+                {
+                    table.Row(type.FullName, string.Empty, string.Empty, 0d, file, "layout");
+                    continue;
+                }
                 foreach (MethodAnalysisContext method in chosen)
                 {
                     request.Cancellation.ThrowIfCancellationRequested();
