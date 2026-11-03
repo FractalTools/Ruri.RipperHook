@@ -12,7 +12,8 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// <c>blender</c> swaps Y and Z (right-handed Z-up; UV origin bottom-left in both, so V stays
 /// and tangent w flips) and turns a top-level object by 180 degrees about the up axis so the
 /// asset faces the viewer. <c>gltf</c> negates X (right-handed Y-up, asset facing +Z; V flips
-/// because glTF's UV origin is the upper left, so tangent w survives). <c>unity</c> is the
+/// because glTF's UV origin is the upper left, so tangent w survives). <c>usd</c> is <c>gltf</c>
+/// with V kept, because USD's texture origin is the lower left as Unity's is. <c>unity</c> is the
 /// identity, for a reader that wants the engine's own numbers.
 /// </summary>
 public sealed class Basis
@@ -109,9 +110,14 @@ public sealed class Basis
         front: new Vector3(0f, 0f, 1f), up: new Vector3(0f, 1f, 0f),
         aimForward: new Vector3(0f, 0f, -1f), aimUp: new Vector3(0f, 1f, 0f));
 
+    public static readonly Basis Usd = new("usd",
+        new double[,] { { -1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, flipV: false,
+        front: new Vector3(0f, 0f, 1f), up: new Vector3(0f, 1f, 0f),
+        aimForward: new Vector3(0f, 0f, -1f), aimUp: new Vector3(0f, 1f, 0f));
+
     /// <summary>Every basis, in declaration order -- what a host asks for when it needs
     /// the conversion itself rather than converted numbers.</summary>
-    public static readonly Basis[] All = [Unity, Blender, Gltf];
+    public static readonly Basis[] All = [Unity, Blender, Gltf, Usd];
 
     /// <summary>The conversion, row-major 4x4. It is its own inverse (a permutation with
     /// signs), so one matrix converts in either direction. Published rather than restated:
@@ -133,7 +139,8 @@ public sealed class Basis
         "unity" => Unity,
         "blender" => Blender,
         "gltf" => Gltf,
-        _ => throw new ArgumentException($"basis '{name}' is not one of unity, blender, gltf."),
+        "usd" => Usd,
+        _ => throw new ArgumentException($"basis '{name}' is not one of unity, blender, gltf, usd."),
     };
 
     /// <summary>What happens to glTF-style tangent handedness w: the reflection flips every
