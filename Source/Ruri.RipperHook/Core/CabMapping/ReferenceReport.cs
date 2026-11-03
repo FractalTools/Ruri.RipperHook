@@ -31,24 +31,19 @@ internal sealed class ReferenceReport
         Logger.Info(LogCategory.Import,
             $"[CabMap] References: {FilesRead}/{expectedFiles} file(s), {ObjectsRead} object(s), "
             + $"{rawEdges} raw reference(s) -> {edges} asset-to-asset edge(s) in {watch.Elapsed.TotalSeconds:F1} s");
-        Warn(expectedFiles - FilesRead, "file(s) with asset rows were not read");
-        Warn(ObjectsUnreadable, "object(s) AssetRipper could not parse");
-        Warn(ObjectsUnknown, "object(s) of a class AssetRipper does not know");
-        Warn(ScriptLayoutsUnresolved, "MonoBehaviour(s) whose script layout could not be resolved");
-        Warn(ReferencesToUnnamedFiles, "reference(s) name a file the dependency table does not hold");
-        Warn(ReferencesOutsideMap, "reference(s) point at a file outside the map");
-        Warn(ReferencesToMissingObjects, "reference(s) point at an object the target file does not hold");
+
+        long failures = _failures.Values.Sum();
+        long unreadFiles = expectedFiles - FilesRead;
+        long issues = unreadFiles + ObjectsUnreadable + ObjectsUnknown + ScriptLayoutsUnresolved
+            + ReferencesToUnnamedFiles + ReferencesOutsideMap + ReferencesToMissingObjects + failures;
+        Logger.Log(issues > 0 ? LogType.Warning : LogType.Info, LogCategory.Import,
+            $"[CabMap] References: files not read {unreadFiles}, objects AssetRipper could not parse {ObjectsUnreadable}, "
+            + $"objects of an unknown class {ObjectsUnknown}, MonoBehaviours without a script layout {ScriptLayoutsUnresolved}, "
+            + $"references naming no file {ReferencesToUnnamedFiles}, references outside the map {ReferencesOutsideMap}, "
+            + $"references to a missing object {ReferencesToMissingObjects}, exceptions {failures}");
         foreach ((string message, int count) in _failures.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             Logger.Warning(LogCategory.Import, $"[CabMap] References: {count} x {message}");
-        }
-    }
-
-    private static void Warn(long count, string what)
-    {
-        if (count > 0)
-        {
-            Logger.Warning(LogCategory.Import, $"[CabMap] References: {count} {what}");
         }
     }
 }
