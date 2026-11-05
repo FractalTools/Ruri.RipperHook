@@ -189,6 +189,10 @@ public sealed class StatementTexture
 
     public required string Container { get; init; }
 
+    /// <summary>The pixel format the source stores the texture in, by the source engine's own name (a Unity
+    /// <c>TextureFormat</c>); empty where the source hands its pixels over already decoded.</summary>
+    public required string Format { get; init; }
+
     public required byte[] Image { get; init; }
 
     /// <summary>How the texture's own sampler addresses it along u and v, and filters it

@@ -519,7 +519,7 @@ public static class UnrealStatementSource
                 statement.Add(new StatementTexture
                 {
                     Key = key.Text(row), Name = textureName.Text(row), Srgb = srgb.Truthy(row), Container = "png",
-                    Image = image.Bytes(row).ToArray(),
+                    Format = string.Empty, Image = image.Bytes(row).ToArray(),
                     Sampling = new TextureSampling(wrapU.Text(row), wrapV.Text(row), filter.Text(row)),
                 });
             }

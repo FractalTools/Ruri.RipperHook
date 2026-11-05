@@ -88,6 +88,7 @@ public static class TextureEncoding
             Name = texture.Name.String,
             Srgb = DeclaresSrgb(texture),
             Container = negotiated.GetFileExtension().TrimStart('.'),
+            Format = texture.Format_C28E.ToString(),
             Image = stream.ToArray(),
             Sampling = Sampling(texture),
         };
