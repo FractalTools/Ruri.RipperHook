@@ -9,16 +9,6 @@
 
 ---
 
-## 作品展示
-
-### 【终末地/模型配布】羽毛笔 恋愛サーキュレーション
-
-![羽毛笔 恋愛サーキュレーション](Docs/Showcase/LaPlumaRenaiCirculation.jpg)
-
-原创模型,整条链路在 Blender 里完成:本仓读取终末地安装,由 [RuriRipperImporter](https://github.com/ShiyumeMeguri/RuriRipperImporter) 直接导入游戏场景(祀的家)、表情库、生成的着色栈与后处理,建好的角色放进场景里用 EEVEE 渲染出片。
-
-**成片与模型配布:** [bilibili · BV1L44t6kEXz](https://www.bilibili.com/video/BV1L44t6kEXz)
-
 ### 打通建模工作流全链路:建模好直接导入终末地场景进行渲染
 
 <img width="1920" height="1080" alt="58f27578a945943a9a703534d638284b" src="https://github.com/user-attachments/assets/87db9e03-ece3-4086-9e6c-23e0c33930c1" />
