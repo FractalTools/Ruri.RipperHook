@@ -98,6 +98,11 @@ public sealed class UnityLightInfo
 
     public required float Range { get; init; }
 
+    /// <summary>How far from the light it lights anything at all: the radius the engine culls the light to. A light
+    /// whose engine bounds it by nothing but its range reaches its range; one the engine also confines to a culling
+    /// volume reaches no further than the farthest point of that volume.</summary>
+    public required float Reach { get; init; }
+
     public required float SpotAngle { get; init; }
 
     public required float InnerSpotAngle { get; init; }
@@ -374,6 +379,7 @@ public static class UnityRenderers
                 Blue = blue,
                 Intensity = light.Intensity,
                 Range = light.Range,
+                Reach = light.Range,
                 SpotAngle = light.SpotAngle,
                 InnerSpotAngle = light.Has_InnerSpotAngle() ? light.InnerSpotAngle : 0f,
                 AreaWidth = light.AreaSize.X,

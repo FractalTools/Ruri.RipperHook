@@ -151,6 +151,7 @@ public static class UnrealStatementSource
                     Blue = (float)lightColumns[2].Real(row),
                     Intensity = (float)lightColumns[3].Real(row),
                     Range = (float)lightColumns[4].Real(row),
+                    Reach = (float)lightColumns[4].Real(row),
                     SpotAngle = (float)lightColumns[5].Real(row),
                     InnerSpotAngle = (float)lightColumns[6].Real(row),
                     AreaWidth = (float)lightColumns[7].Real(row),

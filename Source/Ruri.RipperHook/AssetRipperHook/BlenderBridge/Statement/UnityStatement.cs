@@ -425,6 +425,7 @@ public sealed class UnityStatement
                     Blue = light.Blue,
                     Intensity = light.Intensity,
                     Range = light.Range,
+                    Reach = light.Reach,
                     SpotAngle = light.SpotAngle,
                     InnerSpotAngle = light.InnerSpotAngle,
                     AreaWidth = 0f,

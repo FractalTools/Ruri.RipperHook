@@ -108,11 +108,12 @@ public sealed record RendererFill(IMesh Mesh, IReadOnlyList<IMaterial?> Material
 /// on what it scatters into a participating medium (zero keeps it out), the multiplier on its specular
 /// reflections (one leaves them as they are), and the texels its shadow map spans
 /// (<see cref="UnityLightInfo.ShadowResolution"/>). The rotation is the transform's own,
-/// roll included: a cookie is projected along the light's axes, not only its forward. <see cref="Fade"/>
+/// roll included: a cookie is projected along the light's axes, not only its forward. <see cref="Reach"/> is how
+/// far from the light it lights anything at all (<see cref="UnityLightInfo.Reach"/>). <see cref="Fade"/>
 /// and <see cref="Parameters"/> are what the engine's light list carries beyond that
 /// (<see cref="UnityLightInfo.Fade"/>, <see cref="UnityLightInfo.Parameters"/>).</summary>
 public sealed record PlanLight(string Name, int Type, System.Numerics.Vector3 Position,
-    System.Numerics.Quaternion Rotation, float Red, float Green, float Blue, float Intensity, float Range,
+    System.Numerics.Quaternion Rotation, float Red, float Green, float Blue, float Intensity, float Range, float Reach,
     float SpotAngle, float InnerSpotAngle, bool Shadows, int ShadowResolution, float VolumeFactor,
     float SpecularFactor, System.Numerics.Vector4 Fade,
     float[] Parameters);
