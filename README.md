@@ -9,7 +9,7 @@
 
 ---
 
-### 打通建模工作流全链路:建模好直接导入终末地场景进行渲染
+### 打通建模工作流全链路:[建模好直接导入终末地场景进行渲染](https://www.bilibili.com/video/BV1L44t6kEXz)
 
 <img width="1920" height="1080" alt="58f27578a945943a9a703534d638284b" src="https://github.com/user-attachments/assets/87db9e03-ece3-4086-9e6c-23e0c33930c1" />
 
