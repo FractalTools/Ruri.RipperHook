@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using LibCpp2IL;
 using LibCpp2IL.Metadata;
 using Cpp2IL.Core.Model.Contexts;
+using Cpp2IL.Core.Utils;
 
 namespace Ruri.RipperHook.AR;
 
@@ -32,8 +33,8 @@ internal static class Il2CppAsmAnnotator
         new(@"0x(?<a>[0-9A-Fa-f]+)|\b(?<b>[0-9A-Fa-f]+)h\b", RegexOptions.Compiled);
 
     private static ApplicationAnalysisContext _app;
-    private static Dictionary<ulong, string> _keyFunctions;
-    private static Dictionary<ulong, string> _exports;
+    private static Dictionary<ulong, List<string>> _keyFunctions;
+    private static Dictionary<ulong, List<string>> _exports;
     private static ulong[] _sortedMethodStarts;
     private static readonly Dictionary<ulong, string> _globalCache = new();
     private static readonly Dictionary<ulong, string> _dataCache = new();
@@ -90,10 +91,12 @@ internal static class Il2CppAsmAnnotator
     internal static IEnumerable<(ulong Address, string Kind, string Name)> RuntimeNames(ApplicationAnalysisContext app)
     {
         EnsureMaps(app);
-        foreach (KeyValuePair<ulong, string> export in _exports)
-            yield return (export.Key, "export", export.Value);
-        foreach (KeyValuePair<ulong, string> function in _keyFunctions)
-            yield return (function.Key, "keyFunction", function.Value);
+        foreach (KeyValuePair<ulong, List<string>> export in _exports)
+            foreach (string name in export.Value)
+                yield return (export.Key, "export", name);
+        foreach (KeyValuePair<ulong, List<string>> function in _keyFunctions)
+            foreach (string name in function.Value)
+                yield return (function.Key, "keyFunction", name);
         foreach (KeyValuePair<ulong, string> global in _runtimeGlobals)
             yield return (global.Key, "runtimeGlobal", global.Value);
     }
@@ -101,15 +104,15 @@ internal static class Il2CppAsmAnnotator
     internal static bool IsKeyFunction(ApplicationAnalysisContext app, ulong address, string nameContains)
     {
         EnsureMaps(app);
-        return _keyFunctions.TryGetValue(address, out string name) && name.Contains(nameContains);
+        return _keyFunctions.TryGetValue(address, out List<string> names) && names.Any(name => name.Contains(nameContains));
     }
 
     public static ulong KeyFunctionAddress(ApplicationAnalysisContext app, string nameContains)
     {
         EnsureMaps(app);
-        foreach (KeyValuePair<ulong, string> kv in _keyFunctions)
+        foreach (KeyValuePair<ulong, List<string>> kv in _keyFunctions)
         {
-            if (kv.Value.Contains(nameContains)) return kv.Key;
+            if (kv.Value.Any(name => name.Contains(nameContains))) return kv.Key;
         }
         return 0;
     }
@@ -117,10 +120,13 @@ internal static class Il2CppAsmAnnotator
     internal static bool IsAllocOrRaiseFunction(ApplicationAnalysisContext app, ulong addr)
     {
         EnsureMaps(app);
-        string name = null;
-        if (_keyFunctions != null && _keyFunctions.TryGetValue(addr, out string k)) name = k;
-        else if (_exports != null && _exports.TryGetValue(addr, out string e)) name = e;
-        if (name == null) return false;
+        if (_keyFunctions.TryGetValue(addr, out List<string> keys))
+            return keys.Any(IsAllocOrRaiseName);
+        return _exports.TryGetValue(addr, out List<string> names) && names.Any(IsAllocOrRaiseName);
+    }
+
+    private static bool IsAllocOrRaiseName(string name)
+    {
         return name.Contains("object_new") || name.Contains("bject_new")
             || name.Contains("raise") || name.Contains("Raise")
             || name.Contains("exception") || name.Contains("Exception")
@@ -167,10 +173,11 @@ internal static class Il2CppAsmAnnotator
         if (overrides != null && overrides.TryGetValue(addr, out string ov))
             return ov;
         if (_app.MethodsByAddress.TryGetValue(addr, out List<MethodAnalysisContext> methods) && methods.Count > 0)
-            return MethodTargetName(methods);
-        if (_exports.TryGetValue(addr, out string export))            return export;
-        if (_keyFunctions.TryGetValue(addr, out string keyFunc))
-            return keyFunc;
+            return MethodTargetName(addr, methods);
+        if (_exports.TryGetValue(addr, out List<string> exports))
+            return FormatAliases(addr, exports, "export");
+        if (_keyFunctions.TryGetValue(addr, out List<string> keyFunctions))
+            return FormatAliases(addr, keyFunctions, "keyFunction");
         if (Il2CppRuntimeSymbols.NameAt(_app, addr) is { } runtimeSymbol)
             return runtimeSymbol;
         if (_runtimeGlobals != null && _runtimeGlobals.TryGetValue(addr, out string runtimeGlobal))            return runtimeGlobal;
@@ -230,94 +237,100 @@ internal static class Il2CppAsmAnnotator
         return best >= 0 && best + 1 < starts.Length && addr > starts[best] && addr < starts[best + 1];
     }
 
-    private static string MethodTargetName(List<MethodAnalysisContext> methods)
+    internal static string MethodSymbol(MethodAnalysisContext method)
     {
-        if (methods.Count == 1)
-            return methods[0].FullName;
-        string name = methods[0].FullName;
-        bool allSame = true;
-        for (int i = 1; i < methods.Count; i++)
-            if (methods[i].FullName != name) { allSame = false; break; }
-        if (allSame)
-            return name;
-        string open = StripGenericArguments(name);
-        bool allSameOpen = true;
-        for (int i = 1; i < methods.Count; i++)
-            if (StripGenericArguments(methods[i].FullName) != open) { allSameOpen = false; break; }
-        if (allSameOpen)
-            return open;
-
-        string member = CommonMemberName(methods);
-        return member ?? open;
+        IReadOnlyList<TypeAnalysisContext> genericArguments = method.GenericParameters;
+        if (method is ConcreteGenericMethodAnalysisContext generic)
+        {
+            genericArguments = generic.MethodGenericParameters.Count > 0
+                ? generic.MethodGenericParameters
+                : generic.BaseMethodContext.GenericParameters;
+        }
+        string genericSuffix = genericArguments.Count == 0
+            ? string.Empty
+            : "<" + string.Join(", ", genericArguments.Select(type => type.FullName)) + ">";
+        string name = method.DeclaringType == null
+            ? method.DefaultName : method.DeclaringType.FullName + "::" + method.DefaultName;
+        return method.ReturnType.FullName + " " + name + genericSuffix
+            + "(" + string.Join(", ", method.Parameters.Select(parameter => parameter.ParameterType.FullName)) + ")";
     }
 
-    private static string CommonMemberName(List<MethodAnalysisContext> methods)
+    private static string MethodTargetName(ulong address, List<MethodAnalysisContext> methods)
     {
-        static string Member(string fullName)
-        {
-            int sep = fullName.LastIndexOf("::", System.StringComparison.Ordinal);
-            return sep >= 0 ? fullName.Substring(sep + 2) : fullName;
-        }
-        string first = Member(methods[0].FullName);
+        MethodAnalysisContext first = methods[0];
         for (int i = 1; i < methods.Count; i++)
-            if (Member(methods[i].FullName) != first)
-                return null;
-        return first;
+        {
+            if (!SameMethod(first, methods[i]))
+                return "sub_" + address.ToString("X");
+        }
+        return MethodSymbol(first);
     }
 
-    private static string StripGenericArguments(string fullName)
+    private static bool SameMethod(MethodAnalysisContext first, MethodAnalysisContext other)
     {
-        if (fullName.IndexOf('<') < 0)
-            return fullName;
-        StringBuilder sb = new(fullName.Length);
-        int depth = 0;
-        foreach (char c in fullName)
+        if (ReferenceEquals(first, other))
+            return true;
+        if (first is ConcreteGenericMethodAnalysisContext firstGeneric
+            && other is ConcreteGenericMethodAnalysisContext otherGeneric)
         {
-            if (c == '<') depth++;
-            else if (c == '>') { if (depth > 0) depth--; }
-            else if (depth == 0) sb.Append(c);
+            return ReferenceEquals(firstGeneric.BaseMethodContext, otherGeneric.BaseMethodContext)
+                && SameTypeArguments(firstGeneric.TypeGenericParameters, otherGeneric.TypeGenericParameters)
+                && SameTypeArguments(firstGeneric.MethodGenericParameters, otherGeneric.MethodGenericParameters);
         }
-        return sb.ToString();
+        return first.Definition != null && ReferenceEquals(first.Definition, other.Definition)
+            && ReferenceEquals(first.DeclaringType, other.DeclaringType);
+    }
+
+    private static bool SameTypeArguments(IReadOnlyList<TypeAnalysisContext> first, IReadOnlyList<TypeAnalysisContext> other)
+    {
+        if (first.Count != other.Count)
+            return false;
+        for (int i = 0; i < first.Count; i++)
+        {
+            if (!ReferenceEquals(first[i], other[i]))
+                return false;
+        }
+        return true;
+    }
+
+    internal static MetadataUsage MetadataUsageAt(ApplicationAnalysisContext app, ulong address)
+    {
+        if (!HoldsPointer(app.Binary, address))
+            return null;
+        if (app.Metadata.MetadataVersion >= 27f && app.Binary.ReadPointerAtVirtualAddress(address) >= uint.MaxValue)
+            return null;
+        return app.LibCpp2IlContext.GetAnyGlobalByAddress(address);
     }
 
     private static string ResolveGlobal(ulong addr)
     {
-        if (!HoldsPointer(_app.Binary, addr))
+        MetadataUsage usage = MetadataUsageAt(_app, addr);
+        if (usage == null)
             return null;
-        string literal = _app.LibCpp2IlContext.GetLiteralByAddress(addr);
-        if (literal != null) return "\"" + Escape(literal) + "\"";
-        MetadataUsage usage = _app.LibCpp2IlContext.GetAnyGlobalByAddress(addr);
-        if (usage != null)
+        switch (usage.Type)
         {
-            switch (usage.Type)
-            {
-                case MetadataUsageType.MethodDef:
-                    string methodKey = usage.AsMethod()?.GlobalKey;
-                    if (methodKey != null) return methodKey + "_MethodInfo";
-                    break;
-                case MetadataUsageType.MethodRef:
-                    string genericKey = usage.AsGenericMethodRef()?.ToString();
-                    if (genericKey != null) return genericKey + "_MethodInfo";
-                    break;
-                case MetadataUsageType.FieldInfo:
-                    Il2CppFieldDefinition field = usage.AsField();
-                    if (field?.DeclaringType != null && field.Name != null)
-                        return field.DeclaringType.Name + "::" + field.Name + "_FieldInfo";
-                    break;
-            }
-            if (usage.Value != null)
-            {
-                string value = usage.Value.ToString();
-                return usage.Type switch
-                {
-                    MetadataUsageType.TypeInfo => value + "_TypeInfo",
-                    MetadataUsageType.Type => value + "_TypeRef",
-                    MetadataUsageType.FieldRva => value + "_FieldRva",
-                    _ => value,
-                };
-            }
+            case MetadataUsageType.StringLiteral:
+                return "\"" + Escape(usage.AsLiteral()) + "\"";
+            case MetadataUsageType.MethodDef:
+            case MetadataUsageType.MethodRef:
+                MethodAnalysisContext method = _app.ResolveContextForMethod(usage);
+                return method == null ? null : MethodSymbol(method) + "_MethodInfo";
+            case MetadataUsageType.FieldInfo:
+                Il2CppFieldRef fieldReference = _app.Metadata.fieldRefs[usage.RawValue];
+                var declaringType = fieldReference.DeclaringType;
+                Il2CppTypeDefinition definition = declaringType.CoerceToUnderlyingTypeDefinition();
+                Il2CppFieldDefinition field = _app.Metadata.GetFieldDefinitionFromIndex(definition.FirstFieldIdx + fieldReference.fieldIndex);
+                TypeAnalysisContext type = _app.ResolveIl2CppType(declaringType);
+                return type == null || field?.Name == null ? null : type.FullName + "::" + field.Name + "_FieldInfo";
         }
-        return null;
+        string value = usage.Value?.ToString();
+        return usage.Type switch
+        {
+            MetadataUsageType.TypeInfo => value == null ? null : value + "_TypeInfo",
+            MetadataUsageType.Type => value == null ? null : value + "_TypeRef",
+            MetadataUsageType.FieldRva => value == null ? null : value + "_FieldRva",
+            _ => value,
+        };
     }
 
     /// <summary>Whether a pointer-sized global can sit at this address inside the image. A metadata usage slot is
@@ -393,11 +406,11 @@ internal static class Il2CppAsmAnnotator
             return null;
 
         if (_app.MethodsByAddress.TryGetValue(target, out List<MethodAnalysisContext> targetMethods) && targetMethods.Count > 0)
-            return "->" + MethodTargetName(targetMethods);
-        if (_exports.TryGetValue(target, out string targetExport))
-            return "->" + targetExport;
-        if (_keyFunctions.TryGetValue(target, out string targetKeyFunc))
-            return "->" + targetKeyFunc;
+            return "->" + MethodTargetName(target, targetMethods);
+        if (_exports.TryGetValue(target, out List<string> targetExports))
+            return "->" + FormatAliases(target, targetExports, "export");
+        if (_keyFunctions.TryGetValue(target, out List<string> targetKeys))
+            return "->" + FormatAliases(target, targetKeys, "keyFunction");
         if (Il2CppRuntimeSymbols.NameAt(_app, target) is { } targetRuntime)
             return "->" + targetRuntime;
         return "->" + (InMethodBody(target) ? "loc_" : "sub_") + target.ToString("X");
@@ -582,7 +595,7 @@ internal static class Il2CppAsmAnnotator
     private static void EnsureMaps(ApplicationAnalysisContext app)
     {
         if (ReferenceEquals(_app, app) && _keyFunctions != null) return;
-        Dictionary<ulong, string> map = new();
+        Dictionary<ulong, List<string>> map = new();
         object kfa = app.GetOrCreateKeyFunctionAddresses();
         foreach (FieldInfo f in kfa.GetType().GetFields(
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.FlattenHierarchy))
@@ -590,17 +603,26 @@ internal static class Il2CppAsmAnnotator
             if (f.FieldType == typeof(ulong))
             {
                 ulong v = (ulong)f.GetValue(kfa);
-                if (v != 0) map[v] = f.Name;
+                if (v != 0)
+                {
+                    if (!map.TryGetValue(v, out List<string> names))
+                        map[v] = names = new List<string>();
+                    if (!names.Contains(f.Name))
+                        names.Add(f.Name);
+                }
             }
         }
         _keyFunctions = map;
 
-        Dictionary<ulong, string> exports = new();
+        Dictionary<ulong, List<string>> exports = new();
         foreach (KeyValuePair<string, ulong> kv in app.Binary.GetExportedFunctions())
         {
-            if (kv.Value != 0 && !exports.ContainsKey(kv.Value))
+            if (kv.Value != 0)
             {
-                exports[kv.Value] = kv.Key;
+                if (!exports.TryGetValue(kv.Value, out List<string> names))
+                    exports[kv.Value] = names = new List<string>();
+                if (!names.Contains(kv.Key))
+                    names.Add(kv.Key);
             }
         }
         _exports = exports;
@@ -612,6 +634,9 @@ internal static class Il2CppAsmAnnotator
         _runtimeGlobals = Il2CppX86Listing.TraceRuntimeGlobals(app);
         _app = app;
     }
+
+    private static string FormatAliases(ulong address, IReadOnlyList<string> names, string kind) => names.Count == 1
+        ? names[0] : "sub_" + address.ToString("X") + "{" + kind + " aliases=" + string.Join(" | ", names) + "}";
 
     private static string Escape(string s)
     {

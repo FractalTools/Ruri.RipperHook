@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using AssetRipper.Import.Logging;
-using Cpp2IL.Core.InstructionSets;
 using Cpp2IL.Core.Model.Contexts;
 using Ruri.RipperHook.AR;
 using Ruri.RipperHook.BlenderBridge.Tables;
@@ -93,8 +92,8 @@ public static class Il2CppDatasets
                 {
                     continue;
                 }
-                List<MethodAnalysisContext> chosen = [.. type.Methods.Where(method => method.UnderlyingPointer != 0
-                    && (methodName.Length == 0 || method.Name.Contains(methodName, StringComparison.OrdinalIgnoreCase)))];
+                List<MethodAnalysisContext> chosen = [.. type.Methods.Where(method => methodName.Length == 0
+                    || method.Name.Contains(methodName, StringComparison.OrdinalIgnoreCase))];
                 bool layoutOnly = chosen.Count == 0 && typeName.Length > 0 && methodName.Length == 0;
                 if (chosen.Count == 0 && !layoutOnly)
                 {
@@ -102,6 +101,7 @@ public static class Il2CppDatasets
                 }
                 string file = FileOf(output, assembly.CleanAssemblyName + "." + type.FullName, taken);
                 using StreamWriter writer = new(file, false, new UTF8Encoding(false));
+                HashSet<ulong> presentedAliases = new();
                 WriteLayout(writer, assembly, type);
                 if (layoutOnly)
                 {
@@ -111,7 +111,7 @@ public static class Il2CppDatasets
                 foreach (MethodAnalysisContext method in chosen)
                 {
                     request.Cancellation.ThrowIfCancellationRequested();
-                    WriteMethod(writer, app, method, table, file);
+                    WriteMethod(writer, app, method, table, file, presentedAliases);
                     listed++;
                     if (limit > 0 && listed >= limit)
                     {
@@ -129,14 +129,16 @@ public static class Il2CppDatasets
         Il2CppFunctionTable functions = Il2CppFunctionTable.For(app);
         string file = Path.Combine(output, "addresses.asm");
         using StreamWriter writer = new(file, false, new UTF8Encoding(false));
+        HashSet<ulong> presentedAliases = new();
         foreach (string text in addresses)
         {
             request.Cancellation.ThrowIfCancellationRequested();
             ulong address = ulong.Parse(text.Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase),
                 NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            Il2CppAsmLookup.Implementation[] aliases = Il2CppAsmLookup.AtAddress(app, address).ToArray();
             ulong start = address;
             ulong end = 0;
-            if (functions.TryFind(address, out int index))
+            if (aliases.Length == 0 && functions.TryFind(address, out int index))
             {
                 ulong root = functions.RootOf(index);
                 if (functions.TryFind(root, out int primary) && functions.StartOf(primary) == root)
@@ -144,27 +146,29 @@ public static class Il2CppDatasets
                     start = root;
                     end = functions.EndOf(primary);
                 }
+                aliases = Il2CppAsmLookup.AtAddress(app, start).ToArray();
             }
-            if (app.MethodsByAddress.TryGetValue(start, out List<MethodAnalysisContext> methods) && methods.Count > 0)
+            if (aliases.Length > 0)
             {
-                WriteMethod(writer, app, methods[0], table, file);
+                foreach (Il2CppAsmLookup.Implementation implementation in aliases)
+                    WriteImplementation(writer, app, implementation, table, file, presentedAliases);
                 continue;
             }
-            if (end == 0)
-            {
-                end = Il2CppX86Listing.FindEnd(app, start);
-            }
             string status = "ok";
+            long size = 0;
             try
             {
+                Il2CppNativeBody body = Il2CppX86Listing.DecodeRange(app, start, end);
+                status = body.Status;
+                size = body.ByteCount;
                 writer.Write("== sub_");
                 writer.Write(start.ToString("X"));
                 writer.Write("  VA=0x");
                 writer.Write(start.ToString("X"));
                 writer.Write("  size=0x");
-                writer.Write((end - start).ToString("X"));
+                writer.Write(size.ToString("X"));
                 writer.Write('\n');
-                writer.Write(Il2CppX86Listing.RenderRange(app, start, end));
+                writer.Write(Il2CppX86Listing.RenderRange(app, body));
                 writer.Write('\n');
             }
             catch (Exception exception)
@@ -175,42 +179,28 @@ public static class Il2CppDatasets
                 writer.Write("\n\n");
                 Logger.Warning(LogCategory.Export, $"[{ListingId}] no listing at 0x{start:X}: {status}");
             }
-            table.Row(string.Empty, "sub_" + start.ToString("X"), "0x" + start.ToString("X"), (double)(end - start), file, status);
+            table.Row(string.Empty, "sub_" + start.ToString("X"), "0x" + start.ToString("X"), (double)size, file, status);
         }
     }
 
     private static void WriteMethod(StreamWriter writer, ApplicationAnalysisContext app, MethodAnalysisContext method,
-        TableBuilder table, string file)
+        TableBuilder table, string file, ISet<ulong> presentedAliases)
     {
-        string status = "ok";
-        int size = 0;
-        try
-        {
-            method.EnsureRawBytes();
-            size = method.RawBytes.Length;
-            writer.Write("== ");
-            writer.Write(Prototype(method));
-            writer.Write("\n   VA=0x");
-            writer.Write(method.UnderlyingPointer.ToString("X"));
-            writer.Write("  RVA=0x");
-            writer.Write(method.Rva.ToString("X"));
-            writer.Write("  size=0x");
-            writer.Write(size.ToString("X"));
-            writer.Write('\n');
-            writer.Write(Render(app, method));
-            writer.Write('\n');
-        }
-        catch (Exception exception)
-        {
-            status = Il2CppX86Listing.Describe(exception);
-            writer.Write("!! ");
-            writer.Write(status);
-            writer.Write("\n\n");
-            Logger.Warning(LogCategory.Export,
-                $"[{ListingId}] no listing for {Signature(method)} at 0x{method.UnderlyingPointer:X}: {status}");
-        }
-        table.Row(method.DeclaringType.FullName, Signature(method), "0x" + method.UnderlyingPointer.ToString("X"),
-            (double)size, file, status);
+        foreach (Il2CppAsmLookup.Implementation implementation in Il2CppAsmLookup.Implementations(app, method))
+            WriteImplementation(writer, app, implementation, table, file, presentedAliases);
+    }
+
+    private static void WriteImplementation(StreamWriter writer, ApplicationAnalysisContext app,
+        Il2CppAsmLookup.Implementation implementation, TableBuilder table, string file, ISet<ulong> presentedAliases)
+    {
+        Il2CppAsmLookup.Listing listing = Il2CppAsmLookup.Display(app, implementation, presentedAliases);
+        writer.Write("== ");
+        writer.Write(implementation.Symbol);
+        writer.Write('\n');
+        writer.Write(listing.Text);
+        writer.Write('\n');
+        table.Row(implementation.Source.DeclaringType.FullName, implementation.Symbol,
+            "0x" + implementation.Address.ToString("X"), (double)listing.ByteCount, file, listing.Status);
     }
 
     private static void WriteLayout(StreamWriter writer, AssemblyAnalysisContext assembly, TypeAnalysisContext type)
@@ -256,30 +246,31 @@ public static class Il2CppDatasets
         List<(ulong Address, string Kind, ulong Size, string Assembly, string Name)> symbols = [];
         HashSet<ulong> named = [];
 
-        foreach ((ulong address, List<MethodAnalysisContext> methods) in app.MethodsByAddress)
+        foreach (ulong address in app.MethodsByAddress.Keys)
         {
             if (address == 0)
             {
                 continue;
             }
-            bool generic = methods.All(method => method is ConcreteGenericMethodAnalysisContext);
-            string[] names = [.. methods.Select(Signature).Distinct().Take(3)];
-            string name = string.Join(" | ", names) + (methods.Count > names.Length ? $" | +{methods.Count - names.Length} more" : string.Empty);
-            string assembly = methods[0].DeclaringType?.DeclaringAssembly?.CleanAssemblyName ?? string.Empty;
-            symbols.Add((address, generic ? "genericMethod" : "method", SizeAt(functions, address), assembly, name));
+            foreach (Il2CppAsmLookup.Implementation implementation in Il2CppAsmLookup.AtAddress(app, address))
+            {
+                string kind = implementation.Reference != null ? "genericMethod" : "method";
+                string assembly = implementation.Source.DeclaringType?.DeclaringAssembly?.CleanAssemblyName ?? string.Empty;
+                symbols.Add((address, kind, SizeAt(functions, address), assembly,
+                    implementation.Symbol + $" [metadata-token=0x{implementation.Source.Token:X8}]"));
+            }
             named.Add(address);
         }
         foreach ((ulong address, string kind, string name) in Il2CppAsmAnnotator.RuntimeNames(app))
         {
-            if (named.Add(address))
-            {
-                symbols.Add((address, kind, SizeAt(functions, address), string.Empty, name));
-            }
+            named.Add(address);
+            symbols.Add((address, kind, SizeAt(functions, address), string.Empty, name));
         }
         foreach ((ulong address, string kind, string name) in Il2CppRuntimeSymbols.All(app))
         {
-            if (address != 0 && named.Add(address))
+            if (address != 0)
             {
+                named.Add(address);
                 symbols.Add((address, kind, SizeAt(functions, address), string.Empty, name));
             }
         }
@@ -288,8 +279,9 @@ public static class Il2CppDatasets
             ulong start = functions.StartOf(index);
             if (functions.RootOf(index) == start && named.Add(start))
             {
-                symbols.Add((start, "function", functions.EndOf(index) - start, string.Empty,
-                    Il2CppHelperNamer.TryGetName(app, start) ?? "sub_" + start.ToString("X")));
+                string helper = Il2CppHelperNamer.TryGetName(app, start);
+                symbols.Add((start, helper == null ? "generatedFunction" : "inferredFunction",
+                    functions.EndOf(index) - start, string.Empty, helper ?? "sub_" + start.ToString("X")));
             }
         }
         symbols.Sort(static (left, right) => left.Address.CompareTo(right.Address));
@@ -327,30 +319,6 @@ public static class Il2CppDatasets
 
     private static ulong SizeAt(Il2CppFunctionTable functions, ulong address) =>
         functions.TryFind(address, out int index) && functions.StartOf(index) == address ? functions.EndOf(index) - address : 0;
-
-    private static string Render(ApplicationAnalysisContext app, MethodAnalysisContext method) =>
-        app.InstructionSet is X86InstructionSet
-            ? Il2CppX86Listing.Render(app, method, withAddresses: true, withChunks: true)
-            : Il2CppAsmAnnotator.Annotate(app, app.InstructionSet.PrintAssembly(method));
-
-    private static string Signature(MethodAnalysisContext method) =>
-        $"{method.DeclaringType?.FullName}::{method.Name}({string.Join(", ", method.Parameters.Select(parameter => parameter.ParameterType.FullName))})";
-
-    /// <summary>The method as its native function is declared: the receiver first for an instance method, the
-    /// method's own info last -- where each argument arrives follows from this line.</summary>
-    private static string Prototype(MethodAnalysisContext method)
-    {
-        string modifiers = (method.IsStatic ? "static " : string.Empty)
-            + (method.IsAbstract ? "abstract " : method.IsVirtual ? $"virtual[{method.Definition?.slot}] " : string.Empty);
-        List<string> parameters = [];
-        if (!method.IsStatic)
-        {
-            parameters.Add(method.DeclaringType.FullName + " this");
-        }
-        parameters.AddRange(method.Parameters.Select(parameter => parameter.ParameterType.FullName + " " + parameter.ParameterName));
-        parameters.Add("MethodInfo method");
-        return $"{modifiers}{method.ReturnType.FullName} {method.DeclaringType.FullName}::{method.Name}({string.Join(", ", parameters)})";
-    }
 
     private static string FileOf(string directory, string name, HashSet<string> taken)
     {

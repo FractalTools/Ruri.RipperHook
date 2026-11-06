@@ -25,7 +25,7 @@ internal sealed class Il2CppTypeModel
 
     public readonly HashSet<(string, int)> CondemnedVtableMethods = new();
 
-    private readonly Dictionary<TypeAnalysisContext, string[]> _vtableNames = new();
+    private readonly Dictionary<TypeAnalysisContext, (MethodAnalysisContext Method, string Name)[]> _vtableMethods = new();
     private readonly Dictionary<TypeAnalysisContext, TypeAnalysisContext[]> _vtableReturns = new();
     private readonly Dictionary<TypeAnalysisContext, byte[]> _vtableReturnKinds = new();
     private readonly Dictionary<TypeAnalysisContext, sbyte[]> _vtableParamCounts = new();
@@ -76,9 +76,7 @@ internal sealed class Il2CppTypeModel
     public bool TryGetTypeForTypeInfoGlobal(ulong globalAddress, out TypeAnalysisContext type)
     {
         type = null;
-        if (!Il2CppAsmAnnotator.HoldsPointer(_app.Binary, globalAddress))
-            return false;
-        MetadataUsage usage = _app.LibCpp2IlContext.GetAnyGlobalByAddress(globalAddress);
+        MetadataUsage usage = Il2CppAsmAnnotator.MetadataUsageAt(_app, globalAddress);
         if (usage == null)
             return false;
         if (usage.Type != MetadataUsageType.TypeInfo && usage.Type != MetadataUsageType.Type)
@@ -273,25 +271,25 @@ internal sealed class Il2CppTypeModel
 
     private void ScanMethodForStaticIdiom(MethodAnalysisContext method, Dictionary<int, int> confirmed, ref int confirmations)
     {
-        method.EnsureRawBytes();
-        byte[] bytes = method.RawBytes.ToArray();
-        if (bytes.Length == 0 || bytes.Length > 0x4000)
+        Il2CppNativeBody body = Il2CppX86Listing.Decode(_app, method);
+        if (body.Instructions.Count == 0 || body.ByteCount > 0x4000)
             return;
-
-        Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(bytes), method.UnderlyingPointer);
-        ulong end = method.UnderlyingPointer + (ulong)bytes.Length;
 
         TypeAnalysisContext[] typeInfoOf = new TypeAnalysisContext[16];
         TypeAnalysisContext[] staticBaseType = new TypeAnalysisContext[16];
         int[] staticBaseCandidateC = new int[16];
         for (int i = 0; i < 16; i++) staticBaseCandidateC[i] = -1;
 
-        int guard = 0;
-        while (decoder.IP < end && guard++ < 8000)
+        Instruction previous = default;
+        foreach (Instruction insn in body.Instructions)
         {
-            decoder.Decode(out Instruction insn);
-            if (insn.IsInvalid)
-                break;
+            if (!body.IsLinearStep(previous, insn))
+            {
+                System.Array.Clear(typeInfoOf);
+                System.Array.Clear(staticBaseType);
+                System.Array.Fill(staticBaseCandidateC, -1);
+            }
+            previous = insn;
             if (insn.Mnemonic != Mnemonic.Mov || insn.Op0Kind != OpKind.Register || insn.Op1Kind != OpKind.Memory)
                 continue;
 
@@ -329,19 +327,20 @@ internal sealed class Il2CppTypeModel
         }
     }
 
-    public bool TryGetVirtualMethodName(TypeAnalysisContext type, int byteOffset, out string name)
+    public bool TryGetVirtualMethod(TypeAnalysisContext type, int byteOffset, out MethodAnalysisContext method, out string name)
     {
+        method = null;
         name = null;
         if (VtableOffset < 0 || type?.Definition == null)
             return false;
         int slot = VtableSlotFromOffset(byteOffset);
         if (slot < 0)
             return false;
-        string[] names = GetVtableNames(type);
-        if (slot >= names.Length)
+        var methods = GetVtableMethods(type);
+        if (slot >= methods.Length)
             return false;
-        name = names[slot];
-        return name != null;
+        (method, name) = methods[slot];
+        return method != null;
     }
 
     private int VtableSlotFromOffset(int byteOffset)
@@ -408,19 +407,19 @@ internal sealed class Il2CppTypeModel
         return ReturnKindStruct;
     }
 
-    private string[] GetVtableNames(TypeAnalysisContext type)
+    private (MethodAnalysisContext Method, string Name)[] GetVtableMethods(TypeAnalysisContext type)
     {
         EnsureVtable(type);
-        return _vtableNames[type];
+        return _vtableMethods[type];
     }
 
     private void EnsureVtable(TypeAnalysisContext type)
     {
-        if (_vtableNames.ContainsKey(type))
+        if (_vtableMethods.ContainsKey(type))
             return;
         // A type with no definition of its own (a generic instance) states no vtable in the metadata.
         MetadataUsage[] vtable = type.Definition?.VTable ?? System.Array.Empty<MetadataUsage>();
-        string[] names = new string[vtable.Length];
+        var methods = new (MethodAnalysisContext Method, string Name)[vtable.Length];
         TypeAnalysisContext[] returns = new TypeAnalysisContext[vtable.Length];
         byte[] kinds = new byte[vtable.Length];
         sbyte[] paramCounts = new sbyte[vtable.Length];
@@ -436,7 +435,9 @@ internal sealed class Il2CppTypeModel
                 Il2CppMethodDefinition method = usage.AsMethod();
                 if (method != null && method.slot == i)
                 {
-                    names[i] = method.GlobalKey;
+                    MethodAnalysisContext context = _app.ResolveContextForMethod(method);
+                    if (context != null)
+                        methods[i] = (context, Il2CppAsmAnnotator.MethodSymbol(context));
                     paramCounts[i] = method.parameterCount <= sbyte.MaxValue ? (sbyte)method.parameterCount : (sbyte)-1;
                     Il2CppType[] rawParams = method.InternalParameterTypes;
                     if (rawParams != null && rawParams.Length > 0)
@@ -458,10 +459,12 @@ internal sealed class Il2CppTypeModel
             }
             else if (usage.Type == MetadataUsageType.MethodRef)
             {
-                names[i] = usage.AsGenericMethodRef()?.ToString();
+                MethodAnalysisContext context = _app.ResolveContextForMethod(usage);
+                if (context != null)
+                    methods[i] = (context, Il2CppAsmAnnotator.MethodSymbol(context));
             }
         }
-        _vtableNames[type] = names;
+        _vtableMethods[type] = methods;
         _vtableReturns[type] = returns;
         _vtableReturnKinds[type] = kinds;
         _vtableParamCounts[type] = paramCounts;
@@ -538,20 +541,16 @@ internal sealed class Il2CppTypeModel
 
     private void ScanMethodForVtable(MethodAnalysisContext method, int thisReg, int vtableCount, Dictionary<int, int> votes, ref int candidates)
     {
-        method.EnsureRawBytes();
-        byte[] bytes = method.RawBytes.ToArray();
-        if (bytes.Length == 0 || bytes.Length > 0x4000)
+        Il2CppNativeBody body = Il2CppX86Listing.Decode(_app, method);
+        if (body.Instructions.Count == 0 || body.ByteCount > 0x4000)
             return;
-
-        Decoder decoder = Decoder.Create(64, new ByteArrayCodeReader(bytes), method.UnderlyingPointer);
-        ulong end = method.UnderlyingPointer + (ulong)bytes.Length;
         int klassReg = -1;
-        int guard = 0;
-        while (decoder.IP < end && guard++ < 8000)
+        Instruction previous = default;
+        foreach (Instruction insn in body.Instructions)
         {
-            decoder.Decode(out Instruction insn);
-            if (insn.IsInvalid)
-                break;
+            if (!body.IsLinearStep(previous, insn))
+                klassReg = -1;
+            previous = insn;
 
             if (klassReg >= 0 && insn.MemoryIndex == Register.None && RegisterFlowUtil.GpIndex(insn.MemoryBase) == klassReg
                 && ((insn.Mnemonic == Mnemonic.Call && insn.Op0Kind == OpKind.Memory)

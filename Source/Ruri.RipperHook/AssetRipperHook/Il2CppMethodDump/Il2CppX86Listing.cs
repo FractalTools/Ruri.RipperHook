@@ -1,6 +1,7 @@
 extern alias icedreal;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AssetRipper.Import.Logging;
 using Cpp2IL.Core.Model.Contexts;
 using LibCpp2IL;
@@ -12,26 +13,17 @@ internal static class Il2CppX86Listing
     private static ApplicationAnalysisContext _condemnationApp;
     private static readonly HashSet<AssemblyAnalysisContext> _condemnationScanned = new();
 
-    private static List<Instruction> DecodeInstructions(byte[] bytes, ulong start, bool is32)
-    {
-        ulong end = start + (ulong)bytes.Length;
-        Decoder decoder = Decoder.Create(is32 ? 32 : 64, new ByteArrayCodeReader(bytes), start);
-        List<Instruction> instructions = new();
-        while (decoder.IP < end)
-        {
-            decoder.Decode(out Instruction instruction);
-            if (instruction.IsInvalid) break;
-            instructions.Add(instruction);
-        }
-        return instructions;
-    }
+    public static Il2CppNativeBody Decode(ApplicationAnalysisContext app, MethodAnalysisContext method, bool withChunks = true) =>
+        Il2CppNativeBody.Read(app, method.UnderlyingPointer, withChunks: withChunks);
+
+    public static Il2CppNativeBody DecodeRange(ApplicationAnalysisContext app, ulong start, ulong end, bool withChunks = true) =>
+        Il2CppNativeBody.Read(app, start, end, withChunks);
 
     private static void EnsureCondemnationScan(ApplicationAnalysisContext app, Il2CppTypeModel model, MethodAnalysisContext current)
     {
         if (!ReferenceEquals(_condemnationApp, app)) { _condemnationApp = app; _condemnationScanned.Clear(); }
         AssemblyAnalysisContext assembly = current.DeclaringType?.DeclaringAssembly;
         if (assembly == null || !_condemnationScanned.Add(assembly)) return;
-        bool is32 = app.Binary.is32Bit;
         foreach (TypeAnalysisContext type in assembly.Types)
         {
             foreach (MethodAnalysisContext method in type.Methods)
@@ -39,12 +31,9 @@ internal static class Il2CppX86Listing
                 if (method.UnderlyingPointer == 0) continue;
                 try
                 {
-                    method.EnsureRawBytes();
-                    byte[] bytes = method.RawBytes.ToArray();
-                    if (bytes.Length == 0) continue;
-                    List<Instruction> insns = DecodeInstructions(bytes, method.UnderlyingPointer, is32);
-                    if (insns.Count == 0) continue;
-                    new Il2CppRegisterFlow(app, method, insns, model).Analyze();
+                    Il2CppNativeBody body = Decode(app, method);
+                    if (body.Instructions.Count == 0) continue;
+                    new Il2CppRegisterFlow(app, method, body, model).Analyze();
                 }
                 catch (Exception exception)
                 {
@@ -60,188 +49,127 @@ internal static class Il2CppX86Listing
     internal static string Describe(Exception exception) =>
         $"{exception.GetType().Name} in {exception.TargetSite?.DeclaringType?.Name}.{exception.TargetSite?.Name}: {exception.Message}";
 
-    private readonly record struct Chunk(ulong Start, ulong End, List<Instruction> Instructions);
-
-    /// <summary>A method's code as text. With addresses every instruction is prefixed by its own; with chunks the
-    /// cold pieces the compiler moved out of the body follow it, so the error paths, patch gates and logging calls
-    /// the body only jumps to are in the listing too.</summary>
     public static string Render(ApplicationAnalysisContext app, MethodAnalysisContext method, bool withAddresses = false,
-        bool withChunks = false)
+        bool withChunks = false) => Render(app, method, Decode(app, method, withChunks), withAddresses);
+
+    public static string Render(ApplicationAnalysisContext app, MethodAnalysisContext method, Il2CppNativeBody body,
+        bool withAddresses = true)
     {
-        method.EnsureRawBytes();
-        byte[] bytes = method.RawBytes.ToArray();
-        if (bytes.Length == 0) return string.Empty;
-
-        ulong start = method.UnderlyingPointer;
-        ulong end = start + (ulong)bytes.Length;
-        bool is32 = app.Binary.is32Bit;
-        Il2CppFunctionTable functions = Il2CppFunctionTable.For(app);
-        if (withChunks && functions.TryFind(start, out int own) && functions.StartOf(own) == start && functions.EndOf(own) < end)
-        {
-            end = functions.EndOf(own);
-            bytes = bytes[..(int)(end - start)];
-        }
-
-        List<Instruction> instructions = DecodeInstructions(bytes, start, is32);
-        List<Chunk> chunks = withChunks ? DecodeChunks(app, functions, start) : new();
-
         Il2CppTypeModel model = Il2CppTypeModel.Get(app);
         EnsureCondemnationScan(app, model, method);
-        Il2CppRegisterFlow flow = new(app, method, instructions, model);
+        Il2CppRegisterFlow flow = new(app, method, body, model);
         flow.Analyze();
-        return Format(app, start, end, instructions, chunks, flow, withAddresses);
+        return Format(app, body, flow, withAddresses);
     }
 
     /// <summary>The code between two addresses as text, with no method behind it to say what its registers hold: a
     /// runtime helper, a thunk, any function a call lands in.</summary>
     public static string RenderRange(ApplicationAnalysisContext app, ulong start, ulong end, bool withAddresses = true,
         bool withChunks = true)
+        => Format(app, DecodeRange(app, start, end, withChunks), null, withAddresses);
+
+    public static string RenderRange(ApplicationAnalysisContext app, Il2CppNativeBody body, bool withAddresses = true) =>
+        Format(app, body, null, withAddresses);
+
+    public static ulong FindEnd(ApplicationAnalysisContext app, ulong start, int limit = 0x4000) =>
+        Il2CppNativeBody.Read(app, start, withChunks: false, limit: limit).PrimaryEnd;
+
+    private static string Format(ApplicationAnalysisContext app, Il2CppNativeBody body, Il2CppRegisterFlow flow, bool withAddresses)
     {
-        Il2CppBinary binary = app.Binary;
-        if (end <= start || !binary.TryMapVirtualAddressToRaw(start, out long raw))
-        {
-            return string.Empty;
-        }
-        byte[] bytes = binary.ReadByteArrayAtRawAddress(raw, (int)(end - start));
-        Il2CppFunctionTable functions = Il2CppFunctionTable.For(app);
-        List<Instruction> instructions = DecodeInstructions(bytes, start, binary.is32Bit);
-        List<Chunk> chunks = withChunks ? DecodeChunks(app, functions, start) : new();
-        return Format(app, start, end, instructions, chunks, null, withAddresses);
-    }
-
-    /// <summary>Where a function the exception directory does not list ends. A leaf function carries no unwind
-    /// record, so its end is where the flow runs out: the first return, tail jump or trap that no forward branch of
-    /// the function reaches past.</summary>
-    public static ulong FindEnd(ApplicationAnalysisContext app, ulong start, int limit = 0x4000)
-    {
-        Il2CppBinary binary = app.Binary;
-        if (!binary.TryMapVirtualAddressToRaw(start, out long raw))
-        {
-            return start;
-        }
-        int length = (int)Math.Min(limit, binary.RawLength - raw);
-        byte[] bytes = binary.ReadByteArrayAtRawAddress(raw, length);
-        Decoder decoder = Decoder.Create(binary.is32Bit ? 32 : 64, new ByteArrayCodeReader(bytes), start);
-        ulong stop = start + (ulong)length;
-        ulong furthest = start;
-        while (decoder.IP < stop)
-        {
-            decoder.Decode(out Instruction instruction);
-            if (instruction.IsInvalid)
-            {
-                break;
-            }
-            ulong next = instruction.IP + (ulong)instruction.Length;
-            if (instruction.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64)
-            {
-                ulong target = instruction.NearBranchTarget;
-                if (target > instruction.IP && target < stop)
-                {
-                    furthest = Math.Max(furthest, target);
-                }
-                if (instruction.Mnemonic == Mnemonic.Jmp && next > furthest)
-                {
-                    return next;
-                }
-            }
-            else if ((instruction.Mnemonic is Mnemonic.Ret or Mnemonic.Int3 or Mnemonic.Ud2
-                      || instruction.FlowControl == FlowControl.IndirectBranch) && next > furthest)
-            {
-                return next;
-            }
-        }
-        return stop;
-    }
-
-    private static List<Chunk> DecodeChunks(ApplicationAnalysisContext app, Il2CppFunctionTable functions, ulong root)
-    {
-        List<Chunk> chunks = new();
-        foreach ((ulong start, ulong end) in functions.ChunksOf(root))
-        {
-            if (!app.Binary.TryMapVirtualAddressToRaw(start, out long raw))
-            {
-                continue;
-            }
-            byte[] code = app.Binary.ReadByteArrayAtRawAddress(raw, (int)(end - start));
-            chunks.Add(new Chunk(start, end, DecodeInstructions(code, start, app.Binary.is32Bit)));
-        }
-        return chunks;
-    }
-
-    private static string Format(ApplicationAnalysisContext app, ulong start, ulong end, List<Instruction> instructions,
-        List<Chunk> chunks, Il2CppRegisterFlow flow, bool withAddresses)
-    {
-        List<Instruction> everything = instructions;
-        if (chunks.Count > 0)
-        {
-            everything = new(instructions);
-            foreach (Chunk chunk in chunks)
-            {
-                everything.AddRange(chunk.Instructions);
-            }
-        }
-
-        HashSet<ulong> labels = new();
-        foreach (Instruction instruction in everything)
-        {
-            if (instruction.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64)
-            {
-                ulong target = instruction.NearBranchTarget;
-                if (target >= start && target < end) labels.Add(target);
-                else
-                {
-                    foreach (Chunk chunk in chunks)
-                    {
-                        if (target >= chunk.Start && target < chunk.End) labels.Add(target);
-                    }
-                }
-            }
-        }
-
-        Dictionary<ulong, string> overrides = DetectMetadataInitIdiom(app, everything);
-        DetectIcallCacheIdiom(app, everything, ref overrides);
+        List<Instruction> everything = body.Instructions;
+        Dictionary<ulong, int> indices = new();
+        for (int index = 0; index < everything.Count; index++)
+            indices[everything[index].IP] = index;
+        HashSet<ulong> labels = everything.Where(instruction => instruction.FlowControl is FlowControl.ConditionalBranch
+                or FlowControl.UnconditionalBranch or FlowControl.IndirectBranch)
+            .SelectMany(instruction => body.Successors.TryGetValue(instruction.IP, out List<ulong> targets) ? targets : Enumerable.Empty<ulong>())
+            .Where(indices.ContainsKey).ToHashSet();
+        Dictionary<ulong, string> overrides = DetectMetadataInitIdiom(app, body);
+        DetectIcallCacheIdiom(app, body, ref overrides);
         Dictionary<ulong, Il2CppAsmAnnotator.DataConstantOperand> dataConstants = CollectDataConstants(everything);
 
         Il2CppSymbolResolver resolver = new(app, overrides, dataConstants);
         MasmFormatter formatter = new(resolver);
+        formatter.Options.ShowSymbolAddress = true;
         StringOutput output = new();
         System.Text.StringBuilder sb = new(everything.Count * 32);
-        Append(sb, instructions, labels, formatter, output, flow, withAddresses);
-        foreach (Chunk chunk in chunks)
+        sb.Append("; native ranges preserved; analysis=").Append(body.Status).Append('\n');
+        foreach (Il2CppNativeBody.Issue issue in body.Issues)
+            sb.Append("; analysis ").Append(issue.Address.ToString("X")).Append(' ').Append(issue.Reason).Append('\n');
+        foreach (Il2CppNativeBody.SourceRange source in body.SourceRanges)
+            sb.Append("; source range ").Append(source.Start.ToString("X")).Append("..").Append(source.End.ToString("X"))
+                .Append(" raw=").Append(source.RawOffset.ToString("X")).Append(" length=").Append(source.End - source.Start)
+                .Append(" source=").Append(source.Source).Append('\n');
+        foreach (Il2CppNativeBody.DataRange view in body.DataRanges)
         {
-            sb.Append("; ---- chunk ").Append(chunk.Start.ToString("X")).Append("..").Append(chunk.End.ToString("X")).Append(" ----\n");
-            Append(sb, chunk.Instructions, labels, formatter, output, null, withAddresses);
+            sb.Append("; table view site=").Append(view.SourceSite.ToString("X")).Append(' ')
+                .Append(view.Start.ToString("X")).Append("..").Append(view.End.ToString("X"))
+                .Append(" raw=").Append(view.RawOffset.ToString("X")).Append(" entry_size=").Append(view.EntrySize)
+                .Append(" interpretation=").Append(view.Interpretation).Append('\n');
+            for (int index = 0; index < view.Targets.Length; index++)
+                sb.Append("; table target site=").Append(view.SourceSite.ToString("X"))
+                    .Append(" entry=").Append((view.Start + (ulong)(index * view.EntrySize)).ToString("X"))
+                    .Append(" -> ").Append(view.Targets[index].ToString("X")).Append('\n');
+        }
+        foreach (Il2CppNativeBody.Region region in body.Regions)
+        {
+            foreach (Il2CppNativeBody.SourceRange source in body.SourceRanges.Where(source => source.Executable
+                && source.Start == region.Start && source.Start != body.Entry))
+                sb.Append("; ---- chunk ").Append(source.Start.ToString("X")).Append("..").Append(source.End.ToString("X")).Append(" ----\n");
+            sb.Append("; range ").Append(region.Start.ToString("X")).Append("..").Append(region.End.ToString("X"))
+                .Append(" raw=").Append(region.RawOffset.ToString("X")).Append(" length=").Append(region.End - region.Start)
+                .Append(" source=").Append(region.Source).Append('\n');
+            foreach (Il2CppNativeBody.Partition partition in body.Partitions.Where(partition => partition.Start >= region.Start
+                && partition.End <= region.End))
+            {
+                if (partition.Kind == Il2CppNativeBody.ContentKind.Code)
+                {
+                    int index = indices[partition.Start];
+                    Instruction instruction = everything[index];
+                    Append(sb, instruction, index, labels, formatter, output, flow, withAddresses);
+                }
+                else if (partition.Kind == Il2CppNativeBody.ContentKind.Data)
+                {
+                    Il2CppNativeBody.DataRange[] views = body.DataRanges.Where(view => partition.Start >= view.Start
+                        && partition.End <= view.End).ToArray();
+                    int unit = views.Select(view => view.EntrySize).Distinct().Count() == 1 ? views[0].EntrySize : 1;
+                    if ((partition.End - partition.Start) % (ulong)unit != 0
+                        || views.Any(view => (partition.Start - view.Start) % (ulong)unit != 0))
+                        unit = 1;
+                    sb.Append("; data jump_table ").Append(partition.Start.ToString("X")).Append("..").Append(partition.End.ToString("X"))
+                        .Append(" raw=").Append(partition.RawOffset.ToString("X")).Append(" unit_size=").Append(unit).Append('\n');
+                    for (ulong address = partition.Start; address < partition.End; address += (ulong)unit)
+                        sb.Append(address.ToString("X")).Append("  db ")
+                            .Append(string.Join(",", region.Bytes.Skip((int)(address - region.Start)).Take(unit).Select(value => "0" + value.ToString("X2") + "h")))
+                            .Append('\n');
+                }
+                else
+                    sb.Append("; unknown ").Append(partition.Start.ToString("X")).Append("..").Append(partition.End.ToString("X"))
+                        .Append(" raw=").Append(partition.RawOffset.ToString("X")).Append(" length=").Append(partition.End - partition.Start)
+                        .Append(" reason=").Append(partition.Reason).Append('\n');
+            }
         }
         return sb.ToString();
     }
 
-    private static void Append(System.Text.StringBuilder sb, List<Instruction> instructions, HashSet<ulong> labels,
+    private static void Append(System.Text.StringBuilder sb, Instruction instruction, int index, HashSet<ulong> labels,
         MasmFormatter formatter, StringOutput output, Il2CppRegisterFlow flow, bool withAddresses)
     {
-        for (int i = 0; i < instructions.Count; i++)
-        {
-            Instruction instruction = instructions[i];
-            if (labels.Contains(instruction.IP))
-            {
-                sb.Append("loc_").Append(instruction.IP.ToString("X")).Append(":\n");
-            }
-            formatter.Format(instruction, output);
-            if (withAddresses)
-            {
-                sb.Append(instruction.IP.ToString("X")).Append("  ");
-            }
-            sb.Append(output.ToStringAndReset());
-            string comment = flow?.CommentAt(i);
-            if (comment != null)
-            {
-                sb.Append("  ; ").Append(comment);
-            }
-            sb.Append('\n');
-        }
+        if (labels.Contains(instruction.IP))
+            sb.Append("loc_").Append(instruction.IP.ToString("X")).Append(":\n");
+        formatter.Format(instruction, output);
+        if (withAddresses)
+            sb.Append(instruction.IP.ToString("X")).Append("  ");
+        sb.Append(output.ToStringAndReset());
+        string comment = flow?.CommentAt(index);
+        if (comment != null)
+            sb.Append("  ; ").Append(comment);
+        sb.Append('\n');
     }
 
-    private static Dictionary<ulong, string> DetectMetadataInitIdiom(ApplicationAnalysisContext app, List<Instruction> instructions)
+    private static Dictionary<ulong, string> DetectMetadataInitIdiom(ApplicationAnalysisContext app, Il2CppNativeBody body)
     {
+        List<Instruction> instructions = body.Instructions;
         ulong initMethod = Il2CppAsmAnnotator.KeyFunctionAddress(app, "initialize_method");
         HashSet<ulong> readGuard = null, setOne = null;
         Dictionary<ulong, string> result = null;
@@ -261,9 +189,9 @@ internal static class Il2CppX86Listing
                 && x.NearBranchTarget == initMethod)
             {
                 Instruction prev = instructions[i - 1];
-                if (prev.Mnemonic == Mnemonic.Push && IsDirectMemoryOperand(prev))
+                if (body.IsLinearStep(prev, x, acrossCalls: true) && prev.Mnemonic == Mnemonic.Push && IsDirectMemoryOperand(prev))
                 {
-                    (result ??= new())[prev.MemoryDisplacement64] = "method_init_token";
+                    (result ??= new())[prev.MemoryDisplacement64] = "inferred_method_init_token";
                 }
             }
         }
@@ -271,7 +199,7 @@ internal static class Il2CppX86Listing
         {
             foreach (ulong addr in setOne)
             {
-                if (readGuard.Contains(addr)) (result ??= new())[addr] = "method_init_flag";
+                if (readGuard.Contains(addr)) (result ??= new())[addr] = "inferred_method_init_flag";
             }
         }
         return result;
@@ -284,9 +212,10 @@ internal static class Il2CppX86Listing
             || instruction.MemoryBase == Register.RIP
             || instruction.MemoryBase == Register.EIP);
 
-    private static void DetectIcallCacheIdiom(ApplicationAnalysisContext app, List<Instruction> instructions,
+    private static void DetectIcallCacheIdiom(ApplicationAnalysisContext app, Il2CppNativeBody body,
         ref Dictionary<ulong, string> overrides)
     {
+        List<Instruction> instructions = body.Instructions;
         for (int i = 0; i < instructions.Count; i++)
         {
             Instruction lea = instructions[i];
@@ -301,6 +230,8 @@ internal static class Il2CppX86Listing
             for (int j = i + 1; j < instructions.Count && j <= i + 6; j++)
             {
                 Instruction y = instructions[j];
+                if (!body.IsLinearStep(instructions[j - 1], y, acrossCalls: true))
+                    break;
                 if (y.Mnemonic == Mnemonic.Call) { sawCall = true; continue; }
                 if (sawCall && y.Mnemonic == Mnemonic.Mov && IsDirectMemoryOperand(y)
                     && y.Op1Kind == OpKind.Register && y.Op1Register == Register.RAX)
@@ -328,7 +259,7 @@ internal static class Il2CppX86Listing
             if (!readBefore)
                 continue;
 
-            (overrides ??= new())[slot] = "icall<" + signature + ">";
+            (overrides ??= new())[slot] = "inferred_icall_cache<" + signature + ">";
         }
     }
 
@@ -394,7 +325,6 @@ internal static class Il2CppX86Listing
         var binary = app.Binary;
         ulong initVa = binary.GetVirtualAddressOfExportedFunctionByName("il2cpp_init");
         if (initVa == 0) return map;
-        int bitness = binary.is32Bit ? 32 : 64;
 
         HashSet<ulong> visited = new();
         Queue<ulong> queue = new();
@@ -406,27 +336,15 @@ internal static class Il2CppX86Listing
             ulong funcVa = queue.Dequeue();
             if (!visited.Add(funcVa)) continue;
             budget++;
-            long off = binary.MapVirtualAddressToRaw(funcVa, false);
-            if (off < 0) continue;
-            byte[] code = binary.ReadByteArrayAtRawAddress(off, 0x4000);
-            if (code == null || code.Length == 0) continue;
-
-            ByteArrayCodeReader reader = new(code);
-            Decoder decoder = Decoder.Create(bitness, reader, funcVa);
-            List<Instruction> insns = new(128);
-            int guard = 0;
-            while (guard++ < 4000)
+            List<Instruction> insns = Il2CppNativeBody.Read(app, funcVa).Instructions;
+            foreach (Instruction ins in insns)
             {
-                decoder.Decode(out Instruction ins);
-                if (ins.IsInvalid) break;
-                insns.Add(ins);
                 if ((ins.Mnemonic == Mnemonic.Call || ins.Mnemonic == Mnemonic.Jmp)
                     && ins.Op0Kind is OpKind.NearBranch64 or OpKind.NearBranch32)
                 {
                     ulong target = ins.NearBranchTarget;
                     if (!visited.Contains(target) && visited.Count + queue.Count < 20000) queue.Enqueue(target);
                 }
-                if (ins.Mnemonic == Mnemonic.Ret || ins.Mnemonic == Mnemonic.Int3) break;
             }
             functions.Add(insns);
         }

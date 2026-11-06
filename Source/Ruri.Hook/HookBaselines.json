@@ -1,5 +1,6 @@
 {
   "optimized": {
+    "AsmResolver.DotNet.Builder.ManagedPEImageBuilder::CreateImage(ModuleDefinition)": "2f74306ebbaf573b",
     "AssetRipper.Assets.Bundles.GameBundle::InitializeFromPaths(IEnumerable\u00601,AssetFactoryBase,FileSystem,IGameInitializer)": "85fbb8e9a34f39bf",
     "AssetRipper.Assets.Collections.SerializedAssetCollection::ReadData(SerializedAssetCollection,SerializedFile,AssetFactoryBase)": "de65da37ef2127f3",
     "AssetRipper.Export.Modules.Textures.TextureConverter::TryConvertToBitmap(ITexture2D,DirectBitmap\u0026)": "6588bf84cd718b58",
@@ -45,7 +46,9 @@
     "CUE4Parse.UE4.Assets.Exports.Material.FMemoryImageMaterialParameterInfo::.ctor(FMemoryImageArchive)": "e953d4a42c3028cb",
     "CUE4Parse.UE4.Assets.Exports.SkeletalMesh.FSkelMeshSection::SerializeRenderItem(FAssetArchive)": "0dac40f055e36afe",
     "Cpp2IL.Core.Cpp2IlApi::InitializeLibCpp2Il(String,String,UnityVersion,Boolean)": "eaa07c4179e4a70b",
+    "ICSharpCode.Decompiler.CSharp.CSharpDecompiler::MemberIsHidden(MetadataFile,EntityHandle,DecompilerSettings)": "12dfa69ab325ce11",
     "ICSharpCode.Decompiler.CSharp.ProjectDecompiler.WholeProjectDecompiler::CreateDecompiler(DecompilerTypeSystem)": "b8718fd7483f4ece",
+    "ICSharpCode.Decompiler.CSharp.ProjectDecompiler.WholeProjectDecompiler::IncludeTypeWhenDecompilingProject(MetadataFile,TypeDefinitionHandle)": "4f801e1916e398d6",
     "LibCpp2IL.Metadata.Il2CppTypeDefinition::Read(ClassReadingBinaryReader)": "f2b090d41c0d90ed",
     "Ruri.RipperHook.BlenderBridge.Statements.UnityMeshDecoder::UnpackTitleNormals(UInt32[],Single[])": "063690e1e3b0cb2f",
     "Ruri.RipperHook.HookUtils.TypeTreeFallbackHook.TypeTreeFallbackHook::TitleReleaseTree(ClassIDType,UnityVersion,TypeTreeNodeStruct)": "063690e1e3b0cb2f"

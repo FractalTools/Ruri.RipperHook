@@ -26,6 +26,7 @@ internal static class Il2CppHelperNamer
         if (_cache.TryGetValue(address, out string cached))
             return cached;
         string name = Analyze(app, address);
+        if (name != null) name = "inferred_" + name + "_at_" + address.ToString("X");
         _cache[address] = name;
         return name;
     }

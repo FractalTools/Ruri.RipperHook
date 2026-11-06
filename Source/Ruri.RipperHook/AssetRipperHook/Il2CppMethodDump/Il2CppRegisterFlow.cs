@@ -73,6 +73,7 @@ internal sealed class Il2CppRegisterFlow
     private readonly ApplicationAnalysisContext _app;
     private readonly MethodAnalysisContext _method;
     private readonly List<Instruction> _instructions;
+    private readonly Il2CppNativeBody _body;
     private readonly Il2CppTypeModel _model;
     private readonly bool _isPe;
     private readonly int _staticFieldsOffset;
@@ -88,11 +89,12 @@ internal sealed class Il2CppRegisterFlow
     private string[] _comments;
     private List<(int index, int fnReg, int disp, string typeName, byte kind, string methodName)> _arrowRetractCandidates;
 
-    public Il2CppRegisterFlow(ApplicationAnalysisContext app, MethodAnalysisContext method, List<Instruction> instructions, Il2CppTypeModel model)
+    public Il2CppRegisterFlow(ApplicationAnalysisContext app, MethodAnalysisContext method, Il2CppNativeBody body, Il2CppTypeModel model)
     {
         _app = app;
         _method = method;
-        _instructions = instructions;
+        _body = body;
+        _instructions = body.Instructions;
         _model = model;
         _isPe = app.Binary is PE;
         _staticFieldsOffset = model.StaticFieldsOffset;
@@ -124,22 +126,18 @@ internal sealed class Il2CppRegisterFlow
         for (int i = 0; i < n; i++)
         {
             Instruction insn = _instructions[i];
-            switch (insn.FlowControl)
+            if (i > 0 && !_body.IsLinearStep(_instructions[i - 1], insn))
+                leader[i] = true;
+            if (_body.Successors.TryGetValue(insn.IP, out List<ulong> targets))
             {
-                case FlowControl.ConditionalBranch:
-                    if (i + 1 < n) leader[i + 1] = true;
-                    MarkTarget(insn, leader);
-                    break;
-                case FlowControl.UnconditionalBranch:
-                    if (i + 1 < n) leader[i + 1] = true;
-                    MarkTarget(insn, leader);
-                    break;
-                case FlowControl.Return:
-                case FlowControl.IndirectBranch:
-                case FlowControl.Interrupt:
-                    if (i + 1 < n) leader[i + 1] = true;
-                    break;
+                foreach (ulong target in targets)
+                    if (_indexByIp.TryGetValue(target, out int index)
+                        && (target != insn.NextIP || targets.Count != 1 || index != i + 1))
+                        leader[index] = true;
             }
+            if (insn.FlowControl is FlowControl.ConditionalBranch or FlowControl.UnconditionalBranch
+                or FlowControl.Return or FlowControl.IndirectBranch or FlowControl.Interrupt or FlowControl.Exception)
+                if (i + 1 < n) leader[i + 1] = true;
         }
 
         _blockOf = new int[n];
@@ -161,30 +159,11 @@ internal sealed class Il2CppRegisterFlow
         {
             int last = (b + 1 < blockCount ? _blockFirst[b + 1] : n) - 1;
             Instruction insn = _instructions[last];
-            switch (insn.FlowControl)
-            {
-                case FlowControl.UnconditionalBranch:
-                    if (_indexByIp.TryGetValue(insn.NearBranchTarget, out int t)) AddEdge(b, _blockOf[t]);
-                    break;
-                case FlowControl.ConditionalBranch:
-                    if (last + 1 < n) AddEdge(b, _blockOf[last + 1]);
-                    if (_indexByIp.TryGetValue(insn.NearBranchTarget, out int ct)) AddEdge(b, _blockOf[ct]);
-                    break;
-                case FlowControl.Return:
-                case FlowControl.IndirectBranch:
-                case FlowControl.Interrupt:
-                    break;
-                default:
-                    if (last + 1 < n) AddEdge(b, _blockOf[last + 1]);
-                    break;
-            }
+            if (_body.Successors.TryGetValue(insn.IP, out List<ulong> targets))
+                foreach (ulong target in targets)
+                    if (_indexByIp.TryGetValue(target, out int index))
+                        AddEdge(b, _blockOf[index]);
         }
-    }
-
-    private void MarkTarget(in Instruction insn, bool[] leader)
-    {
-        if (_indexByIp.TryGetValue(insn.NearBranchTarget, out int t))
-            leader[t] = true;
     }
 
     private void AddEdge(int from, int to)
@@ -239,12 +218,15 @@ internal sealed class Il2CppRegisterFlow
     {
         int blockCount = _blockFirst.Length;
         _entryState = new TrackedValue[blockCount][];
-        _entryState[0] = Seed();
+        if (!_indexByIp.TryGetValue(_body.Entry, out int entryIndex))
+            return;
+        int entryBlock = _blockOf[entryIndex];
+        _entryState[entryBlock] = Seed();
 
         Queue<int> worklist = new();
-        worklist.Enqueue(0);
+        worklist.Enqueue(entryBlock);
         bool[] queued = new bool[blockCount];
-        queued[0] = true;
+        queued[entryBlock] = true;
 
         int guard = 0;
         while (worklist.Count > 0 && guard++ < blockCount * 8 + 64)
@@ -323,6 +305,8 @@ internal sealed class Il2CppRegisterFlow
             for (int j = arrowIndex + 1; j < n && j <= arrowIndex + 10; j++)
             {
                 Instruction c = _instructions[j];
+                if (!_body.IsLinearStep(_instructions[j - 1], c, acrossCalls: true))
+                    return false;
                 if (c.FlowControl == FlowControl.IndirectCall && c.Op0Kind == OpKind.Register
                     && RegisterFlowUtil.GpIndex(c.Op0Register) == fnReg)
                 { callIdx = j; break; }
@@ -337,6 +321,8 @@ internal sealed class Il2CppRegisterFlow
         for (int j = callIdx + 1; j < n && j <= callIdx + 16; j++)
         {
             Instruction u = _instructions[j];
+            if (!_body.IsLinearStep(_instructions[j - 1], u, acrossCalls: true))
+                break;
             if (raxLive && (raxIntLike || isFloat))
             {
                 if (u.MemoryBase.GetFullRegister() == Register.RAX || u.MemoryIndex.GetFullRegister() == Register.RAX)
@@ -459,12 +445,10 @@ internal sealed class Il2CppRegisterFlow
             && slotKind != enclosingKind;
     }
 
-    private static bool IsObjectBaseMethodName(string name)
+    private bool IsObjectBaseMethod(MethodAnalysisContext method)
     {
-        if (name == null)
-            return false;
-        string n = name.StartsWith("System.") ? name.Substring(7) : name;
-        return n == "Object.ToString()" || n == "Object.GetHashCode()" || n == "Object.Finalize()" || n.StartsWith("Object.Equals(");
+        return ReferenceEquals(method.DeclaringType, _app.SystemTypes.SystemObjectType)
+            && method.Name is "ToString" or "GetHashCode" or "Finalize" or "Equals";
     }
 
     private static bool AreUnrelatedRefClasses(TypeAnalysisContext a, TypeAnalysisContext b)
@@ -501,6 +485,8 @@ internal sealed class Il2CppRegisterFlow
         for (int j = callIdx + 1; j < n && j <= callIdx + 20; j++)
         {
             Instruction u = _instructions[j];
+            if (!_body.IsLinearStep(_instructions[j - 1], u, acrossCalls: true))
+                return false;
             if (!inRcx)
             {
                 if (u.Mnemonic == Mnemonic.Mov && u.Op0Kind == OpKind.Register && u.Op0Register == Register.RCX
@@ -661,7 +647,7 @@ internal sealed class Il2CppRegisterFlow
     {
         if (_model.CondemnedVtableSlots.Contains((klassType.Name, SlotKey(disp))))
             return true;
-        return _model.TryGetVirtualMethodName(klassType, disp, out string virtualMethod)
+        return _model.TryGetVirtualMethod(klassType, disp, out _, out string virtualMethod)
             && _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp)));
     }
 
@@ -776,7 +762,7 @@ internal sealed class Il2CppRegisterFlow
             access = "&" + baseValue.Type.Name + "::static_fields";
         }
         else if (baseValue.Kind == TrackedKind.Klass && insn.MemoryIndex == Register.None
-                 && _model.TryGetVirtualMethodName(baseValue.Type, disp, out string virtualMethod))
+                 && _model.TryGetVirtualMethod(baseValue.Type, disp, out MethodAnalysisContext virtualContext, out string virtualMethod))
         {
             if (_model.CondemnedVtableSlots.Contains((baseValue.Type.Name, SlotKey(disp)))
                 || _model.CondemnedVtableMethods.Contains((virtualMethod, SlotKey(disp)))                || ArgCountContradicts(baseValue.Type, disp, insn)                || ArgTypeContradicts(baseValue.Type, disp, insn, state))            {
@@ -790,7 +776,7 @@ internal sealed class Il2CppRegisterFlow
                 _model.CondemnedVtableMethods.Add((virtualMethod, SlotKey(disp)));
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
             }
-            else if (IsObjectBaseMethodName(virtualMethod) && baseValue.Type.FullName != "System.Object")
+            else if (IsObjectBaseMethod(virtualContext) && !ReferenceEquals(baseValue.Type, _app.SystemTypes.SystemObjectType))
             {
                 access = baseValue.Type.Name + "::class[0x" + disp.ToString("X") + "]";
             }

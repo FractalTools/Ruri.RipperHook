@@ -7,10 +7,8 @@ using LibCpp2IL;
 namespace Ruri.RipperHook.AR;
 
 /// <summary>
-/// The functions of a native image as its own exception directory states them -- the table the operating system
-/// unwinds by, which names every function's first byte, its end, and the cold chunks the compiler moved out of it.
-/// A chunk is a function's own code: a method's error paths, patch gates and logging live there, away from the body, so a
-/// listing that stops at the body has lost them. An image with no such table (not a 64-bit PE) holds no functions here.
+/// Native image bounds and the function portions described by its exception directory. Leaf functions need not
+/// have unwind entries; chained portions describe shared unwind state, not necessarily cold or disjoint code.
 /// </summary>
 internal sealed class Il2CppFunctionTable
 {
@@ -18,6 +16,7 @@ internal sealed class Il2CppFunctionTable
     private const int ExceptionDirectoryIndex = 3;
     private const int DirectoriesOffset = 112;
     private const int HeaderBytes = 4096;
+    private const int SectionHeaderSize = 40;
     private const byte ChainedUnwind = 4;
     private const int UnwindHeaderSize = 4;
     private const int ChainDepth = 8;
@@ -29,13 +28,17 @@ internal sealed class Il2CppFunctionTable
     private readonly ulong[] _end;
     private readonly ulong[] _root;
     private readonly Dictionary<ulong, List<int>> _chunksByRoot;
+    private readonly Section[] _sections;
 
-    private Il2CppFunctionTable(ulong imageBase, ulong[] begin, ulong[] end, ulong[] root)
+    private readonly record struct Section(ulong Start, ulong End, long RawOffset, bool Executable, bool Writable);
+
+    private Il2CppFunctionTable(ulong imageBase, ulong[] begin, ulong[] end, ulong[] root, Section[] sections = null)
     {
         ImageBase = imageBase;
         _begin = begin;
         _end = end;
         _root = root;
+        _sections = sections ?? Array.Empty<Section>();
         _chunksByRoot = new Dictionary<ulong, List<int>>();
         for (int index = 0; index < begin.Length; index++)
         {
@@ -102,6 +105,42 @@ internal sealed class Il2CppFunctionTable
     /// chunk.</summary>
     public ulong RootOf(int index) => _root[index];
 
+    public bool IsReadOnly(ulong start, ulong end)
+    {
+        foreach (Section section in _sections)
+            if (start >= section.Start && end <= section.End)
+                return !section.Writable;
+        return false;
+    }
+
+    public bool TryGetRawRange(Il2CppBinary binary, ulong address, out long rawOffset, out ulong end, out bool executable)
+    {
+        foreach (Section section in _sections)
+        {
+            if (address < section.Start || address >= section.End)
+                continue;
+            rawOffset = section.RawOffset + (long)(address - section.Start);
+            end = section.End;
+            executable = section.Executable;
+            return true;
+        }
+        rawOffset = 0;
+        end = address;
+        executable = false;
+        if (_sections.Length != 0 || !binary.TryMapVirtualAddressToRaw(address, out rawOffset))
+            return false;
+        end = address + (ulong)(binary.RawLength - rawOffset);
+        executable = true;
+        return true;
+    }
+
+    public ulong NextStart(ulong address)
+    {
+        int index = Array.BinarySearch(_begin, address);
+        index = index >= 0 ? index + 1 : ~index;
+        return index < _begin.Length ? _begin[index] : 0;
+    }
+
     public IReadOnlyList<(ulong Start, ulong End)> ChunksOf(ulong root)
     {
         if (!_chunksByRoot.TryGetValue(root, out List<int> chunks))
@@ -119,10 +158,6 @@ internal sealed class Il2CppFunctionTable
     private static Il2CppFunctionTable Build(Il2CppBinary binary)
     {
         Il2CppFunctionTable empty = new(0, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>());
-        if (binary.is32Bit)
-        {
-            return empty;
-        }
         long length = Math.Min(binary.RawLength, HeaderBytes);
         if (length < 0x200)
         {
@@ -139,11 +174,34 @@ internal sealed class Il2CppFunctionTable
             return empty;
         }
         int optional = pe + 24;
-        if (BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(optional)) != 0x20b)
+        ushort magic = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(optional));
+        if (magic is not (0x20b or 0x10b))
         {
             return empty;
         }
-        ulong imageBase = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(optional + 24));
+        ulong imageBase = magic == 0x20b
+            ? BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(optional + 24))
+            : BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(optional + 28));
+        int sectionCount = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(pe + 6));
+        int sectionTable = optional + BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(pe + 20));
+        byte[] sectionHeaders = binary.ReadByteArrayAtRawAddress(sectionTable, sectionCount * SectionHeaderSize);
+        Section[] sections = new Section[sectionCount];
+        for (int index = 0; index < sectionCount; index++)
+        {
+            ReadOnlySpan<byte> section = sectionHeaders.AsSpan(index * SectionHeaderSize, SectionHeaderSize);
+            uint virtualSize = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(8));
+            uint virtualAddress = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(12));
+            uint rawSize = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(16));
+            uint rawOffset = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(20));
+            uint flags = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(36));
+            ulong available = (ulong)Math.Max(0L, Math.Min((long)rawSize, binary.RawLength - rawOffset));
+            ulong size = Math.Min(virtualSize == 0 ? rawSize : virtualSize, available);
+            sections[index] = new Section(imageBase + virtualAddress, imageBase + virtualAddress + size,
+                rawOffset, (flags & 0x20000000) != 0, (flags & 0x80000000) != 0);
+        }
+        empty = new Il2CppFunctionTable(imageBase, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>(), sections);
+        if (magic != 0x20b)
+            return empty;
         int directory = optional + DirectoriesOffset + ExceptionDirectoryIndex * 8;
         if (directory + 8 > header.Length)
         {
@@ -186,7 +244,7 @@ internal sealed class Il2CppFunctionTable
                 current = next >= 0 ? parent[next] : 0;
             }
         }
-        return new Il2CppFunctionTable(imageBase, begin, end, root);
+        return new Il2CppFunctionTable(imageBase, begin, end, root, sections);
     }
 
     /// <summary>The first byte of the function an unwind record continues, or 0 when it is a function of its own.

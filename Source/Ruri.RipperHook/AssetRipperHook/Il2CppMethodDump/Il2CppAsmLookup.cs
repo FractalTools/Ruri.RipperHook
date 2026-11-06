@@ -1,84 +1,160 @@
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Linq;
+using System.Text;
 using AssetRipper.Import.Logging;
 using Cpp2IL.Core.InstructionSets;
 using Cpp2IL.Core.Model.Contexts;
-using ICSharpCode.Decompiler.TypeSystem;
-using Cpp2IlApi = Cpp2IL.Core.Cpp2IlApi;
+using LibCpp2IL;
 
 namespace Ruri.RipperHook.AR;
 
 internal static class Il2CppAsmLookup
 {
-    private static readonly object _gate = new();
-    private static readonly Dictionary<string, List<MethodAnalysisContext>> _map = new();
-    private static ApplicationAnalysisContext _builtFor;
-
-    private static string Normalize(string typeFullName)
+    internal sealed record Implementation(MethodAnalysisContext Source, MethodAnalysisContext Method,
+        Cpp2IlMethodRef Reference, int Ordinal, string Failure)
     {
-        if (typeFullName == null) return null;
-        string s = typeFullName.Replace('/', '.').Replace('+', '.').Replace('\\', '.');
-        return Regex.Replace(s, "`\\d+", "");
+        public ulong Address => Reference?.GenericVariantPtr ?? Method?.UnderlyingPointer ?? 0;
+        public object Identity => (object)Reference ?? Method ?? Source;
+        public string Symbol => Method == null
+            ? $"unresolved generic instantiation {Ordinal} of {Il2CppAsmAnnotator.MethodSymbol(Source)}"
+            : Il2CppAsmAnnotator.MethodSymbol(Method);
     }
 
-    private static string Key(string assembly, string type, string method, int paramCount)
-        => assembly + "|" + type + "::" + method + "/" + paramCount;
+    internal sealed record Listing(Implementation Implementation, string Text, string Status, long ByteCount);
 
-    private static void EnsureBuilt(ApplicationAnalysisContext app)
+    private static readonly object _gate = new();
+
+    public static IEnumerable<Implementation> Implementations(ApplicationAnalysisContext app, MethodAnalysisContext method)
     {
-        if (ReferenceEquals(_builtFor, app)) return;
-        _map.Clear();
-        foreach (AssemblyAnalysisContext assembly in app.Assemblies)
+        if (method is ConcreteGenericMethodAnalysisContext concrete)
         {
-            string assemblyName = assembly.CleanAssemblyName;
-            foreach (TypeAnalysisContext type in assembly.Types)
+            yield return new(concrete.BaseMethodContext, concrete, concrete.MethodRef, 0, null);
+            yield break;
+        }
+        if (method.Definition != null
+            && app.Binary.ConcreteGenericMethods.TryGetValue(method.Definition, out List<Cpp2IlMethodRef> instances)
+            && instances.Count > 0)
+        {
+            for (int index = 0; index < instances.Count; index++)
             {
-                if (type?.Methods == null) continue;
-                string typeName = Normalize(type.FullName);
-                foreach (MethodAnalysisContext method in type.Methods)
+                Cpp2IlMethodRef reference = instances[index];
+                ConcreteGenericMethodAnalysisContext instance = null;
+                string failure = null;
+                try
                 {
-                    if (method.UnderlyingPointer == 0) continue;
-                    string key = Key(assemblyName, typeName, method.Name, method.Parameters.Count);
-                    if (!_map.TryGetValue(key, out List<MethodAnalysisContext> list))
-                    {
-                        list = new List<MethodAnalysisContext>();
-                        _map[key] = list;
-                    }
-                    list.Add(method);
+                    instance = app.ResolveContextForMethod(reference);
                 }
+                catch (Exception exception)
+                {
+                    failure = Il2CppX86Listing.Describe(exception);
+                }
+                yield return new(method, instance, reference, index + 1, failure);
+            }
+            yield break;
+        }
+        yield return new(method, method, null, 0, null);
+    }
+
+    public static IEnumerable<Implementation> AtAddress(ApplicationAnalysisContext app, ulong address)
+    {
+        if (!app.MethodsByAddress.TryGetValue(address, out List<MethodAnalysisContext> methods)) yield break;
+        HashSet<object> seen = new();
+        foreach (MethodAnalysisContext method in methods)
+        {
+            foreach (Implementation implementation in Implementations(app, method))
+            {
+                if (implementation.Address == address && seen.Add(implementation.Identity)) yield return implementation;
             }
         }
-        _builtFor = app;
     }
 
-    public static string GetDisassembly(IMethod method)
+    public static Listing Display(ApplicationAnalysisContext app, Implementation implementation, ISet<ulong> presentedAliases = null)
     {
-        ApplicationAnalysisContext app = Cpp2IlApi.CurrentAppContext;
-        if (app == null) return null;
-
         lock (_gate)
         {
-            EnsureBuilt(app);
-            string key = Key(method.ParentModule?.Name, Normalize(method.DeclaringTypeDefinition?.FullName), method.Name, method.Parameters.Count);
-            if (!_map.TryGetValue(key, out List<MethodAnalysisContext> list) || list.Count == 0)
+            StringBuilder text = new();
+            text.Append("Method: ").Append(implementation.Symbol)
+                .Append("  metadata-token=0x").Append(implementation.Source.Token.ToString("X8")).Append('\n');
+            MethodAnalysisContext projection = implementation.Method ?? implementation.Source;
+            if (projection.Name != projection.DefaultName)
+                text.Append("Managed projection name: ").Append(projection.Name).Append('\n');
+            if (implementation.Reference != null)
+                text.Append("Generic instantiation: ").Append(implementation.Symbol).Append('\n');
+            if (implementation.Failure != null)
             {
-                return null;
+                text.Append("Native implementation unresolved at VA=0x").Append(implementation.Address.ToString("X"))
+                    .Append(": ").Append(implementation.Failure).Append('\n');
+                return new(implementation, text.ToString(), "unresolved", 0);
             }
-            MethodAnalysisContext ctx = list[0];
+            if (implementation.Address == 0)
+            {
+                text.Append("No native implementation recorded for ").Append(implementation.Symbol).Append(".\n");
+                return new(implementation, text.ToString(), "no-native", 0);
+            }
+
+            MethodAnalysisContext method = implementation.Method;
             try
             {
-                string asm = app.InstructionSet is X86InstructionSet
-                    ? Il2CppX86Listing.Render(app, ctx, withAddresses: true, withChunks: true)
-                    : Il2CppAsmAnnotator.Annotate(app, app.InstructionSet.PrintAssembly(ctx));
-                return $"VA=0x{ctx.UnderlyingPointer:X}  RVA=0x{ctx.Rva:X}\n{asm}";
+                text.Append("Native prototype: ").Append(Prototype(method, implementation.Source)).Append('\n');
+                if (implementation.Reference == null && (method.GenericParameters.Count > 0
+                    || method.DeclaringType?.GenericParameters.Count > 0))
+                    text.Append("Generic definition; native specialization is not recorded.\n");
+                text.Append("VA=0x").Append(implementation.Address.ToString("X"))
+                    .Append("  RVA=0x").Append(method.Rva.ToString("X")).Append('\n');
+                if (presentedAliases?.Contains(implementation.Address) == true)
+                {
+                    text.Append("Shared native address; metadata aliases at VA=0x").Append(implementation.Address.ToString("X"))
+                        .Append(" (listed once in this file).\n");
+                }
+                else
+                {
+                    Implementation[] aliases = AtAddress(app, implementation.Address).ToArray();
+                    if (aliases.Length > 1)
+                    {
+                        text.Append("Shared native address; metadata aliases at VA=0x").Append(implementation.Address.ToString("X"))
+                            .Append(":\n");
+                        foreach (Implementation alias in aliases)
+                            text.Append("  [").Append(alias.Source.DeclaringType?.DeclaringAssembly.CleanAssemblyName)
+                                .Append("] ").Append(alias.Symbol).Append("  metadata-token=0x")
+                                .Append(alias.Source.Token.ToString("X8")).Append('\n');
+                        presentedAliases?.Add(implementation.Address);
+                    }
+                }
+                if (app.InstructionSet is X86InstructionSet)
+                {
+                    Il2CppNativeBody body = Il2CppX86Listing.Decode(app, method, withChunks: true);
+                    text.Append("Native status: ").Append(body.Status).Append("  bytes=0x")
+                        .Append(body.ByteCount.ToString("X")).Append('\n');
+                    text.Append(Il2CppX86Listing.Render(app, method, body, withAddresses: true));
+                    return new(implementation, text.ToString(), body.Status, body.ByteCount);
+                }
+                text.Append(Il2CppAsmAnnotator.Annotate(app, app.InstructionSet.PrintAssembly(method)));
+                text.Append("\nNative byte count is unverified for this instruction set.\n");
+                return new(implementation, text.ToString(), "unverified", 0);
             }
             catch (Exception exception)
             {
-                Logger.Warning(LogCategory.Export, $"[Il2CppMethodDump] no listing for {ctx.FullName} at 0x{ctx.UnderlyingPointer:X}: "
-                    + Il2CppX86Listing.Describe(exception));
-                return null;
+                string failure = Il2CppX86Listing.Describe(exception);
+                Logger.Warning(LogCategory.Export, $"[Il2CppMethodDump] no listing for {implementation.Symbol} "
+                    + $"at 0x{implementation.Address:X}: {failure}");
+                text.Append("Native listing failed: ").Append(failure).Append('\n');
+                return new(implementation, text.ToString(), "error", 0);
             }
         }
+    }
+
+    public static string GetDisassembly(ApplicationAnalysisContext app, MethodAnalysisContext method, ISet<ulong> presentedAliases = null)
+        => string.Join("\n", Implementations(app, method).Select(implementation => Display(app, implementation, presentedAliases).Text));
+
+    private static string Prototype(MethodAnalysisContext method, MethodAnalysisContext source)
+    {
+        string modifiers = (method.IsStatic ? "static " : string.Empty)
+            + (method.IsAbstract ? "abstract " : method.IsVirtual ? $"virtual[{source.Definition?.slot}] " : string.Empty);
+        List<string> parameters = [];
+        if (!method.IsStatic) parameters.Add(method.DeclaringType.FullName + " this");
+        parameters.AddRange(method.Parameters.Select(parameter => parameter.ParameterType.FullName + " " + parameter.ParameterName));
+        parameters.Add("MethodInfo method");
+        return $"{modifiers}{method.ReturnType.FullName} {method.DeclaringType.FullName}::{method.DefaultName}({string.Join(", ", parameters)})";
     }
 }
