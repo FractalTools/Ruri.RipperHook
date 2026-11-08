@@ -338,6 +338,29 @@ public static class StatementTables
         return table.Build();
     }
 
+    public static ColumnTable Controllers(string id, IEnumerable<StatementController> controllers)
+    {
+        TableBuilder table = new(id, "controller", "name", "record", "cab");
+        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key | ColumnRole.Payload, "controller");
+        foreach (StatementController controller in controllers)
+        {
+            table.Row(controller.Key, controller.Name, controller.RecordJson, controller.Archive);
+        }
+        return table.Build();
+    }
+
+    public static ColumnTable Animators(string id, IEnumerable<StatementAnimator> animators)
+    {
+        TableBuilder table = new(id, "path", "controller", "avatar", "enabled#", "root_motion#", "update_mode", "culling_mode");
+        table.Role(ColumnRole.Label, "path");
+        foreach (StatementAnimator animator in animators)
+        {
+            table.Row(animator.Path, animator.Controller, animator.Avatar, animator.Enabled ? 1 : 0,
+                animator.ApplyRootMotion ? 1 : 0, animator.UpdateMode, animator.CullingMode);
+        }
+        return table.Build();
+    }
+
     public static ColumnTable Report(string id, Statement statement)
     {
         TableBuilder table = new(id, "seed", "what", "count#", "detail");

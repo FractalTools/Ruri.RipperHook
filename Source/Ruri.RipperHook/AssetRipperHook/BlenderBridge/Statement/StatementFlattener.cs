@@ -50,7 +50,7 @@ public static class StatementFlattener
     private static void NoteEmpty(Statement flattened, StatementPlan plan)
     {
         if (flattened.Roots.Count != 0 || flattened.Nodes.Count != 0 || flattened.Meshes.Count != 0
-            || flattened.Clips.Count != 0 || flattened.Morphs.Count != 0
+            || flattened.Clips.Count != 0 || flattened.Controllers.Count != 0 || flattened.Morphs.Count != 0
             || flattened.Materials.Count != 0 || flattened.Textures.Count != 0)
         {
             return;
@@ -123,6 +123,8 @@ public static class StatementFlattener
             }
         }
         target.Clips.AddRange(source.Clips);
+        target.Controllers.AddRange(source.Controllers);
+        target.Animators.AddRange(source.Animators);
         target.Morphs.AddRange(source.Morphs);
         target.Report.AddRange(source.Report);
     }

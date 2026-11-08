@@ -23,6 +23,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_64;
 using AssetRipper.SourceGenerated.Classes.ClassID_65;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
+using AssetRipper.SourceGenerated.Classes.ClassID_91;
 using AssetRipper.SourceGenerated.Classes.ClassID_95;
 using AssetRipper.SourceGenerated.Classes.ClassID_134;
 using AssetRipper.SourceGenerated.Classes.ClassID_135;
@@ -155,6 +156,7 @@ public sealed class UnityStatement
             _statement.Note(_plan.Seed, "named by the plan but resolved to nothing", 1, missing);
         }
         Clips();
+        Controllers();
         EncodeTextures();
     }
 
@@ -944,6 +946,7 @@ public sealed class UnityStatement
         List<(UnityNode Node, IComponent Component)> colliders = [];
         IAvatar? avatar = null;
         List<(UnityNode Holder, IAvatar Built)> rigRoots = [];
+        List<(UnityNode Holder, IAnimator Animator)> animators = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
         {
             if (node.GameObject is null)
@@ -952,6 +955,10 @@ public sealed class UnityStatement
             }
             foreach (IComponent? component in node.GameObject.GetComponentAccessList())
             {
+                if (component is IAnimator placedAnimator)
+                {
+                    animators.Add((node, placedAnimator));
+                }
                 switch (component)
                 {
                     case ILODGroup group: lodGroups.Add(group); break;
@@ -995,6 +1002,13 @@ public sealed class UnityStatement
         foreach ((UnityNode holder, IAvatar built) in rigRoots)
         {
             rows[holder].Avatar = KeyOf(built);
+        }
+        foreach ((UnityNode holder, IAnimator animator) in animators)
+        {
+            _statement.Animators.Add(new StatementAnimator(rows[holder].Path,
+                animator.Controller_PPtr_RuntimeAnimatorController_5P is { } played ? KeyOf(played) : string.Empty,
+                animator.AvatarP is { } built ? KeyOf(built) : string.Empty, animator.Enabled != 0, animator.ApplyRootMotion,
+                UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode)));
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, rootObject.Name,
             _plan.Kind.ToString().ToLowerInvariant()));
@@ -1955,6 +1969,40 @@ public sealed class UnityStatement
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, -1, _plan.Label, "loose"));
     }
+
+    private void Controllers()
+    {
+        List<IAnimatorController> controllers = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is IAnimatorController controller && IsSeedCollection(asset.Collection) && Keeps(asset))
+            {
+                controllers.Add(controller);
+            }
+        }
+        foreach (IAnimatorController controller in controllers
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            _statement.Controllers.Add(new StatementController(KeyOf(controller), controller.Name.String,
+                UnityControllers.Describe(controller, KeyOf).ToJsonString(), controller.Collection.Name));
+        }
+    }
+
+    private static string UpdateModeName(int mode) => mode switch
+    {
+        0 => "Normal",
+        1 => "AnimatePhysics",
+        2 => "UnscaledTime",
+        _ => "Unknown" + mode,
+    };
+
+    private static string CullingModeName(int mode) => mode switch
+    {
+        0 => "AlwaysAnimate",
+        1 => "CullUpdateTransforms",
+        2 => "CullCompletely",
+        _ => "Unknown" + mode,
+    };
 
     private void Clips()
     {

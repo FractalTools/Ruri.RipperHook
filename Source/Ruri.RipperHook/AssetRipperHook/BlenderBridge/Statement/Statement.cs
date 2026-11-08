@@ -21,6 +21,10 @@ public sealed class Statement
 
     public List<StatementClip> Clips { get; } = [];
 
+    public List<StatementController> Controllers { get; } = [];
+
+    public List<StatementAnimator> Animators { get; } = [];
+
     public List<StatementMorph> Morphs { get; } = [];
 
     public List<StatementCollider> Colliders { get; } = [];
@@ -207,6 +211,14 @@ public sealed record StatementCollider(int Node, string Kind, bool Trigger, bool
     Vector3 Size, float Radius, float Height, int Axis, bool Convex, string Mesh, string Material);
 
 public sealed record StatementClip(string Key, string Name, string MetaJson, byte[] Curves, string Archive);
+
+/// <summary>An animator controller as one JSON record: its parameters, layers, state machines, states, transitions,
+/// conditions and blend trees, every clip it plays named by the key the clip statement states for it.</summary>
+public sealed record StatementController(string Key, string Name, string RecordJson, string Archive);
+
+/// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.</summary>
+public sealed record StatementAnimator(string Path, string Controller, string Avatar, bool Enabled, bool ApplyRootMotion,
+    string UpdateMode, string CullingMode);
 
 public sealed record StatementMorph(string Mesh, string Name, uint[] Vertices, float[] DeltaPositions,
     float[] DeltaNormals, float[] DeltaTangents, float Weight, int Frames);

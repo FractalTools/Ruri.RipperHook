@@ -26,6 +26,8 @@ public static class StatementDatasets
     public const string TexturesId = "core.statement.textures";
     public const string TextureId = "core.statement.texture";
     public const string ClipsId = "core.statement.clips";
+    public const string ControllersId = "core.statement.controllers";
+    public const string AnimatorsId = "core.statement.animators";
     public const string ReportId = "core.statement.report";
     public const string ArchivesId = "core.statement.archives";
     public const string BasesId = "core.bases";
@@ -118,6 +120,16 @@ public static class StatementDatasets
             + "reversible strings Unity itself hashes once to bind a clip -- onto which every curve is re-anchored; "
             + "avatar is the avatar that hierarchy was built with, against which a muscle-encoded clip is solved into "
             + "bone curves." + CommonText, Clips);
+        Datasets.Publish(ControllersId, DataRole.Statement, Common(),
+            "Every animator controller the seeds themselves carry, one row each with the whole controller as a JSON "
+            + "record: parameters, layers, state machines, states, transitions, conditions and blend trees, every clip it "
+            + "plays named by the key core.statement.clips states for it, and beside the fields a host models the fields "
+            + "it does not (mirror, cycle offset, tags, behaviours, solo and mute, interruption sources the engine "
+            + "lacks), so that a host can refuse what it cannot play rather than lose it." + CommonText, Controllers);
+        Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
+            "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
+            + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
+            + "motion, and its update and culling modes." + CommonText, Animators);
         Datasets.Publish(ArchivesId, DataRole.Internal, [DataParam.List(Seed, required: true)],
             "Where each seed lives: every archive loading it would read, with the container path "
             + "that archive files first -- answered by the same resolution a load makes.", Archives);
@@ -266,6 +278,12 @@ public static class StatementDatasets
         throw new ArgumentException(
             $"this selection states no texture '{wanted}' -- ask {TexturesId} which it carries.");
     }
+
+    private static ColumnTable Controllers(DataRequest request) =>
+        StatementTables.Controllers(ControllersId, Flatten(request).Controllers);
+
+    private static ColumnTable Animators(DataRequest request) =>
+        StatementTables.Animators(AnimatorsId, Flatten(request).Animators);
 
     private static ColumnTable Report(DataRequest request) => StatementTables.Report(ReportId, Flatten(request));
 
