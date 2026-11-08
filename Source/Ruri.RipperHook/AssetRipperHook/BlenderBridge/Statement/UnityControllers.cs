@@ -429,10 +429,27 @@ public sealed class UnityControllers
             result.Add(new JsonObject
             {
                 ["parameter"] = condition.ConditionEvent.String,
-                ["mode"] = ((AnimatorConditionMode)condition.ConditionMode).ToString(),
+                ["mode"] = ConditionModeName(condition.ConditionMode, condition.ConditionEvent.String),
                 ["threshold"] = condition.EventTreshold,
             });
         }
         return result;
     }
+
+    /// <summary>
+    /// A condition mode under the name a host reads (If, IfNot, Greater, Less, Equals, NotEqual), keyed by the number
+    /// the controller serializes rather than by the generated enum's member names, which carry a prefix. The legacy
+    /// exit-time number 5 and any number a host cannot evaluate are refused, not written under some other name.
+    /// </summary>
+    private static string ConditionModeName(int mode, string parameter) => mode switch
+    {
+        1 => "If",
+        2 => "IfNot",
+        3 => "Greater",
+        4 => "Less",
+        6 => "Equals",
+        7 => "NotEqual",
+        _ => throw new InvalidOperationException(
+            $"condition on parameter '{parameter}' has mode {mode}, which is none of If(1), IfNot(2), Greater(3), Less(4), Equals(6), NotEqual(7)."),
+    };
 }
