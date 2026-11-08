@@ -31,7 +31,7 @@ public static class ClosureReader
     /// <summary>Load one closure's files, gated to the closure itself. The gate is process-wide
     /// state on the bundle hook, so it is set and cleared HERE rather than by each caller
     /// remembering to.</summary>
-    public static GameData Load(CabClosure closure, ExportHandler handler)
+    public static GameData Load(CabClosure closure, ExportHandler handler, IReadOnlyList<string>? managedDirectories = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
         HashSet<string> loadFilter = closure.LoadFilterFileNames;
@@ -41,7 +41,8 @@ public static class ClosureReader
         GameBundleHook.LoadMappedFile = closure.Mapped;
         try
         {
-            return handler.Load(closure.Files, LocalFileSystem.Instance);
+            string[] paths = managedDirectories is { Count: > 0 } ? [.. closure.Files, .. managedDirectories] : closure.Files;
+            return handler.Load(paths, LocalFileSystem.Instance);
         }
         finally
         {

@@ -23,6 +23,8 @@ public sealed class Statement
 
     public List<StatementController> Controllers { get; } = [];
 
+    public List<StatementTimeline> Timelines { get; } = [];
+
     public List<StatementAnimator> Animators { get; } = [];
 
     public List<StatementMorph> Morphs { get; } = [];
@@ -215,6 +217,11 @@ public sealed record StatementClip(string Key, string Name, string MetaJson, byt
 /// <summary>An animator controller as one JSON record: its parameters, layers, state machines, states, transitions,
 /// conditions and blend trees, every clip it plays named by the key the clip statement states for it.</summary>
 public sealed record StatementController(string Key, string Name, string RecordJson, string Archive);
+
+/// <summary>A timeline asset as one JSON record -- its tracks, clips, markers and the playable asset each clip plays -- and, when
+/// a director plays it, the scene path of that director and the object each track is bound to. The director is empty for an
+/// asset no director of the selection plays.</summary>
+public sealed record StatementTimeline(string Key, string Name, string Director, string RecordJson, string Archive);
 
 /// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.</summary>
 public sealed record StatementAnimator(string Path, string Controller, string Avatar, bool Enabled, bool ApplyRootMotion,

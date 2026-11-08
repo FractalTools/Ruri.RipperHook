@@ -36,6 +36,10 @@ public sealed class StatementOptions
 
     public bool Colliders { get; init; }
 
+    /// <summary>Whether the layouts of the game's own scripts are read, which loads the install's managed assemblies: a
+    /// MonoBehaviour has no fields to state without them.</summary>
+    public bool Scripts { get; init; }
+
     public IReadOnlyList<string> RoleLayers { get; init; } = [];
 
     public IReadOnlyList<string> Containers { get; init; } = [];
@@ -44,7 +48,7 @@ public sealed class StatementOptions
     /// basis converts the tables a flattening is read out of and nothing that is flattened,
     /// so asking one selection in two bases -- geometry in the host's own, the rig's rest in
     /// the one its animation data is written in -- must not decode the selection twice.</summary>
-    public string Signature => string.Join('|', Detail, Inactive ? 1 : 0, ShadowProxies ? 1 : 0, Colliders ? 1 : 0,
+    public string Signature => string.Join('|', Detail, Inactive ? 1 : 0, ShadowProxies ? 1 : 0, Colliders ? 1 : 0, Scripts ? 1 : 0,
         string.Join(';', RoleLayers), string.Join(';', Containers));
 }
 

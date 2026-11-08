@@ -349,6 +349,17 @@ public static class StatementTables
         return table.Build();
     }
 
+    public static ColumnTable Timelines(string id, IEnumerable<StatementTimeline> timelines)
+    {
+        TableBuilder table = new(id, "timeline", "name", "director", "record", "cab");
+        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key | ColumnRole.Payload, "timeline");
+        foreach (StatementTimeline timeline in timelines)
+        {
+            table.Row(timeline.Key, timeline.Name, timeline.Director, timeline.RecordJson, timeline.Archive);
+        }
+        return table.Build();
+    }
+
     public static ColumnTable Animators(string id, IEnumerable<StatementAnimator> animators)
     {
         TableBuilder table = new(id, "path", "controller", "avatar", "enabled#", "root_motion#", "update_mode", "culling_mode");

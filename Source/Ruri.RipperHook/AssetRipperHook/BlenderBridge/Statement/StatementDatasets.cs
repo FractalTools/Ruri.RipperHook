@@ -28,6 +28,7 @@ public static class StatementDatasets
     public const string ClipsId = "core.statement.clips";
     public const string ControllersId = "core.statement.controllers";
     public const string AnimatorsId = "core.statement.animators";
+    public const string TimelinesId = "core.statement.timelines";
     public const string ReportId = "core.statement.report";
     public const string ArchivesId = "core.statement.archives";
     public const string BasesId = "core.bases";
@@ -38,6 +39,7 @@ public static class StatementDatasets
     public const string Inactive = "inactive";
     public const string ShadowProxies = "shadow_proxies";
     public const string CollidersFlag = "colliders";
+    public const string Scripts = "scripts";
     public const string Roles = "roles";
     public const string Containers = "containers";
     public const string Texture = "texture";
@@ -53,6 +55,7 @@ public static class StatementDatasets
     [
         DataParam.List(Seed), DataParam.Text(BasisParam, required: false), DataParam.Integer(Detail, required: false),
         DataParam.Flag(Inactive, required: false), DataParam.Flag(ShadowProxies, required: false), DataParam.Flag(CollidersFlag, required: false),
+        DataParam.Flag(Scripts, required: false),
         DataParam.List(Roles),
         DataParam.List(Containers), .. extra,
     ];
@@ -63,7 +66,8 @@ public static class StatementDatasets
         " seed... are payloads of published rows (archives, container paths, or what a hook states); basis is unity, "
         + "blender or gltf (geometry and transforms both come out in it); detail is the level to keep, -1 every level; "
         + "inactive keeps disabled renderers (on unless stated 0); shadow_proxies keeps shadow-only renderers; colliders "
-        + "states the collision volumes of the objects (core.statement.colliders; off states none); roles are "
+        + "states the collision volumes of the objects (core.statement.colliders; off states none); scripts reads the layouts of the "
+        + "game's own scripts, which loads the install's managed assemblies (a MonoBehaviour has no fields to state without them); roles are "
         + "texture-role layer files, later overriding earlier; containers are the image containers accepted.";
 
     public static void Register()
@@ -126,6 +130,14 @@ public static class StatementDatasets
             + "plays named by the key core.statement.clips states for it, and beside the fields a host models the fields "
             + "it does not (mirror, cycle offset, tags, behaviours, solo and mute, interruption sources the engine "
             + "lacks), so that a host can refuse what it cannot play rather than lose it." + CommonText, Controllers);
+        Datasets.Publish(TimelinesId, DataRole.Statement, Common(),
+            "Every timeline asset the directors of the seeds play, or that the seeds themselves carry, one row each with the "
+            + "whole timeline as a JSON record: its tracks in a depth-first walk, each track's clips with the playable asset each "
+            + "plays, its markers, and for a timeline a director plays that director's scene path and the object each track is "
+            + "bound to; every serialized field is stated under the name the script of the game gives it and a pointer as the "
+            + "key of what it points at, so that a host refuses what it cannot play rather than lose it. scripts reads the "
+            + "layouts of the game's own scripts, which a timeline cannot be stated without."
+            + CommonText, Timelines);
         Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
             + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
@@ -151,6 +163,7 @@ public static class StatementDatasets
         Inactive = !request.Given(Inactive) || request.Flag(Inactive),
         ShadowProxies = request.Flag(ShadowProxies),
         Colliders = request.Flag(CollidersFlag),
+        Scripts = request.Given(Scripts) && request.Flag(Scripts),
         RoleLayers = request.List(Roles),
         Containers = request.List(Containers),
     };
@@ -281,6 +294,9 @@ public static class StatementDatasets
 
     private static ColumnTable Controllers(DataRequest request) =>
         StatementTables.Controllers(ControllersId, Flatten(request).Controllers);
+
+    private static ColumnTable Timelines(DataRequest request) =>
+        StatementTables.Timelines(TimelinesId, Flatten(request).Timelines);
 
     private static ColumnTable Animators(DataRequest request) =>
         StatementTables.Animators(AnimatorsId, Flatten(request).Animators);

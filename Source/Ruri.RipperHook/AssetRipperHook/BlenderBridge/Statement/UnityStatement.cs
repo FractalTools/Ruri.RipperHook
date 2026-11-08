@@ -23,6 +23,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_64;
 using AssetRipper.SourceGenerated.Classes.ClassID_65;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
+using AssetRipper.SourceGenerated.Classes.ClassID_320;
 using AssetRipper.SourceGenerated.Classes.ClassID_91;
 using AssetRipper.SourceGenerated.Classes.ClassID_95;
 using AssetRipper.SourceGenerated.Classes.ClassID_134;
@@ -80,19 +81,28 @@ public sealed class UnityStatement
 
     /// <summary>Load the plan's closure the way an import loads it: gated to the closure,
     /// scripts at level zero, static batching separated, then processed.</summary>
-    public static GameData LoadClosure(CabTable map, IEnumerable<string> cabs, bool scriptedDependenciesOnly = false)
+    private static string[] ManagedDirectories(CabClosure closure) => closure.Files
+        .Select(path => Path.GetDirectoryName(path))
+        .Where(directory => directory is not null)
+        .Select(directory => Path.Combine(directory!, "Managed"))
+        .Where(Directory.Exists)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    public static GameData LoadClosure(CabTable map, IEnumerable<string> cabs, bool scriptedDependenciesOnly = false,
+        bool scripts = false)
     {
         CabClosure closure = ClosureReader.Resolve(map, cabs, reachThroughDependents: true,
             scriptedDependenciesOnly: scriptedDependenciesOnly);
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
         settings.ExportSettings.ShaderExportMode = ShaderExportMode.Dummy;
-        settings.ImportSettings.ScriptContentLevel = ScriptContentLevel.Level0;
+        settings.ImportSettings.ScriptContentLevel = scripts ? ScriptContentLevel.Level1 : ScriptContentLevel.Level0;
         settings.ProcessingSettings.EnableStaticMeshSeparation = true;
         ExportHandler handler = new(settings);
         GameData gameData = closure.Files.Length == 0
             ? handler.Load([], AssetRipper.IO.Files.LocalFileSystem.Instance)
-            : ClosureReader.Load(closure, handler);
+            : ClosureReader.Load(closure, handler, scripts ? ManagedDirectories(closure) : null);
         if (gameData.GameBundle.HasAnyAssetCollections())
         {
             handler.Process(gameData);
@@ -103,7 +113,7 @@ public sealed class UnityStatement
     public static Statement Flatten(CabTable map, StatementPlan plan, StatementOptions options)
     {
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
-        GameData gameData = LoadClosure(map, plan.Cabs);
+        GameData gameData = LoadClosure(map, plan.Cabs, scripts: options.Scripts);
         long read = System.Diagnostics.Stopwatch.GetTimestamp();
         UnityStatement flattening = new(map, plan, options, gameData);
         flattening.Run();
@@ -157,6 +167,7 @@ public sealed class UnityStatement
         }
         Clips();
         Controllers();
+        Timelines();
         EncodeTextures();
     }
 
@@ -947,6 +958,7 @@ public sealed class UnityStatement
         IAvatar? avatar = null;
         List<(UnityNode Holder, IAvatar Built)> rigRoots = [];
         List<(UnityNode Holder, IAnimator Animator)> animators = [];
+        List<(UnityNode Holder, IPlayableDirector Director)> directors = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
         {
             if (node.GameObject is null)
@@ -958,6 +970,10 @@ public sealed class UnityStatement
                 if (component is IAnimator placedAnimator)
                 {
                     animators.Add((node, placedAnimator));
+                }
+                if (component is IPlayableDirector placedDirector)
+                {
+                    directors.Add((node, placedDirector));
                 }
                 switch (component)
                 {
@@ -1003,9 +1019,20 @@ public sealed class UnityStatement
         {
             rows[holder].Avatar = KeyOf(built);
         }
+        foreach ((UnityNode node, StatementNode row) in rows)
+        {
+            if (node.GameObject is { } placed)
+            {
+                _gameObjectPaths[placed] = SourcePath(rootObject, row);
+            }
+        }
+        foreach ((UnityNode holder, IPlayableDirector director) in directors)
+        {
+            _directors.Add((SourcePath(rootObject, rows[holder]), director));
+        }
         foreach ((UnityNode holder, IAnimator animator) in animators)
         {
-            _statement.Animators.Add(new StatementAnimator(rows[holder].Path,
+            _statement.Animators.Add(new StatementAnimator(SourcePath(rootObject, rows[holder]),
                 animator.Controller_PPtr_RuntimeAnimatorController_5P is { } played ? KeyOf(played) : string.Empty,
                 animator.AvatarP is { } built ? KeyOf(built) : string.Empty, animator.Enabled != 0, animator.ApplyRootMotion,
                 UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode)));
@@ -1968,6 +1995,46 @@ public sealed class UnityStatement
             }
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, -1, _plan.Label, "loose"));
+    }
+
+    /// <summary>The path a node is told apart by in a scene: its object names from the root down, the root's own included,
+    /// which is what the scene layer states as the node's source path.</summary>
+    private static string SourcePath(IGameObject root, StatementNode node) =>
+        node.Path.Length == 0 ? root.Name.String : root.Name.String + "/" + node.Path;
+
+    private readonly Dictionary<IGameObject, string> _gameObjectPaths = new(ReferenceEqualityComparer.Instance);
+
+    private readonly List<(string Path, IPlayableDirector Director)> _directors = [];
+
+    private void Timelines()
+    {
+        string? PathOf(IGameObject gameObject) => _gameObjectPaths.TryGetValue(gameObject, out string? path) ? path : null;
+        HashSet<IUnityObjectBase> described = new(ReferenceEqualityComparer.Instance);
+        foreach ((string path, IPlayableDirector director) in _directors)
+        {
+            if (director.PlayableAsset_C320P is not IMonoBehaviour timeline || !UnityTimelines.IsTimeline(timeline))
+            {
+                continue;
+            }
+            described.Add(timeline);
+            _statement.Timelines.Add(new StatementTimeline(KeyOf(timeline), timeline.Name.String, path,
+                UnityTimelines.Describe(timeline, director, path, KeyOf, PathOf).ToJsonString(), timeline.Collection.Name));
+        }
+        List<IMonoBehaviour> loose = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is IMonoBehaviour behaviour && IsSeedCollection(asset.Collection) && Keeps(asset)
+                && UnityTimelines.IsTimeline(behaviour) && described.Add(behaviour))
+            {
+                loose.Add(behaviour);
+            }
+        }
+        foreach (IMonoBehaviour timeline in loose
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            _statement.Timelines.Add(new StatementTimeline(KeyOf(timeline), timeline.Name.String, string.Empty,
+                UnityTimelines.Describe(timeline, null, string.Empty, KeyOf, PathOf).ToJsonString(), timeline.Collection.Name));
+        }
     }
 
     private void Controllers()
