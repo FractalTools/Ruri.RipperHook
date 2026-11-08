@@ -127,6 +127,8 @@ public static class StatementFlattener
         target.Controllers.AddRange(source.Controllers);
         target.Timelines.AddRange(source.Timelines);
         target.Animators.AddRange(source.Animators);
+        target.Cinemachine.AddRange(source.Cinemachine);
+        target.CinemachineRefused.AddRange(source.CinemachineRefused);
         target.Morphs.AddRange(source.Morphs);
         target.Report.AddRange(source.Report);
     }

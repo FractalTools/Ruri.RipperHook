@@ -29,6 +29,12 @@ public sealed class Statement
 
     public List<StatementAnimator> Animators { get; } = [];
 
+    public List<StatementCinemachine> Cinemachine { get; } = [];
+
+    /// <summary>The components of the camera package this statement could not state, each with why. Asking for the components
+    /// refuses with these, so that a scene is never exported with a camera missing; every other table is unaffected.</summary>
+    public List<string> CinemachineRefused { get; } = [];
+
     public List<StatementMorph> Morphs { get; } = [];
 
     public List<StatementCollider> Colliders { get; } = [];
@@ -234,6 +240,11 @@ public sealed record StatementTimeline(string Key, string Name, string Director,
 /// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.</summary>
 public sealed record StatementAnimator(string Path, string Controller, string Avatar, bool Enabled, bool ApplyRootMotion,
     string UpdateMode, string CullingMode);
+
+/// <summary>A component of the camera package's own scripts on a node: the node it sits on (its source path, the one the scene
+/// layer states the node by), the class of its script, and the component as one JSON record -- whether it is enabled and every
+/// field its script serializes, each under the name the script gives it.</summary>
+public sealed record StatementCinemachine(string Path, string Class, string RecordJson);
 
 public sealed record StatementMorph(string Mesh, string Name, uint[] Vertices, float[] DeltaPositions,
     float[] DeltaNormals, float[] DeltaTangents, float Weight, int Frames);

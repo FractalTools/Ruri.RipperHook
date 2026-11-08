@@ -172,6 +172,7 @@ public sealed class UnityStatement
         if (_options.Scripts)
         {
             Timelines();
+            CinemachineComponents();
         }
         EncodeTextures();
     }
@@ -964,6 +965,7 @@ public sealed class UnityStatement
         List<(UnityNode Holder, IAvatar Built)> rigRoots = [];
         List<(UnityNode Holder, IAnimator Animator)> animators = [];
         List<(UnityNode Holder, IPlayableDirector Director)> directors = [];
+        List<(UnityNode Holder, IMonoBehaviour Component)> cinemachine = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
         {
             if (node.GameObject is null)
@@ -979,6 +981,10 @@ public sealed class UnityStatement
                 if (component is IPlayableDirector placedDirector)
                 {
                     directors.Add((node, placedDirector));
+                }
+                if (_options.Scripts && component is IMonoBehaviour placedScript && UnityCinemachine.Owns(placedScript))
+                {
+                    cinemachine.Add((node, placedScript));
                 }
                 switch (component)
                 {
@@ -1034,6 +1040,10 @@ public sealed class UnityStatement
         foreach ((UnityNode holder, IPlayableDirector director) in directors)
         {
             _directors.Add((SourcePath(rootObject, rows[holder]), director));
+        }
+        foreach ((UnityNode holder, IMonoBehaviour component) in cinemachine)
+        {
+            _cinemachine.Add((SourcePath(rootObject, rows[holder]), component));
         }
         foreach ((UnityNode holder, IAnimator animator) in animators)
         {
@@ -2011,9 +2021,31 @@ public sealed class UnityStatement
 
     private readonly List<(string Path, IPlayableDirector Director)> _directors = [];
 
+    private readonly List<(string Path, IMonoBehaviour Component)> _cinemachine = [];
+
+    private string? PathOf(IGameObject gameObject) => _gameObjectPaths.TryGetValue(gameObject, out string? path) ? path : null;
+
+    /// <summary>The camera package's components, stated once every root is flattened: what one of them points at may stand
+    /// under another root of the selection.</summary>
+    private void CinemachineComponents()
+    {
+        foreach ((string path, IMonoBehaviour component) in _cinemachine)
+        {
+            try
+            {
+                _statement.Cinemachine.Add(new StatementCinemachine(path, component.ScriptClass(),
+                    UnityCinemachine.Describe(component, PathOf).ToJsonString()));
+            }
+            catch (InvalidOperationException refusal)
+            {
+                _statement.CinemachineRefused.Add(refusal.Message);
+                _statement.Note(_plan.Seed, "camera component cannot be stated", 1, refusal.Message);
+            }
+        }
+    }
+
     private void Timelines()
     {
-        string? PathOf(IGameObject gameObject) => _gameObjectPaths.TryGetValue(gameObject, out string? path) ? path : null;
         HashSet<IUnityObjectBase> described = new(ReferenceEqualityComparer.Instance);
         foreach ((string path, IPlayableDirector director) in _directors)
         {

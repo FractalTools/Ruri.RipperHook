@@ -385,6 +385,17 @@ public static class StatementTables
         return table.Build();
     }
 
+    public static ColumnTable Cinemachine(string id, IEnumerable<StatementCinemachine> components)
+    {
+        TableBuilder table = new(id, "path", "class", "record");
+        table.Role(ColumnRole.Label, "class").Role(ColumnRole.Group, "path");
+        foreach (StatementCinemachine component in components)
+        {
+            table.Row(component.Path, component.Class, component.RecordJson);
+        }
+        return table.Build();
+    }
+
     public static ColumnTable Report(string id, Statement statement)
     {
         TableBuilder table = new(id, "seed", "what", "count#", "detail");

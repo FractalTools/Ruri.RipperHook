@@ -31,6 +31,7 @@ public static class StatementDatasets
     public const string ControllersId = "core.statement.controllers";
     public const string AnimatorsId = "core.statement.animators";
     public const string TimelinesId = "core.statement.timelines";
+    public const string CinemachineId = "core.statement.cinemachine";
     public const string ReportId = "core.statement.report";
     public const string ArchivesId = "core.statement.archives";
     public const string BasesId = "core.bases";
@@ -152,6 +153,17 @@ public static class StatementDatasets
             + "key of what it points at, so that a host refuses what it cannot play rather than lose it. scripts reads the "
             + "layouts of the game's own scripts, which a timeline cannot be stated without: the table is empty unless it is asked."
             + CommonText, Timelines);
+        Datasets.Publish(CinemachineId, DataRole.Statement, Common(),
+            "Every component of the camera package's own scripts (the assembly Cinemachine; its post-processing component, which "
+            + "names a render pipeline profile and nothing of the camera, is left out) the seeds place, one row each: the node it "
+            + "sits on (its source path, the path the scene layer states the node by), the class of its script, and the component "
+            + "as a JSON record -- whether it is enabled and every field its script serializes, each under the name the script gives "
+            + "it, a vector as an object of x, y and z, a pointer to an object of the scene as the source path of that object, a "
+            + "pointer to a scriptable object (a noise profile, a table of blends) as the asset itself with its name. A pointer to "
+            + "a node the selection does not hold, or to anything a layer of nodes cannot state, refuses this table, never leaves a "
+            + "component out of it (the report names each component that could not be stated; the other tables are unaffected). "
+            + "scripts reads the layouts of the game's own scripts, which these components cannot be stated without: the table is "
+            + "empty unless it is asked." + CommonText, Cinemachine);
         Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
             + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
@@ -328,6 +340,18 @@ public static class StatementDatasets
 
     private static ColumnTable Timelines(DataRequest request) =>
         StatementTables.Timelines(TimelinesId, Flatten(request).Timelines);
+
+    private static ColumnTable Cinemachine(DataRequest request)
+    {
+        Statement statement = Flatten(request);
+        if (statement.CinemachineRefused.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"{statement.CinemachineRefused.Count} of {statement.Cinemachine.Count + statement.CinemachineRefused.Count} "
+                + $"component(s) of the camera package cannot be stated: {string.Join("; ", statement.CinemachineRefused)}");
+        }
+        return StatementTables.Cinemachine(CinemachineId, statement.Cinemachine);
+    }
 
     private static ColumnTable Animators(DataRequest request) =>
         StatementTables.Animators(AnimatorsId, Flatten(request).Animators);

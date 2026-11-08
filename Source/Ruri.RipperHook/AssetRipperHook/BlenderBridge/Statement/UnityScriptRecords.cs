@@ -211,7 +211,8 @@ public abstract class UnityScriptRecords
     protected static JsonNode Wide(long value) =>
         Math.Abs(value) < (1L << 53) ? value : value.ToString(CultureInfo.InvariantCulture);
 
-    protected static JsonNode Number(double value) => double.IsFinite(value)
+    /// <summary>A real number. One that is not finite is its name in text, which JSON has no number for.</summary>
+    protected virtual JsonNode Number(double value) => double.IsFinite(value)
         ? value
         : double.IsNaN(value) ? "NaN" : value > 0 ? "Infinity" : "-Infinity";
 }
