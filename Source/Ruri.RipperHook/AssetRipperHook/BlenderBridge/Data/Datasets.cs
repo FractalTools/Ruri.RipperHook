@@ -125,6 +125,7 @@ public static class Datasets
             return (handle, kept);
         }
         ColumnTable table;
+        using (DefaultDenormalScope.Enter())
         using (DataUnit? unit = DataUnit.Current is null ? DataUnit.Begin() : null)
         {
             table = dataset.Table(new DataRequest(dataset, values, cancellation, map));
@@ -151,6 +152,7 @@ public static class Datasets
         {
             throw new InvalidOperationException($"dataset '{id}' is a table, not a blob -- ask for it with Table().");
         }
+        using DefaultDenormalScope denormals = DefaultDenormalScope.Enter();
         using DataUnit? unit = DataUnit.Current is null ? DataUnit.Begin() : null;
         return dataset.Blob(new DataRequest(dataset, values, cancellation, map, payload));
     }
