@@ -17,7 +17,7 @@ public static class ClipCurveBlob
     private sealed record ClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
-        List<CurveIndexEntry> curves);
+        List<CurveIndexEntry> curves, bool loopTime = false);
 
     private sealed record SolvedClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
@@ -260,7 +260,8 @@ public static class ClipCurveBlob
             muscleClip?.KeepOriginalPositionXZ ?? true,
             muscleClip?.KeepOriginalPositionY ?? true,
             muscleClip?.KeepOriginalOrientation ?? true,
-            index);
+            index,
+            muscleClip?.LoopTime ?? false);
 
         byte[] bytes = new byte[totalFloats * sizeof(float)];
         Buffer.BlockCopy(payload, 0, bytes, 0, bytes.Length);

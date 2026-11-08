@@ -22,7 +22,7 @@ public static class ClipStatement
     private sealed record CurveEntry(string kind, string path, string? attr, int classId, int keys, long off);
 
     private sealed record ClipIndex(string name, float sampleRate, float startTime, float stopTime,
-        bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves);
+        bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false);
 
     private sealed class Channel
     {
@@ -80,7 +80,7 @@ public static class ClipStatement
             cursor += channel.Data.Length;
         }
         ClipIndex meta = new(source.name, source.sampleRate, source.startTime, source.stopTime,
-            source.keepPositionXZ, source.keepPositionY, source.keepOrientation, index);
+            source.keepPositionXZ, source.keepPositionY, source.keepOrientation, index, source.loopTime);
         return (JsonSerializer.Serialize(meta), MemoryMarshal.AsBytes<float>(payload).ToArray());
     }
 
