@@ -167,7 +167,10 @@ public sealed class UnityStatement
         }
         Clips();
         Controllers();
-        Timelines();
+        if (_options.Scripts)
+        {
+            Timelines();
+        }
         EncodeTextures();
     }
 

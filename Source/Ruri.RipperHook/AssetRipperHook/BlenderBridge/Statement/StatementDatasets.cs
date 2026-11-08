@@ -136,7 +136,7 @@ public static class StatementDatasets
             + "plays, its markers, and for a timeline a director plays that director's scene path and the object each track is "
             + "bound to; every serialized field is stated under the name the script of the game gives it and a pointer as the "
             + "key of what it points at, so that a host refuses what it cannot play rather than lose it. scripts reads the "
-            + "layouts of the game's own scripts, which a timeline cannot be stated without."
+            + "layouts of the game's own scripts, which a timeline cannot be stated without: the table is empty unless it is asked."
             + CommonText, Timelines);
         Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
