@@ -338,6 +338,19 @@ public static class StatementTables
         return table.Build();
     }
 
+    public static ColumnTable AudioClips(string id, IEnumerable<StatementAudioClip> clips)
+    {
+        TableBuilder table = new(id, "audioclip", "name", "channels#", "frequency#", "samples#", "duration#", "serialized_length#",
+            "format", "bytes#", "cab");
+        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key | ColumnRole.Payload, "audioclip");
+        foreach (StatementAudioClip clip in clips)
+        {
+            table.Row(clip.Key, clip.Name, clip.Channels, clip.Frequency, clip.SampleCount, clip.Duration, clip.SerializedLength,
+                clip.Format, clip.Ogg.Length, clip.Archive);
+        }
+        return table.Build();
+    }
+
     public static ColumnTable Controllers(string id, IEnumerable<StatementController> controllers)
     {
         TableBuilder table = new(id, "controller", "name", "record", "cab");

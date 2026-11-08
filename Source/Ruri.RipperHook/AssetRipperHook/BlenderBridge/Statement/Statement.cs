@@ -21,6 +21,8 @@ public sealed class Statement
 
     public List<StatementClip> Clips { get; } = [];
 
+    public List<StatementAudioClip> AudioClips { get; } = [];
+
     public List<StatementController> Controllers { get; } = [];
 
     public List<StatementTimeline> Timelines { get; } = [];
@@ -213,6 +215,12 @@ public sealed record StatementCollider(int Node, string Kind, bool Trigger, bool
     Vector3 Size, float Radius, float Height, int Axis, bool Convex, string Mesh, string Material);
 
 public sealed record StatementClip(string Key, string Name, string MetaJson, byte[] Curves, string Archive);
+
+/// <summary>An audio clip as the engine plays one: the channels, frequency and whole number of samples per channel its sound bank states,
+/// the duration those make (the game's own timeline takes a clip's length as its sample count over its frequency), the length the clip
+/// itself serializes in single precision, its compression format and the clip as a standard Ogg Vorbis file.</summary>
+public sealed record StatementAudioClip(string Key, string Name, int Channels, int Frequency, long SampleCount, double Duration,
+    double SerializedLength, string Format, byte[] Ogg, string Archive);
 
 /// <summary>An animator controller as one JSON record: its parameters, layers, state machines, states, transitions,
 /// conditions and blend trees, every clip it plays named by the key the clip statement states for it.</summary>

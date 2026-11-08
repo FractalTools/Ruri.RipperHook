@@ -34,3 +34,4 @@ Ruri-RipperHook 框架事实:只记与常识相反或读代码得不到的约束
 33. usmap 来自 exe 旁的 pdb:Ruri.Tpk --unreal-reflection {exe} [out.usmap],再 Ruri.Tpk --unreal {usmap} 直出自定义引擎 tpk,别注入 UnrealMappingsDumper(DebugGame 会崩)。
 34. Git Bash 传 /Game/... 对象路径须 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*',否则被改写成 C:/Program Files/Git/Game/... 而数据集静默返回 0 行。
 35. AssetRipper 生成的 FetchDependencies 对整个类只有一条非列表 PPtr 路径的类(NavMeshSettings、PhysicsManager、Physics2DSettings、Prefab 等)是永不结束的序列,物化即耗尽内存,取依赖一律用 AssetWalker 的 WalkStandard 并以最外层字段名栈分类,别枚举它。
+36. 音频剪辑的通道数、频率与整数采样数只在 FSB5 子声音头里,序列化字段只有单精度秒数 m_Length;core.statement.audioclips 取头里的值,与 Ogg 重建所用的是同一组(Fmod5Sharp 按头建 Ogg 信息包,末页粒度位置以头里采样数封顶),不取 m_Length 乘频率反推,也不另写 FSB 或 Vorbis 解析。

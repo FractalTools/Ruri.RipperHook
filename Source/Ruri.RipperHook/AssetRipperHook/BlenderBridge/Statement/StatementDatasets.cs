@@ -26,6 +26,8 @@ public static class StatementDatasets
     public const string TexturesId = "core.statement.textures";
     public const string TextureId = "core.statement.texture";
     public const string ClipsId = "core.statement.clips";
+    public const string AudioClipsId = "core.statement.audioclips";
+    public const string AudioClipId = "core.statement.audioclip";
     public const string ControllersId = "core.statement.controllers";
     public const string AnimatorsId = "core.statement.animators";
     public const string TimelinesId = "core.statement.timelines";
@@ -45,6 +47,7 @@ public static class StatementDatasets
     public const string Texture = "texture";
     public const string Paths = "paths";
     public const string Avatar = "avatar";
+    public const string AudioClip = "audioclip";
 
     private static readonly object Gate = new();
     private static string _cachedRequest = string.Empty;
@@ -124,6 +127,17 @@ public static class StatementDatasets
             + "reversible strings Unity itself hashes once to bind a clip -- onto which every curve is re-anchored; "
             + "avatar is the avatar that hierarchy was built with, against which a muscle-encoded clip is solved into "
             + "bone curves." + CommonText, Clips);
+        Datasets.Publish(AudioClipsId, DataRole.Statement, Common(),
+            "Every audio clip the seeds themselves carry, one row each as the engine plays it: the channels, frequency and whole "
+            + "number of samples per channel the clip's sound bank states, the duration those make (the sample count over the "
+            + "frequency, which is how the game's own timeline takes a clip's length), the length the clip itself serializes in "
+            + "single precision, its compression format and the size of its Ogg Vorbis file. The file itself is asked for one clip "
+            + "at a time from core.statement.audioclip. A clip that cannot be restated as Ogg Vorbis states no row and is named in "
+            + "the report." + CommonText, AudioClips);
+        Datasets.PublishBlob(AudioClipId, DataRole.Payload, Common(DataParam.Text(AudioClip)),
+            "The bytes of ONE audio clip of a selection as a standard Ogg Vorbis file, rebuilt from the clip's sound bank. Asked "
+            + "per clip rather than as a column beside the rest: a selection's sounds run to many megabytes."
+            + CommonText, AudioClipBytes);
         Datasets.Publish(ControllersId, DataRole.Statement, Common(),
             "Every animator controller the seeds themselves carry, one row each with the whole controller as a JSON "
             + "record: parameters, layers, state machines, states, transitions, conditions and blend trees, every clip it "
@@ -290,6 +304,23 @@ public static class StatementDatasets
         }
         throw new ArgumentException(
             $"this selection states no texture '{wanted}' -- ask {TexturesId} which it carries.");
+    }
+
+    private static ColumnTable AudioClips(DataRequest request) =>
+        StatementTables.AudioClips(AudioClipsId, Flatten(request).AudioClips);
+
+    private static byte[] AudioClipBytes(DataRequest request)
+    {
+        string wanted = request.Text(AudioClip);
+        foreach (StatementAudioClip clip in Flatten(request).AudioClips)
+        {
+            if (string.Equals(clip.Key, wanted, StringComparison.Ordinal))
+            {
+                return clip.Ogg;
+            }
+        }
+        throw new ArgumentException(
+            $"this selection states no audio clip '{wanted}' -- ask {AudioClipsId} which it carries.");
     }
 
     private static ColumnTable Controllers(DataRequest request) =>

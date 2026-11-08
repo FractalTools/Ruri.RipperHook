@@ -22,6 +22,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Classes.ClassID_64;
 using AssetRipper.SourceGenerated.Classes.ClassID_65;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
+using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
 using AssetRipper.SourceGenerated.Classes.ClassID_320;
 using AssetRipper.SourceGenerated.Classes.ClassID_91;
@@ -166,6 +167,7 @@ public sealed class UnityStatement
             _statement.Note(_plan.Seed, "named by the plan but resolved to nothing", 1, missing);
         }
         Clips();
+        AudioClips();
         Controllers();
         if (_options.Scripts)
         {
@@ -2037,6 +2039,29 @@ public sealed class UnityStatement
         {
             _statement.Timelines.Add(new StatementTimeline(KeyOf(timeline), timeline.Name.String, string.Empty,
                 UnityTimelines.Describe(timeline, null, string.Empty, KeyOf, PathOf).ToJsonString(), timeline.Collection.Name));
+        }
+    }
+
+    private void AudioClips()
+    {
+        List<IAudioClip> clips = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is IAudioClip clip && IsSeedCollection(asset.Collection) && Keeps(asset))
+            {
+                clips.Add(clip);
+            }
+        }
+        foreach (IAudioClip clip in clips
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            StatementAudioClip? restated = UnityAudioClips.Restate(clip, KeyOf(clip), out string reason);
+            if (restated is null)
+            {
+                _statement.Note(_plan.Seed, "audio clip could not be restated as Ogg Vorbis", 1, $"{clip.Name.String}: {reason}");
+                continue;
+            }
+            _statement.AudioClips.Add(restated);
         }
     }
 
