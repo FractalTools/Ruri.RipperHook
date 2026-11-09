@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.BlenderBridge.Data;
 using Ruri.RipperHook.BlenderBridge.Tables;
@@ -33,6 +33,7 @@ public static class StatementDatasets
     public const string TimelinesId = "core.statement.timelines";
     public const string CinemachineId = "core.statement.cinemachine";
     public const string ReportId = "core.statement.report";
+    public const string SceneLightingId = "core.statement.scene_lighting";
     public const string ArchivesId = "core.statement.archives";
     public const string BasesId = "core.bases";
 
@@ -51,9 +52,11 @@ public static class StatementDatasets
     public const string AudioClip = "audioclip";
 
     private static readonly object Gate = new();
-    private static string _cachedRequest = string.Empty;
+    private readonly record struct RequestIdentity(string Owner, string External);
+    private static RequestIdentity _cachedRequest;
     private static string _cachedSignature = string.Empty;
     private static Statement? _cached;
+    private static long _cachedGeneration;
 
     private static DataParam[] Common(params DataParam[] extra) =>
     [
@@ -76,44 +79,52 @@ public static class StatementDatasets
 
     public static void Register()
     {
+        Datasets.Publish(SceneLightingId, DataRole.Statement, Common(),
+            "Static scene facts supplied by the plan's reader adapter; empty for plans without scene facts.",
+            request =>
+            {
+                TableBuilder table = new(SceneLightingId, "json");
+                foreach (string json in Flatten(request).SceneLighting) table.Row(json);
+                return table.Build();
+            }, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(RootsId, DataRole.Statement, Common(),
             "What each seed resolved to: the node its tree starts at, its label and kind, and the transform the "
-            + "statement's own frame sits at in the basis -- where a host places the whole of it." + CommonText, Roots);
+            + "statement's own frame sits at in the basis -- where a host places the whole of it." + CommonText, Roots, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(NodesId, DataRole.Statement, Common(),
             "Every transform of every seed, parents before children: name, the engine's own transform path, what "
             + "sits on it (empty, mesh, skinned, light, camera), the local transform in the basis, and for a renderer "
             + "the mesh, skeleton and material keys it draws with, its layer, and for the root of a rig the avatar it is "
             + "built with. A skinned node's mesh is already baked to its rest "
-            + "pose in the statement's own frame, so a host places it at the skeleton and not at the node." + CommonText, Nodes);
+            + "pose in the statement's own frame, so a host places it at the skeleton and not at the node." + CommonText, Nodes, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(MeshesId, DataRole.Statement, Common(),
             "Every mesh the seeds draw as raw buffers in the basis: positions, normals, tangents, colours, every "
             + "texture-coordinate set, triangle indices, material sections, four influences a vertex beside the bone "
-            + "paths they index, and bind poses." + CommonText, Meshes);
+            + "paths they index, and bind poses." + CommonText, Meshes, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(MorphsId, DataRole.Statement, Common(),
-            "Every blend shape of every mesh as sparse deltas in the basis, one row per shape." + CommonText, Morphs);
+            "Every blend shape of every mesh as sparse deltas in the basis, one row per shape." + CommonText, Morphs, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(CollidersId, DataRole.Statement, Common(),
             "Every collision volume the seeds put on their nodes, one row per component, in the node's own space and "
             + "the requester's basis: a box (centre, size), a sphere (centre, radius), a capsule (centre, radius, height, "
             + "axis) or a mesh (a key of core.statement.meshes), with whether it is a trigger, whether it is enabled, the "
-            + "layer of its object and the physics material it names. Empty unless colliders is asked." + CommonText, Colliders);
+            + "layer of its object and the physics material it names. Empty unless colliders is asked." + CommonText, Colliders, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(SkeletonsId, DataRole.Statement, Common(),
             "Every seed's transform tree as a skeleton, parents before children: name, path, the identity a rig "
-            + "carries for it, the rest local transform in the basis, and the humanoid slot it fills." + CommonText, Skeletons);
+            + "carries for it, the rest local transform in the basis, and the humanoid slot it fills." + CommonText, Skeletons, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(AvatarsId, DataRole.Statement, Common(),
             "The avatar each skeleton was built with, in the form the humanoid solver reads back -- what a host "
-            + "stamps on the rig and hands to core.statement.clips as its avatar argument." + CommonText, Avatars);
+            + "stamps on the rig and hands to core.statement.clips as its avatar argument." + CommonText, Avatars, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(MaterialsId, DataRole.Statement, Common(),
             "Every material the seeds wear, one row per entry told apart by kind: m the material (name, shader), "
             + "k a keyword, p a disabled pass, s a pass its shader draws with (its name; texture holds its LightMode "
             + "tag, empty when untagged), t a texture property (texture key, tiling and offset), f a number, c a "
             + "vector, n the decode a role layer states for one texture, r a resolved surface role (a colour role "
             + "names its texture; a channel role names the texture and the channel in x; a value role carries the "
-            + "value), u a texture property no role layer names." + CommonText, Materials);
+            + "value), u a texture property no role layer names." + CommonText, Materials, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(TexturesId, DataRole.Statement, Common(),
             "Every texture those materials read: the container it was decoded into, its name and whether the asset "
             + "itself declares sRGB encoding. The PIXELS are asked for one texture at a time from "
             + "core.statement.texture, because a selection's images run to gigabytes and a host loads them one by "
-            + "one anyway." + CommonText, Textures);
+            + "one anyway." + CommonText, Textures, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.PublishBlob(TextureId, DataRole.Payload, Common(DataParam.Text(Texture)),
             "The bytes of ONE texture of a selection, in the container core.statement.textures states for it. Asked "
             + "per texture rather than as a column beside the rest: a scene's images are gigabytes, which is more "
@@ -127,14 +138,14 @@ public static class StatementDatasets
             + "a path_0x<crc>_ placeholder that matches no bone. paths+ are the target's object hierarchy -- the "
             + "reversible strings Unity itself hashes once to bind a clip -- onto which every curve is re-anchored; "
             + "avatar is the avatar that hierarchy was built with, against which a muscle-encoded clip is solved into "
-            + "bone curves." + CommonText, Clips);
+            + "bone curves." + CommonText, Clips, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(AudioClipsId, DataRole.Statement, Common(),
             "Every audio clip the seeds themselves carry, one row each as the engine plays it: the channels, frequency and whole "
             + "number of samples per channel the clip's sound bank states, the duration those make (the sample count over the "
             + "frequency, which is how the game's own timeline takes a clip's length), the length the clip itself serializes in "
             + "single precision, its compression format and the size of its Ogg Vorbis file. The file itself is asked for one clip "
             + "at a time from core.statement.audioclip. A clip that cannot be restated as Ogg Vorbis states no row and is named in "
-            + "the report." + CommonText, AudioClips);
+            + "the report." + CommonText, AudioClips, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.PublishBlob(AudioClipId, DataRole.Payload, Common(DataParam.Text(AudioClip)),
             "The bytes of ONE audio clip of a selection as a standard Ogg Vorbis file, rebuilt from the clip's sound bank. Asked "
             + "per clip rather than as a column beside the rest: a selection's sounds run to many megabytes."
@@ -144,7 +155,7 @@ public static class StatementDatasets
             + "record: parameters, layers, state machines, states, transitions, conditions and blend trees, every clip it "
             + "plays named by the key core.statement.clips states for it, and beside the fields a host models the fields "
             + "it does not (mirror, cycle offset, tags, behaviours, solo and mute, interruption sources the engine "
-            + "lacks), so that a host can refuse what it cannot play rather than lose it." + CommonText, Controllers);
+            + "lacks), so that a host can refuse what it cannot play rather than lose it." + CommonText, Controllers, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(TimelinesId, DataRole.Statement, Common(),
             "Every timeline asset the directors of the seeds play, or that the seeds themselves carry, one row each with the "
             + "whole timeline as a JSON record: its tracks in a depth-first walk, each track's clips with the playable asset each "
@@ -152,7 +163,7 @@ public static class StatementDatasets
             + "bound to; every serialized field is stated under the name the script of the game gives it and a pointer as the "
             + "key of what it points at, so that a host refuses what it cannot play rather than lose it. scripts reads the "
             + "layouts of the game's own scripts, which a timeline cannot be stated without: the table is empty unless it is asked."
-            + CommonText, Timelines);
+            + CommonText, Timelines, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(CinemachineId, DataRole.Statement, Common(),
             "Every component of the camera package's own scripts (the assembly Cinemachine; its post-processing component, which "
             + "names a render pipeline profile and nothing of the camera, is left out) the seeds place, one row each: the node it "
@@ -163,11 +174,11 @@ public static class StatementDatasets
             + "a node the selection does not hold, or to anything a layer of nodes cannot state, refuses this table, never leaves a "
             + "component out of it (the report names each component that could not be stated; the other tables are unaffected). "
             + "scripts reads the layouts of the game's own scripts, which these components cannot be stated without: the table is "
-            + "empty unless it is asked." + CommonText, Cinemachine);
+            + "empty unless it is asked." + CommonText, Cinemachine, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
             + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
-            + "motion, and its update and culling modes." + CommonText, Animators);
+            + "motion, and its update and culling modes." + CommonText, Animators, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(ArchivesId, DataRole.Internal, [DataParam.List(Seed, required: true)],
             "Where each seed lives: every archive loading it would read, with the container path "
             + "that archive files first -- answered by the same resolution a load makes.", Archives);
@@ -179,7 +190,7 @@ public static class StatementDatasets
             + "needs the conversion rather than converted numbers.", Bases);
         Datasets.Publish(ReportId, DataRole.Statement, Common(),
             "What the flattening left out or rebuilt, and why: levels of detail dropped, shadow proxies, inactive "
-            + "renderers, meshes without geometry, primitives rebuilt, texture properties no role layer names." + CommonText, Report);
+            + "renderers, meshes without geometry, primitives rebuilt, texture properties no role layer names." + CommonText, Report, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
     }
 
     private static StatementOptions Options(DataRequest request) => new()
@@ -203,6 +214,14 @@ public static class StatementDatasets
     /// the flattening it would make is the one already kept.</summary>
     public static Statement Flatten(DataRequest request)
     {
+        lock (Gate)
+        {
+            return FlattenCore(request);
+        }
+    }
+
+    private static Statement FlattenCore(DataRequest request)
+    {
         CabTable map = request.Map;
         string[] seeds = request.List(Seed);
         if (seeds.Length == 0)
@@ -210,37 +229,30 @@ public static class StatementDatasets
             throw new ArgumentException("a statement needs at least one seed.");
         }
         StatementOptions options = Options(request);
-        string mapIdentity = MapIdentity(map);
-        string asked = Asked(seeds, options, map);
-        lock (Gate)
+        string owner = Owner(seeds, options, map);
+        if (_cached is not null && _cachedRequest.Owner == owner)
         {
-            if (_cached is not null && _cachedRequest == asked)
-            {
-                return _cached;
-            }
+            return _cached;
         }
+        string externalIdentity = StatementSources.ExternalIdentity(seeds, map, options);
+        RequestIdentity asked = new(owner, externalIdentity);
         List<StatementPlan> plans = new(seeds.Length);
         foreach (string seed in seeds)
         {
             plans.Add(StatementSources.Resolve(seed, map, options));
         }
         string signature = string.Join("\n", plans.Select(plan => plan.Signature)) + "\n" + options.Signature + "\n"
-            + mapIdentity;
-        lock (Gate)
+            + MapIdentity(map) + "\n" + externalIdentity;
+        if (_cached is not null && _cachedSignature == signature)
         {
-            if (_cached is not null && _cachedSignature == signature)
-            {
-                _cachedRequest = asked;
-                return _cached;
-            }
+            _cachedRequest = asked;
+            return _cached;
         }
         Statement statement = StatementFlattener.Flatten(map, plans, options, request.Cancellation);
-        lock (Gate)
-        {
-            _cached = statement;
-            _cachedSignature = signature;
-            _cachedRequest = asked;
-        }
+        _cached = statement;
+        _cachedSignature = signature;
+        _cachedRequest = asked;
+        _cachedGeneration++;
         return statement;
     }
 
@@ -250,7 +262,7 @@ public static class StatementDatasets
         {
             _cached = null;
             _cachedSignature = string.Empty;
-            _cachedRequest = string.Empty;
+            _cachedRequest = default;
         }
     }
 
@@ -263,22 +275,31 @@ public static class StatementDatasets
     /// </summary>
     public static void Release(DataRequest request)
     {
-        string asked = Asked(request.List(Seed), Options(request), request.Map);
+        string owner = Owner(request.List(Seed), Options(request), request.Map);
         lock (Gate)
         {
-            if (_cached is not null && _cachedRequest == asked)
+            if (_cached is not null && _cachedRequest.Owner == owner)
             {
                 _cached = null;
                 _cachedSignature = string.Empty;
-                _cachedRequest = string.Empty;
+                _cachedRequest = default;
             }
         }
     }
 
     /// <summary>What a request asked, before its seeds are resolved: the seeds, every option a
     /// flattening depends on, and which map it reads.</summary>
-    private static string Asked(string[] seeds, StatementOptions options, CabTable map)
+    private static string Owner(string[] seeds, StatementOptions options, CabTable map)
         => string.Join("\n", seeds) + "\n" + options.Signature + "\n" + MapIdentity(map);
+
+    private static string SnapshotIdentity(DataRequest request)
+    {
+        lock (Gate)
+        {
+            FlattenCore(request);
+            return _cachedGeneration.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
 
     private static string MapIdentity(CabTable map)
         => RuntimeHelpers.GetHashCode(map).ToString(System.Globalization.CultureInfo.InvariantCulture);

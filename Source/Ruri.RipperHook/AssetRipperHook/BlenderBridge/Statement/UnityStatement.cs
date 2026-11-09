@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
@@ -75,7 +75,7 @@ public sealed class UnityStatement
         _plan = plan;
         _options = options;
         _gameData = gameData;
-        _roles = TextureRoles.Load(options.RoleLayers);
+        _roles = TextureRoles.Load(options.RoleLayers, plan.UnityAdapter?.TextureRoleLayer);
         _identities = ClosureGraphBlob.CollectionIdentities(gameData);
         _seedCabs = new HashSet<string>(plan.Cabs, StringComparer.OrdinalIgnoreCase);
     }
@@ -92,9 +92,14 @@ public sealed class UnityStatement
 
     public static GameData LoadClosure(CabTable map, IEnumerable<string> cabs, bool scriptedDependenciesOnly = false,
         bool scripts = false)
+        => LoadClosure(map, cabs, scriptedDependenciesOnly, scripts, null);
+
+    private static GameData LoadClosure(CabTable map, IEnumerable<string> cabs,
+        bool scriptedDependenciesOnly, bool scripts, UnityStatementAdapter? adapter)
     {
         CabClosure closure = ClosureReader.Resolve(map, cabs, reachThroughDependents: true,
             scriptedDependenciesOnly: scriptedDependenciesOnly);
+        if (adapter?.PrepareClosure is { } prepare) closure = prepare(closure);
         FullConfiguration settings = new();
         settings.LoadFromDefaultPath();
         settings.ExportSettings.ShaderExportMode = ShaderExportMode.Dummy;
@@ -114,7 +119,7 @@ public sealed class UnityStatement
     public static Statement Flatten(CabTable map, StatementPlan plan, StatementOptions options)
     {
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
-        GameData gameData = LoadClosure(map, plan.Cabs, scripts: options.Scripts);
+        GameData gameData = LoadClosure(map, plan.Cabs, false, options.Scripts, plan.UnityAdapter);
         long read = System.Diagnostics.Stopwatch.GetTimestamp();
         UnityStatement flattening = new(map, plan, options, gameData);
         flattening.Run();
@@ -174,8 +179,14 @@ public sealed class UnityStatement
             Timelines();
             CinemachineComponents();
         }
+        _plan.UnityAdapter?.Complete?.Invoke(new(_statement, _gameData, KeyOf, TextureKey, IsSeedCollection));
         EncodeTextures();
     }
+
+    private IEnumerable<UnityLightInfo> ReadLights(List<ILight> lights, UnityHierarchy hierarchy,
+        UnityRendererFilters filters) => _plan.UnityAdapter?.Lights is { } read
+            ? read(_statement, lights, hierarchy, filters)
+            : UnityRenderers.Lights(lights, hierarchy, filters);
 
     /// <summary>A recipe: named meshes out of the closure, each bind-baked onto ONE rig grown
     /// from the template avatar's standing rest, dressed in the materials the recipe names.
@@ -856,7 +867,7 @@ public sealed class UnityStatement
                 Hidden = camera.Disabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject),
             });
         }
-        foreach (UnityLightInfo light in UnityRenderers.Lights(lights, hierarchy, filters))
+        foreach (UnityLightInfo light in ReadLights(lights, hierarchy, filters))
         {
             pieces.Add(new WindowPiece
             {
@@ -1023,6 +1034,7 @@ public sealed class UnityStatement
                 Shadows = null,
                 Layer = LayerOf(node.GameObject),
             };
+            _plan.UnityAdapter?.Node?.Invoke(row, node, KeyOf);
             rows[node] = row;
             _statement.Nodes.Add(row);
         }
@@ -1086,7 +1098,7 @@ public sealed class UnityStatement
                 row.Camera = camera;
             }
         }
-        foreach (UnityLightInfo light in UnityRenderers.Lights(lights, hierarchy, filters))
+        foreach (UnityLightInfo light in ReadLights(lights, hierarchy, filters))
         {
             StatementNode row = rows[light.Node];
             if (row.Kind == "empty")
@@ -1298,6 +1310,8 @@ public sealed class UnityStatement
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
             Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
             ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Avatar = rigRow.Avatar,
+            SourceObject = rigRow.SourceObject, SourceCollection = rigRow.SourceCollection,
+            LightmapIndex = rigRow.LightmapIndex, LightmapST = rigRow.LightmapST,
         };
         _statement.Roots[^1] = _statement.Roots[^1] with { Label = _plan.Label, Kind = "assembly" };
 
@@ -1648,6 +1662,7 @@ public sealed class UnityStatement
         StatementSkeleton skeleton, Dictionary<IRenderer, int> lodOf)
     {
         StatementNode? row = info.Node is null ? null : rows[info.Node];
+        if (row is not null) _plan.UnityAdapter?.Renderer?.Invoke(row, info);
         string rendererName = info.Name;
         (DecodedMesh? decoded, string meshKey, string builtin) = ResolveMesh(info);
         if (decoded is null)
@@ -1741,46 +1756,54 @@ public sealed class UnityStatement
     private (DecodedMesh? Decoded, string Key, string Builtin) ResolveMesh(UnityRendererInfo info)
     {
         IMesh? mesh = info.Mesh;
-        if (mesh is null)
+        DecodedMesh? decoded = null;
+        if (mesh is not null)
         {
-            string? primitive = BuiltinPrimitive(info);
-            if (primitive is not null)
+            if (!_decodedMeshes.TryGetValue(mesh, out decoded))
             {
-                DecodedMesh? built = BuiltinMeshes.Build(primitive);
-                if (built is null)
+                try
                 {
-                    _statement.Note(_plan.Seed, "engine primitive not rebuilt here", 1, $"{info.Name}: {primitive}");
+                    decoded = UnityMeshDecoder.Decode(mesh);
+                }
+                catch (Exception exception)
+                {
+                    _statement.Note(_plan.Seed, "mesh could not be decoded", 1, $"{info.Name}: {exception.Message}");
                     return (null, string.Empty, string.Empty);
                 }
-                return (built, "builtin:" + primitive, built.Builtin);
+                _decodedMeshes[mesh] = decoded;
             }
-            _statement.Note(_plan.Seed, "renderer without a mesh", 1, info.Name);
-            return (null, string.Empty, string.Empty);
+            if (decoded.HasGeometry)
+            {
+                List<int> dropped = decoded.SubMeshes.Where(subMesh => subMesh.Topology != 0).Select(subMesh => subMesh.Topology).Distinct().ToList();
+                if (dropped.Count > 0)
+                {
+                    _statement.Note(_plan.Seed, "non-triangle submeshes dropped", dropped.Count, $"{info.Name}: {string.Join(',', dropped)}");
+                }
+                return (decoded, KeyOf(mesh), string.Empty);
+            }
         }
-        if (!_decodedMeshes.TryGetValue(mesh, out DecodedMesh? decoded))
+        string? primitive = mesh is null || string.Equals(mesh.Collection.Name,
+            BuiltinMeshes.ResourcesCollectionName, StringComparison.OrdinalIgnoreCase)
+            ? BuiltinPrimitive(info) : null;
+        if (primitive is not null)
         {
-            try
+            DecodedMesh? built = BuiltinMeshes.Build(primitive);
+            if (built is null)
             {
-                decoded = UnityMeshDecoder.Decode(mesh);
-            }
-            catch (Exception exception)
-            {
-                _statement.Note(_plan.Seed, "mesh could not be decoded", 1, $"{info.Name}: {exception.Message}");
+                _statement.Note(_plan.Seed, "engine primitive not rebuilt here", 1, $"{info.Name}: {primitive}");
                 return (null, string.Empty, string.Empty);
             }
-            _decodedMeshes[mesh] = decoded;
+            return (built, "builtin:" + primitive, built.Builtin);
         }
-        if (!decoded.HasGeometry)
+        if (decoded is null)
+        {
+            _statement.Note(_plan.Seed, "renderer without a mesh", 1, info.Name);
+        }
+        else
         {
             _statement.Note(_plan.Seed, "mesh decoded to zero vertices", 1, $"{info.Name}: {decoded.Name}");
-            return (null, string.Empty, string.Empty);
         }
-        List<int> dropped = decoded.SubMeshes.Where(subMesh => subMesh.Topology != 0).Select(subMesh => subMesh.Topology).Distinct().ToList();
-        if (dropped.Count > 0)
-        {
-            _statement.Note(_plan.Seed, "non-triangle submeshes dropped", dropped.Count, $"{info.Name}: {string.Join(',', dropped)}");
-        }
-        return (decoded, KeyOf(mesh), string.Empty);
+        return (null, string.Empty, string.Empty);
     }
 
     /// <summary>A renderer whose mesh reference points into the engine's own resources file,
@@ -1807,11 +1830,11 @@ public sealed class UnityStatement
 
     private static string? BuiltinPrimitiveAt(AssetCollection collection, AssetRipper.Assets.Metadata.PPtr pointer)
     {
-        if (pointer.FileID <= 0 || pointer.FileID > collection.Dependencies.Count)
+        if (pointer.FileID <= 0 || pointer.FileID >= collection.Dependencies.Count)
         {
             return null;
         }
-        AssetCollection? dependency = collection.Dependencies[pointer.FileID - 1];
+        AssetCollection? dependency = collection.Dependencies[pointer.FileID];
         if (dependency is not null && !string.Equals(dependency.Name, BuiltinMeshes.ResourcesCollectionName, StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -2172,7 +2195,9 @@ public sealed class UnityStatement
         Parallel.For(0, _texturesToEncode.Count, index =>
         {
             ITexture2D texture = _texturesToEncode[index];
-            encoded[index] = TextureEncoding.Encode(texture, _textureKeys[texture], accepted);
+            encoded[index] = _plan.UnityAdapter?.EncodeTexture is { } encode
+                ? encode(texture, _textureKeys[texture], accepted)
+                : TextureEncoding.Encode(texture, _textureKeys[texture], accepted);
         });
         for (int index = 0; index < encoded.Length; index++)
         {

@@ -127,7 +127,11 @@ namespace Ruri.RipperHook.AR
 				return this;
 			}
 
-			int count = ProcessedIndexBuffer.Length;
+			int count = 0;
+			foreach (SubMeshData subMesh in SubMeshes)
+			{
+				count += subMesh.IndexCount;
+			}
 			Vector3[] vertices = new Vector3[count];
 			Vector3[]? normals = Normals.IsNullOrEmpty() ? null : new Vector3[count];
 			Vector4[]? tangents = Tangents.IsNullOrEmpty() ? null : new Vector4[count];
@@ -143,33 +147,39 @@ namespace Ruri.RipperHook.AR
 			Vector2[]? uv7 = UV7.IsNullOrEmpty() ? null : new Vector2[count];
 			Matrix4x4[]? bindpose = BindPose.IsNullOrEmpty() ? null : new Matrix4x4[count];
 			uint[] processedIndexBuffer = new uint[count];
-			for (int i = 0; i < count; i++)
+			SubMeshData[] subMeshes = new SubMeshData[SubMeshes.Length];
+			int offset = 0;
+			for (int i = 0; i < SubMeshes.Length; i++)
 			{
-				int index = (int)ProcessedIndexBuffer[i];
-				vertices[i] = Vertices[index];
-				SetUnlessNull(normals, i, Normals, index);
-				SetUnlessNull(tangents, i, Tangents, index);
-				SetUnlessNull(colors, i, Colors, index);
-				SetUnlessNull(skin, i, Skin, index);
-				SetUnlessNull(uv1, i, UV1, index);
-				SetUnlessNull(uv2, i, UV2, index);
-				SetUnlessNull(uv3, i, UV3, index);
-				SetUnlessNull(uv4, i, UV4, index);
-				SetUnlessNull(uv5, i, UV5, index);
-				SetUnlessNull(uv6, i, UV6, index);
-				SetUnlessNull(uv7, i, UV7, index);
-				SetUnlessNull(bindpose, i, BindPose, index);
-				processedIndexBuffer[i] = (uint)i;
-			}
-
-			SubMeshData[] subMeshes = DuplicateArray(SubMeshes);
-			for (int i = 0; i < subMeshes.Length; i++)
-			{
-				SubMeshData subMesh = subMeshes[i];
+				SubMeshData subMesh = SubMeshes[i];
+				for (int j = 0; j < subMesh.IndexCount; j++)
+				{
+					int destination = offset + j;
+					int index = (int)(ProcessedIndexBuffer[subMesh.FirstIndex + j] + subMesh.BaseVertex);
+					vertices[destination] = Vertices[index];
+					SetUnlessNull(normals, destination, Normals, index);
+					SetUnlessNull(tangents, destination, Tangents, index);
+					SetUnlessNull(colors, destination, Colors, index);
+					SetUnlessNull(skin, destination, Skin, index);
+					SetUnlessNull(uv0, destination, UV0, index);
+					SetUnlessNull(uv1, destination, UV1, index);
+					SetUnlessNull(uv2, destination, UV2, index);
+					SetUnlessNull(uv3, destination, UV3, index);
+					SetUnlessNull(uv4, destination, UV4, index);
+					SetUnlessNull(uv5, destination, UV5, index);
+					SetUnlessNull(uv6, destination, UV6, index);
+					SetUnlessNull(uv7, destination, UV7, index);
+					SetUnlessNull(bindpose, destination, BindPose, index);
+					processedIndexBuffer[destination] = (uint)destination;
+				}
+				subMesh.FirstIndex = offset;
+				subMesh.FirstVertex = offset;
 				subMesh.VertexCount = subMesh.IndexCount;
-				subMesh.FirstVertex = subMesh.FirstIndex;
-
-				subMesh.BaseVertex = 0;			}
+				subMesh.BaseVertex = 0;
+				subMesh.LocalBounds = Bounds.CalculateFromVertexArray(new ReadOnlySpan<Vector3>(vertices, offset, subMesh.IndexCount));
+				subMeshes[i] = subMesh;
+				offset += subMesh.IndexCount;
+			}
 
 			return new MeshData(vertices, normals, tangents, colors, skin, uv0, uv1, uv2, uv3, uv4, uv5, uv6, uv7, bindpose, processedIndexBuffer, subMeshes);
 		}
@@ -185,6 +195,20 @@ namespace Ruri.RipperHook.AR
 		{
 			get
 			{
+				int offset = 0;
+				foreach (SubMeshData subMesh in SubMeshes)
+				{
+					if (subMesh.BaseVertex != 0 || subMesh.FirstIndex != offset || subMesh.FirstVertex != offset
+						|| subMesh.VertexCount != subMesh.IndexCount)
+					{
+						return false;
+					}
+					offset += subMesh.IndexCount;
+				}
+				if (offset != ProcessedIndexBuffer.Length || offset != Vertices.Length)
+				{
+					return false;
+				}
 				for (uint i = 0; i < ProcessedIndexBuffer.Length; i++)
 				{
 					if (i != ProcessedIndexBuffer[i])

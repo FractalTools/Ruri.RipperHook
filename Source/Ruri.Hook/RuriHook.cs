@@ -10,6 +10,18 @@ namespace Ruri.Hook
 {
     public abstract class RuriHook
     {
+        /// <summary>A snapshot of hooks whose initialization completed successfully.</summary>
+        public static string[] AppliedHookIds
+        {
+            get
+            {
+                lock (LifecycleSyncRoot)
+                {
+                    return ActiveHookIds.OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray();
+                }
+            }
+        }
+
         protected readonly HookRegistry Registry = new();
         private static readonly object LifecycleSyncRoot = new();
         private static readonly HashSet<string> ActiveHookIds = new(StringComparer.OrdinalIgnoreCase);

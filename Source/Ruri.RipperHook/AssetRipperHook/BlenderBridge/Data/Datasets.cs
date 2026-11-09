@@ -28,6 +28,11 @@ public static class Datasets
         /// alphabetical, which put a story's cast list in front of its animations and a
         /// roster's empty half in front of the one with rows.</summary>
         public long Sequence { get; init; }
+        public bool Cache { get; init; } = true;
+        public bool ReaderIndependent { get; init; }
+        public bool ReaderTransition { get; init; }
+        public Func<DataRequest, string>? CacheIdentity { get; init; }
+        public object? CacheGate { get; init; }
     }
 
     /// <summary>
@@ -50,22 +55,34 @@ public static class Datasets
     private static long mapsNumbered;
 
     public static void Publish(string id, DataRole role, DataParam[] parameters, string description,
-        TableProducer producer)
+        TableProducer producer, bool cache = true, bool readerIndependent = false,
+        Func<DataRequest, string>? cacheIdentity = null, object? cacheGate = null)
     {
         ArgumentNullException.ThrowIfNull(producer);
         Registered[Declared(id, parameters)] = new Dataset(id, role, parameters, description ?? string.Empty,
-            producer, null) { Sequence = Next(id) };
+            producer, null) { Sequence = Next(id), Cache = cache, ReaderIndependent = readerIndependent,
+                CacheIdentity = cacheIdentity, CacheGate = cacheGate };
         ClearCache();
     }
 
     public static void PublishBlob(string id, DataRole role, DataParam[] parameters, string description,
-        BlobProducer producer)
+        BlobProducer producer, bool readerIndependent = false, bool readerTransition = false)
     {
         ArgumentNullException.ThrowIfNull(producer);
+        if (readerIndependent && readerTransition) throw new ArgumentException("A reader transition is not reader-independent.");
         Registered[Declared(id, parameters)] = new Dataset(id, role, parameters, description ?? string.Empty,
-            null, producer) { Sequence = Next(id) };
+            null, producer) { Sequence = Next(id), ReaderIndependent = readerIndependent, ReaderTransition = readerTransition };
         ClearCache();
     }
+
+    public static void Remove(string id)
+    {
+        Registered.TryRemove(id, out _);
+        ClearCache();
+    }
+
+    internal static bool IsCurrent(Dataset dataset) =>
+        Registered.TryGetValue(dataset.Id, out Dataset? current) && ReferenceEquals(current, dataset);
 
     /// <summary>The place in the reading order this id holds. Re-publishing one keeps the place
     /// it already had, so a decoder reloaded mid-session does not reshuffle the surfaces.</summary>
@@ -113,24 +130,53 @@ public static class Datasets
 
     public static (string Handle, ColumnTable Table) Table(string id, string[] namedArgs,
         CancellationToken cancellation = default, CabTable? map = null)
+        => Table(Definition(id), namedArgs, cancellation, map);
+
+    internal static (string Handle, ColumnTable Table) Table(Dataset dataset, string[] namedArgs,
+        CancellationToken cancellation, CabTable? map)
     {
-        (Dataset dataset, Dictionary<string, string[]> values) = Resolve(id, namedArgs);
+        if (dataset.CacheGate is { } gate)
+        {
+            lock (gate)
+            {
+                return TableCore(dataset, namedArgs, cancellation, map);
+            }
+        }
+        return TableCore(dataset, namedArgs, cancellation, map);
+    }
+
+    private static (string Handle, ColumnTable Table) TableCore(Dataset dataset, string[] namedArgs,
+        CancellationToken cancellation, CabTable? map)
+    {
+        string id = dataset.Id;
+        Dictionary<string, string[]> values = Bind(dataset, namedArgs ?? []);
+        bool cache = dataset.Cache;
+        if (dataset.ReaderIndependent) cancellation.ThrowIfCancellationRequested();
         if (dataset.Table is null)
         {
             throw new InvalidOperationException($"dataset '{id}' is a blob, not a table -- ask for it with Blob().");
         }
+        using DefaultDenormalScope denormals = DefaultDenormalScope.Enter();
+        using DataUnit? unit = DataUnit.Current is null ? DataUnit.Begin() : null;
+        DataRequest request = new(dataset, values, cancellation, map);
         string handle = HandleOf(id, values, map);
-        if (Kept.TryGet(handle, out ColumnTable? kept))
+        if (dataset.CacheIdentity is { } identity)
+        {
+            StringBuilder key = new(handle);
+            string contentIdentity = identity(request);
+            Append(key, contentIdentity);
+            handle = key.ToString();
+        }
+        if (cache && Kept.TryGet(handle, out ColumnTable? kept))
         {
             return (handle, kept);
         }
-        ColumnTable table;
-        using (DefaultDenormalScope.Enter())
-        using (DataUnit? unit = DataUnit.Current is null ? DataUnit.Begin() : null)
+        ColumnTable table = dataset.Table(request);
+        if (dataset.ReaderIndependent) cancellation.ThrowIfCancellationRequested();
+        if (cache)
         {
-            table = dataset.Table(new DataRequest(dataset, values, cancellation, map));
+            Kept.Offer(handle, table);
         }
-        Kept.Offer(handle, table);
         TableRegistry.Register(handle, table);
         return (handle, table);
     }
@@ -146,8 +192,14 @@ public static class Datasets
 
     public static byte[] Blob(string id, string[] namedArgs, CancellationToken cancellation = default,
         CabTable? map = null, ReadOnlyMemory<byte> payload = default)
+        => Blob(Definition(id), namedArgs, cancellation, map, payload);
+
+    internal static byte[] Blob(Dataset dataset, string[] namedArgs, CancellationToken cancellation,
+        CabTable? map, ReadOnlyMemory<byte> payload)
     {
-        (Dataset dataset, Dictionary<string, string[]> values) = Resolve(id, namedArgs);
+        string id = dataset.Id;
+        Dictionary<string, string[]> values = Bind(dataset, namedArgs ?? []);
+        if (dataset.ReaderIndependent) cancellation.ThrowIfCancellationRequested();
         if (dataset.Blob is null)
         {
             throw new InvalidOperationException($"dataset '{id}' is a table, not a blob -- ask for it with Table().");
@@ -159,6 +211,13 @@ public static class Datasets
 
     private static (Dataset Dataset, Dictionary<string, string[]> Values) Resolve(string id, string[] namedArgs)
     {
+        Dataset dataset = Definition(id);
+        return (dataset, Bind(dataset, namedArgs ?? []));
+    }
+
+    /// <summary>Use one publication for both lifecycle classification and execution.</summary>
+    internal static Dataset Definition(string id)
+    {
         if (!Registered.TryGetValue(id, out Dataset? dataset))
         {
             string known = string.Join(", ", Available().Select(entry => entry.Id));
@@ -166,7 +225,7 @@ public static class Datasets
                 $"no dataset '{id}' is published. The active game publishes: "
                 + $"{(known.Length == 0 ? "(none -- is a game hook enabled?)" : known)}");
         }
-        return (dataset, Bind(dataset, namedArgs ?? []));
+        return dataset;
     }
 
     private static Dictionary<string, string[]> Bind(Dataset dataset, string[] namedArgs)

@@ -41,6 +41,9 @@ public sealed class Statement
 
     public List<StatementReport> Report { get; } = [];
 
+    /// <summary>Static scene facts supplied by the plan's reader adapter, not runtime component behaviour.</summary>
+    public List<string> SceneLighting { get; } = [];
+
     private readonly Dictionary<string, StatementMesh> _meshByKey = new(StringComparer.Ordinal);
     private readonly Dictionary<string, StatementMaterial> _materialByKey = new(StringComparer.Ordinal);
     private readonly Dictionary<string, StatementTexture> _textureByKey = new(StringComparer.Ordinal);
@@ -152,6 +155,14 @@ public sealed class StatementNode
     /// <summary>The key of the avatar the node's animator is built with, which makes the node the root of a rig;
     /// empty for a node that animates nothing.</summary>
     public string Avatar { get; set; } = string.Empty;
+
+    public string SourceObject { get; set; } = string.Empty;
+
+    public string SourceCollection { get; set; } = string.Empty;
+
+    public int LightmapIndex { get; set; } = -1;
+
+    public Vector4 LightmapST { get; set; } = new(1, 1, 0, 0);
 }
 
 public sealed class StatementMesh

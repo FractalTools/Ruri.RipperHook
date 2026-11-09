@@ -42,6 +42,12 @@ public sealed class TypeTreeReadPlan
             static key => Build(key.ClassID, key.Target, key.Version));
     }
 
+    internal static TypeTreeReadPlan Create(ClassIDType classID, Type targetType, TypeTreeNode rootNode)
+    {
+        TypeTreeStructStep root = new(BuildFields(rootNode, targetType, classID, "", strict: true), align: false);
+        return new TypeTreeReadPlan(classID, default, rootNode, root, TypeTreeOverrides.FindPostReaders(classID));
+    }
+
     public void Read(IUnityObjectBase asset, ref EndianSpanReader reader)
     {
         TypeTreeReadContext context = _context ??= new TypeTreeReadContext();
@@ -77,7 +83,7 @@ public sealed class TypeTreeReadPlan
     }
 
 
-    private static TypeTreeFieldStep[] BuildFields(TypeTreeNode structNode, Type? ownerType, ClassIDType classID, string parentPath)
+    private static TypeTreeFieldStep[] BuildFields(TypeTreeNode structNode, Type? ownerType, ClassIDType classID, string parentPath, bool strict = false)
     {
         TypeTreeFieldStep[] steps = new TypeTreeFieldStep[structNode.SubNodes.Length];
         for (int i = 0; i < structNode.SubNodes.Length; i++)
@@ -86,19 +92,23 @@ public sealed class TypeTreeReadPlan
             string path = parentPath.Length == 0 ? node.Name : $"{parentPath}/{node.Name}";
             FieldInfo? field = ownerType is null ? null : TypeTreeFieldAccess.FindField(ownerType, node.Name);
 
-            TypeTreeFieldStep step = BuildFieldStep(node, field, classID, path);
+            TypeTreeFieldStep step = BuildFieldStep(node, field, classID, path, strict);
             step.Gate = TypeTreeOverrides.FindGate(classID, path);
             steps[i] = step;
         }
         return steps;
     }
 
-    private static TypeTreeFieldStep BuildFieldStep(TypeTreeNode node, FieldInfo? field, ClassIDType classID, string path)
+    private static TypeTreeFieldStep BuildFieldStep(TypeTreeNode node, FieldInfo? field, ClassIDType classID, string path, bool strict)
     {
         bool capture = TypeTreeOverrides.ShouldCapture(classID, path);
 
         if (field is null)
         {
+            if (strict)
+            {
+                throw new NotSupportedException($"[TypeTree] '{path}' ({node.TypeName}) has no field in the serialized target.");
+            }
             return capture
                 ? new TypeTreeCaptureFieldStep(node, path)
                 : new TypeTreeFilledFieldStep(node, path, null, new TypeTreeDiscardStep(node));
@@ -113,6 +123,10 @@ public sealed class TypeTreeReadPlan
                 return CreateScalarStep(node, path, fieldType, read!, align, field, classID, capture);
             }
 
+            if (strict)
+            {
+                throw new NotSupportedException($"[TypeTree] {Describe(field)} does not match '{path}' ({node.TypeName}).");
+            }
             Warn($"{Describe(field)} cannot hold node '{node.OriginalName}' ({node.TypeName}); reading and discarding it.");
             return new TypeTreeFilledFieldStep(node, path, null, new TypeTreeDiscardStep(node));
         }
@@ -123,9 +137,13 @@ public sealed class TypeTreeReadPlan
                 $"[TypeTree] '{path}' is bound to {Describe(field)}; capture is only supported for nodes the stock classes have no field for.");
         }
 
-        TypeTreeStep? inner = TryBuildInPlaceStep(node, fieldType, classID, path);
+        TypeTreeStep? inner = TryBuildInPlaceStep(node, fieldType, classID, path, strict);
         if (inner is null)
         {
+            if (strict)
+            {
+                throw new NotSupportedException($"[TypeTree] {Describe(field)} does not match '{path}' ({node.TypeName}).");
+            }
             Warn($"{Describe(field)} cannot hold node '{node.OriginalName}' ({node.TypeName}); reading and discarding it.");
             return new TypeTreeFilledFieldStep(node, path, null, new TypeTreeDiscardStep(node));
         }
@@ -196,22 +214,22 @@ public sealed class TypeTreeReadPlan
             [node, path, read, align, setter, valueFix, capture])!;
     }
 
-    private static TypeTreeStep? TryBuildInPlaceStep(TypeTreeNode node, Type fieldType, ClassIDType classID, string path)
+    private static TypeTreeStep? TryBuildInPlaceStep(TypeTreeNode node, Type fieldType, ClassIDType classID, string path, bool strict)
     {
         switch (node.NodeType)
         {
             case TypeTreeNodeType.Type:
                 if (fieldType.IsValueType) return null;
-                return new TypeTreeStructStep(BuildFields(node, fieldType, classID, path), node.AlignBytes);
+                return new TypeTreeStructStep(BuildFields(node, fieldType, classID, path, strict), node.AlignBytes);
 
             case TypeTreeNodeType.Vector:
             {
                 TypeTreeNode arrayNode = node.SubNodes[0];
-                return BuildSequenceStep(arrayNode.SubNodes[1], fieldType, node.AlignBytes || arrayNode.AlignBytes, classID, path);
+                return BuildSequenceStep(arrayNode.SubNodes[1], fieldType, node.AlignBytes || arrayNode.AlignBytes, classID, path, strict);
             }
 
             case TypeTreeNodeType.Array:
-                return BuildSequenceStep(node.SubNodes[1], fieldType, node.AlignBytes, classID, path);
+                return BuildSequenceStep(node.SubNodes[1], fieldType, node.AlignBytes, classID, path, strict);
 
             case TypeTreeNodeType.Map:
             {
@@ -219,7 +237,7 @@ public sealed class TypeTreeReadPlan
                 TypeTreeNode pairNode = arrayNode.SubNodes[1];
                 if (!TryGetGenericArguments(fieldType, typeof(AssetDictionary<,>), out Type[]? arguments)) return null;
 
-                TypeTreeStep? pair = BuildPairStep(pairNode, arguments![0], arguments[1], classID, path);
+                TypeTreeStep? pair = BuildPairStep(pairNode, arguments![0], arguments[1], classID, path, strict);
                 if (pair is null) return null;
 
                 return (TypeTreeStep)Activator.CreateInstance(
@@ -230,7 +248,7 @@ public sealed class TypeTreeReadPlan
             case TypeTreeNodeType.Pair:
             {
                 if (!TryGetGenericArguments(fieldType, typeof(AssetPair<,>), out Type[]? arguments)) return null;
-                return BuildPairStep(node, arguments![0], arguments[1], classID, path);
+                return BuildPairStep(node, arguments![0], arguments[1], classID, path, strict);
             }
 
             default:
@@ -238,7 +256,7 @@ public sealed class TypeTreeReadPlan
         }
     }
 
-    private static TypeTreeStep? BuildSequenceStep(TypeTreeNode elementNode, Type fieldType, bool align, ClassIDType classID, string path)
+    private static TypeTreeStep? BuildSequenceStep(TypeTreeNode elementNode, Type fieldType, bool align, ClassIDType classID, string path, bool strict)
     {
         if (!TryGetGenericArguments(fieldType, typeof(AssetList<>), out Type[]? arguments))
         {
@@ -258,7 +276,7 @@ public sealed class TypeTreeReadPlan
                 [read!, elementAlign, align])!;
         }
 
-        TypeTreeStep? element = TryBuildInPlaceStep(elementNode, elementType, classID, path);
+        TypeTreeStep? element = TryBuildInPlaceStep(elementNode, elementType, classID, path, strict);
         if (element is null)
         {
             return null;
@@ -269,22 +287,22 @@ public sealed class TypeTreeReadPlan
             [element, align])!;
     }
 
-    private static TypeTreeStep? BuildPairStep(TypeTreeNode pairNode, Type keyType, Type valueType, ClassIDType classID, string path)
+    private static TypeTreeStep? BuildPairStep(TypeTreeNode pairNode, Type keyType, Type valueType, ClassIDType classID, string path, bool strict)
     {
         if (pairNode.SubNodes.Length != 2)
         {
             return null;
         }
 
-        if (!TryBuildPairMember(pairNode.SubNodes[0], keyType, classID, path, out Delegate? readKey, out bool keyAlign, out TypeTreeStep? keyStep)) return null;
-        if (!TryBuildPairMember(pairNode.SubNodes[1], valueType, classID, path, out Delegate? readValue, out bool valueAlign, out TypeTreeStep? valueStep)) return null;
+        if (!TryBuildPairMember(pairNode.SubNodes[0], keyType, classID, path, strict, out Delegate? readKey, out bool keyAlign, out TypeTreeStep? keyStep)) return null;
+        if (!TryBuildPairMember(pairNode.SubNodes[1], valueType, classID, path, strict, out Delegate? readValue, out bool valueAlign, out TypeTreeStep? valueStep)) return null;
 
         return (TypeTreeStep)Activator.CreateInstance(
             typeof(TypeTreePairStep<,>).MakeGenericType(keyType, valueType),
             [readKey, keyAlign, keyStep, readValue, valueAlign, valueStep, pairNode.AlignBytes])!;
     }
 
-    private static bool TryBuildPairMember(TypeTreeNode node, Type memberType, ClassIDType classID, string path, out Delegate? read, out bool align, out TypeTreeStep? step)
+    private static bool TryBuildPairMember(TypeTreeNode node, Type memberType, ClassIDType classID, string path, bool strict, out Delegate? read, out bool align, out TypeTreeStep? step)
     {
         step = null;
         if (IsAssignedInPlaceOfRead(memberType))
@@ -294,7 +312,7 @@ public sealed class TypeTreeReadPlan
 
         read = null;
         align = false;
-        step = TryBuildInPlaceStep(node, memberType, classID, path);
+        step = TryBuildInPlaceStep(node, memberType, classID, path, strict);
         return step is not null;
     }
 

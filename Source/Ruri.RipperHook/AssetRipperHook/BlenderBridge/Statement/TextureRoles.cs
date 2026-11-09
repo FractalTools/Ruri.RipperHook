@@ -32,20 +32,26 @@ public sealed class TextureRoles
         ["metallic", "roughness", "smoothness", "normal_strength", "alpha_cutoff", "blend_mode", "surface_type",
          "alpha_clip"];
 
-    private readonly Dictionary<string, JsonObject> _textures = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _colors = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _floats = new(StringComparer.Ordinal);
+    private readonly JsonObject _rules = new();
+    private readonly Dictionary<string, JsonObject> _profiles = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _colorValueRoles = new(ColorValueRoles, StringComparer.Ordinal);
+    private readonly HashSet<string> _floatValueRoles = new(FloatValueRoles, StringComparer.Ordinal);
 
     public string ProvenKeyword { get; private set; } = string.Empty;
 
     public List<string> Sources { get; } = [];
 
     /// <summary>The default layer, then every stated layer path that exists, in order.</summary>
-    public static TextureRoles Load(IEnumerable<string> layerPaths)
+    public static TextureRoles Load(IEnumerable<string> layerPaths, string? embeddedLayer = null)
     {
         TextureRoles table = new();
-        table.Merge(DefaultLayer());
+        table.Merge(ResourceLayer(DefaultLayerResource));
         table.Sources.Add(DefaultLayerResource);
+        if (embeddedLayer is not null)
+        {
+            table.Merge(ResourceLayer(embeddedLayer));
+            table.Sources.Add(embeddedLayer);
+        }
         foreach (string path in layerPaths)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -58,12 +64,12 @@ public sealed class TextureRoles
         return table;
     }
 
-    private static JsonObject DefaultLayer()
+    private static JsonObject ResourceLayer(string name)
     {
-        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(DefaultLayerResource)
-            ?? throw new InvalidOperationException($"the kernel ships no embedded '{DefaultLayerResource}'.");
+        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
+            ?? throw new InvalidOperationException($"the reader ships no embedded '{name}'.");
         using StreamReader reader = new(stream);
-        return ReadLayer(reader.ReadToEnd(), DefaultLayerResource);
+        return ReadLayer(reader.ReadToEnd(), name);
     }
 
     private static JsonObject ReadLayer(string text, string origin) =>
@@ -72,33 +78,56 @@ public sealed class TextureRoles
 
     private void Merge(JsonObject layer)
     {
-        if (layer["textures"] is JsonObject textures)
+        AddRoles(layer["ColorValueRoles"], _colorValueRoles);
+        AddRoles(layer["FloatValueRoles"], _floatValueRoles);
+        if (layer["shader_profiles"] is JsonObject profiles)
         {
-            foreach ((string name, JsonNode? entry) in textures)
+            foreach ((string name, JsonNode? entry) in profiles)
             {
-                if (entry is JsonObject stated)
+                if (entry is JsonObject profile)
                 {
-                    _textures[name] = stated;
+                    _profiles[name] = (JsonObject)profile.DeepClone();
                 }
             }
         }
-        if (layer["colors"] is JsonObject colors)
+        foreach (string section in new[] { "textures", "colors", "floats" })
         {
-            foreach ((string name, JsonNode? role) in colors)
+            if (layer[section] is not JsonObject entries)
             {
-                _colors[name] = role?.ToString() ?? string.Empty;
+                continue;
+            }
+            JsonObject target = _rules[section] as JsonObject ?? new JsonObject();
+            _rules[section] = target;
+            foreach ((string name, JsonNode? value) in entries)
+            {
+                if (section == "textures" && value is not JsonObject)
+                {
+                    continue;
+                }
+                target[name] = value?.DeepClone();
+                foreach (JsonObject profile in _profiles.Values)
+                {
+                    if (profile[section] is JsonObject selected)
+                    {
+                        selected[name] = value?.DeepClone();
+                    }
+                }
             }
         }
-        if (layer["floats"] is JsonObject floats)
+        if (layer["proven_keyword"] is JsonValue keyword && keyword.TryGetValue(out string? keywordValue) && keywordValue.Length > 0)
         {
-            foreach ((string name, JsonNode? role) in floats)
-            {
-                _floats[name] = role?.ToString() ?? string.Empty;
-            }
+            ProvenKeyword = keywordValue;
         }
-        if (layer["proven_keyword"] is JsonValue keyword && keyword.TryGetValue(out string? value) && value.Length > 0)
+    }
+
+    private static void AddRoles(JsonNode? node, HashSet<string> roles)
+    {
+        if (node is JsonArray entries)
         {
-            ProvenKeyword = value;
+            foreach (JsonNode? entry in entries)
+            {
+                roles.Add(entry!.GetValue<string>());
+            }
         }
     }
 
@@ -111,25 +140,36 @@ public sealed class TextureRoles
 
     public Resolution Resolve(UnityMaterialProperties properties)
     {
+        _profiles.TryGetValue(properties.ShaderName, out JsonObject? profile);
+        JsonObject Rules(string section) => profile?[section] as JsonObject
+            ?? _rules[section] as JsonObject ?? new JsonObject();
+        JsonObject textureRules = Rules("textures");
         bool proven = ProvenKeyword.Length > 0 && properties.Keywords.Contains(ProvenKeyword);
         List<TextureRole> textures = [];
         List<string> unmapped = [];
         foreach ((string name, string textureKey) in properties.Textures)
         {
-            if (!_textures.TryGetValue(name, out JsonObject? entry))
+            if (textureRules[name] is not JsonObject entry)
             {
-                if (!proven)
+                bool unused = _rules["textures"]?[name]?["role"]?.ToString() == NoneRole;
+                if (!proven && !unused)
                 {
                     unmapped.Add(name);
                 }
+                continue;
+            }
+            if (!Allowed(entry, properties))
+            {
                 continue;
             }
             string? role = entry["role"]?.ToString();
             Dictionary<string, int> channels = new(StringComparer.Ordinal);
             if (entry["channels"] is JsonObject fixedChannels)
             {
-                foreach ((string channelRole, JsonNode? index) in fixedChannels)
+                foreach ((string channelRole, JsonNode? node) in fixedChannels)
                 {
+                    JsonNode? index = node is JsonObject conditional
+                        ? Allowed(conditional, properties) ? conditional["channel"] : null : node;
                     if (Array.IndexOf(ChannelRoles, channelRole) >= 0 && index is JsonValue value
                         && value.TryGetValue(out int channel))
                     {
@@ -158,22 +198,100 @@ public sealed class TextureRoles
             }
             textures.Add(new TextureRole(name, textureKey, role, channels, entry["encoding"]?.ToString() ?? string.Empty));
         }
-        Dictionary<string, float[]> colors = new(StringComparer.Ordinal);
-        foreach ((string name, float[] value) in properties.Colors)
+        Dictionary<string, float[]> colors = Map(properties.Colors, Rules("colors"), _colorValueRoles, properties);
+        Dictionary<string, float> floats = Map(properties.Floats, Rules("floats"), _floatValueRoles, properties);
+        ApplyValues(profile?["constants"], properties, colors, floats, replace: true);
+        ApplyValues(profile?["Defaults"], properties, colors, floats, replace: false);
+        if (profile?["TextureTransforms"] is JsonObject transforms)
         {
-            if (_colors.TryGetValue(name, out string? role) && Array.IndexOf(ColorValueRoles, role) >= 0)
+            string prefix = transforms["RolePrefix"]!.GetValue<string>();
+            string source = transforms["Source"]!.GetValue<string>();
+            string namePrefix = transforms["NamePrefix"]?.GetValue<string>() ?? string.Empty;
+            IEnumerable<string> names = source.Length == 0
+                ? transforms["Properties"]!.AsObject().Select(pair => pair.Key)
+                : properties.Textures.Select(pair => pair.Key);
+            foreach (string name in names)
             {
-                colors.TryAdd(role, value);
-            }
-        }
-        Dictionary<string, float> floats = new(StringComparer.Ordinal);
-        foreach ((string name, float value) in properties.Floats)
-        {
-            if (_floats.TryGetValue(name, out string? role) && Array.IndexOf(FloatValueRoles, role) >= 0)
-            {
-                floats.TryAdd(role, value);
+                if (!name.StartsWith(namePrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                string selected = transforms["Properties"]?[name]?.GetValue<string>() ?? source;
+                if (selected.Length == 0)
+                {
+                    continue;
+                }
+                colors[prefix + name] = properties.TextureScaleOffset.TryGetValue(selected, out float[]? value)
+                    ? value.ToArray() : transforms["Default"]!.AsArray().Select(value => value!.GetValue<float>()).ToArray();
             }
         }
         return new Resolution(textures, colors, floats, unmapped, proven);
     }
+
+    private static Dictionary<string, T> Map<T>(IReadOnlyDictionary<string, T> values, JsonObject rules,
+        HashSet<string> allowed, UnityMaterialProperties properties)
+    {
+        Dictionary<string, T> result = new(StringComparer.Ordinal);
+        foreach ((string name, T value) in values)
+        {
+            JsonNode? mapping = rules[name];
+            string? role = mapping is JsonObject rule
+                ? Allowed(rule, properties) ? rule["role"]?.ToString() : null : mapping?.ToString();
+            if (role is not null && allowed.Contains(role))
+            {
+                result.TryAdd(role, value);
+            }
+        }
+        return result;
+    }
+
+    private void ApplyValues(JsonNode? node, UnityMaterialProperties properties,
+        Dictionary<string, float[]> colors, Dictionary<string, float> floats, bool replace)
+    {
+        if (node is not JsonObject values)
+        {
+            return;
+        }
+        foreach ((string role, JsonNode? entry) in values)
+        {
+            JsonNode? value = entry;
+            if (entry is JsonObject rule)
+            {
+                if (!Allowed(rule, properties))
+                {
+                    continue;
+                }
+                value = rule["value"] ?? rule["Default"];
+                if (rule["value_from"] is JsonValue source
+                    && properties.Floats.TryGetValue(source.ToString(), out float scalar))
+                {
+                    value = JsonValue.Create(scalar);
+                }
+                if (_colorValueRoles.Contains(role) && rule["ColorFrom"] is JsonValue colorSource
+                    && properties.Colors.TryGetValue(colorSource.ToString(), out float[]? vector))
+                {
+                    if (replace) colors[role] = vector.ToArray();
+                    else colors.TryAdd(role, vector.ToArray());
+                    continue;
+                }
+            }
+            if (_floatValueRoles.Contains(role) && value is JsonValue number && number.TryGetValue(out float scalarValue))
+            {
+                if (replace) floats[role] = scalarValue;
+                else floats.TryAdd(role, scalarValue);
+            }
+            else if (_colorValueRoles.Contains(role) && value is JsonArray vectorValue)
+            {
+                float[] vector = vectorValue.Select(item => item!.GetValue<float>()).ToArray();
+                if (replace) colors[role] = vector;
+                else colors.TryAdd(role, vector);
+            }
+        }
+    }
+
+    private static bool Allowed(JsonObject rule, UnityMaterialProperties properties) =>
+        (rule["if_keyword"] is null || properties.Keywords.Contains(rule["if_keyword"]!.ToString()))
+        && (rule["if_nonzero"] is null || properties.Floats.GetValueOrDefault(rule["if_nonzero"]!.ToString()) != 0)
+        && (rule["unless_keyword"] is null || !properties.Keywords.Contains(rule["unless_keyword"]!.ToString()))
+        && (rule["unless_texture"] is null || !properties.Textures.Any(pair => pair.Key == rule["unless_texture"]!.ToString()));
 }

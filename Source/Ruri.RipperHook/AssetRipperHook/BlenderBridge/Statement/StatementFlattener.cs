@@ -1,4 +1,4 @@
-﻿using Ruri.RipperHook.CabMapping;
+using Ruri.RipperHook.CabMapping;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
 
@@ -98,6 +98,10 @@ public static class StatementFlattener
                 Collection = node.Collection,
                 Layer = node.Layer,
                 Avatar = node.Avatar,
+                SourceObject = node.SourceObject,
+                SourceCollection = node.SourceCollection,
+                LightmapIndex = node.LightmapIndex,
+                LightmapST = node.LightmapST,
             });
         }
         foreach (StatementMesh mesh in source.Meshes)
@@ -131,5 +135,6 @@ public static class StatementFlattener
         target.CinemachineRefused.AddRange(source.CinemachineRefused);
         target.Morphs.AddRange(source.Morphs);
         target.Report.AddRange(source.Report);
+        target.SceneLighting.AddRange(source.SceneLighting);
     }
 }

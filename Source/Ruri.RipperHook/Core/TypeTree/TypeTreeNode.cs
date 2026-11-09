@@ -38,11 +38,11 @@ public sealed class TypeTreeNode
         return new TypeTreeNode(typeName, name, 1, metaFlag, subNodes.Length == 0 ? NoSubNodes : subNodes);
     }
 
-    private TypeTreeNode(string typeName, string originalName, int version, TransferMetaFlags metaFlag, TypeTreeNode[] subNodes)
+    private TypeTreeNode(string typeName, string originalName, int version, TransferMetaFlags metaFlag, TypeTreeNode[] subNodes, string? fieldName = null)
     {
         TypeName = typeName;
         OriginalName = originalName;
-        Name = TypeTreeNameFixer.GetValidFieldName(originalName);
+        Name = fieldName ?? TypeTreeNameFixer.GetValidFieldName(originalName);
         Version = version;
         MetaFlag = metaFlag;
         SubNodes = subNodes;
@@ -79,16 +79,48 @@ public sealed class TypeTreeNode
             }
         }
 
-        string typeName = GetFixedTypeName(stringBuffer[node.TypeName]);
-        string originalName = stringBuffer[node.Name];
-        TransferMetaFlags metaFlag = (TransferMetaFlags)node.MetaFlag;
+        return Normalize(stringBuffer[node.TypeName], stringBuffer[node.Name], node.Version,
+            (TransferMetaFlags)node.MetaFlag, subNodes);
+    }
+
+    internal static TypeTreeNode FromSerialized(AssetRipper.Import.Structure.Assembly.TypeTrees.TypeTreeNodeStruct node, string? parentType = null)
+    {
+        TypeTreeNode[] subNodes = new TypeTreeNode[node.SubNodes.Count];
+        for (int i = 0; i < subNodes.Length; i++)
+        {
+            subNodes[i] = FromSerialized(node.SubNodes[i], node.TypeName);
+        }
+
+        string fieldName = TypeTreeNameFixer.GetValidFieldName(node.Name);
+        if (parentType is not null && parentType.StartsWith("PPtr<", StringComparison.Ordinal)
+            && fieldName is "m_FileID" or "m_PathID")
+        {
+            fieldName += "_";
+        }
+        else if (fieldName == "m_ObjectHideFlags")
+        {
+            fieldName = "m_HideFlags";
+        }
+        else if (parentType == "ComputeShaderPlatformVariant" && fieldName == "m_Kernels")
+        {
+            fieldName = "m_KernelParents";
+        }
+
+        string typeName = node.TypeName == "ComputeShaderPlatformVariant" ? "ComputeShaderVariant" : node.TypeName;
+        return Normalize(typeName, node.Name, node.Version, node.MetaFlag, subNodes, fieldName);
+    }
+
+    private static TypeTreeNode Normalize(string typeName, string originalName, int version,
+        TransferMetaFlags metaFlag, TypeTreeNode[] subNodes, string? fieldName = null)
+    {
+        typeName = GetFixedTypeName(typeName);
 
         if (typeName == "string")
         {
             ApplyStringRenaming(subNodes, ref typeName, ref metaFlag);
         }
 
-        return new TypeTreeNode(typeName, originalName, node.Version, metaFlag, subNodes);
+        return new TypeTreeNode(typeName, originalName, version, metaFlag, subNodes, fieldName);
     }
 
     private static void ApplyStringRenaming(TypeTreeNode[] subNodes, ref string typeName, ref TransferMetaFlags metaFlag)

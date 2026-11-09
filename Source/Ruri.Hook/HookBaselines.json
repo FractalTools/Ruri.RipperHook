@@ -15,6 +15,7 @@
     "AssetRipper.IO.Files.BundleFiles.FileStream.FileStreamBundleFile::ReadFileStreamMetadata(Stream,Int64)": "b405ba57ed469e95",
     "AssetRipper.IO.Files.BundleFiles.FileStream.FileStreamBundleHeader::IsBundleHeader(EndianReader)": "9b840e17c2dc3d4b",
     "AssetRipper.IO.Files.BundleFiles.FileStream.FileStreamBundleHeader::Read(EndianReader)": "229e84d58499f19d",
+    "AssetRipper.Import.AssetCreation.GameAssetFactory::ReadAsset(AssetInfo,ReadOnlyArraySegment\u00601,SerializedType,IReadOnlyList\u00601)": "aa8e351013ad3872",
     "AssetRipper.Import.AssetCreation.TypeTreeObject::Create(AssetInfo,TypeTreeNodeStruct,TypeTreeNodeStruct,ITypeResolver)": "36d5a3b810e20566",
     "AssetRipper.Import.Configuration.ImportSettings::.ctor()": "3247e60468dd6d5a",
     "AssetRipper.Import.Configuration.ImportSettings::get_DefaultVersion()": "2425d775c950f4eb",

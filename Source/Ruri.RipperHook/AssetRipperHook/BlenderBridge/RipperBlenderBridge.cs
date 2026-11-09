@@ -18,8 +18,68 @@ namespace Ruri.RipperHook.BlenderBridge;
 /// </summary>
 public static class RipperBlenderBridge
 {
-    private static bool _loggingConfigured;
+    private static readonly ReaderWriterLockSlim HostLifecycle = new(LockRecursionPolicy.SupportsRecursion);
 
+    private sealed class ReaderScope(bool transition) : IDisposable
+    {
+        private bool disposed;
+
+        internal void Enter()
+        {
+            if (transition) HostLifecycle.EnterWriteLock();
+            else HostLifecycle.EnterReadLock();
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (transition) HostLifecycle.ExitWriteLock();
+            else HostLifecycle.ExitReadLock();
+        }
+    }
+
+    /// <summary>Readers may overlap; a hook/session transition waits for them to finish.</summary>
+    internal static T WithReaderLifecycle<T>(Func<T> operation)
+    {
+        ReaderScope scope = new(false);
+        scope.Enter();
+        using (scope) return operation();
+    }
+
+    internal static void WithReaderLifecycle(Action operation)
+        => WithReaderLifecycle(() => { operation(); return true; });
+
+    /// <summary>Exclusive reader-state mutation, including synchronous nested install operations.</summary>
+    internal static T WithReaderTransition<T>(Func<T> operation)
+    {
+        ReaderScope scope = new(true);
+        scope.Enter();
+        using (scope) return operation();
+    }
+
+    internal static void WithReaderTransition(Action operation)
+        => WithReaderTransition(() => { operation(); return true; });
+
+    private static T WithDatasetLifecycle<T>(string id, Func<Data.Datasets.Dataset, bool, T> operation)
+    {
+        while (true)
+        {
+            Data.Datasets.Dataset dataset = Data.Datasets.Definition(id);
+            bool current = false;
+            T Invoke()
+            {
+                if (!Data.Datasets.IsCurrent(dataset)) return default!;
+                current = true;
+                return operation(dataset, dataset.ReaderIndependent);
+            }
+            T answer = dataset.ReaderTransition ? WithReaderTransition(Invoke)
+                : dataset.ReaderIndependent ? Invoke() : WithReaderLifecycle(Invoke);
+            if (current) return answer;
+        }
+    }
+
+    private static bool _loggingConfigured;
     /// <summary>
     /// The features THIS host runs with, always. They are not a user choice, because each one
     /// states something about the ASSETS this path hands over rather than about writing a
@@ -29,6 +89,15 @@ public static class RipperBlenderBridge
     /// is a build error at the first Initialize, not a silent no-op.
     /// </summary>
     public static readonly string[] HostFeatures = { "HumanoidToGeneric", "StaticMeshSeparation" };
+    private static readonly List<Func<string, IEnumerable<string>>> HostFeatureProviders = [];
+
+    /// <summary>Register source-owned optional features to carry when a decoder is opened.
+    /// Providers return nothing for decoders they do not own.</summary>
+    internal static void RegisterHostFeatureProvider(Func<string, IEnumerable<string>> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        if (!HostFeatureProviders.Contains(provider)) HostFeatureProviders.Add(provider);
+    }
 
     /// <summary>
     /// Every decoder compiled in, as flat triples (product, version, engineVersion) -- what a
@@ -102,7 +171,7 @@ public static class RipperBlenderBridge
         {
             options[flatPairs[index]] = flatPairs[index + 1] ?? string.Empty;
         }
-        Data.Session.SetOptions(options);
+        WithReaderTransition(() => Data.Session.SetOptions(options));
     }
 
     /// <summary>
@@ -130,6 +199,9 @@ public static class RipperBlenderBridge
     /// un-bundled Unity build is read by the generic path.
     /// </summary>
     public static void Initialize(string decoderId, string gameRoot)
+        => WithReaderTransition(() => InitializeCore(decoderId, gameRoot));
+
+    private static void InitializeCore(string decoderId, string gameRoot)
     {
         Bootstrap.InstallAssemblyResolver();
 
@@ -144,7 +216,8 @@ public static class RipperBlenderBridge
         Data.Installs.Opener = Initialize;
 
         HookConfig config = new();
-        foreach (string feature in HostFeatures)
+        IEnumerable<string> optional = HostFeatureProviders.SelectMany(provider => provider(decoderId) ?? []);
+        foreach (string feature in HostFeatures.Concat(optional).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (HookCatalog.FeatureByName(feature) is null)
             {
@@ -163,31 +236,69 @@ public static class RipperBlenderBridge
             }
             config.EnabledHooks.Add(decoderId);
         }
-        Bootstrap.ApplyHooks(config);
-        Data.Session.Open(gameRoot ?? string.Empty, config.EnabledHooks);
+        HookConfig previous = new();
+        previous.EnabledHooks.UnionWith(Ruri.Hook.RuriHook.AppliedHookIds);
+        string previousRoot = Data.Session.GameRoot;
+        try
+        {
+            Data.Session.Open(gameRoot ?? string.Empty, ApplyHooksChecked(config));
+        }
+        catch (Exception error)
+        {
+            try { Data.Session.Open(previousRoot, ApplyHooksChecked(previous)); }
+            catch (Exception restoreError)
+            {
+                throw new AggregateException("Reader initialization and restoration both failed.", error, restoreError);
+            }
+            throw;
+        }
     }
 
-    public static int BuildCabMap(string gameRoot, string outPath) => CabMap.Build(gameRoot, outPath);
+    /// <summary>Hook initialization failures are reported by the hook framework rather than thrown.
+    /// A reader transition succeeds only when every requested hook actually became active.</summary>
+    internal static string[] ApplyHooksChecked(HookConfig config)
+    {
+        string[] requested = config.EnabledHooks.ToArray();
+        Bootstrap.ApplyHooks(config);
+        string[] applied = Ruri.Hook.RuriHook.AppliedHookIds;
+        string[] missing = requested.Except(applied, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException("Reader hooks failed to initialize: " + string.Join(", ", missing));
+        return applied;
+    }
+
+    public static int BuildCabMap(string gameRoot, string outPath) => WithReaderLifecycle(() => CabMap.Build(gameRoot, outPath));
 
     public static CabMapHandle LoadCabMap(string cabMapPath) => new(cabMapPath, CabMap.LoadTable(cabMapPath));
 
     /// <summary>Open (or restate) one install slot: its folder, decoder and read options. The
     /// first slot opened becomes the active one; see <see cref="UseInstall"/>.</summary>
     public static void OpenInstall(string key, string gameRoot, string decoderId, string[] flatOptions)
-    {
-        Data.Installs.Opener = Initialize;
-        Data.Installs.Open(key, gameRoot, decoderId, flatOptions ?? []);
-    }
+        => WithReaderTransition(() =>
+        {
+            Data.Installs.Opener = Initialize;
+            Data.Installs.Open(key, gameRoot, decoderId, flatOptions ?? []);
+        });
 
-    public static void LoadInstallCabMap(string key, string cabMapPath) => Data.Installs.LoadCabMap(key, cabMapPath);
+    /// <summary>Load one install's CABMap once and return a handle over the exact
+    /// table retained by that install slot. The host must keep this handle rather
+    /// than separately loading the same file into a second CabTable instance.</summary>
+    public static CabMapHandle LoadInstallCabMap(string key, string cabMapPath)
+        => new(cabMapPath, Data.Installs.LoadCabMap(key, cabMapPath));
+
+    /// <summary>A retained in-memory install map, through the same handle as a disk-loaded map.</summary>
+    public static CabMapHandle GetInstallMap(string key) => new(string.Empty, Data.Installs.MapOf(key));
+
+    public static string[] GetInstallOptions(string key) => Data.Installs.OptionsOf(key);
 
     /// <summary>Make one install the live one, re-opening the session onto its decoder and
     /// folder when they differ from what is active.</summary>
     public static void UseInstall(string key)
-    {
-        Data.Installs.Opener = Initialize;
-        Data.Installs.Use(key);
-    }
+        => WithReaderTransition(() =>
+        {
+            Data.Installs.Opener = Initialize;
+            Data.Installs.Use(key);
+        });
 
     public static void RenameInstall(string oldKey, string newKey) => Data.Installs.Rename(oldKey, newKey);
 
@@ -201,10 +312,12 @@ public static class RipperBlenderBridge
 
     public static Data.PinnedTable GameDataTable(CabMapHandle? map, string datasetId, string[] args,
         CancellationToken cancellation)
-    {
-        (string handle, ColumnTable table) = Data.Datasets.Table(datasetId, args ?? [], cancellation, OptionalTableOf(map));
-        return Data.ColumnTablePacking.Pin(handle, table);
-    }
+        => WithDatasetLifecycle(datasetId, (dataset, independent) =>
+        {
+            (string handle, ColumnTable table) = Data.Datasets.Table(dataset, args ?? [], cancellation,
+                independent ? map?.Table : OptionalTableOf(map));
+            return Data.ColumnTablePacking.Pin(handle, table);
+        });
 
     public static Views.View OpenView(string handle, string facet, string search, string[]? flatRules,
         string note, bool shippedOnly, string sortColumn, int sortDirection, int window,
@@ -218,8 +331,9 @@ public static class RipperBlenderBridge
     /// dataset that is purely a question about the install.
     /// </summary>
     public static byte[] GameDataBlob(CabMapHandle? map, string datasetId, string[] args, byte[]? payload,
-        CancellationToken cancellation) =>
-        Data.Datasets.Blob(datasetId, args ?? [], cancellation, OptionalTableOf(map), payload ?? []);
+        CancellationToken cancellation)
+        => WithDatasetLifecycle(datasetId, (dataset, independent) => Data.Datasets.Blob(dataset, args ?? [], cancellation,
+            independent ? map?.Table : OptionalTableOf(map), payload ?? []));
 
     /// <summary>
     /// The host has placed the selection these statement arguments asked about and is done with
@@ -231,8 +345,8 @@ public static class RipperBlenderBridge
     /// </summary>
     public static void ReleaseStatement(CabMapHandle? map, string[] args)
     {
-        Statements.StatementDatasets.Release(
-            Data.Datasets.Request(Statements.StatementDatasets.RootsId, args ?? [], OptionalTableOf(map)));
+        WithReaderTransition(() => Statements.StatementDatasets.Release(
+            Data.Datasets.Request(Statements.StatementDatasets.RootsId, args ?? [], OptionalTableOf(map))));
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
     }

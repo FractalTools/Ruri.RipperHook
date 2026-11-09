@@ -13,13 +13,25 @@ namespace Ruri.RipperHook.Attributes;
 public sealed class RipperHookAttribute : GameHookAttribute
 {
     public GameType GameType { get; }
-    public override string GameName { get => GameType.ToString(); }
+    public override string GameName { get; }
     public override string Version { get; }
     public override string EngineVersion { get; }
+
+    /// <summary>A source-defined product name; no shared enum member is required.
+    /// The legacy enum identity remains Unknown for names outside that enum.</summary>
+    public RipperHookAttribute(string gameName, string version = "", string engineVersion = "")
+        : this(GameType.Unknown, version, engineVersion)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+        GameName = gameName;
+        if (Enum.TryParse(gameName, out GameType known) && known.ToString() == gameName)
+            GameType = known;
+    }
 
     public RipperHookAttribute(GameType gameType, string version = "", string engineVersion = "")
     {
         GameType = gameType;
+        GameName = gameType.ToString();
         Version = version;
         EngineVersion = engineVersion;
     }

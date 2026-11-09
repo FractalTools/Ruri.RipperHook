@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using AssetRipper.SourceGenerated.Enums;
@@ -42,6 +42,7 @@ public static class StatementTables
             "far#", "ortho#",
             "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#", "two_sided_shadows#", "light_fade@", "light_parameters@",
             "object_parameter_names", "object_parameters@", "collection", "layer#", "avatar",
+            "source_object", "source_collection", "lightmap_index#", "lm_sx#", "lm_sy#", "lm_ox#", "lm_oy#",
         ]);
         table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "path");
         foreach (StatementNode node in statement.Nodes)
@@ -74,7 +75,9 @@ public static class StatementTables
                 Bytes<float>(light is null ? [] : [light.Fade.X, light.Fade.Y, light.Fade.Z, light.Fade.W]),
                 Bytes<float>(light?.Parameters ?? []),
                 string.Join(Separator, node.ObjectParameters.Select(parameter => parameter.Key)),
-                Bytes<float>(objectParameters), node.Collection, node.Layer, node.Avatar);
+                Bytes<float>(objectParameters), node.Collection, node.Layer, node.Avatar,
+                node.SourceObject, node.SourceCollection, node.LightmapIndex,
+                node.LightmapST.X, node.LightmapST.Y, node.LightmapST.Z, node.LightmapST.W);
         }
         return table.Build();
     }
@@ -232,64 +235,67 @@ public static class StatementTables
 
     public static ColumnTable Materials(string id, Statement statement)
     {
-        TableBuilder table = new(id, "material", "kind", "name", "texture", "x#", "y#", "z#", "w#");
+        TableBuilder table = new(id, "material", "kind", "name", "texture", "x#", "y#", "z#", "w#", "property");
+        void Row(string material, string kind, string name, string texture,
+            float x, float y, float z, float w, string property = "")
+            => table.Row(material, kind, name, texture, x, y, z, w, property);
         table.Role(ColumnRole.Group, "material");
         foreach (StatementMaterial material in statement.Materials)
         {
             UnityMaterialProperties properties = material.Properties;
-            table.Row(material.Key, MaterialRow, properties.Name, properties.ShaderName, 0, 0, 0, 0);
+            Row(material.Key, MaterialRow, properties.Name, properties.ShaderName, 0, 0, 0, 0);
             foreach (string keyword in properties.KeywordList)
             {
-                table.Row(material.Key, KeywordRow, keyword, string.Empty, 0, 0, 0, 0);
+                Row(material.Key, KeywordRow, keyword, string.Empty, 0, 0, 0, 0);
             }
             foreach (string pass in properties.DisabledPasses)
             {
-                table.Row(material.Key, PassRow, pass, string.Empty, 0, 0, 0, 0);
+                Row(material.Key, PassRow, pass, string.Empty, 0, 0, 0, 0);
             }
             foreach (UnityShaderPass pass in properties.ShaderPasses)
             {
-                table.Row(material.Key, ShaderPassRow, pass.Name, pass.LightMode, 0, 0, 0, 0);
+                Row(material.Key, ShaderPassRow, pass.Name, pass.LightMode, 0, 0, 0, 0);
             }
             foreach ((string name, string texture) in properties.Textures)
             {
                 float[] st = properties.TextureScaleOffset.TryGetValue(name, out float[]? stated) ? stated : [1f, 1f, 0f, 0f];
-                table.Row(material.Key, TextureRow, name, texture, st[0], st[1], st[2], st[3]);
+                Row(material.Key, TextureRow, name, texture, st[0], st[1], st[2], st[3], name);
             }
             foreach ((string name, float value) in properties.FloatEntries)
             {
-                table.Row(material.Key, ScalarRow, name, string.Empty, value, 0, 0, 0);
+                Row(material.Key, ScalarRow, name, string.Empty, value, 0, 0, 0);
             }
             foreach ((string name, float[] value) in properties.ColorEntries)
             {
-                table.Row(material.Key, VectorRow, name, string.Empty, value[0], value[1], value[2], value[3]);
+                Row(material.Key, VectorRow, name, string.Empty, value[0], value[1], value[2], value[3]);
             }
             foreach (TextureRoles.TextureRole role in material.Roles.Textures)
             {
                 if (role.Encoding.Length > 0)
                 {
-                    table.Row(material.Key, EncodingRow, role.Encoding, role.Texture, 0, 0, 0, 0);
+                    Row(material.Key, EncodingRow, role.Encoding, role.Texture, 0, 0, 0, 0, role.Name);
                 }
                 if (role.Role is not null)
                 {
-                    table.Row(material.Key, RoleRow, role.Role, role.Texture, -1, 0, 0, 0);
+                    Row(material.Key, RoleRow, role.Role, role.Texture, -1, 0, 0, 0, role.Name);
                 }
                 foreach ((string channelRole, int channel) in role.Channels)
                 {
-                    table.Row(material.Key, RoleRow, channelRole, role.Texture, channel, 0, 0, 0);
+                    Row(material.Key, RoleRow, channelRole, role.Texture, channel, 0, 0, 0, role.Name);
                 }
             }
             foreach ((string role, float[] value) in material.Roles.Colors)
             {
-                table.Row(material.Key, RoleRow, role, string.Empty, value[0], value[1], value[2], value[3]);
+                Row(material.Key, RoleRow, role, string.Empty, value[0], value[1], value[2], value[3]);
             }
             foreach ((string role, float value) in material.Roles.Floats)
             {
-                table.Row(material.Key, RoleRow, role, string.Empty, value, 0, 0, 0);
+                Row(material.Key, RoleRow, role, string.Empty, value, 0, 0, 0);
             }
             foreach (string unmapped in material.Roles.Unmapped)
             {
                 string texture = properties.Textures.FirstOrDefault(pair => pair.Key == unmapped).Value ?? string.Empty;
-                table.Row(material.Key, UnclaimedRow, unmapped, texture, 0, 0, 0, 0);
+                Row(material.Key, UnclaimedRow, unmapped, texture, 0, 0, 0, 0, unmapped);
             }
         }
         return table.Build();

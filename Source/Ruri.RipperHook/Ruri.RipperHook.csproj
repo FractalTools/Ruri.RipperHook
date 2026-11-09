@@ -97,6 +97,9 @@
 		<EmbeddedResource Include="..\Ruri.GameHook\Unity\TypeTree\RuriTypeTree.tpk">
 			<LogicalName>RuriTypeTree.tpk</LogicalName>
 		</EmbeddedResource>
+		<EmbeddedResource Include="..\Ruri.GameHook\Unity\VRChat\SurfaceRoles.json">
+			<LogicalName>VRChat.SurfaceRoles.json</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 	<!-- Unity's built-in engine resources, straight from the Tpk repo's own CI (the same artifact

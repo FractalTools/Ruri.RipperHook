@@ -28,6 +28,7 @@ public abstract class RipperHookCommon : RuriHook
         var ripperHookAttr = GetType().GetCustomAttribute<RipperHookAttribute>();
         if (ripperHookAttr != null)
         {
+            RegisterModule(new HookUtils.SerializedComputeShaderHook());
             RegisterModule(new AR.TextureConversionHook());
             RuriRuntimeHook.RegisterLoadedGameHook(ripperHookAttr.GameType);
         }

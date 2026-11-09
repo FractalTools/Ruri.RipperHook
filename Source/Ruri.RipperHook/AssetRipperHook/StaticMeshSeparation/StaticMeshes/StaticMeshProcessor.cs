@@ -465,73 +465,13 @@ namespace Ruri.RipperHook.AR
 		private static MeshData MakeMeshDataFromSubMeshes(IRenderer renderer, MeshData combinedMeshData)
 		{
 			IReadOnlyList<uint> subMeshIndicies = renderer.GetSubmeshIndices();
-
-			int count = 0;
+			SubMeshData[] subMeshes = new SubMeshData[subMeshIndicies.Count];
 			for (int i = 0; i < subMeshIndicies.Count; i++)
 			{
-				count += combinedMeshData.SubMeshes[(int)subMeshIndicies[i]].IndexCount;
+				subMeshes[i] = combinedMeshData.SubMeshes[(int)subMeshIndicies[i]];
 			}
-
-			Vector3[] vertices = new Vector3[count];
-			Vector3[]? normals = combinedMeshData.Normals.IsNullOrEmpty() ? null : new Vector3[count];
-			Vector4[]? tangents = combinedMeshData.Tangents.IsNullOrEmpty() ? null : new Vector4[count];
-			ColorFloat[]? colors = combinedMeshData.Colors.IsNullOrEmpty() ? null : new ColorFloat[count];
-			BoneWeight4[]? skin = combinedMeshData.Skin.IsNullOrEmpty() ? null : new BoneWeight4[count];
-			Vector2[]? uv0 = combinedMeshData.UV0.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv1 = combinedMeshData.UV1.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv2 = combinedMeshData.UV2.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv3 = combinedMeshData.UV3.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv4 = combinedMeshData.UV4.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv5 = combinedMeshData.UV5.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv6 = combinedMeshData.UV6.IsNullOrEmpty() ? null : new Vector2[count];
-			Vector2[]? uv7 = combinedMeshData.UV7.IsNullOrEmpty() ? null : new Vector2[count];
-			Matrix4x4[]? bindpose = combinedMeshData.BindPose.IsNullOrEmpty() ? null : new Matrix4x4[count];
-			uint[] processedIndexBuffer = new uint[count];
-			SubMeshData[] subMeshes = new SubMeshData[subMeshIndicies.Count];
-
-			int offset = 0;
-			for (int k = 0; k < subMeshIndicies.Count; k++)
-			{
-				SubMeshData combinedSubMesh = combinedMeshData.SubMeshes[(int)subMeshIndicies[k]];
-				int combinedIndexStart = combinedSubMesh.FirstIndex;
-				for (int j = 0; j < combinedSubMesh.IndexCount; j++)
-				{
-					int newIndex = j + offset;
-					int combinedIndex = (int)combinedMeshData.ProcessedIndexBuffer[j + combinedIndexStart];
-					vertices[newIndex] = combinedMeshData.Vertices[combinedIndex];
-					SetUnlessNull(normals, newIndex, combinedMeshData.Normals, combinedIndex);
-					SetUnlessNull(tangents, newIndex, combinedMeshData.Tangents, combinedIndex);
-					SetUnlessNull(colors, newIndex, combinedMeshData.Colors, combinedIndex);
-					SetUnlessNull(skin, newIndex, combinedMeshData.Skin, combinedIndex);
-					SetUnlessNull(uv0, newIndex, combinedMeshData.UV0, combinedIndex);
-					SetUnlessNull(uv1, newIndex, combinedMeshData.UV1, combinedIndex);
-					SetUnlessNull(uv2, newIndex, combinedMeshData.UV2, combinedIndex);
-					SetUnlessNull(uv3, newIndex, combinedMeshData.UV3, combinedIndex);
-					SetUnlessNull(uv4, newIndex, combinedMeshData.UV4, combinedIndex);
-					SetUnlessNull(uv5, newIndex, combinedMeshData.UV5, combinedIndex);
-					SetUnlessNull(uv6, newIndex, combinedMeshData.UV6, combinedIndex);
-					SetUnlessNull(uv7, newIndex, combinedMeshData.UV7, combinedIndex);
-					SetUnlessNull(bindpose, newIndex, combinedMeshData.BindPose, combinedIndex);
-					processedIndexBuffer[newIndex] = (uint)newIndex;
-				}
-				SubMeshData newSubMesh = combinedSubMesh;
-				newSubMesh.FirstIndex = offset;
-				newSubMesh.FirstVertex = offset;
-				newSubMesh.VertexCount = newSubMesh.IndexCount;
-				newSubMesh.LocalBounds = Bounds.CalculateFromVertexArray(new ReadOnlySpan<Vector3>(vertices, (int)offset, (int)newSubMesh.IndexCount));
-				subMeshes[k] = newSubMesh;
-
-				offset += combinedSubMesh.IndexCount;
-			}
-
-			return new MeshData(vertices, normals, tangents, colors, skin, uv0, uv1, uv2, uv3, uv4, uv5, uv6, uv7, bindpose, processedIndexBuffer, subMeshes);
-		}
-
-		private static void SetUnlessNull<T>(T[]? array1, int index1, T[]? array2, int index2)
-		{
-			if (array1 is not null)
-			{
-				array1[index1] = array2![index2];			}
+			MeshData selectedMeshData = combinedMeshData with { SubMeshes = subMeshes };
+			return selectedMeshData.IsComparable ? selectedMeshData.DeepClone() : selectedMeshData.MakeComparableMeshData();
 		}
 
 		private bool TryGetOrMakeCombinedMeshData(IMesh combinedMesh, out MeshData combinedMeshData)
@@ -619,6 +559,20 @@ namespace Ruri.RipperHook.AR
 		#region Approximate Equality
 		private static bool AreApproximatelyEqual(MeshData instanceMeshData, MeshData otherMeshData)
 		{
+			if (instanceMeshData.SubMeshes.Length != otherMeshData.SubMeshes.Length)
+			{
+				return false;
+			}
+			for (int i = 0; i < instanceMeshData.SubMeshes.Length; i++)
+			{
+				SubMeshData subMesh = instanceMeshData.SubMeshes[i];
+				SubMeshData otherSubMesh = otherMeshData.SubMeshes[i];
+				if (subMesh.Topology != otherSubMesh.Topology || subMesh.IndexCount != otherSubMesh.IndexCount
+					|| subMesh.FirstIndex != otherSubMesh.FirstIndex)
+				{
+					return false;
+				}
+			}
 			if (!AreSameLength(instanceMeshData.Vertices, otherMeshData.Vertices)
 				|| !AreSameLength(instanceMeshData.Normals, otherMeshData.Normals)
 				|| !AreSameLength(instanceMeshData.Tangents, otherMeshData.Tangents)

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated.Classes.ClassID_21;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
@@ -129,6 +129,9 @@ public sealed record PlanNote(string What, int Count, string Detail);
 /// them. Inert on purpose -- resolving touches no closure of its own.</summary>
 public sealed class StatementPlan
 {
+    /// <summary>Source-owned policy applied inside the existing Unity reader; absent for ordinary plans.</summary>
+    public UnityStatementAdapter? UnityAdapter { get; init; }
+
     public required string Seed { get; init; }
 
     public required string Label { get; init; }
@@ -188,7 +191,8 @@ public sealed class StatementPlan
     public Func<GameData, IReadOnlyDictionary<IUnityObjectBase, string>>? Clips { get; init; }
 
     public string Signature => string.Join('|', Seed, Kind, string.Join(';', Cabs), SeededOnly ? 1 : 0,
-        string.Join(';', NamedRoots), string.Join(',', Assets), Meshes.Count, Parts.Count, Placements.Count, PipelineDraws.Count, Fills is null ? 0 : 1);
+        string.Join(';', NamedRoots), string.Join(',', Assets), Meshes.Count, Parts.Count, Placements.Count, PipelineDraws.Count, Fills is null ? 0 : 1,
+        UnityAdapter?.Signature ?? string.Empty);
 }
 
 /// <summary>Where a seed that is not an archive of the loaded map is explained: a hook
@@ -200,17 +204,48 @@ public static class StatementSources
 
     public delegate StatementPlan? Source(string seed, CabTable map, StatementOptions options);
 
-    private static readonly List<Source> Sources = [];
+    /// <summary>Content read outside the map, checked before either statement or table cache lookup.
+    /// Null means this source does not claim the seed.</summary>
+    public delegate string? ExternalIdentitySource(string seed, CabTable map, StatementOptions options);
 
-    public static void Register(Source source)
+    private sealed record Registration(Source Callback, ExternalIdentitySource? Identity);
+
+    private static readonly List<Registration> Sources = [];
+
+    public static void Register(Source source, ExternalIdentitySource? externalIdentity = null)
     {
         ArgumentNullException.ThrowIfNull(source);
-        Sources.Add(source);
+        Sources.Add(new(source, externalIdentity));
     }
 
-    public static void Remove(Source source) => Sources.Remove(source);
+    public static void Remove(Source source)
+    {
+        Sources.RemoveAll(entry => entry.Callback == source);
+    }
 
-    public static void Clear() => Sources.Clear();
+    public static void Clear()
+    {
+        Sources.Clear();
+    }
+
+    public static string ExternalIdentity(IEnumerable<string> seeds, CabTable map, StatementOptions options)
+    {
+        List<string> identities = [];
+        foreach (string seed in seeds)
+        {
+            string identity = string.Empty;
+            foreach (Registration source in Sources)
+            {
+                if (source.Identity?.Invoke(seed, map, options) is { } supplied)
+                {
+                    identity = supplied;
+                    break;
+                }
+            }
+            identities.Add(identity);
+        }
+        return string.Join('\n', identities);
+    }
 
     /// <summary>Every archive these seeds read, each once -- what a question about a selection's
     /// archives is asked of, so that the shaders it shades with or the shapes its meshes carry are
@@ -243,9 +278,9 @@ public static class StatementSources
     public static StatementPlan Resolve(string seed, CabTable map, StatementOptions options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(seed);
-        foreach (Source source in Sources)
+        foreach (Registration source in Sources)
         {
-            if (source(seed, map, options) is { } plan)
+            if (source.Callback(seed, map, options) is { } plan)
             {
                 return plan;
             }

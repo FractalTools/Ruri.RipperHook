@@ -32,9 +32,10 @@ public static class Installs
     /// that owns hook activation, so this registry never reaches into it.</summary>
     public static Action<string, string>? Opener { get; set; }
 
-    public static string ActiveKey => _active;
+    public static string ActiveKey => RipperBlenderBridge.WithReaderLifecycle(() => _active);
 
-    public static CabTable? ActiveMap => Slots.TryGetValue(_active, out Slot? slot) ? slot.Map : null;
+    public static CabTable? ActiveMap => RipperBlenderBridge.WithReaderLifecycle(() =>
+        Slots.TryGetValue(_active, out Slot? slot) ? slot.Map : null);
 
     public static void Register()
     {
@@ -44,6 +45,9 @@ public static class Installs
     }
 
     public static void Open(string key, string root, string decoder, string[] flatOptions)
+        => RipperBlenderBridge.WithReaderTransition(() => OpenCore(key, root, decoder, flatOptions));
+
+    private static void OpenCore(string key, string root, string decoder, string[] flatOptions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         if (!Slots.TryGetValue(key, out Slot? slot))
@@ -66,30 +70,85 @@ public static class Installs
         Datasets.ClearCache();
     }
 
-    public static void LoadCabMap(string key, string path)
+    public static CabTable LoadCabMap(string key, string path)
+        => RipperBlenderBridge.WithReaderTransition(() => LoadCabMapCore(key, path));
+
+    private static CabTable LoadCabMapCore(string key, string path)
     {
         Slot slot = SlotOf(key);
         slot.CabMapPath = path;
         slot.Map = CabMap.LoadTable(path);
         Datasets.ClearCache();
+        return slot.Map;
     }
+
+    /// <summary>Retain an explicitly prepared map without disk IO or changing the active slot.</summary>
+    public static void RegisterMap(string key, string root, string decoder, CabTable map, bool replaceExisting = false)
+        => RipperBlenderBridge.WithReaderTransition(() => RegisterMapCore(key, root, decoder, map, replaceExisting));
+
+    private static void RegisterMapCore(string key, string root, string decoder, CabTable map, bool replaceExisting)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(map);
+        if (Slots.TryGetValue(key, out Slot? existing))
+        {
+            if (!replaceExisting) throw new InvalidOperationException("An install already owns that key.");
+            if (!string.Equals(existing.Root.TrimEnd('/', '\\'), root.TrimEnd('/', '\\'), StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(existing.Decoder, decoder, StringComparison.Ordinal))
+                throw new InvalidOperationException("Replacing a map must preserve its install root and decoder.");
+            existing.Map = map;
+            Datasets.ClearCache();
+            return;
+        }
+        if (Slots.Count >= 64) throw new InvalidOperationException("Close an install before retaining another map.");
+        Slot slot = new() { Key = key, Root = root, Decoder = decoder, Map = map };
+        foreach ((string name, string value) in Session.Options) slot.Options[name] = value;
+        Slots.Add(key, slot);
+        Order.Add(key);
+        Datasets.ClearCache();
+    }
+
+    public static CabTable MapOf(string key) => RipperBlenderBridge.WithReaderLifecycle(() => SlotOf(key).Map
+        ?? throw new InvalidOperationException("The selected install has no loaded map."));
+
+    public static string[] OptionsOf(string key) => RipperBlenderBridge.WithReaderLifecycle(() => SlotOf(key).Options
+        .SelectMany(pair => new[] { pair.Key, pair.Value }).ToArray());
 
     /// <summary>Make one install the live one: its options and decoder become the
     /// session's, re-opened only when they differ from what is active.</summary>
     public static void Use(string key)
+        => RipperBlenderBridge.WithReaderTransition(() => UseCore(key));
+
+    private static void UseCore(string key)
     {
         Slot slot = SlotOf(key);
-        _active = key;
-        Session.SetOptions(slot.Options);
-        bool sameHooks = Session.HookIds.Contains(slot.Decoder) || (slot.Decoder.Length == 0 && Session.HookIds.Length <= 2);
-        if (!sameHooks || !string.Equals(Session.GameRoot, slot.Root, StringComparison.OrdinalIgnoreCase))
+        Dictionary<string, string> previousOptions = new(Session.Options, StringComparer.Ordinal);
+        try
         {
-            (Opener ?? throw new InvalidOperationException("no session opener is registered."))(slot.Decoder, slot.Root);
+            Session.SetOptions(slot.Options);
+            bool sameHooks = Session.HookIds.Contains(slot.Decoder) || (slot.Decoder.Length == 0 && Session.HookIds.Length <= 2);
+            if (!sameHooks || !string.Equals(Session.GameRoot, slot.Root, StringComparison.OrdinalIgnoreCase))
+            {
+                (Opener ?? throw new InvalidOperationException("no session opener is registered."))(slot.Decoder, slot.Root);
+            }
+            _active = key;
+        }
+        catch (Exception error)
+        {
+            try { Session.SetOptions(previousOptions); }
+            catch (Exception restoreError)
+            {
+                throw new AggregateException("Install selection and option restoration both failed.", error, restoreError);
+            }
+            throw;
         }
         Datasets.ClearCache();
     }
 
     public static void Rename(string oldKey, string newKey)
+        => RipperBlenderBridge.WithReaderTransition(() => RenameCore(oldKey, newKey));
+
+    private static void RenameCore(string oldKey, string newKey)
     {
         if (oldKey == newKey || !Slots.Remove(oldKey, out Slot? slot))
         {
@@ -109,6 +168,9 @@ public static class Installs
     }
 
     public static void Close(string key)
+        => RipperBlenderBridge.WithReaderTransition(() => CloseCore(key));
+
+    private static void CloseCore(string key)
     {
         if (Slots.Remove(key))
         {
@@ -127,6 +189,9 @@ public static class Installs
             : throw new InvalidOperationException($"no install is open under key '{key}' -- open it first.");
 
     private static ColumnTable Table(DataRequest request)
+        => RipperBlenderBridge.WithReaderLifecycle(() => TableCore(request));
+
+    private static ColumnTable TableCore(DataRequest request)
     {
         TableBuilder table = new(InstallsId, "key", "root", "decoder", "options", "cabmap", "loaded#", "active#");
         table.Role(ColumnRole.Key, "key").Role(ColumnRole.Label, "key");
