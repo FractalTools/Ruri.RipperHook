@@ -179,7 +179,7 @@ public sealed class UnityStatement
             Timelines();
             CinemachineComponents();
         }
-        _plan.UnityAdapter?.Complete?.Invoke(new(_statement, _gameData, KeyOf, TextureKey, IsSeedCollection));
+        _plan.UnityAdapter?.Complete?.Invoke(new(_statement, _gameData, KeyOf, TextureKey, IsSeedCollection, WrittenMaterial));
         EncodeTextures();
     }
 
@@ -1678,7 +1678,7 @@ public sealed class UnityStatement
         foreach (IMaterial? material in info.Materials)
         {
             materialKeys.Add(material is null ? string.Empty
-                : info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info));
+                : info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info.Name, info.Writes));
         }
         int lod = lodOf.GetValueOrDefault(info.Renderer, -1);
         ShadowCastingMode shadows = info.Renderer.GetShadowCastingMode();
@@ -1947,22 +1947,22 @@ public sealed class UnityStatement
     /// gives each renderer its own instance of a material it writes onto, so the written material is
     /// a record of its own, named after the material and the renderer it belongs to; renderers the
     /// title writes the same values onto share one.</summary>
-    private string WrittenMaterial(IMaterial material, UnityRendererInfo info)
+    private string WrittenMaterial(IMaterial material, string rendererName, IReadOnlyList<MaterialWrite> writes)
     {
         string key = string.Create(CultureInfo.InvariantCulture,
-            $"{KeyOf(material)}|{UnityMaterials.WriteSignature(info.Writes, TextureKey)}");
+            $"{KeyOf(material)}|{UnityMaterials.WriteSignature(writes, TextureKey)}");
         if (_statement.HasMaterial(key))
         {
             return key;
         }
-        string stem = string.Create(CultureInfo.InvariantCulture, $"{material.Name.String}@{info.Name}");
+        string stem = string.Create(CultureInfo.InvariantCulture, $"{material.Name.String}@{rendererName}");
         string name = stem;
         for (int ordinal = 2; _writtenNames.TryGetValue(name, out string? taken) && taken != key; ordinal++)
         {
             name = string.Create(CultureInfo.InvariantCulture, $"{stem}#{ordinal}");
         }
         _writtenNames[name] = key;
-        return Register(key, UnityMaterials.Written(UnityMaterials.Read(material, TextureKey), name, info.Writes, TextureKey));
+        return Register(key, UnityMaterials.Written(UnityMaterials.Read(material, TextureKey), name, writes, TextureKey));
     }
 
     private string Register(string key, UnityMaterialProperties properties)

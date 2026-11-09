@@ -4,6 +4,7 @@ using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated.Classes.ClassID_108;
+using AssetRipper.SourceGenerated.Classes.ClassID_21;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 
 namespace Ruri.RipperHook.BlenderBridge.Statements;
@@ -26,4 +27,5 @@ public sealed class UnityStatementAdapter
 /// <summary>Already-read data and existing key/texture registration, not another parser or loader.</summary>
 public sealed record UnityStatementData(Statement Output, GameData Data,
     Func<IUnityObjectBase, string> Key, Func<ITexture2D, string> Texture,
-    Func<AssetCollection, bool> Own);
+    Func<AssetCollection, bool> Own,
+    Func<IMaterial, string, IReadOnlyList<MaterialWrite>, string> WriteMaterial);
