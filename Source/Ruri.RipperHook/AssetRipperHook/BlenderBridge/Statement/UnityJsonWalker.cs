@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json.Nodes;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Metadata;
@@ -29,26 +30,41 @@ internal sealed class UnityJsonWalker : AssetWalker
     private readonly Func<JsonNode?> _hole;
     private readonly Func<double, JsonNode> _number;
     private readonly IReadOnlySet<string> _skipped;
+    private readonly ClassMemberSet? _members;
     private readonly List<Frame> _frames = [];
     private JsonNode? _result;
 
     public UnityJsonWalker(Func<int, long, JsonNode?> pointer, Func<JsonNode?> hole, Func<double, JsonNode> number,
-        IReadOnlySet<string> skipped)
+        IReadOnlySet<string> skipped, ClassMemberSet? members)
     {
         _pointer = pointer;
         _hole = hole;
         _number = number;
         _skipped = skipped;
+        _members = members;
     }
 
     public JsonNode? Result => _result;
 
     public static JsonNode? Walk(IUnityAssetBase value, Func<int, long, JsonNode?> pointer, Func<JsonNode?> hole,
-        Func<double, JsonNode> number, IReadOnlySet<string> skipped)
+        Func<double, JsonNode> number, IReadOnlySet<string> skipped, ClassMemberSet? members)
     {
-        UnityJsonWalker walker = new(pointer, hole, number, skipped);
+        UnityJsonWalker walker = new(pointer, hole, number, skipped, members);
         value.WalkRelease(walker);
         return walker.Result;
+    }
+
+    private string PathOf(string name)
+    {
+        StringBuilder path = new();
+        for (int index = 0; index < _frames.Count - 1; index++)
+        {
+            if (_frames[index].Object is not null && _frames[index].Field is { } field)
+            {
+                path.Append(field).Append('.');
+            }
+        }
+        return path.Append(name).ToString();
     }
 
     private void Attach(JsonNode? value)
@@ -88,6 +104,10 @@ internal sealed class UnityJsonWalker : AssetWalker
     public override bool EnterField(IUnityAssetBase asset, string name)
     {
         if (_frames.Count == 1 && _skipped.Contains(name))
+        {
+            return false;
+        }
+        if (_members is not null && !_members.Allows(PathOf(name)))
         {
             return false;
         }

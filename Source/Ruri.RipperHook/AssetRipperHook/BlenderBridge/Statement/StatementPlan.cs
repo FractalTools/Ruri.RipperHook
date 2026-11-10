@@ -44,6 +44,16 @@ public sealed class StatementOptions
     /// transform, a canvas. Data of the request, not a table of the code.</summary>
     public IReadOnlyList<string> Classes { get; init; } = [];
 
+    /// <summary>The members of those classes the request wants, each as <c>Class.member.path</c>: a class that has entries is
+    /// stated as those members only, a class that has none is stated whole. Data of the request, not a table of the code.</summary>
+    public IReadOnlyList<string> Members { get; init; } = [];
+
+    private ScriptMemberFilter? _memberFilter;
+
+    /// <summary>The filter <see cref="Members"/> make over <see cref="Classes"/>; a request that names a member of a class it does
+    /// not state is refused when this is first asked.</summary>
+    public ScriptMemberFilter MemberFilter => _memberFilter ??= ScriptMemberFilter.Parse(Members, Classes);
+
     /// <summary>Whether a script whose layout the reader cannot read (a field the player stores by managed reference, a class the
     /// installed assemblies no longer match) is stated as a record that says so, instead of refusing the table that holds it.</summary>
     public bool Unreadable { get; init; }
@@ -57,7 +67,7 @@ public sealed class StatementOptions
     /// so asking one selection in two bases -- geometry in the host's own, the rig's rest in
     /// the one its animation data is written in -- must not decode the selection twice.</summary>
     public string Signature => string.Join('|', Detail, Inactive ? 1 : 0, ShadowProxies ? 1 : 0, Colliders ? 1 : 0, Scripts ? 1 : 0, Unreadable ? 1 : 0,
-        string.Join(';', Classes), string.Join(';', RoleLayers), string.Join(';', Containers));
+        string.Join(';', Classes), string.Join(';', Members), string.Join(';', RoleLayers), string.Join(';', Containers));
 }
 
 /// <summary>One piece of an assembled character: the prefab's own name in the closure, the

@@ -46,6 +46,7 @@ public static class StatementDatasets
     public const string CollidersFlag = "colliders";
     public const string Scripts = "scripts";
     public const string Classes = "classes";
+    public const string Members = "members";
     public const string Unreadable = "unreadable";
     public const string Roles = "roles";
     public const string Containers = "containers";
@@ -65,7 +66,7 @@ public static class StatementDatasets
     [
         DataParam.List(Seed), DataParam.Text(BasisParam, required: false), DataParam.Integer(Detail, required: false),
         DataParam.Flag(Inactive, required: false), DataParam.Flag(ShadowProxies, required: false), DataParam.Flag(CollidersFlag, required: false),
-        DataParam.Flag(Scripts, required: false), DataParam.List(Classes), DataParam.Flag(Unreadable, required: false),
+        DataParam.Flag(Scripts, required: false), DataParam.List(Classes), DataParam.List(Members), DataParam.Flag(Unreadable, required: false),
         DataParam.List(Roles),
         DataParam.List(Containers), .. extra,
     ];
@@ -78,7 +79,8 @@ public static class StatementDatasets
         + "inactive keeps disabled renderers (on unless stated 0); shadow_proxies keeps shadow-only renderers; colliders "
         + "states the collision volumes of the objects (core.statement.colliders; off states none); scripts reads the layouts of the "
         + "game's own scripts, which loads the install's managed assemblies (a MonoBehaviour has no fields to state without them); classes "
-        + "are the engine component classes (not scripts) core.statement.scripts states beside the scripts; unreadable states a script "
+        + "are the engine classes (components and assets, not scripts) core.statement.scripts states beside the scripts; members are the "
+        + "members of those classes the request wants as Class.member.path, a class with none stated whole; unreadable states a script "
         + "whose layout cannot be read as a record that says so instead of refusing the table; roles are "
         + "texture-role layer files, later overriding earlier; containers are the image containers accepted.";
 
@@ -219,6 +221,7 @@ public static class StatementDatasets
         Colliders = request.Flag(CollidersFlag),
         Scripts = request.Given(Scripts) && request.Flag(Scripts),
         Classes = request.List(Classes),
+        Members = request.List(Members),
         Unreadable = request.Given(Unreadable) && request.Flag(Unreadable),
         RoleLayers = request.List(Roles),
         Containers = request.List(Containers),

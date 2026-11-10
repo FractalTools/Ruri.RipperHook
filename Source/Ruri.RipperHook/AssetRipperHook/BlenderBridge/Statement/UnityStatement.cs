@@ -2124,7 +2124,7 @@ public sealed class UnityStatement
             placements[placed.Object] = new UnityScripts.Placement(placed.Path, before, KeyOf(placed.Root));
         }
         UnityScripts converter = new(KeyOf, gameObject => placements.TryGetValue(gameObject, out UnityScripts.Placement? placement) ? placement : null,
-            _options.Unreadable);
+            _options.Unreadable, _options.MemberFilter);
         List<string> withoutScript = [];
         foreach (PlacedScript placed in _scripts)
         {
@@ -2186,6 +2186,30 @@ public sealed class UnityStatement
                 string record = converter.Asset(asset, (asset.OriginalPath ?? string.Empty).Replace('\\', '/')).ToJsonString();
                 _statement.Scripts.Add(new StatementScript(asset.Collection.Name, ScriptRecordMembers.AssetRow, KeyOf(asset), string.Empty,
                     UnityScripts.ClassNameOf(asset), record));
+            }
+            catch (Exception refusal) when (refusal is InvalidOperationException or NotSupportedException)
+            {
+                _statement.ScriptsRefused.Add(refusal.Message);
+                _statement.Note(_plan.Seed, "script cannot be stated", 1, refusal.Message);
+            }
+        }
+        List<IUnityObjectBase> engineAssets = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is not (IMonoBehaviour or IComponent or IGameObject) && _options.Classes.Contains(asset.ClassName)
+                && IsSeedCollection(asset.Collection) && Keeps(asset))
+            {
+                engineAssets.Add(asset);
+            }
+        }
+        foreach (IUnityObjectBase asset in engineAssets
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            try
+            {
+                string record = converter.NativeAsset(asset, (asset.OriginalPath ?? string.Empty).Replace('\\', '/')).ToJsonString();
+                _statement.Scripts.Add(new StatementScript(asset.Collection.Name, ScriptRecordMembers.AssetRow, KeyOf(asset), string.Empty,
+                    asset.ClassName, record));
             }
             catch (Exception refusal) when (refusal is InvalidOperationException or NotSupportedException)
             {

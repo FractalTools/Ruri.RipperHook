@@ -41,13 +41,16 @@ public sealed class UnityScripts : UnityScriptRecords
     private readonly List<string> _dangling = [];
     private readonly List<string> _unreadable = [];
     private readonly bool _allowUnreadable;
+    private readonly ScriptMemberFilter _members;
     private string _owner = string.Empty;
 
-    public UnityScripts(Func<IUnityObjectBase, string> keyOf, Func<IGameObject, Placement?> placementOf, bool allowUnreadable)
+    public UnityScripts(Func<IUnityObjectBase, string> keyOf, Func<IGameObject, Placement?> placementOf, bool allowUnreadable,
+        ScriptMemberFilter members)
     {
         _keyOf = keyOf;
         _placementOf = placementOf;
         _allowUnreadable = allowUnreadable;
+        _members = members;
     }
 
     /// <summary>The pointers that pointed at nothing a loaded archive holds, each with the field it was found in.</summary>
@@ -112,7 +115,7 @@ public sealed class UnityScripts : UnityScriptRecords
         record[ScriptRecordMembers.Namespace] = string.Empty;
         record[ScriptRecordMembers.Assembly] = string.Empty;
         record[ScriptRecordMembers.ClassOrdinal] = ClassOrdinal(component, holder);
-        JsonObject fields = Walk(component, component.Collection, UnityScriptAdditions.Dropped(className));
+        JsonObject fields = Walk(component, component.Collection, UnityScriptAdditions.Dropped(className), _members.Of(className));
         if (fields.Remove(ScriptRecordMembers.EnabledField, out JsonNode? enabled) && enabled is not null)
         {
             record[ScriptRecordMembers.Enabled] = enabled.GetValue<int>() != 0;
@@ -149,6 +152,29 @@ public sealed class UnityScripts : UnityScriptRecords
         return record;
     }
 
+    /// <summary>An asset of the engine's own classes (an audio mixer, a group of one): no script defines it, so it is stated from its
+    /// own serialized members like a component of the engine, under the members the request names for its class.</summary>
+    public JsonObject NativeAsset(IUnityObjectBase asset, string container)
+    {
+        string className = asset.ClassName;
+        string name = NameOf(asset);
+        _owner = $"{className} {name}";
+        JsonObject record = new()
+        {
+            [ScriptRecordMembers.Key] = _keyOf(asset),
+            [ScriptRecordMembers.Class] = className,
+            [ScriptRecordMembers.Namespace] = string.Empty,
+            [ScriptRecordMembers.Assembly] = string.Empty,
+            [ScriptRecordMembers.Name] = name,
+        };
+        if (container.Length > 0)
+        {
+            record[ScriptRecordMembers.Container] = container;
+        }
+        record[ScriptRecordMembers.Fields] = Walk(asset, asset.Collection, UnityScriptAdditions.Dropped(className), _members.Of(className));
+        return record;
+    }
+
     private bool TryStructure(IMonoBehaviour behaviour, out JsonObject? fields)
     {
         try
@@ -166,12 +192,12 @@ public sealed class UnityScripts : UnityScriptRecords
 
     private static bool StructureMissing(IMonoBehaviour behaviour) => behaviour.Structure is null or UnloadedStructure;
 
-    private JsonObject Walk(IUnityAssetBase value, AssetCollection collection, IReadOnlySet<string> skipped) =>
-        UnityJsonWalker.Walk(value, (fileId, pathId) => Resolve(fileId, pathId, collection), NullElement, Number, skipped) as JsonObject
+    private JsonObject Walk(IUnityAssetBase value, AssetCollection collection, IReadOnlySet<string> skipped, ClassMemberSet? members) =>
+        UnityJsonWalker.Walk(value, (fileId, pathId) => Resolve(fileId, pathId, collection), NullElement, Number, skipped, members) as JsonObject
         ?? throw Refused("is not an object");
 
     protected override JsonNode? EngineStruct(IUnityAssetBase value, AssetCollection collection) =>
-        UnityJsonWalker.Walk(value, (fileId, pathId) => Resolve(fileId, pathId, collection), NullElement, Number, NoNames);
+        UnityJsonWalker.Walk(value, (fileId, pathId) => Resolve(fileId, pathId, collection), NullElement, Number, NoNames, null);
 
     protected override JsonNode? NullElement() =>
         new JsonObject { [ScriptRecordMembers.Kind] = ScriptRecordMembers.NoReference };
