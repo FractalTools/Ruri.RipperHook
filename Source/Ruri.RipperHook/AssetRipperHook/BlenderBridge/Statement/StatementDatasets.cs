@@ -32,6 +32,7 @@ public static class StatementDatasets
     public const string AnimatorsId = "core.statement.animators";
     public const string TimelinesId = "core.statement.timelines";
     public const string CinemachineId = "core.statement.cinemachine";
+    public const string ScriptsId = "core.statement.scripts";
     public const string ReportId = "core.statement.report";
     public const string SceneLightingId = "core.statement.scene_lighting";
     public const string ArchivesId = "core.statement.archives";
@@ -44,6 +45,8 @@ public static class StatementDatasets
     public const string ShadowProxies = "shadow_proxies";
     public const string CollidersFlag = "colliders";
     public const string Scripts = "scripts";
+    public const string Classes = "classes";
+    public const string Unreadable = "unreadable";
     public const string Roles = "roles";
     public const string Containers = "containers";
     public const string Texture = "texture";
@@ -62,7 +65,7 @@ public static class StatementDatasets
     [
         DataParam.List(Seed), DataParam.Text(BasisParam, required: false), DataParam.Integer(Detail, required: false),
         DataParam.Flag(Inactive, required: false), DataParam.Flag(ShadowProxies, required: false), DataParam.Flag(CollidersFlag, required: false),
-        DataParam.Flag(Scripts, required: false),
+        DataParam.Flag(Scripts, required: false), DataParam.List(Classes), DataParam.Flag(Unreadable, required: false),
         DataParam.List(Roles),
         DataParam.List(Containers), .. extra,
     ];
@@ -74,7 +77,9 @@ public static class StatementDatasets
         + "blender or gltf (geometry and transforms both come out in it); detail is the level to keep, -1 every level; "
         + "inactive keeps disabled renderers (on unless stated 0); shadow_proxies keeps shadow-only renderers; colliders "
         + "states the collision volumes of the objects (core.statement.colliders; off states none); scripts reads the layouts of the "
-        + "game's own scripts, which loads the install's managed assemblies (a MonoBehaviour has no fields to state without them); roles are "
+        + "game's own scripts, which loads the install's managed assemblies (a MonoBehaviour has no fields to state without them); classes "
+        + "are the engine component classes (not scripts) core.statement.scripts states beside the scripts; unreadable states a script "
+        + "whose layout cannot be read as a record that says so instead of refusing the table; roles are "
         + "texture-role layer files, later overriding earlier; containers are the image containers accepted.";
 
     public static void Register()
@@ -175,6 +180,18 @@ public static class StatementDatasets
             + "component out of it (the report names each component that could not be stated; the other tables are unaffected). "
             + "scripts reads the layouts of the game's own scripts, which these components cannot be stated without: the table is "
             + "empty unless it is asked." + CommonText, Cinemachine, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
+        Datasets.Publish(ScriptsId, DataRole.Statement, Common(),
+            "Every script component the seeds place and every scriptable object their archives carry, one row each: the archive it "
+            + "is read from, whether it is a component or an asset, its key, the source path of the node it sits on (empty for an "
+            + "asset), the class of its script, and the object as a JSON record -- the script (assembly, namespace, class), where it "
+            + "sits (the key of the root object, the source path and its number among nodes of one path, the class's number on the "
+            + "node), whether it is enabled, and every field its script serializes, each under the name the script gives it and in "
+            + "the type the script declares; a pointer is a node reference (key, root, path, path number, class, class number) or "
+            + "an asset reference (key, class, name), a null place in a list is a none reference, and an input action asset also "
+            + "carries the JSON text its package writes. What core.statement.timelines and core.statement.cinemachine state is not "
+            + "stated again. A component with no script is named in the report; an object that cannot be stated refuses this table "
+            + "(the report names each), the other tables are unaffected. scripts reads the layouts of the game's own scripts, which "
+            + "these cannot be stated without: the table is empty unless it is asked." + CommonText, ScriptRows, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(AnimatorsId, DataRole.Statement, Common(),
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
             + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
@@ -201,6 +218,8 @@ public static class StatementDatasets
         ShadowProxies = request.Flag(ShadowProxies),
         Colliders = request.Flag(CollidersFlag),
         Scripts = request.Given(Scripts) && request.Flag(Scripts),
+        Classes = request.List(Classes),
+        Unreadable = request.Given(Unreadable) && request.Flag(Unreadable),
         RoleLayers = request.List(Roles),
         Containers = request.List(Containers),
     };
@@ -372,6 +391,17 @@ public static class StatementDatasets
                 + $"component(s) of the camera package cannot be stated: {string.Join("; ", statement.CinemachineRefused)}");
         }
         return StatementTables.Cinemachine(CinemachineId, statement.Cinemachine);
+    }
+
+    private static ColumnTable ScriptRows(DataRequest request)
+    {
+        Statement statement = Flatten(request);
+        if (statement.ScriptsRefused.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"{statement.ScriptsRefused.Count} object(s) cannot be stated as scripts: {string.Join("; ", statement.ScriptsRefused)}");
+        }
+        return StatementTables.Scripts(ScriptsId, statement.Scripts);
     }
 
     private static ColumnTable Animators(DataRequest request) =>

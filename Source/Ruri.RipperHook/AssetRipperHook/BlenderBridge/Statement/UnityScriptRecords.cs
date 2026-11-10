@@ -43,6 +43,10 @@ public abstract class UnityScriptRecords
     /// <summary>What an engine structure (a vector, a curve, a mask) is stated as.</summary>
     protected virtual JsonNode? EngineStruct(IUnityAssetBase value, AssetCollection collection) => Generated(value, collection, 0);
 
+    /// <summary>What a null pointer in a list is stated as, null for leaving the place out: a list whose places are
+    /// meaningful keeps the place, or every element after it moves up by one.</summary>
+    protected virtual JsonNode? NullElement() => null;
+
     protected static SerializableStructure StructureOf(IMonoBehaviour behaviour)
     {
         SerializableStructure? structure = behaviour.Structure is UnloadedStructure unloaded
@@ -201,6 +205,10 @@ public abstract class UnityScriptRecords
                     if (element is not null)
                     {
                         array.Add(element);
+                    }
+                    else if (item is IPPtr && NullElement() is { } hole)
+                    {
+                        array.Add(hole);
                     }
                 }
                 break;

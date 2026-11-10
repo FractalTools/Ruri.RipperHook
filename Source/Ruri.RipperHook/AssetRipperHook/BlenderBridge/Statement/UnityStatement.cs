@@ -178,6 +178,7 @@ public sealed class UnityStatement
         {
             Timelines();
             CinemachineComponents();
+            ScriptRecords();
         }
         _plan.UnityAdapter?.Complete?.Invoke(new(_statement, _gameData, KeyOf, TextureKey, IsSeedCollection, WrittenMaterial));
         EncodeTextures();
@@ -977,6 +978,7 @@ public sealed class UnityStatement
         List<(UnityNode Holder, IAnimator Animator)> animators = [];
         List<(UnityNode Holder, IPlayableDirector Director)> directors = [];
         List<(UnityNode Holder, IMonoBehaviour Component)> cinemachine = [];
+        List<(UnityNode Holder, IComponent Component)> scripted = [];
         foreach (UnityNode node in hierarchy.DocumentOrder())
         {
             if (node.GameObject is null)
@@ -996,6 +998,14 @@ public sealed class UnityStatement
                 if (_options.Scripts && component is IMonoBehaviour placedScript && UnityCinemachine.Owns(placedScript))
                 {
                     cinemachine.Add((node, placedScript));
+                }
+                if (component is IMonoBehaviour trackedScript)
+                {
+                    _placedBehaviours.Add(trackedScript);
+                }
+                if (_options.Scripts && component is not null && StatesAsScript(component))
+                {
+                    scripted.Add((node, component));
                 }
                 switch (component)
                 {
@@ -1028,6 +1038,7 @@ public sealed class UnityStatement
                 Path = node.Path,
                 Kind = "empty",
                 Active = node.ActiveInHierarchy,
+                ActiveSelf = node.Active,
                 Position = node.LocalPosition,
                 Rotation = node.LocalRotation,
                 Scale = node.LocalScale,
@@ -1046,8 +1057,14 @@ public sealed class UnityStatement
         {
             if (node.GameObject is { } placed)
             {
-                _gameObjectPaths[placed] = SourcePath(rootObject, row);
+                string placedPath = SourcePath(rootObject, row);
+                _gameObjectPaths[placed] = placedPath;
+                _placedObjects.Add(new PlacedObject(placed, placedPath, rootObject));
             }
+        }
+        foreach ((UnityNode holder, IComponent component) in scripted)
+        {
+            _scripts.Add(new PlacedScript(component, holder.GameObject!, rootObject, SourcePath(rootObject, rows[holder])));
         }
         foreach ((UnityNode holder, IPlayableDirector director) in directors)
         {
@@ -1306,7 +1323,7 @@ public sealed class UnityStatement
         _statement.Nodes[rig.RootIndex] = new StatementNode
         {
             Index = rigRow.Index, Parent = rigRow.Parent, Name = _plan.Label, Path = rigRow.Path, Kind = rigRow.Kind,
-            Active = rigRow.Active, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
+            Active = rigRow.Active, ActiveSelf = rigRow.ActiveSelf, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
             Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
             ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Avatar = rigRow.Avatar,
@@ -2046,6 +2063,18 @@ public sealed class UnityStatement
 
     private readonly List<(string Path, IMonoBehaviour Component)> _cinemachine = [];
 
+    private sealed record PlacedObject(IGameObject Object, string Path, IGameObject Root);
+
+    private sealed record PlacedScript(IComponent Component, IGameObject Holder, IGameObject Root, string Path);
+
+    private readonly List<PlacedObject> _placedObjects = [];
+
+    private readonly List<PlacedScript> _scripts = [];
+
+    private readonly HashSet<IMonoBehaviour> _placedBehaviours = new(ReferenceEqualityComparer.Instance);
+
+    private readonly HashSet<IUnityObjectBase> _claimed = new(ReferenceEqualityComparer.Instance);
+
     private string? PathOf(IGameObject gameObject) => _gameObjectPaths.TryGetValue(gameObject, out string? path) ? path : null;
 
     /// <summary>The camera package's components, stated once every root is flattened: what one of them points at may stand
@@ -2067,6 +2096,112 @@ public sealed class UnityStatement
         }
     }
 
+    private bool StatesAsScript(IComponent component) => component switch
+    {
+        IMonoBehaviour behaviour => !UnityCinemachine.Owns(behaviour),
+        _ => _options.Classes.Contains(component.ClassName),
+    };
+
+    /// <summary>The scripts, stated once every root is flattened and the timelines and the camera package have stated theirs:
+    /// what one of them points at may stand under another root of the selection, and what those two state is not stated again.
+    /// The components placed on the nodes come first in the statement's order, then the scriptable objects of the seed archives.</summary>
+    private void ScriptRecords()
+    {
+        Dictionary<IGameObject, UnityScripts.Placement> placements = new(ReferenceEqualityComparer.Instance);
+        Dictionary<string, int> pathCounts = new(StringComparer.Ordinal);
+        foreach (PlacedObject placed in _placedObjects)
+        {
+            pathCounts.TryGetValue(placed.Path, out int before);
+            pathCounts[placed.Path] = before + 1;
+            placements[placed.Object] = new UnityScripts.Placement(placed.Path, before, KeyOf(placed.Root));
+        }
+        UnityScripts converter = new(KeyOf, gameObject => placements.TryGetValue(gameObject, out UnityScripts.Placement? placement) ? placement : null,
+            _options.Unreadable);
+        List<string> withoutScript = [];
+        foreach (PlacedScript placed in _scripts)
+        {
+            if (placed.Component is IMonoBehaviour behaviour)
+            {
+                if (behaviour.ScriptClass().Length == 0)
+                {
+                    withoutScript.Add(KeyOf(behaviour));
+                    continue;
+                }
+                if (_claimed.Contains(behaviour))
+                {
+                    continue;
+                }
+            }
+            try
+            {
+                string record = converter.Component(placed.Component, placed.Holder, placements[placed.Holder]).ToJsonString();
+                _statement.Scripts.Add(new StatementScript(placed.Root.Collection.Name, ScriptRecordMembers.ComponentRow, KeyOf(placed.Component), placed.Path,
+                    UnityScripts.ClassNameOf(placed.Component), record));
+            }
+            catch (Exception refusal) when (refusal is InvalidOperationException or NotSupportedException)
+            {
+                _statement.ScriptsRefused.Add(refusal.Message);
+                _statement.Note(_plan.Seed, "script cannot be stated", 1, refusal.Message);
+            }
+        }
+        List<IMonoBehaviour> assets = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is not IMonoBehaviour behaviour || !IsSeedCollection(asset.Collection) || !Keeps(asset)
+                || _claimed.Contains(behaviour) || UnityCinemachine.Owns(behaviour))
+            {
+                continue;
+            }
+            if (behaviour.GameObjectP is null)
+            {
+                if (behaviour.ScriptClass().Length == 0)
+                {
+                    withoutScript.Add(KeyOf(behaviour));
+                }
+                else
+                {
+                    assets.Add(behaviour);
+                }
+            }
+            else if (!_placedBehaviours.Contains(behaviour))
+            {
+                string orphan = $"{UnityScripts.ClassNameOf(behaviour)} {KeyOf(behaviour)} sits on '{behaviour.GameObjectP.Name.String}', which no flattened root holds";
+                _statement.ScriptsRefused.Add(orphan);
+                _statement.Note(_plan.Seed, "script cannot be stated", 1, orphan);
+            }
+        }
+        foreach (IMonoBehaviour asset in assets
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            try
+            {
+                string record = converter.Asset(asset, (asset.OriginalPath ?? string.Empty).Replace('\\', '/')).ToJsonString();
+                _statement.Scripts.Add(new StatementScript(asset.Collection.Name, ScriptRecordMembers.AssetRow, KeyOf(asset), string.Empty,
+                    UnityScripts.ClassNameOf(asset), record));
+            }
+            catch (Exception refusal) when (refusal is InvalidOperationException or NotSupportedException)
+            {
+                _statement.ScriptsRefused.Add(refusal.Message);
+                _statement.Note(_plan.Seed, "script cannot be stated", 1, refusal.Message);
+            }
+        }
+        if (withoutScript.Count > 0)
+        {
+            _statement.Note(_plan.Seed, "component whose script is missing, which does nothing in the game", withoutScript.Count,
+                string.Join(", ", withoutScript));
+        }
+        if (converter.Unreadable.Count > 0)
+        {
+            _statement.Note(_plan.Seed, "script stated as unreadable: its layout cannot be read", converter.Unreadable.Count,
+                string.Join("; ", converter.Unreadable));
+        }
+        if (converter.Dangling.Count > 0)
+        {
+            _statement.Note(_plan.Seed, "pointer to an object no loaded archive holds, null as when the game runs", converter.Dangling.Count,
+                string.Join("; ", converter.Dangling.Take(40)));
+        }
+    }
+
     private void Timelines()
     {
         HashSet<IUnityObjectBase> described = new(ReferenceEqualityComparer.Instance);
@@ -2078,7 +2213,7 @@ public sealed class UnityStatement
             }
             described.Add(timeline);
             _statement.Timelines.Add(new StatementTimeline(KeyOf(timeline), timeline.Name.String, path,
-                UnityTimelines.Describe(timeline, director, path, KeyOf, PathOf).ToJsonString(), timeline.Collection.Name));
+                UnityTimelines.Describe(timeline, director, path, KeyOf, PathOf, _claimed).ToJsonString(), timeline.Collection.Name));
         }
         List<IMonoBehaviour> loose = [];
         foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
@@ -2093,7 +2228,7 @@ public sealed class UnityStatement
                      .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
         {
             _statement.Timelines.Add(new StatementTimeline(KeyOf(timeline), timeline.Name.String, string.Empty,
-                UnityTimelines.Describe(timeline, null, string.Empty, KeyOf, PathOf).ToJsonString(), timeline.Collection.Name));
+                UnityTimelines.Describe(timeline, null, string.Empty, KeyOf, PathOf, _claimed).ToJsonString(), timeline.Collection.Name));
         }
     }
 

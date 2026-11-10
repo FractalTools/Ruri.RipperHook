@@ -35,7 +35,7 @@ public static class StatementTables
     {
         TableBuilder table = new(id,
         [
-            "node#", "parent#", "name", "path", "kind", "active#", "mesh", "skeleton", "materials", "anchor", .. TrsColumns,
+            "node#", "parent#", "name", "path", "kind", "active#", "active_self#", "mesh", "skeleton", "materials", "anchor", .. TrsColumns,
             "light_kind#", "light_r#", "light_g#", "light_b#", "light_intensity#", "light_range#", "light_reach#", "light_angle#",
             "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_shadow_resolution#",
             "light_volume#", "light_specular#", "fov#", "near#",
@@ -60,7 +60,7 @@ public static class StatementTables
                 objectParameters[index * 4 + 2] = value.Z;
                 objectParameters[index * 4 + 3] = value.W;
             }
-            table.Row(node.Index, node.Parent, node.Name, node.Path, node.Kind, node.Active ? 1 : 0, node.Mesh,
+            table.Row(node.Index, node.Parent, node.Name, node.Path, node.Kind, node.Active ? 1 : 0, node.ActiveSelf ? 1 : 0, node.Mesh,
                 node.Skeleton, string.Join(Separator, node.Materials), node.Anchor,
                 position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, rotation.W,
                 scale.X, scale.Y, scale.Z,
@@ -398,6 +398,17 @@ public static class StatementTables
         foreach (StatementCinemachine component in components)
         {
             table.Row(component.Path, component.Class, component.RecordJson);
+        }
+        return table.Build();
+    }
+
+    public static ColumnTable Scripts(string id, IEnumerable<StatementScript> scripts)
+    {
+        TableBuilder table = new(id, "archive", "kind", "key", "path", "class", "record");
+        table.Role(ColumnRole.Label, "class").Role(ColumnRole.Group, "archive");
+        foreach (StatementScript script in scripts)
+        {
+            table.Row(script.Archive, script.Kind, script.Key, script.Path, script.Class, script.RecordJson);
         }
         return table.Build();
     }

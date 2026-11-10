@@ -1,0 +1,167 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Metadata;
+using AssetRipper.Assets.Traversal;
+using AssetRipper.Primitives;
+
+namespace Ruri.RipperHook.BlenderBridge.Statements;
+
+/// <summary>
+/// An object of the engine's own generated classes (a vector, a colour, a curve, a mask, a component) as the JSON a record
+/// holds, each member under the name the player's own data gives it -- which is what the release walk of the object states,
+/// and what neither the property names of the generated class (their PascalCase) nor the standard walk (its own spelling, and the
+/// members an editor adds) are. A pointer is what the caller makes of it, a list with no
+/// element is no member, and a number is what the caller states a real number as.
+/// </summary>
+internal sealed class UnityJsonWalker : AssetWalker
+{
+    private sealed class Frame
+    {
+        public JsonObject? Object { get; init; }
+
+        public JsonArray? Array { get; init; }
+
+        public string? Field { get; set; }
+    }
+
+    private readonly Func<int, long, JsonNode?> _pointer;
+    private readonly Func<JsonNode?> _hole;
+    private readonly Func<double, JsonNode> _number;
+    private readonly IReadOnlySet<string> _skipped;
+    private readonly List<Frame> _frames = [];
+    private JsonNode? _result;
+
+    public UnityJsonWalker(Func<int, long, JsonNode?> pointer, Func<JsonNode?> hole, Func<double, JsonNode> number,
+        IReadOnlySet<string> skipped)
+    {
+        _pointer = pointer;
+        _hole = hole;
+        _number = number;
+        _skipped = skipped;
+    }
+
+    public JsonNode? Result => _result;
+
+    public static JsonNode? Walk(IUnityAssetBase value, Func<int, long, JsonNode?> pointer, Func<JsonNode?> hole,
+        Func<double, JsonNode> number, IReadOnlySet<string> skipped)
+    {
+        UnityJsonWalker walker = new(pointer, hole, number, skipped);
+        value.WalkRelease(walker);
+        return walker.Result;
+    }
+
+    private void Attach(JsonNode? value)
+    {
+        if (_frames.Count == 0)
+        {
+            _result = value;
+            return;
+        }
+        Frame top = _frames[^1];
+        if (top.Object is not null)
+        {
+            if (value is not null && top.Field is not null)
+            {
+                top.Object[top.Field] = value;
+            }
+        }
+        else if (value is not null)
+        {
+            top.Array!.Add(value);
+        }
+    }
+
+    public override bool EnterAsset(IUnityAssetBase asset)
+    {
+        _frames.Add(new Frame { Object = new JsonObject() });
+        return true;
+    }
+
+    public override void ExitAsset(IUnityAssetBase asset)
+    {
+        Frame frame = _frames[^1];
+        _frames.RemoveAt(_frames.Count - 1);
+        Attach(frame.Object);
+    }
+
+    public override bool EnterField(IUnityAssetBase asset, string name)
+    {
+        if (_frames.Count == 1 && _skipped.Contains(name))
+        {
+            return false;
+        }
+        _frames[^1].Field = name;
+        return true;
+    }
+
+    public override void ExitField(IUnityAssetBase asset, string name)
+    {
+        _frames[^1].Field = null;
+    }
+
+    public override bool EnterList<T>(IReadOnlyList<T> list)
+    {
+        if (list.Count == 0)
+        {
+            return false;
+        }
+        _frames.Add(new Frame { Array = new JsonArray() });
+        return true;
+    }
+
+    public override void ExitList<T>(IReadOnlyList<T> list)
+    {
+        Frame frame = _frames[^1];
+        _frames.RemoveAt(_frames.Count - 1);
+        Attach(frame.Array);
+    }
+
+    public override bool EnterDictionary<TKey, TValue>(IReadOnlyCollection<KeyValuePair<TKey, TValue>> dictionary) =>
+        throw new NotSupportedException($"a dictionary of {typeof(TKey).Name} to {typeof(TValue).Name} has no record form.");
+
+    public override void VisitPPtr<TAsset>(PPtr<TAsset> pptr)
+    {
+        JsonNode? stated = pptr.IsNull ? null : _pointer(pptr.FileID, pptr.PathID);
+        if (stated is null)
+        {
+            AttachHole();
+            return;
+        }
+        Attach(stated);
+    }
+
+    private void AttachHole()
+    {
+        if (_frames.Count > 0 && _frames[^1].Array is not null && _hole() is { } hole)
+        {
+            Attach(hole);
+        }
+    }
+
+    public override void VisitPrimitive<T>(T value)
+    {
+        Attach(Primitive(value));
+    }
+
+    private JsonNode? Primitive(object? value) => value switch
+    {
+        null => null,
+        bool flag => flag,
+        byte or sbyte or short or ushort or int => Convert.ToInt32(value, CultureInfo.InvariantCulture),
+        char character => (int)character,
+        uint unsigned => (long)unsigned,
+        long wide => Wide(wide),
+        ulong unsignedWide => unsignedWide <= long.MaxValue ? Wide((long)unsignedWide) : unsignedWide.ToString(CultureInfo.InvariantCulture),
+        float single => _number(single),
+        double precise => _number(precise),
+        string text => text,
+        Utf8String utf8 => utf8.String,
+        byte[] bytes => Convert.ToBase64String(bytes),
+        Enum member => Convert.ToInt32(member, CultureInfo.InvariantCulture),
+        _ => throw new NotSupportedException($"a {value.GetType().Name} has no record form."),
+    };
+
+    private static JsonNode Wide(long value) =>
+        Math.Abs(value) < (1L << 53) ? value : value.ToString(CultureInfo.InvariantCulture);
+}

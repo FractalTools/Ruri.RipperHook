@@ -40,6 +40,14 @@ public sealed class StatementOptions
     /// MonoBehaviour has no fields to state without them.</summary>
     public bool Scripts { get; init; }
 
+    /// <summary>The classes of engine components (not scripts) a scripts statement states beside the scripts: a rect
+    /// transform, a canvas. Data of the request, not a table of the code.</summary>
+    public IReadOnlyList<string> Classes { get; init; } = [];
+
+    /// <summary>Whether a script whose layout the reader cannot read (a field the player stores by managed reference, a class the
+    /// installed assemblies no longer match) is stated as a record that says so, instead of refusing the table that holds it.</summary>
+    public bool Unreadable { get; init; }
+
     public IReadOnlyList<string> RoleLayers { get; init; } = [];
 
     public IReadOnlyList<string> Containers { get; init; } = [];
@@ -48,8 +56,8 @@ public sealed class StatementOptions
     /// basis converts the tables a flattening is read out of and nothing that is flattened,
     /// so asking one selection in two bases -- geometry in the host's own, the rig's rest in
     /// the one its animation data is written in -- must not decode the selection twice.</summary>
-    public string Signature => string.Join('|', Detail, Inactive ? 1 : 0, ShadowProxies ? 1 : 0, Colliders ? 1 : 0, Scripts ? 1 : 0,
-        string.Join(';', RoleLayers), string.Join(';', Containers));
+    public string Signature => string.Join('|', Detail, Inactive ? 1 : 0, ShadowProxies ? 1 : 0, Colliders ? 1 : 0, Scripts ? 1 : 0, Unreadable ? 1 : 0,
+        string.Join(';', Classes), string.Join(';', RoleLayers), string.Join(';', Containers));
 }
 
 /// <summary>One piece of an assembled character: the prefab's own name in the closure, the

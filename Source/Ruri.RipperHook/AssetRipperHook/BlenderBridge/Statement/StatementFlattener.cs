@@ -82,6 +82,7 @@ public static class StatementFlattener
                 Path = node.Path,
                 Kind = node.Kind,
                 Active = node.Active,
+                ActiveSelf = node.ActiveSelf,
                 Mesh = node.Mesh,
                 Skeleton = node.Skeleton,
                 Materials = node.Materials,
@@ -133,6 +134,8 @@ public static class StatementFlattener
         target.Animators.AddRange(source.Animators);
         target.Cinemachine.AddRange(source.Cinemachine);
         target.CinemachineRefused.AddRange(source.CinemachineRefused);
+        target.Scripts.AddRange(source.Scripts);
+        target.ScriptsRefused.AddRange(source.ScriptsRefused);
         target.Morphs.AddRange(source.Morphs);
         target.Report.AddRange(source.Report);
         target.SceneLighting.AddRange(source.SceneLighting);

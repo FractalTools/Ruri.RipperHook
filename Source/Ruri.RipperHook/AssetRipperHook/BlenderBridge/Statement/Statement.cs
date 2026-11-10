@@ -35,6 +35,12 @@ public sealed class Statement
     /// refuses with these, so that a scene is never exported with a camera missing; every other table is unaffected.</summary>
     public List<string> CinemachineRefused { get; } = [];
 
+    public List<StatementScript> Scripts { get; } = [];
+
+    /// <summary>The scripts this statement could not state, each with why. Asking for the scripts refuses with these, so that a
+    /// scene is never exported with a component missing; every other table is unaffected.</summary>
+    public List<string> ScriptsRefused { get; } = [];
+
     public List<StatementMorph> Morphs { get; } = [];
 
     public List<StatementCollider> Colliders { get; } = [];
@@ -103,6 +109,11 @@ public sealed class StatementNode
     /// <summary>Whether the node draws right now: its object is active in the hierarchy and, for a
     /// node that carries a renderer, that renderer is enabled.</summary>
     public required bool Active { get; set; }
+
+    /// <summary>Whether the node's own object is active (GameObject.activeSelf, serialized as m_IsActive), whatever its
+    /// ancestors are: what SetActive writes and what a listener registers by once its ancestors are active. A node no object
+    /// stands behind is active.</summary>
+    public bool ActiveSelf { get; set; } = true;
 
     public string Mesh { get; set; } = string.Empty;
 
@@ -256,6 +267,11 @@ public sealed record StatementAnimator(string Path, string Controller, string Av
 /// layer states the node by), the class of its script, and the component as one JSON record -- whether it is enabled and every
 /// field its script serializes, each under the name the script gives it.</summary>
 public sealed record StatementCinemachine(string Path, string Class, string RecordJson);
+
+/// <summary>A component of a node, or a scriptable object, as one JSON record: the archive it is read from, whether it is a
+/// component or an asset, its key, the source path of the node it sits on (empty for an asset), its class, and every field its
+/// script serializes under the name the script gives it.</summary>
+public sealed record StatementScript(string Archive, string Kind, string Key, string Path, string Class, string RecordJson);
 
 public sealed record StatementMorph(string Mesh, string Name, uint[] Vertices, float[] DeltaPositions,
     float[] DeltaNormals, float[] DeltaTangents, float Weight, int Frames);

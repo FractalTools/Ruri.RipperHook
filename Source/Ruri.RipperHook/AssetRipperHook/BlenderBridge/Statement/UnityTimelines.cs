@@ -34,23 +34,30 @@ public sealed class UnityTimelines : UnityScriptRecords
     private readonly Func<IUnityObjectBase, string> _keyOf;
     private readonly Func<IGameObject, string?> _pathOf;
     private readonly IPlayableDirector? _director;
+    private readonly ISet<IUnityObjectBase>? _claimed;
     private int _tracks;
 
-    private UnityTimelines(Func<IUnityObjectBase, string> keyOf, Func<IGameObject, string?> pathOf, IPlayableDirector? director)
+    private UnityTimelines(Func<IUnityObjectBase, string> keyOf, Func<IGameObject, string?> pathOf, IPlayableDirector? director,
+        ISet<IUnityObjectBase>? claimed)
     {
         _keyOf = keyOf;
         _pathOf = pathOf;
         _director = director;
+        _claimed = claimed;
     }
 
     public static bool IsTimeline(IMonoBehaviour behaviour) => behaviour.ScriptClass() == TimelineScript;
 
+    /// <summary>The record of a timeline asset. <paramref name="claimed"/>, when given, takes every object the record states
+    /// (the asset, its tracks, the playable asset of each clip, its markers), so that another statement of scripts does not state
+    /// them a second time.</summary>
     public static JsonObject Describe(IMonoBehaviour timeline, IPlayableDirector? director, string directorPath,
-        Func<IUnityObjectBase, string> keyOf, Func<IGameObject, string?> pathOf) =>
-        new UnityTimelines(keyOf, pathOf, director).Record(timeline, directorPath);
+        Func<IUnityObjectBase, string> keyOf, Func<IGameObject, string?> pathOf, ISet<IUnityObjectBase>? claimed = null) =>
+        new UnityTimelines(keyOf, pathOf, director, claimed).Record(timeline, directorPath);
 
     private JsonObject Record(IMonoBehaviour timeline, string directorPath)
     {
+        _claimed?.Add(timeline);
         SerializableStructure structure = StructureOf(timeline);
         JsonObject record = new()
         {
@@ -86,6 +93,7 @@ public sealed class UnityTimelines : UnityScriptRecords
     private void Track(IMonoBehaviour track, int parent, IMonoBehaviour timeline, JsonArray into)
     {
         int index = _tracks++;
+        _claimed?.Add(track);
         SerializableStructure structure = StructureOf(track);
         JsonObject entry = new()
         {
@@ -144,6 +152,7 @@ public sealed class UnityTimelines : UnityScriptRecords
         if (clip.TryGetField(AssetField, out SerializableValue pointer) && pointer.CValue is IPPtr target
             && collection.TryGetAsset(target.FileID, target.PathID) is IMonoBehaviour played)
         {
+            _claimed?.Add(played);
             entry["assetType"] = played.ScriptClass();
             entry["assetKey"] = _keyOf(played);
             entry["asset"] = Structure(StructureOf(played), played.Collection);
@@ -153,6 +162,7 @@ public sealed class UnityTimelines : UnityScriptRecords
 
     private JsonObject Marker(IMonoBehaviour marker)
     {
+        _claimed?.Add(marker);
         SerializableStructure structure = StructureOf(marker);
         JsonObject entry = new()
         {
