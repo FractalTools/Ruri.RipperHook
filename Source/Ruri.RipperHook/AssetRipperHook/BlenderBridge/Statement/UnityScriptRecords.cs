@@ -183,12 +183,15 @@ public abstract class UnityScriptRecords
         switch (type.Type)
         {
             case PrimitiveType.Bool: foreach (bool item in value.AsBooleanArray) array.Add(item); break;
+            case PrimitiveType.Char: foreach (char item in value.AsCharArray) array.Add((int)item); break;
+            case PrimitiveType.SByte: foreach (sbyte item in value.AsSByteArray) array.Add((int)item); break;
             case PrimitiveType.Byte: foreach (byte item in value.AsByteArray) array.Add((int)item); break;
             case PrimitiveType.Short: foreach (short item in value.AsInt16Array) array.Add((int)item); break;
             case PrimitiveType.UShort: foreach (ushort item in value.AsUInt16Array) array.Add((int)item); break;
             case PrimitiveType.Int: foreach (int item in value.AsInt32Array) array.Add(item); break;
             case PrimitiveType.UInt: foreach (uint item in value.AsUInt32Array) array.Add((long)item); break;
             case PrimitiveType.Long: foreach (long item in value.AsInt64Array) array.Add(Wide(item)); break;
+            case PrimitiveType.ULong: foreach (ulong item in value.AsUInt64Array) array.Add(item <= long.MaxValue ? Wide((long)item) : item.ToString(CultureInfo.InvariantCulture)); break;
             case PrimitiveType.Single: foreach (float item in value.AsSingleArray) array.Add(Number(item)); break;
             case PrimitiveType.Double: foreach (double item in value.AsDoubleArray) array.Add(Number(item)); break;
             case PrimitiveType.String: foreach (string item in value.AsStringArray) array.Add(item); break;
