@@ -50,6 +50,9 @@ public sealed record UnityRendererInfo
     public (int First, int Count)? SubMeshWindow { get; init; }
 
     public required bool Disabled { get; init; }
+
+    /// <summary>The renderer's own enabled flag, apart from whether its object is active in the hierarchy.</summary>
+    public bool Enabled { get; init; } = true;
 }
 
 public sealed class UnityCameraInfo
@@ -71,6 +74,9 @@ public sealed class UnityCameraInfo
     public required float OrthographicSize { get; init; }
 
     public required bool Disabled { get; init; }
+
+    /// <summary>The camera component's own enabled flag, apart from whether its object is active in the hierarchy.</summary>
+    public bool Enabled { get; init; } = true;
 }
 
 /// <summary>One light as the engine emits it. The colour is what the light emits per unit of its
@@ -122,6 +128,9 @@ public sealed class UnityLightInfo
     public required float SpecularFactor { get; init; }
 
     public required bool Disabled { get; init; }
+
+    /// <summary>The light component's own enabled flag, apart from whether its object is active in the hierarchy.</summary>
+    public bool Enabled { get; init; } = true;
 
     /// <summary>The camera-distance fade the engine's light list gives this light, as four coefficients
     /// (a, k, b, m): the light's colour is scaled by saturate(1 + a - d²k) · saturate(1 + d²m - b), d the camera's
@@ -230,6 +239,7 @@ public static class UnityRenderers
                 Bones = renderer.BonesP.ToArray(),
                 SubMeshWindow = StaticBatchWindow(renderer),
                 Disabled = disabled.Value,
+                Enabled = renderer.Enabled_C25,
             };
         }
         foreach (IMeshRenderer renderer in meshRenderers)
@@ -253,6 +263,7 @@ public static class UnityRenderers
                 Bones = [],
                 SubMeshWindow = StaticBatchWindow(renderer),
                 Disabled = disabled.Value,
+                Enabled = renderer.Enabled_C25,
             };
         }
     }
@@ -301,7 +312,8 @@ public static class UnityRenderers
     {
         foreach (ICamera camera in cameras)
         {
-            (UnityNode? node, bool disabled, bool skip) = ContentNode(camera.GameObject_C20P, camera.Enabled_C20 != 0, hierarchy, filters);
+            bool enabled = camera.Enabled_C20 != 0;
+            (UnityNode? node, bool disabled, bool skip) = ContentNode(camera.GameObject_C20P, enabled, hierarchy, filters);
             if (node is null || skip)
             {
                 continue;
@@ -317,6 +329,7 @@ public static class UnityRenderers
                 Orthographic = camera.Orthographic_C20,
                 OrthographicSize = camera.Orthographic_size_C20,
                 Disabled = disabled,
+                Enabled = enabled,
             };
         }
         foreach (IMonoBehaviour behaviour in behaviours)
@@ -329,7 +342,8 @@ public static class UnityRenderers
             {
                 continue;
             }
-            (UnityNode? node, bool disabled, bool skip) = ContentNode(behaviour.GameObjectP, behaviour.Enabled != 0, hierarchy, filters);
+            bool enabled = behaviour.Enabled != 0;
+            (UnityNode? node, bool disabled, bool skip) = ContentNode(behaviour.GameObjectP, enabled, hierarchy, filters);
             if (node is null || skip)
             {
                 continue;
@@ -345,6 +359,7 @@ public static class UnityRenderers
                 Orthographic = Boolean(block, "Orthographic"),
                 OrthographicSize = Single(block, "OrthographicSize", 5f),
                 Disabled = disabled,
+                Enabled = enabled,
             };
         }
     }
@@ -360,7 +375,8 @@ public static class UnityRenderers
     {
         foreach (ILight light in lights)
         {
-            (UnityNode? node, bool disabled, bool skip) = ContentNode(light.GameObjectP, light.Enabled != 0, hierarchy, filters);
+            bool enabled = light.Enabled != 0;
+            (UnityNode? node, bool disabled, bool skip) = ContentNode(light.GameObjectP, enabled, hierarchy, filters);
             if (node is null || skip)
             {
                 continue;
@@ -388,6 +404,7 @@ public static class UnityRenderers
                 VolumeFactor = 0f,
                 SpecularFactor = 1f,
                 Disabled = disabled,
+                Enabled = enabled,
             };
         }
     }

@@ -83,6 +83,7 @@ public static class StatementFlattener
                 Kind = node.Kind,
                 Active = node.Active,
                 ActiveSelf = node.ActiveSelf,
+                ComponentEnabled = node.ComponentEnabled,
                 Mesh = node.Mesh,
                 Skeleton = node.Skeleton,
                 Materials = node.Materials,

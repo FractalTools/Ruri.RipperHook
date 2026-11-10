@@ -556,6 +556,7 @@ public sealed class UnityStatement
                     Path = piece.Path,
                     Kind = piece.Kind,
                     Active = !piece.Hidden,
+                    ComponentEnabled = piece.Enabled,
                     Mesh = piece.MeshKey,
                     Skeleton = piece.Skeleton,
                     Materials = piece.MaterialKeys,
@@ -647,6 +648,7 @@ public sealed class UnityStatement
         public required string Kind { get; init; }
         public required double[] Local { get; init; }
         public required bool Hidden { get; init; }
+        public bool Enabled { get; init; } = true;
         public string MeshKey { get; init; } = string.Empty;
         public string Skeleton { get; init; } = string.Empty;
         public IReadOnlyList<string> MaterialKeys { get; init; } = [];
@@ -854,6 +856,7 @@ public sealed class UnityStatement
                 Kind = baked ? "skinned" : "mesh",
                 Local = baked || info.Node is null ? Mat4.Identity() : info.Node.World,
                 Hidden = info.Disabled,
+                Enabled = info.Enabled,
                 MeshKey = meshKey,
                 MaterialKeys = materialKeys,
                 Shadows = info.Renderer.GetShadowCastingMode(),
@@ -865,7 +868,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = camera.Name, Path = camera.Node.Path, Kind = "camera", Local = camera.Node.World,
-                Hidden = camera.Disabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject),
+                Hidden = camera.Disabled, Enabled = camera.Enabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject),
             });
         }
         foreach (UnityLightInfo light in ReadLights(lights, hierarchy, filters))
@@ -873,7 +876,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = light.Name, Path = light.Node.Path, Kind = "light", Local = light.Node.World,
-                Hidden = light.Disabled, Light = light, Layer = LayerOf(light.Node.GameObject),
+                Hidden = light.Disabled, Enabled = light.Enabled, Light = light, Layer = LayerOf(light.Node.GameObject),
             });
         }
         return pieces;
@@ -1112,6 +1115,7 @@ public sealed class UnityStatement
             {
                 row.Kind = "camera";
                 row.Active = !camera.Disabled;
+                row.ComponentEnabled = camera.Enabled;
                 row.Camera = camera;
             }
         }
@@ -1122,6 +1126,7 @@ public sealed class UnityStatement
             {
                 row.Kind = "light";
                 row.Active = !light.Disabled;
+                row.ComponentEnabled = light.Enabled;
                 row.Light = light;
             }
         }
@@ -1323,7 +1328,8 @@ public sealed class UnityStatement
         _statement.Nodes[rig.RootIndex] = new StatementNode
         {
             Index = rigRow.Index, Parent = rigRow.Parent, Name = _plan.Label, Path = rigRow.Path, Kind = rigRow.Kind,
-            Active = rigRow.Active, ActiveSelf = rigRow.ActiveSelf, Mesh = rigRow.Mesh, Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
+            Active = rigRow.Active, ActiveSelf = rigRow.ActiveSelf, ComponentEnabled = rigRow.ComponentEnabled, Mesh = rigRow.Mesh,
+            Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
             Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
             ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Avatar = rigRow.Avatar,
@@ -1510,7 +1516,7 @@ public sealed class UnityStatement
                 _statement.Nodes.Add(new StatementNode
                 {
                     Index = _statement.Nodes.Count, Parent = rig.RootIndex, Name = info.Name, Path = info.Node?.Path ?? string.Empty,
-                    Kind = bakedNow ? "skinned" : "mesh", Active = !info.Disabled, Mesh = key, Skeleton = rig.Skeleton.Key,
+                    Kind = bakedNow ? "skinned" : "mesh", Active = !info.Disabled, ComponentEnabled = info.Enabled, Mesh = key, Skeleton = rig.Skeleton.Key,
                     Materials = materialKeys, Anchor = bakedNow ? string.Empty : anchor,
                     Position = System.Numerics.Vector3.Zero, Rotation = System.Numerics.Quaternion.Identity, Scale = System.Numerics.Vector3.One,
                     Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
@@ -1528,7 +1534,7 @@ public sealed class UnityStatement
             _statement.Nodes.Add(new StatementNode
             {
                 Index = _statement.Nodes.Count, Parent = rig.RootIndex, Name = info.Name, Path = info.Node?.Path ?? string.Empty,
-                Kind = "mesh", Active = !info.Disabled, Mesh = meshKey, Materials = materialKeys, Anchor = anchor,
+                Kind = "mesh", Active = !info.Disabled, ComponentEnabled = info.Enabled, Mesh = meshKey, Materials = materialKeys, Anchor = anchor,
                 Position = position, Rotation = rotation, Scale = scale,
                 Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
             });
@@ -1729,6 +1735,7 @@ public sealed class UnityStatement
             {
                 row.Kind = bakedNow ? "skinned" : "mesh";
                 row.Active = !info.Disabled;
+                row.ComponentEnabled = info.Enabled;
                 row.Mesh = key;
                 row.Materials = materialKeys;
                 row.Shadows = shadows;
@@ -1764,6 +1771,7 @@ public sealed class UnityStatement
         {
             row.Kind = "mesh";
             row.Active = !info.Disabled;
+            row.ComponentEnabled = info.Enabled;
             row.Mesh = meshKey;
             row.Materials = materialKeys;
             row.Shadows = shadows;

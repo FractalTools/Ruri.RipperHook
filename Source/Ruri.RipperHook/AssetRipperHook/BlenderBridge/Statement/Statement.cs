@@ -115,6 +115,11 @@ public sealed class StatementNode
     /// stands behind is active.</summary>
     public bool ActiveSelf { get; set; } = true;
 
+    /// <summary>Whether the component this node's kind stands for (its renderer, light or camera) is itself enabled
+    /// (Renderer.enabled, Behaviour.enabled, serialized as m_Enabled), whatever its object's activity is: what a script's
+    /// enabled setter writes. A node with no such component is enabled.</summary>
+    public bool ComponentEnabled { get; set; } = true;
+
     public string Mesh { get; set; } = string.Empty;
 
     public string Skeleton { get; set; } = string.Empty;
