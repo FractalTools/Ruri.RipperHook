@@ -177,7 +177,7 @@ internal sealed class UnityJsonWalker : AssetWalker
         double precise => _number(precise),
         string text => text,
         Utf8String utf8 => utf8.String,
-        byte[] bytes => Convert.ToBase64String(bytes),
+        byte[] bytes => bytes.Length == 0 ? null : new JsonArray(bytes.Select(entry => (JsonNode?)JsonValue.Create((int)entry)).ToArray()),
         Enum member => Convert.ToInt32(member, CultureInfo.InvariantCulture),
         _ => throw new NotSupportedException($"a {value.GetType().Name} has no record form."),
     };
