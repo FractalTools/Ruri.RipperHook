@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ruri.RipperHook.Animation;
 using Ruri.RipperHook.BlenderBridge;
 using Ruri.RipperHook.Humanoid;
@@ -19,7 +20,10 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// </summary>
 public static class ClipStatement
 {
-    private sealed record CurveEntry(string kind, string path, string? attr, int classId, int keys, long off);
+    private sealed record CurveEntry(string kind, string path, string? attr, int classId, int keys, long off,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptAssembly = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptNamespace = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null);
 
     private sealed record ClipIndex(string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false);
@@ -31,6 +35,9 @@ public static class ClipStatement
         public string? Attribute { get; init; }
         public int ClassId { get; init; }
         public int Keys { get; init; }
+        public string? ScriptAssembly { get; init; }
+        public string? ScriptNamespace { get; init; }
+        public string? ScriptClass { get; init; }
         public required float[] Data { get; init; }
     }
 
@@ -57,6 +64,9 @@ public static class ClipStatement
                 Attribute = entry.attr,
                 ClassId = entry.classId,
                 Keys = entry.keys,
+                ScriptAssembly = entry.scriptAssembly,
+                ScriptNamespace = entry.scriptNamespace,
+                ScriptClass = entry.scriptClass,
                 Data = floats.Slice(checked((int)entry.off), length).ToArray(),
             });
         }
@@ -69,7 +79,8 @@ public static class ClipStatement
         long total = 0;
         foreach (Channel channel in channels)
         {
-            index.Add(new CurveEntry(channel.Kind, channel.Path, channel.Attribute, channel.ClassId, channel.Keys, total));
+            index.Add(new CurveEntry(channel.Kind, channel.Path, channel.Attribute, channel.ClassId, channel.Keys, total,
+                channel.ScriptAssembly, channel.ScriptNamespace, channel.ScriptClass));
             total += channel.Data.Length;
         }
         float[] payload = new float[total];

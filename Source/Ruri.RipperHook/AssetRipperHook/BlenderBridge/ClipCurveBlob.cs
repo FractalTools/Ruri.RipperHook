@@ -1,3 +1,5 @@
+using AssetRipper.Import.Structure.Assembly;
+using AssetRipper.SourceGenerated.Classes.ClassID_115;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
@@ -7,12 +9,16 @@ using Ruri.RipperHook.BlenderBridge.Conversion;
 using Ruri.RipperHook.Humanoid;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ruri.RipperHook.BlenderBridge;
 
 public static class ClipCurveBlob
 {
-    private sealed record CurveIndexEntry(string kind, string path, string? attr, int classId, int keys, long off);
+    private sealed record CurveIndexEntry(string kind, string path, string? attr, int classId, int keys, long off,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptAssembly = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptNamespace = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null);
 
     private sealed record ClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
@@ -195,9 +201,10 @@ public static class ClipCurveBlob
         List<CurveIndexEntry> index = new();
         long totalFloats = 0;
 
-        void Count(string kind, int keys, int dimensions, string path, string? attr = null, int classId = 0)
+        void Count(string kind, int keys, int dimensions, string path, string? attr = null, int classId = 0, IMonoScript? script = null)
         {
-            index.Add(new CurveIndexEntry(kind, path, attr, classId, keys, totalFloats));
+            index.Add(new CurveIndexEntry(kind, path, attr, classId, keys, totalFloats,
+                script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String));
             totalFloats += keys + 3L * keys * dimensions;
         }
 
@@ -219,7 +226,8 @@ public static class ClipCurveBlob
         }
         foreach (IFloatCurve curve in clip.FloatCurves_C74)
         {
-            Count("float", curve.Curve.Curve.Count, 1, curve.Path.String, curve.Attribute.String, curve.ClassID);
+            Count("float", curve.Curve.Curve.Count, 1, curve.Path.String, curve.Attribute.String, curve.ClassID,
+                curve.Script.TryGetAsset(clip.Collection, out IMonoScript? script) ? script : null);
         }
 
         float[] payload = new float[totalFloats];

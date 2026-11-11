@@ -37,3 +37,4 @@ Ruri-RipperHook 框架事实:只记与常识相反或读代码得不到的约束
 36. 音频剪辑的通道数、频率与整数采样数只在 FSB5 子声音头里,序列化字段只有单精度秒数 m_Length;core.statement.audioclips 取头里的值,与 Ogg 重建所用的是同一组(Fmod5Sharp 按头建 Ogg 信息包,末页粒度位置以头里采样数封顶),不取 m_Length 乘频率反推,也不另写 FSB 或 Vorbis 解析。
 
 37. containers 列了 dds 时,DXT1、DXT5、BC7 与其 Crunch 变体的单图贴图按存储序(下行在前)原样成 DDS:整条 mip 链、Crunch 先解成块、BC7 用 DX10 头 dxgiFormat 98、头里不带色彩空间、不翻行不解包法线;其余格式、立方体与多图贴图仍走列出的其他容器(table 的 container 列即扩展名)。
+38. 剪辑里绑在脚本组件上的浮点曲线,属性名只能由目标脚本的字段表对 CRC32 回查还原(AnimationClipConverter 的 PathChecksumCache.Add(script)),脚本布局只在请求带 scripts=1 时加载,不带就全是 script_0x哈希占位符,看到占位符先查请求;曲线索引带出绑定脚本的 scriptAssembly、scriptNamespace、scriptClass,同一份索引里的路径仍可能是 path_0x哈希占位符,要对播放它的层级按 CRC32 解析。
