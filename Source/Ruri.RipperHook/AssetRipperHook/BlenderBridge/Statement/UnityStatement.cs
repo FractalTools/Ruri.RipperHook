@@ -2370,7 +2370,9 @@ public sealed class UnityStatement
     private void EncodeTextures()
     {
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        bool direct = _options.Containers.Contains(TextureEncoding.DdsContainer, StringComparer.OrdinalIgnoreCase);
         ImageExportFormat[] accepted = _options.Containers
+            .Where(name => !name.Equals(TextureEncoding.DdsContainer, StringComparison.OrdinalIgnoreCase))
             .Select(name => Enum.TryParse(name, ignoreCase: true, out ImageExportFormat format) ? format : ImageExportFormat.Png)
             .ToArray();
         StatementTexture?[] encoded = new StatementTexture?[_texturesToEncode.Count];
@@ -2378,9 +2380,11 @@ public sealed class UnityStatement
         Parallel.For(0, _texturesToEncode.Count, index =>
         {
             ITexture2D texture = _texturesToEncode[index];
-            encoded[index] = _plan.UnityAdapter?.EncodeTexture is { } encode
-                ? encode(texture, _textureKeys[texture], accepted)
-                : TextureEncoding.Encode(texture, _textureKeys[texture], accepted);
+            string key = _textureKeys[texture];
+            encoded[index] = (direct ? TextureEncoding.EncodeDds(texture, key) : null)
+                ?? (_plan.UnityAdapter?.EncodeTexture is { } encode
+                    ? encode(texture, key, accepted)
+                    : TextureEncoding.Encode(texture, key, accepted));
         });
         for (int index = 0; index < encoded.Length; index++)
         {

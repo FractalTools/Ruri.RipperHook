@@ -73,6 +73,28 @@ public static class TextureEncoding
         value >= 0 && value < names.Length ? names[value] : throw new InvalidDataException(
             $"texture sampler value {value} is none of {string.Join('/', names)}");
 
+    /// <summary>The container name a requester lists to take block-compressed textures as DDS files (<see cref="TextureDds"/>).</summary>
+    public const string DdsContainer = "dds";
+
+    /// <summary>The texture as a DDS file where <see cref="TextureDds"/> answers it, else null.</summary>
+    public static StatementTexture? EncodeDds(ITexture2D texture, string key)
+    {
+        if (!TextureDds.TryEncode(texture, out byte[] file))
+        {
+            return null;
+        }
+        return new StatementTexture
+        {
+            Key = key,
+            Name = texture.Name.String,
+            Srgb = DeclaresSrgb(texture),
+            Container = DdsContainer,
+            Format = texture.Format_C28E.ToString(),
+            Image = file,
+            Sampling = Sampling(texture),
+        };
+    }
+
     public static StatementTexture? Encode(ITexture2D texture, string key, ImageExportFormat[] accepted)
     {
         if (!TextureConverter.TryConvertToBitmap(texture, out DirectBitmap bitmap))
