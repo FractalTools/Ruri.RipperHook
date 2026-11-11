@@ -79,13 +79,42 @@ internal sealed class UnityJsonWalker : AssetWalker
         {
             if (value is not null && top.Field is not null)
             {
-                top.Object[top.Field] = value;
+                Assign(top.Object, top.Field, value);
             }
         }
         else if (value is not null)
         {
             top.Array!.Add(value);
         }
+    }
+
+    /// <summary>A member the player's data names as an element of a fixed-size array (<c>bytes[3]</c>) is an element of the
+    /// array member of the base name, in index order, so that a record carries it as the list it is.</summary>
+    private static void Assign(JsonObject target, string field, JsonNode value)
+    {
+        int open = field.Length > 3 && field[^1] == ']' ? field.LastIndexOf('[') : -1;
+        if (open <= 0 || !int.TryParse(field.AsSpan(open + 1, field.Length - open - 2), NumberStyles.None, CultureInfo.InvariantCulture, out int index))
+        {
+            target[field] = value;
+            return;
+        }
+        string name = field[..open];
+        JsonArray elements;
+        if (target[name] is null)
+        {
+            elements = [];
+            target[name] = elements;
+        }
+        else
+        {
+            elements = target[name] as JsonArray
+                ?? throw new NotSupportedException($"member {field} is an element of {name}, which is not an array.");
+        }
+        if (index != elements.Count)
+        {
+            throw new NotSupportedException($"member {field} is not the next element of {name}, which has {elements.Count}.");
+        }
+        elements.Add(value);
     }
 
     public override bool EnterAsset(IUnityAssetBase asset)
