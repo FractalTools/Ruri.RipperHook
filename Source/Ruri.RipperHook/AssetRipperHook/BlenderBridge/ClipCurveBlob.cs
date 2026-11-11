@@ -1,3 +1,6 @@
+using AssetRipper.Assets;
+using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.SourceGenerated.Classes.ClassID_115;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
@@ -6,20 +9,30 @@ using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
 using Ruri.RipperHook.Animation;
 using Ruri.RipperHook.BlenderBridge.Conversion;
+using Ruri.RipperHook.BlenderBridge.Statements;
 using Ruri.RipperHook.Humanoid;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Ruri.RipperHook.BlenderBridge;
 
+/// <summary>One animation event of a clip, as the source serializes it: when it fires, the function it calls, its string, float and
+/// integer parameters, the object it passes (stated as the asset reference the script records use: kind, key, class, name; null where
+/// it passes none) and how the call is sent (<c>SendMessageOptions</c> as its serialized integer).</summary>
+internal sealed record ClipEvent(float time, string functionName, string stringParameter, float floatParameter, int intParameter,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? objectReference, int messageOptions);
+
 public static class ClipCurveBlob
 {
-    /// <summary>One curve of the index. <c>preWrap</c> and <c>postWrap</c> are the curve's serialized pre- and post-infinity
-    /// (<c>CurveLoopTypes</c>: 0 constant, 1 cycle, 2 cycle with offset, 3 oscillate, 4 linear). <c>weighted</c> says the curve's
-    /// block carries, after the four arrays every curve has, three more of one value per key -- in weights, out weights and weighted
-    /// modes (0 none, 1 in, 2 out, 3 both) -- which a float curve read from a clip has and no other producer writes.
-    /// <c>className</c> is the class name of the native class a float curve drives, where it is not a script's.</summary>
+    /// <summary>One curve of the index. <c>preWrap</c> and <c>postWrap</c> are the curve's serialized pre- and post-infinity, the
+    /// two integers the source stores on the curve (<c>m_PreInfinity</c>, <c>m_PostInfinity</c>), as they are: not converted to
+    /// another enumeration, so the reader reads them in the source engine's own value domain. <c>weighted</c> says the curve's
+    /// block carries, after the four arrays every curve has (times, values, in slopes, out slopes), three more: in weights and out
+    /// weights, each as wide as the values, and weighted modes, one per key (0 none, 1 in, 2 out, 3 both) -- which a curve read
+    /// from a clip has and no other producer writes. <c>className</c> is the class name of the native class a float curve drives,
+    /// where it is not a script's.</summary>
     private sealed record CurveIndexEntry(string kind, string path, string? attr, int classId, int keys, long off,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptAssembly = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptNamespace = null,
@@ -32,7 +45,8 @@ public static class ClipCurveBlob
     private sealed record ClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
-        List<CurveIndexEntry> curves, bool loopTime = false);
+        List<CurveIndexEntry> curves, bool loopTime = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ClipEvent>? events = null);
 
     private sealed record SolvedClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
@@ -205,7 +219,9 @@ public static class ClipCurveBlob
         return (JsonSerializer.Serialize(meta), bytes);
     }
 
-    public static (string MetaJson, byte[] Curves) Build(IAnimationClip clip)
+    /// <summary>The clip's curves as the blob a host reads, and its animation events in the index. <paramref name="keyOf"/> names the
+    /// object an event passes (the key the statement states it by); without it an event states no object.</summary>
+    public static (string MetaJson, byte[] Curves) Build(IAnimationClip clip, Func<IUnityObjectBase, string>? keyOf = null)
     {
         List<CurveIndexEntry> index = new();
         long totalFloats = 0;
@@ -215,24 +231,28 @@ public static class ClipCurveBlob
         {
             index.Add(new CurveIndexEntry(kind, path, attr, classId, keys, totalFloats,
                 script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String, className, preWrap, postWrap, weighted));
-            totalFloats += keys + 3L * keys * dimensions + (weighted ? 3L * keys : 0L);
+            totalFloats += keys + 3L * keys * dimensions + (weighted ? (2L * dimensions + 1L) * keys : 0L);
         }
 
         foreach (IVector3Curve curve in clip.PositionCurves_C74)
         {
-            Count("pos", curve.Curve.Curve.Count, 3, curve.Path.String);
+            Count("pos", curve.Curve.Curve.Count, 3, curve.Path.String, preWrap: curve.Curve.PreInfinity,
+                postWrap: curve.Curve.PostInfinity, weighted: true);
         }
         foreach (IQuaternionCurve curve in clip.RotationCurves_C74)
         {
-            Count("rot", curve.Curve.Curve.Count, 4, curve.Path.String);
+            Count("rot", curve.Curve.Curve.Count, 4, curve.Path.String, preWrap: curve.Curve.PreInfinity,
+                postWrap: curve.Curve.PostInfinity, weighted: true);
         }
         foreach (IVector3Curve curve in clip.ScaleCurves_C74)
         {
-            Count("scale", curve.Curve.Curve.Count, 3, curve.Path.String);
+            Count("scale", curve.Curve.Curve.Count, 3, curve.Path.String, preWrap: curve.Curve.PreInfinity,
+                postWrap: curve.Curve.PostInfinity, weighted: true);
         }
         foreach (IVector3Curve curve in clip.EulerCurves_C74)
         {
-            Count("euler", curve.Curve.Curve.Count, 3, curve.Path.String);
+            Count("euler", curve.Curve.Curve.Count, 3, curve.Path.String, preWrap: curve.Curve.PreInfinity,
+                postWrap: curve.Curve.PostInfinity, weighted: true);
         }
         foreach (IFloatCurve curve in clip.FloatCurves_C74)
         {
@@ -270,6 +290,14 @@ public static class ClipCurveBlob
             throw new InvalidOperationException($"clip curve payload desync: wrote {cursor}, indexed {totalFloats}");
         }
 
+        List<ClipEvent>? events = null;
+        foreach (var animationEvent in clip.Events_C74)
+        {
+            (events ??= []).Add(new ClipEvent(animationEvent.Time, animationEvent.FunctionName.String, animationEvent.Data.String,
+                animationEvent.FloatParameter, animationEvent.IntParameter,
+                EventObject(animationEvent.ObjectReferenceParameter, clip.Collection, keyOf), animationEvent.MessageOptions));
+        }
+
         var muscleClip = clip.MuscleClip_C74;
         ClipIndex meta = new(
             clip.Name,
@@ -280,13 +308,36 @@ public static class ClipCurveBlob
             muscleClip?.KeepOriginalPositionY ?? true,
             muscleClip?.KeepOriginalOrientation ?? true,
             index,
-            muscleClip?.LoopTime ?? false);
+            muscleClip?.LoopTime ?? false,
+            events);
 
         byte[] bytes = new byte[totalFloats * sizeof(float)];
         Buffer.BlockCopy(payload, 0, bytes, 0, bytes.Length);
         return (JsonSerializer.Serialize(meta), bytes);
     }
 
+    /// <summary>The object an animation event passes, as the asset reference the script records use, or null where it passes none (or
+    /// no key naming is given).</summary>
+    private static JsonObject? EventObject(IPPtr pointer, AssetCollection collection, Func<IUnityObjectBase, string>? keyOf)
+    {
+        if (keyOf is null || pointer.PathID == 0 || collection.TryGetAsset(pointer.FileID, pointer.PathID) is not { } target)
+        {
+            return null;
+        }
+        return new JsonObject
+        {
+            [ScriptRecordMembers.Kind] = ScriptRecordMembers.AssetReference,
+            [ScriptRecordMembers.Key] = keyOf(target),
+            [ScriptRecordMembers.Class] = UnityScripts.ClassNameOf(target),
+            [ScriptRecordMembers.Name] = UnityScripts.NameOf(target),
+        };
+    }
+
+    /// <summary>The weight a key states when its version of the engine states none: the third the engine fills a new key with.</summary>
+    private const float DefaultWeight = 1f / 3f;
+
+    /// <summary>A vector curve's block: times, values, in slopes, out slopes, then in weights and out weights (three per key each) and
+    /// weighted modes (one per key).</summary>
     private static int WriteVector3Keys(IVector3Curve curve, float[] payload, int cursor)
     {
         var keys = curve.Curve.Curve;
@@ -295,6 +346,9 @@ public static class ClipCurveBlob
         int values = times + count;
         int inSlopes = values + count * 3;
         int outSlopes = inSlopes + count * 3;
+        int inWeights = outSlopes + count * 3;
+        int outWeights = inWeights + count * 3;
+        int weightedModes = outWeights + count * 3;
         for (int i = 0; i < count; i++)
         {
             var key = keys[i];
@@ -308,10 +362,18 @@ public static class ClipCurveBlob
             payload[outSlopes + i * 3 + 0] = key.OutSlope.X;
             payload[outSlopes + i * 3 + 1] = key.OutSlope.Y;
             payload[outSlopes + i * 3 + 2] = key.OutSlope.Z;
+            payload[inWeights + i * 3 + 0] = key.InWeight?.X ?? DefaultWeight;
+            payload[inWeights + i * 3 + 1] = key.InWeight?.Y ?? DefaultWeight;
+            payload[inWeights + i * 3 + 2] = key.InWeight?.Z ?? DefaultWeight;
+            payload[outWeights + i * 3 + 0] = key.OutWeight?.X ?? DefaultWeight;
+            payload[outWeights + i * 3 + 1] = key.OutWeight?.Y ?? DefaultWeight;
+            payload[outWeights + i * 3 + 2] = key.OutWeight?.Z ?? DefaultWeight;
+            payload[weightedModes + i] = key.WeightedMode;
         }
-        return outSlopes + count * 3;
+        return weightedModes + count;
     }
 
+    /// <summary>A quaternion curve's block, laid out as a vector curve's with four components.</summary>
     private static int WriteQuaternionKeys(IQuaternionCurve curve, float[] payload, int cursor)
     {
         var keys = curve.Curve.Curve;
@@ -320,6 +382,9 @@ public static class ClipCurveBlob
         int values = times + count;
         int inSlopes = values + count * 4;
         int outSlopes = inSlopes + count * 4;
+        int inWeights = outSlopes + count * 4;
+        int outWeights = inWeights + count * 4;
+        int weightedModes = outWeights + count * 4;
         for (int i = 0; i < count; i++)
         {
             var key = keys[i];
@@ -336,8 +401,17 @@ public static class ClipCurveBlob
             payload[outSlopes + i * 4 + 1] = key.OutSlope.Y;
             payload[outSlopes + i * 4 + 2] = key.OutSlope.Z;
             payload[outSlopes + i * 4 + 3] = key.OutSlope.W;
+            payload[inWeights + i * 4 + 0] = key.InWeight?.X ?? DefaultWeight;
+            payload[inWeights + i * 4 + 1] = key.InWeight?.Y ?? DefaultWeight;
+            payload[inWeights + i * 4 + 2] = key.InWeight?.Z ?? DefaultWeight;
+            payload[inWeights + i * 4 + 3] = key.InWeight?.W ?? DefaultWeight;
+            payload[outWeights + i * 4 + 0] = key.OutWeight?.X ?? DefaultWeight;
+            payload[outWeights + i * 4 + 1] = key.OutWeight?.Y ?? DefaultWeight;
+            payload[outWeights + i * 4 + 2] = key.OutWeight?.Z ?? DefaultWeight;
+            payload[outWeights + i * 4 + 3] = key.OutWeight?.W ?? DefaultWeight;
+            payload[weightedModes + i] = key.WeightedMode;
         }
-        return outSlopes + count * 4;
+        return weightedModes + count;
     }
 
     /// <summary>The class name of the native class a float curve drives, or null for a script's class (the script states itself) and

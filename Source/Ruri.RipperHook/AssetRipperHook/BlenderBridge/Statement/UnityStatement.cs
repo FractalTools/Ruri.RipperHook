@@ -2347,7 +2347,7 @@ public sealed class UnityStatement
                 {
                     continue;
                 }
-                (string statedMeta, byte[] statedCurves) = ClipCurveBlob.Build(named);
+                (string statedMeta, byte[] statedCurves) = ClipCurveBlob.Build(named, KeyOf);
                 _statement.Clips.Add(new StatementClip(KeyOf(named), label, statedMeta, statedCurves,
                     named.Collection.Name));
             }
@@ -2359,7 +2359,7 @@ public sealed class UnityStatement
             {
                 continue;
             }
-            (string meta, byte[] curves) = ClipCurveBlob.Build(clip);
+            (string meta, byte[] curves) = ClipCurveBlob.Build(clip, KeyOf);
             _statement.Clips.Add(new StatementClip(KeyOf(clip), clip.Name.String, meta, curves,
                 clip.Collection.Name));
         }
@@ -2377,6 +2377,19 @@ public sealed class UnityStatement
             .ToArray();
         StatementTexture?[] encoded = new StatementTexture?[_texturesToEncode.Count];
         _ = TextureEncoding.Ready;
+        // A texture whose pixels sit in a streamed resource file is read here, one at a time: the resource files of an archive load on
+        // first use into a list other readers walk, and share one stream (a position, then a read), and neither survives two threads
+        // asking at once. The bytes ride the texture while it is encoded below and are let go after.
+        List<ITexture2D> streamed = [];
+        foreach (ITexture2D texture in _texturesToEncode)
+        {
+            if (texture.ImageData_C28.Length == 0 && texture.StreamData_C28 is { } stream && stream.IsSet()
+                && stream.GetContent(texture.Collection) is { Length: > 0 } content)
+            {
+                texture.ImageData_C28 = content;
+                streamed.Add(texture);
+            }
+        }
         Parallel.For(0, _texturesToEncode.Count, index =>
         {
             ITexture2D texture = _texturesToEncode[index];
@@ -2386,6 +2399,10 @@ public sealed class UnityStatement
                     ? encode(texture, key, accepted)
                     : TextureEncoding.Encode(texture, key, accepted));
         });
+        foreach (ITexture2D texture in streamed)
+        {
+            texture.ImageData_C28 = [];
+        }
         for (int index = 0; index < encoded.Length; index++)
         {
             StatementTexture? row = encoded[index];

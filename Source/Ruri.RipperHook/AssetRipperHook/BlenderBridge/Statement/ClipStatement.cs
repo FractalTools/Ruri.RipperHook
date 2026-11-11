@@ -16,8 +16,8 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// A clip's curves re-anchored onto the skeleton a host holds, and its muscle encoding
 /// solved into ordinary bone curves against that skeleton's avatar. The blob layout is the
 /// one every clip producer writes -- per curve, times then values then both tangents (and, for a
-/// curve whose index entry says <c>weighted</c>, three more arrays: in weights, out weights, weighted
-/// modes) -- so a reader cannot tell a repaired clip from a raw one.
+/// curve whose index entry says <c>weighted</c>, three more arrays: in weights and out weights as wide
+/// as the values, then one weighted mode per key) -- so a reader cannot tell a repaired clip from a raw one.
 /// </summary>
 public static class ClipStatement
 {
@@ -31,7 +31,8 @@ public static class ClipStatement
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool weighted = false);
 
     private sealed record ClipIndex(string name, float sampleRate, float startTime, float stopTime,
-        bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false);
+        bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ClipEvent>? events = null);
 
     private sealed class Channel
     {
@@ -65,7 +66,8 @@ public static class ClipStatement
         List<Channel> channels = new(meta.curves.Count);
         foreach (CurveEntry entry in meta.curves)
         {
-            int length = entry.keys + 3 * entry.keys * Dimensions(entry.kind) + (entry.weighted ? 3 * entry.keys : 0);
+            int length = entry.keys + 3 * entry.keys * Dimensions(entry.kind)
+                + (entry.weighted ? (2 * Dimensions(entry.kind) + 1) * entry.keys : 0);
             channels.Add(new Channel
             {
                 Kind = entry.kind,
@@ -105,7 +107,7 @@ public static class ClipStatement
             cursor += channel.Data.Length;
         }
         ClipIndex meta = new(source.name, source.sampleRate, source.startTime, source.stopTime,
-            source.keepPositionXZ, source.keepPositionY, source.keepOrientation, index, source.loopTime);
+            source.keepPositionXZ, source.keepPositionY, source.keepOrientation, index, source.loopTime, source.events);
         return (JsonSerializer.Serialize(meta), MemoryMarshal.AsBytes<float>(payload).ToArray());
     }
 
