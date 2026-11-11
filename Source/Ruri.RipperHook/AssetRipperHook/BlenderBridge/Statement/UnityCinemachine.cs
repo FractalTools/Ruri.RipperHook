@@ -22,8 +22,10 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 /// of one) is the source path of that object, the path the scene layer states the node by, so that a pointer to a node the
 /// layer does not hold is not a path that reads as nothing: it refuses the record. A pointer to a scriptable object of the
 /// package (a noise profile, a table of blends) is the asset itself, embedded with its name, so that one record carries
-/// everything the component reads. A pointer to anything else refuses the record too. A vector is an object of its
-/// components, x, y and z in lower case.
+/// everything the component reads. A pointer to any other object of a loaded archive (an input action reference, a profile of
+/// another package) is the <c>asset</c> reference the script records state, the key, the class and the name of the object, so
+/// that the layers of the scripts hold what it is and this record names it; a pointer to an object no loaded archive holds
+/// refuses the record. A vector is an object of its components, x, y and z in lower case.
 /// </summary>
 public sealed class UnityCinemachine : UnityScriptRecords
 {
@@ -34,12 +36,14 @@ public sealed class UnityCinemachine : UnityScriptRecords
     private const string NameMember = "m_Name";
 
     private readonly Func<IGameObject, string?> _pathOf;
+    private readonly Func<IUnityObjectBase, string> _keyOf;
     private readonly HashSet<IUnityObjectBase> _embedding = new(ReferenceEqualityComparer.Instance);
     private string _component = string.Empty;
 
-    private UnityCinemachine(Func<IGameObject, string?> pathOf)
+    private UnityCinemachine(Func<IGameObject, string?> pathOf, Func<IUnityObjectBase, string> keyOf)
     {
         _pathOf = pathOf;
+        _keyOf = keyOf;
     }
 
     public static bool Owns(IMonoBehaviour behaviour) => InAssembly(behaviour) && behaviour.ScriptClass() != PostProcessing;
@@ -47,8 +51,9 @@ public sealed class UnityCinemachine : UnityScriptRecords
     private static bool InAssembly(IMonoBehaviour behaviour) =>
         behaviour.ScriptP is { } script && script.GetAssemblyNameFixed() == Assembly;
 
-    public static JsonObject Describe(IMonoBehaviour component, Func<IGameObject, string?> pathOf) =>
-        new UnityCinemachine(pathOf).Record(component);
+    public static JsonObject Describe(IMonoBehaviour component, Func<IGameObject, string?> pathOf,
+        Func<IUnityObjectBase, string> keyOf) =>
+        new UnityCinemachine(pathOf, keyOf).Record(component);
 
     private JsonObject Record(IMonoBehaviour component)
     {
@@ -80,9 +85,13 @@ public sealed class UnityCinemachine : UnityScriptRecords
         {
             return Embedded(asset);
         }
-        throw Refused(target is IMonoBehaviour outside
-            ? $"points at the {outside.ScriptClass()} '{outside.Name.String}', a scriptable object outside the package, which a layer of nodes cannot state"
-            : $"points at a {target.ClassName}, which a layer of nodes cannot state");
+        return new JsonObject
+        {
+            [ScriptRecordMembers.Kind] = ScriptRecordMembers.AssetReference,
+            [ScriptRecordMembers.Key] = _keyOf(target),
+            [ScriptRecordMembers.Class] = UnityScripts.ClassNameOf(target),
+            [ScriptRecordMembers.Name] = UnityScripts.NameOf(target),
+        };
     }
 
     /// <summary>A real number states itself as one: a whole value keeps its decimal point, so that a field of the script that is a

@@ -38,3 +38,4 @@ Ruri-RipperHook 框架事实:只记与常识相反或读代码得不到的约束
 
 37. containers 列了 dds 时,DXT1、DXT5、BC7 与其 Crunch 变体的单图贴图按存储序(下行在前)原样成 DDS:整条 mip 链、Crunch 先解成块、BC7 用 DX10 头 dxgiFormat 98、头里不带色彩空间、不翻行不解包法线;其余格式、立方体与多图贴图仍走列出的其他容器(table 的 container 列即扩展名)。
 38. 剪辑里绑在脚本组件上的浮点曲线,属性名只能由目标脚本的字段表对 CRC32 回查还原(AnimationClipConverter 的 PathChecksumCache.Add(script)),脚本布局只在请求带 scripts=1 时加载,不带就全是 script_0x哈希占位符,看到占位符先查请求;曲线索引带出绑定脚本的 scriptAssembly、scriptNamespace、scriptClass,同一份索引里的路径仍可能是 path_0x哈希占位符,要对播放它的层级按 CRC32 解析。
+39. 相机包组件(core.statement.cinemachine)里指向相机包外对象的指针不拒产:场景里的节点或其组件仍写成节点源路径(层里没有这个节点才拒产),相机包自己的 ScriptableObject 仍整条嵌入,其余(例如输入动作引用、别的包的配置)写成与 core.statement.scripts 同一种 asset 引用(kind=asset、key、class、name),被指的记录由脚本记录层持有;只有指向任何已加载档案都没有的对象才拒产。

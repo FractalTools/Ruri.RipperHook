@@ -2110,7 +2110,7 @@ public sealed class UnityStatement
             try
             {
                 _statement.Cinemachine.Add(new StatementCinemachine(path, component.ScriptClass(),
-                    UnityCinemachine.Describe(component, PathOf).ToJsonString()));
+                    UnityCinemachine.Describe(component, PathOf, KeyOf).ToJsonString()));
             }
             catch (InvalidOperationException refusal)
             {

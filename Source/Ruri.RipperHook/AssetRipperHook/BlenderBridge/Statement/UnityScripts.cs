@@ -65,7 +65,7 @@ public sealed class UnityScripts : UnityScriptRecords
         _ => target.ClassName,
     };
 
-    private static string NameOf(IUnityObjectBase target) => target switch
+    internal static string NameOf(IUnityObjectBase target) => target switch
     {
         IMonoBehaviour behaviour when behaviour.Name.String.Length > 0 => behaviour.Name.String,
         IMonoBehaviour behaviour => behaviour.GameObjectP?.Name.String ?? string.Empty,
