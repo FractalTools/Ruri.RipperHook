@@ -35,6 +35,7 @@ using AssetRipper.SourceGenerated.Extensions;
 using Ruri.RipperHook.BlenderBridge;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.BlenderBridge.Data;
+using Ruri.RipperHook.BlenderBridge.Install;
 using Ruri.RipperHook.Humanoid;
 using System.Globalization;
 
@@ -138,6 +139,17 @@ public sealed class UnityStatement
         string.Create(CultureInfo.InvariantCulture, $"{_identities[asset.Collection]}|{asset.PathID}");
 
     private static int LayerOf(IGameObject? gameObject) => gameObject is null ? 0 : (int)gameObject.Layer;
+
+    private const int FirstCustomTag = 20000;
+
+    private static string TagOf(IGameObject? gameObject)
+    {
+        if (gameObject is null)
+        {
+            return string.Empty;
+        }
+        return gameObject.Tag >= FirstCustomTag ? UnityTagManager.NameOf(Session.GameRoot, gameObject.Tag) : gameObject.TagString;
+    }
 
     private bool IsSeedCollection(AssetCollection collection) => _seedCabs.Contains(collection.Name);
 
@@ -567,6 +579,7 @@ public sealed class UnityStatement
                     Camera = piece.Camera,
                     Shadows = piece.Shadows,
                     Layer = piece.Layer,
+                    Tag = piece.Tag,
                 });
             }
         }
@@ -656,6 +669,7 @@ public sealed class UnityStatement
         public UnityCameraInfo? Camera { get; init; }
         public ShadowCastingMode? Shadows { get; init; }
         public int Layer { get; init; }
+        public string Tag { get; init; } = string.Empty;
     }
 
     private sealed class WindowSource
@@ -861,6 +875,7 @@ public sealed class UnityStatement
                 MaterialKeys = materialKeys,
                 Shadows = info.Renderer.GetShadowCastingMode(),
                 Layer = LayerOf(info.Node?.GameObject),
+                Tag = TagOf(info.Node?.GameObject),
             });
         }
         foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters))
@@ -868,7 +883,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = camera.Name, Path = camera.Node.Path, Kind = "camera", Local = camera.Node.World,
-                Hidden = camera.Disabled, Enabled = camera.Enabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject),
+                Hidden = camera.Disabled, Enabled = camera.Enabled, Camera = camera, Layer = LayerOf(camera.Node.GameObject), Tag = TagOf(camera.Node.GameObject),
             });
         }
         foreach (UnityLightInfo light in ReadLights(lights, hierarchy, filters))
@@ -876,7 +891,7 @@ public sealed class UnityStatement
             pieces.Add(new WindowPiece
             {
                 Name = light.Name, Path = light.Node.Path, Kind = "light", Local = light.Node.World,
-                Hidden = light.Disabled, Enabled = light.Enabled, Light = light, Layer = LayerOf(light.Node.GameObject),
+                Hidden = light.Disabled, Enabled = light.Enabled, Light = light, Layer = LayerOf(light.Node.GameObject), Tag = TagOf(light.Node.GameObject),
             });
         }
         return pieces;
@@ -1047,6 +1062,7 @@ public sealed class UnityStatement
                 Scale = node.LocalScale,
                 Shadows = null,
                 Layer = LayerOf(node.GameObject),
+                Tag = TagOf(node.GameObject),
             };
             _plan.UnityAdapter?.Node?.Invoke(row, node, KeyOf);
             rows[node] = row;
@@ -1332,7 +1348,7 @@ public sealed class UnityStatement
             Skeleton = rigRow.Skeleton, Materials = rigRow.Materials,
             Position = rigRow.Position, Rotation = rigRow.Rotation, Scale = rigRow.Scale, Light = rigRow.Light, Camera = rigRow.Camera,
             Shadows = rigRow.Shadows, MainLightShadows = rigRow.MainLightShadows, TwoSidedShadows = rigRow.TwoSidedShadows,
-            ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Avatar = rigRow.Avatar,
+            ObjectParameters = rigRow.ObjectParameters, Collection = rigRow.Collection, Layer = rigRow.Layer, Tag = rigRow.Tag, Avatar = rigRow.Avatar,
             SourceObject = rigRow.SourceObject, SourceCollection = rigRow.SourceCollection,
             LightmapIndex = rigRow.LightmapIndex, LightmapST = rigRow.LightmapST,
         };
@@ -1519,7 +1535,7 @@ public sealed class UnityStatement
                     Kind = bakedNow ? "skinned" : "mesh", Active = !info.Disabled, ComponentEnabled = info.Enabled, Mesh = key, Skeleton = rig.Skeleton.Key,
                     Materials = materialKeys, Anchor = bakedNow ? string.Empty : anchor,
                     Position = System.Numerics.Vector3.Zero, Rotation = System.Numerics.Quaternion.Identity, Scale = System.Numerics.Vector3.One,
-                    Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
+                    Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject), Tag = TagOf(info.Node?.GameObject),
                 });
                 continue;
             }
@@ -1536,7 +1552,7 @@ public sealed class UnityStatement
                 Index = _statement.Nodes.Count, Parent = rig.RootIndex, Name = info.Name, Path = info.Node?.Path ?? string.Empty,
                 Kind = "mesh", Active = !info.Disabled, ComponentEnabled = info.Enabled, Mesh = meshKey, Materials = materialKeys, Anchor = anchor,
                 Position = position, Rotation = rotation, Scale = scale,
-                Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject),
+                Shadows = info.Renderer.GetShadowCastingMode(), Layer = LayerOf(info.Node?.GameObject), Tag = TagOf(info.Node?.GameObject),
             });
             if (builtin.Length > 0)
             {

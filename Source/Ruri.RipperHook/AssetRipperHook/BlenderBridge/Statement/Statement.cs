@@ -168,6 +168,9 @@ public sealed class StatementNode
     /// <summary>The engine's layer number of the object this node is, zero where the source states none.</summary>
     public int Layer { get; set; }
 
+    /// <summary>The tag string of the object this node is, Untagged where the source states the default; empty where no object stands behind the node.</summary>
+    public string Tag { get; set; } = string.Empty;
+
     /// <summary>The key of the avatar the node's animator is built with, which makes the node the root of a rig;
     /// empty for a node that animates nothing.</summary>
     public string Avatar { get; set; } = string.Empty;

@@ -99,6 +99,7 @@ public static class StatementFlattener
                 ObjectParameters = node.ObjectParameters,
                 Collection = node.Collection,
                 Layer = node.Layer,
+                Tag = node.Tag,
                 Avatar = node.Avatar,
                 SourceObject = node.SourceObject,
                 SourceCollection = node.SourceCollection,

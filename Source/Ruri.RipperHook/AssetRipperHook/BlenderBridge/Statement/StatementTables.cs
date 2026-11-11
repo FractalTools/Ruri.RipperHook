@@ -70,7 +70,7 @@ public static class StatementTables
                 light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0, light?.ShadowResolution ?? 0,
                 light?.VolumeFactor ?? 0f, light?.SpecularFactor ?? 0f,
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
-                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, camera?.Tag ?? string.Empty,
+                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, node.Tag,
                 node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0,
                 node.TwoSidedShadows || node.Shadows == ShadowCastingMode.TwoSided ? 1 : 0,
                 Bytes<float>(light is null ? [] : [light.Fade.X, light.Fade.Y, light.Fade.Z, light.Fade.W]),

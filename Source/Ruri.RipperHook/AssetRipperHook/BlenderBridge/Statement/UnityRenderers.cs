@@ -61,8 +61,6 @@ public sealed class UnityCameraInfo
 
     public required string Name { get; init; }
 
-    public required string Tag { get; init; }
-
     public required float FieldOfView { get; init; }
 
     public required float Near { get; init; }
@@ -322,7 +320,6 @@ public static class UnityRenderers
             {
                 Node = node,
                 Name = node.Name,
-                Tag = node.GameObject?.TagString ?? string.Empty,
                 FieldOfView = camera.Field_of_view_C20,
                 Near = camera.Near_clip_plane_C20,
                 Far = camera.Far_clip_plane_C20,
@@ -352,7 +349,6 @@ public static class UnityRenderers
             {
                 Node = node,
                 Name = node.Name,
-                Tag = node.GameObject?.TagString ?? string.Empty,
                 FieldOfView = Single(block, "FieldOfView", 60f),
                 Near = Single(block, "NearClipPlane", 0.3f),
                 Far = Single(block, "FarClipPlane", 1000f),
