@@ -267,9 +267,12 @@ public sealed record StatementController(string Key, string Name, string RecordJ
 /// asset no director of the selection plays.</summary>
 public sealed record StatementTimeline(string Key, string Name, string Director, string RecordJson, string Archive);
 
-/// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.</summary>
+/// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.
+/// <paramref name="KeepControllerState"/> is whether the controller keeps its state when the object is disabled and enabled again
+/// (the field the game's Unity version serializes as keep-animator-state-on-disable, or under its older name keep-animator-controller-state-on-disable);
+/// false is the engine's default, where a re-enabled object starts the controller from its default state.</summary>
 public sealed record StatementAnimator(string Path, string Controller, string Avatar, bool Enabled, bool ApplyRootMotion,
-    string UpdateMode, string CullingMode);
+    string UpdateMode, string CullingMode, bool KeepControllerState = false);
 
 /// <summary>A component of the camera package's own scripts on a node: the node it sits on (its source path, the one the scene
 /// layer states the node by), the class of its script, and the component as one JSON record -- whether it is enabled and every

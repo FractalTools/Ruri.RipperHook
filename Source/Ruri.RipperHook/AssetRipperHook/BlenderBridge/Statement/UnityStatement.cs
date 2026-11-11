@@ -837,7 +837,7 @@ public sealed class UnityStatement
                 decoded = Windowed(decoded, window.First, window.Count);
                 meshKey = string.Create(CultureInfo.InvariantCulture, $"{meshKey}#{window.First}-{window.Count}");
             }
-            List<string> materialKeys = info.Materials.Select(material => material is null ? string.Empty : Material(material)).ToList();
+            List<string> materialKeys = MaterialKeys(info);
             bool baked = false;
             if (info.Skinned)
             {
@@ -1098,7 +1098,7 @@ public sealed class UnityStatement
             _statement.Animators.Add(new StatementAnimator(SourcePath(rootObject, rows[holder]),
                 animator.Controller_PPtr_RuntimeAnimatorController_5P is { } played ? KeyOf(played) : string.Empty,
                 animator.AvatarP is { } built ? KeyOf(built) : string.Empty, animator.Enabled != 0, animator.ApplyRootMotion,
-                UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode)));
+                UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode), KeepsControllerState(animator)));
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, rootObject.Name,
             _plan.Kind.ToString().ToLowerInvariant()));
@@ -1510,7 +1510,7 @@ public sealed class UnityStatement
                 decoded = Windowed(decoded, window.First, window.Count);
                 meshKey = string.Create(CultureInfo.InvariantCulture, $"{meshKey}#{window.First}-{window.Count}");
             }
-            List<string> materialKeys = info.Materials.Select(material => material is null ? string.Empty : Material(material)).ToList();
+            List<string> materialKeys = MaterialKeys(info);
             if (info.Skinned)
             {
                 DecodedMesh baked = Clone(decoded);
@@ -1713,12 +1713,8 @@ public sealed class UnityStatement
             decoded = Windowed(decoded, window.First, window.Count);
             meshKey = string.Create(CultureInfo.InvariantCulture, $"{meshKey}#{window.First}-{window.Count}");
         }
-        List<string> materialKeys = [];
-        foreach (IMaterial? material in info.Materials)
-        {
-            materialKeys.Add(material is null ? string.Empty
-                : info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info.Name, info.Writes));
-        }
+        List<string> materialKeys = MaterialKeys(info,
+            material => info.Writes.Count == 0 ? Material(material) : WrittenMaterial(material, info.Name, info.Writes));
         int lod = lodOf.GetValueOrDefault(info.Renderer, -1);
         ShadowCastingMode shadows = info.Renderer.GetShadowCastingMode();
 
@@ -1961,6 +1957,32 @@ public sealed class UnityStatement
     {
         string key = KeyOf(material);
         return _statement.HasMaterial(key) ? key : Register(key, UnityMaterials.Read(material, TextureKey));
+    }
+
+    /// <summary>The keys of a renderer's materials, one per slot; an empty key is a slot with no material (a null pointer, file id
+    /// and path id both zero). A slot whose pointer is not null but names an object no loaded archive holds is an empty key too,
+    /// and is said in a note with its file id and path id, so that a slot left empty and a slot the archives cannot answer are
+    /// told apart.</summary>
+    private List<string> MaterialKeys(UnityRendererInfo info, Func<IMaterial, string>? keyOf = null)
+    {
+        keyOf ??= Material;
+        List<string> keys = [];
+        for (int slot = 0; slot < info.Materials.Count; slot++)
+        {
+            if (info.Materials[slot] is { } material)
+            {
+                keys.Add(keyOf(material));
+                continue;
+            }
+            keys.Add(string.Empty);
+            if (slot < info.Renderer.Materials_C25.Count && info.Renderer.Materials_C25[slot].PathID != 0)
+            {
+                var pointer = info.Renderer.Materials_C25[slot];
+                _statement.Note(_plan.Seed, "material slot points at no loaded object", 1,
+                    $"{info.Name}: slot {slot} file {pointer.FileID} path {pointer.PathID}");
+            }
+        }
+        return keys;
     }
 
     /// <summary>The material a pipeline draw shades with. None exists in the closure: the draw is the pipeline's
@@ -2336,6 +2358,13 @@ public sealed class UnityStatement
         2 => "CullCompletely",
         _ => "Unknown" + mode,
     };
+
+    /// <summary>Whether the controller keeps its state when the object is disabled and enabled again: the field the version
+    /// serializes as keep-animator-state-on-disable, or before the rename keep-animator-controller-state-on-disable, and
+    /// false (the engine's default) for a version with neither.</summary>
+    private static bool KeepsControllerState(IAnimator animator) =>
+        animator.Has_KeepAnimatorStateOnDisable() ? animator.KeepAnimatorStateOnDisable
+            : animator.Has_KeepAnimatorControllerStateOnDisable() && animator.KeepAnimatorControllerStateOnDisable;
 
     private void Clips()
     {
