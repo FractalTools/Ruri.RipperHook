@@ -15,15 +15,20 @@ namespace Ruri.RipperHook.BlenderBridge.Statements;
 ///
 /// A clip's curves re-anchored onto the skeleton a host holds, and its muscle encoding
 /// solved into ordinary bone curves against that skeleton's avatar. The blob layout is the
-/// one every clip producer writes -- per curve, times then values then both tangents -- so a
-/// reader cannot tell a repaired clip from a raw one.
+/// one every clip producer writes -- per curve, times then values then both tangents (and, for a
+/// curve whose index entry says <c>weighted</c>, three more arrays: in weights, out weights, weighted
+/// modes) -- so a reader cannot tell a repaired clip from a raw one.
 /// </summary>
 public static class ClipStatement
 {
     private sealed record CurveEntry(string kind, string path, string? attr, int classId, int keys, long off,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptAssembly = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptNamespace = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? className = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? preWrap = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? postWrap = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool weighted = false);
 
     private sealed record ClipIndex(string name, float sampleRate, float startTime, float stopTime,
         bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false);
@@ -38,6 +43,10 @@ public static class ClipStatement
         public string? ScriptAssembly { get; init; }
         public string? ScriptNamespace { get; init; }
         public string? ScriptClass { get; init; }
+        public string? ClassName { get; init; }
+        public int? PreWrap { get; init; }
+        public int? PostWrap { get; init; }
+        public bool Weighted { get; init; }
         public required float[] Data { get; init; }
     }
 
@@ -56,7 +65,7 @@ public static class ClipStatement
         List<Channel> channels = new(meta.curves.Count);
         foreach (CurveEntry entry in meta.curves)
         {
-            int length = entry.keys + 3 * entry.keys * Dimensions(entry.kind);
+            int length = entry.keys + 3 * entry.keys * Dimensions(entry.kind) + (entry.weighted ? 3 * entry.keys : 0);
             channels.Add(new Channel
             {
                 Kind = entry.kind,
@@ -67,6 +76,10 @@ public static class ClipStatement
                 ScriptAssembly = entry.scriptAssembly,
                 ScriptNamespace = entry.scriptNamespace,
                 ScriptClass = entry.scriptClass,
+                ClassName = entry.className,
+                PreWrap = entry.preWrap,
+                PostWrap = entry.postWrap,
+                Weighted = entry.weighted,
                 Data = floats.Slice(checked((int)entry.off), length).ToArray(),
             });
         }
@@ -80,7 +93,8 @@ public static class ClipStatement
         foreach (Channel channel in channels)
         {
             index.Add(new CurveEntry(channel.Kind, channel.Path, channel.Attribute, channel.ClassId, channel.Keys, total,
-                channel.ScriptAssembly, channel.ScriptNamespace, channel.ScriptClass));
+                channel.ScriptAssembly, channel.ScriptNamespace, channel.ScriptClass, channel.ClassName, channel.PreWrap,
+                channel.PostWrap, channel.Weighted));
             total += channel.Data.Length;
         }
         float[] payload = new float[total];

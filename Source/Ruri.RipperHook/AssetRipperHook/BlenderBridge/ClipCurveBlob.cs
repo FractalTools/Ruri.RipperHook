@@ -15,10 +15,19 @@ namespace Ruri.RipperHook.BlenderBridge;
 
 public static class ClipCurveBlob
 {
+    /// <summary>One curve of the index. <c>preWrap</c> and <c>postWrap</c> are the curve's serialized pre- and post-infinity
+    /// (<c>CurveLoopTypes</c>: 0 constant, 1 cycle, 2 cycle with offset, 3 oscillate, 4 linear). <c>weighted</c> says the curve's
+    /// block carries, after the four arrays every curve has, three more of one value per key -- in weights, out weights and weighted
+    /// modes (0 none, 1 in, 2 out, 3 both) -- which a float curve read from a clip has and no other producer writes.
+    /// <c>className</c> is the class name of the native class a float curve drives, where it is not a script's.</summary>
     private sealed record CurveIndexEntry(string kind, string path, string? attr, int classId, int keys, long off,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptAssembly = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptNamespace = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? scriptClass = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? className = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? preWrap = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? postWrap = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool weighted = false);
 
     private sealed record ClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
@@ -201,11 +210,12 @@ public static class ClipCurveBlob
         List<CurveIndexEntry> index = new();
         long totalFloats = 0;
 
-        void Count(string kind, int keys, int dimensions, string path, string? attr = null, int classId = 0, IMonoScript? script = null)
+        void Count(string kind, int keys, int dimensions, string path, string? attr = null, int classId = 0, IMonoScript? script = null,
+            string? className = null, int? preWrap = null, int? postWrap = null, bool weighted = false)
         {
             index.Add(new CurveIndexEntry(kind, path, attr, classId, keys, totalFloats,
-                script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String));
-            totalFloats += keys + 3L * keys * dimensions;
+                script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String, className, preWrap, postWrap, weighted));
+            totalFloats += keys + 3L * keys * dimensions + (weighted ? 3L * keys : 0L);
         }
 
         foreach (IVector3Curve curve in clip.PositionCurves_C74)
@@ -227,7 +237,8 @@ public static class ClipCurveBlob
         foreach (IFloatCurve curve in clip.FloatCurves_C74)
         {
             Count("float", curve.Curve.Curve.Count, 1, curve.Path.String, curve.Attribute.String, curve.ClassID,
-                curve.Script.TryGetAsset(clip.Collection, out IMonoScript? script) ? script : null);
+                curve.Script.TryGetAsset(clip.Collection, out IMonoScript? script) ? script : null,
+                NativeClassName(curve.ClassID), curve.Curve.PreInfinity, curve.Curve.PostInfinity, weighted: true);
         }
 
         float[] payload = new float[totalFloats];
@@ -329,6 +340,16 @@ public static class ClipCurveBlob
         return outSlopes + count * 4;
     }
 
+    /// <summary>The class name of the native class a float curve drives, or null for a script's class (the script states itself) and
+    /// for an id no class has.</summary>
+    private static string? NativeClassName(int classId) =>
+        classId != (int)AssetRipper.SourceGenerated.ClassIDType.MonoBehaviour
+        && Enum.IsDefined(typeof(AssetRipper.SourceGenerated.ClassIDType), classId)
+            ? ((AssetRipper.SourceGenerated.ClassIDType)classId).ToString()
+            : null;
+
+    /// <summary>A float curve's block: times, values, in slopes, out slopes, then in weights, out weights and weighted modes, one value
+    /// per key each.</summary>
     private static int WriteFloatKeys(IFloatCurve curve, float[] payload, int cursor)
     {
         var keys = curve.Curve.Curve;
@@ -337,6 +358,9 @@ public static class ClipCurveBlob
         int values = times + count;
         int inSlopes = values + count;
         int outSlopes = inSlopes + count;
+        int inWeights = outSlopes + count;
+        int outWeights = inWeights + count;
+        int weightedModes = outWeights + count;
         for (int i = 0; i < count; i++)
         {
             var key = keys[i];
@@ -344,7 +368,10 @@ public static class ClipCurveBlob
             payload[values + i] = key.Value;
             payload[inSlopes + i] = key.InSlope;
             payload[outSlopes + i] = key.OutSlope;
+            payload[inWeights + i] = key.InWeight;
+            payload[outWeights + i] = key.OutWeight;
+            payload[weightedModes + i] = key.WeightedMode;
         }
-        return outSlopes + count;
+        return weightedModes + count;
     }
 }
