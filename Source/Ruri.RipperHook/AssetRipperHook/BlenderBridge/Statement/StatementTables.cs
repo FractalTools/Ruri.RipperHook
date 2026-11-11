@@ -383,12 +383,13 @@ public static class StatementTables
     public static ColumnTable Animators(string id, IEnumerable<StatementAnimator> animators)
     {
         TableBuilder table = new(id, "path", "controller", "avatar", "enabled#", "root_motion#", "update_mode", "culling_mode",
-            "keep_controller_state#");
+            "keep_controller_state#", "path_ordinal#");
         table.Role(ColumnRole.Label, "path");
         foreach (StatementAnimator animator in animators)
         {
             table.Row(animator.Path, animator.Controller, animator.Avatar, animator.Enabled ? 1 : 0,
-                animator.ApplyRootMotion ? 1 : 0, animator.UpdateMode, animator.CullingMode, animator.KeepControllerState ? 1 : 0);
+                animator.ApplyRootMotion ? 1 : 0, animator.UpdateMode, animator.CullingMode, animator.KeepControllerState ? 1 : 0,
+                animator.PathOrdinal);
         }
         return table.Build();
     }

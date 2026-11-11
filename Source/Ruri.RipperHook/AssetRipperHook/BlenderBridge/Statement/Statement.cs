@@ -270,9 +270,11 @@ public sealed record StatementTimeline(string Key, string Name, string Director,
 /// <summary>An Animator component on a node: the controller it plays (by key, empty when none) and the avatar it was built with.
 /// <paramref name="KeepControllerState"/> is whether the controller keeps its state when the object is disabled and enabled again
 /// (the field the game's Unity version serializes as keep-animator-state-on-disable, or under its older name keep-animator-controller-state-on-disable);
-/// false is the engine's default, where a re-enabled object starts the controller from its default state.</summary>
+/// false is the engine's default, where a re-enabled object starts the controller from its default state.
+/// <paramref name="PathOrdinal"/> is how many nodes of <paramref name="Path"/> come before the node the Animator sits on in the
+/// statement (the number a script record states as its pathOrdinal), which tells apart the Animators of two nodes that share a path.</summary>
 public sealed record StatementAnimator(string Path, string Controller, string Avatar, bool Enabled, bool ApplyRootMotion,
-    string UpdateMode, string CullingMode, bool KeepControllerState = false);
+    string UpdateMode, string CullingMode, bool KeepControllerState = false, int PathOrdinal = 0);
 
 /// <summary>A component of the camera package's own scripts on a node: the node it sits on (its source path, the one the scene
 /// layer states the node by), the class of its script, and the component as one JSON record -- whether it is enabled and every

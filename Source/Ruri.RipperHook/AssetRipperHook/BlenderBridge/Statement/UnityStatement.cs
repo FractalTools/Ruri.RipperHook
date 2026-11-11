@@ -1098,7 +1098,8 @@ public sealed class UnityStatement
             _statement.Animators.Add(new StatementAnimator(SourcePath(rootObject, rows[holder]),
                 animator.Controller_PPtr_RuntimeAnimatorController_5P is { } played ? KeyOf(played) : string.Empty,
                 animator.AvatarP is { } built ? KeyOf(built) : string.Empty, animator.Enabled != 0, animator.ApplyRootMotion,
-                UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode), KeepsControllerState(animator)));
+                UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode), KeepsControllerState(animator),
+                PathOrdinalOf(holder.GameObject, SourcePath(rootObject, rows[holder]))));
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, rootObject.Name,
             _plan.Kind.ToString().ToLowerInvariant()));
@@ -2358,6 +2359,25 @@ public sealed class UnityStatement
         2 => "CullCompletely",
         _ => "Unknown" + mode,
     };
+
+    /// <summary>How many nodes of <paramref name="path"/> come before <paramref name="placed"/> in the statement: the number a
+    /// script record states as its pathOrdinal (the order the placed objects are added in, which is the order of the node table).</summary>
+    private int PathOrdinalOf(IGameObject? placed, string path)
+    {
+        int before = 0;
+        foreach (PlacedObject candidate in _placedObjects)
+        {
+            if (ReferenceEquals(candidate.Object, placed))
+            {
+                return before;
+            }
+            if (string.Equals(candidate.Path, path, StringComparison.Ordinal))
+            {
+                before++;
+            }
+        }
+        return before;
+    }
 
     /// <summary>Whether the controller keeps its state when the object is disabled and enabled again: the field the version
     /// serializes as keep-animator-state-on-disable, or before the rename keep-animator-controller-state-on-disable, and
