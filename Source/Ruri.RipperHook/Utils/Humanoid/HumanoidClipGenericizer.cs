@@ -52,9 +52,13 @@ public static class HumanoidClipGenericizer
         return false;
     }
 
+    /// <summary>The clip as the pose of the body and the motion of its root. <paramref name="bakePositionXz"/>, <paramref name="bakePositionY"/> and
+    /// <paramref name="bakeOrientation"/> are the clip's three Bake Into Pose flags (the muscle clip's LoopBlendPositionXZ, LoopBlendPositionY and
+    /// LoopBlendOrientation, which the engine's root motion reads): an axis whose flag is set stays in the body pose, one whose flag is not set is
+    /// the root's motion. They are not the clip's KeepOriginal* flags, which only choose what the root is measured against.</summary>
     public static SolvedHumanoidPose? Solve(AvatarMuscleReferential referential,
         List<(string Attribute, HermiteCurve Curve)> channels, float sampleRate,
-        bool keepPositionXz, bool keepPositionY, bool keepOrientation)
+        bool bakePositionXz, bool bakePositionY, bool bakeOrientation)
     {
         if (channels.Count == 0 || !HasMuscleChannel(channels))
         {
@@ -117,7 +121,7 @@ public static class HumanoidClipGenericizer
             if (referential.Hips is { } hips && hipsPositions is not null)
             {
                 var body = referential.BodyTransform(frame, root, quats, driven,
-                    keepPositionXz, keepPositionY, keepOrientation);
+                    bakePositionXz, bakePositionY, bakeOrientation);
                 if (body is not null)
                 {
                     (Vector3 position, Quaternion rotation, (Vector3 motionT, Quaternion motionQ)) = body.Value;
@@ -174,9 +178,9 @@ public static class HumanoidClipGenericizer
     {
         SolvedHumanoidPose? pose = Solve(referential, CollectMuscleChannels(clip),
             clip.SampleRate_C74,
-            clip.MuscleClipInfo_C74?.KeepOriginalPositionXZ ?? true,
-            clip.MuscleClipInfo_C74?.KeepOriginalPositionY ?? true,
-            clip.MuscleClipInfo_C74?.KeepOriginalOrientation ?? true);
+            clip.MuscleClipInfo_C74?.LoopBlendPositionXZ ?? true,
+            clip.MuscleClipInfo_C74?.LoopBlendPositionY ?? true,
+            clip.MuscleClipInfo_C74?.LoopBlendOrientation ?? true);
         if (pose is null)
         {
             return 0;

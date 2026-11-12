@@ -31,7 +31,7 @@ public static class ClipStatement
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool weighted = false);
 
     private sealed record ClipIndex(string name, float sampleRate, float startTime, float stopTime,
-        bool keepPositionXZ, bool keepPositionY, bool keepOrientation, List<CurveEntry> curves, bool loopTime = false,
+        bool bakePositionXZ, bool bakePositionY, bool bakeOrientation, List<CurveEntry> curves, bool loopTime = false,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ClipEvent>? events = null);
 
     private sealed class Channel
@@ -107,7 +107,7 @@ public static class ClipStatement
             cursor += channel.Data.Length;
         }
         ClipIndex meta = new(source.name, source.sampleRate, source.startTime, source.stopTime,
-            source.keepPositionXZ, source.keepPositionY, source.keepOrientation, index, source.loopTime, source.events);
+            source.bakePositionXZ, source.bakePositionY, source.bakeOrientation, index, source.loopTime, source.events);
         return (JsonSerializer.Serialize(meta), MemoryMarshal.AsBytes<float>(payload).ToArray());
     }
 
@@ -163,8 +163,8 @@ public static class ClipStatement
     private static void Solve(StatementClip clip, ClipIndex meta, List<Channel> channels, HashSet<string> paths,
         Dictionary<uint, string> suffixes, string avatarJson, Action<string> note)
     {
-        (List<(string Attribute, HermiteCurve Curve)> floatChannels, float sampleRate, bool keepXZ, bool keepY,
-            bool keepOrientation) = ClipCurveBlob.ReadFloatChannels(clip.MetaJson, clip.Curves);
+        (List<(string Attribute, HermiteCurve Curve)> floatChannels, float sampleRate, bool bakeXZ, bool bakeY,
+            bool bakeOrientation) = ClipCurveBlob.ReadFloatChannels(clip.MetaJson, clip.Curves);
         if (!HumanoidClipGenericizer.HasMuscleChannel(floatChannels))
         {
             return;
@@ -175,7 +175,7 @@ public static class ClipStatement
             note($"{clip.Name}: the avatar carries no human rig, so its muscle curves stay unsolved");
             return;
         }
-        SolvedHumanoidPose? pose = HumanoidClipGenericizer.Solve(referential, floatChannels, sampleRate, keepXZ, keepY, keepOrientation);
+        SolvedHumanoidPose? pose = HumanoidClipGenericizer.Solve(referential, floatChannels, sampleRate, bakeXZ, bakeY, bakeOrientation);
         if (pose is null)
         {
             return;
@@ -185,7 +185,7 @@ public static class ClipStatement
             .Where(attribute => AvatarMuscleReferential.IsMuscleAttribute(attribute) || AvatarMuscleReferential.IsRootAttribute(attribute))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        (string solvedMeta, byte[] solvedCurves) = ClipCurveBlob.BuildSolved(pose, consumed, keepXZ, keepY, keepOrientation);
+        (string solvedMeta, byte[] solvedCurves) = ClipCurveBlob.BuildSolved(pose, consumed, bakeXZ, bakeY, bakeOrientation);
         (_, List<Channel> solved) = Parse(solvedMeta, solvedCurves);
         (_, int unmatched) = Repair(solved, paths, suffixes);
         if (unmatched > 0)

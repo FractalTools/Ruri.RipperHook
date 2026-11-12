@@ -253,10 +253,12 @@ public sealed class AvatarMuscleReferential
         return RootChannelPlan.Bind(channelIndex);
     }
 
+    /// <summary>The hips' pose and the root's motion of one frame. The root transform the clip states is split by the clip's three Bake Into Pose
+    /// flags: an axis whose flag is set stays in the hips' pose, one whose flag is not set is the motion (the orientation only by its yaw).</summary>
     public (Vector3 Position, Quaternion Rotation, (Vector3 Position, Quaternion Rotation) Motion)? BodyTransform(
         ReadOnlySpan<float> frame, in RootChannelPlan root, ReadOnlySpan<Quaternion> bodyQuats,
-        ReadOnlySpan<bool> driven, bool keepPositionXz = true, bool keepPositionY = true,
-        bool keepOrientation = true)
+        ReadOnlySpan<bool> driven, bool bakePositionXz = true, bool bakePositionY = true,
+        bool bakeOrientation = true)
     {
         if (!root.HasRootTranslation)
         {
@@ -292,7 +294,7 @@ public sealed class AvatarMuscleReferential
             rootTSimple = fullT - motionT;
             rootQ = Quaternion.Normalize(Quaternion.Inverse(motionQ) * fullQ);
         }
-        else if (keepPositionXz && keepPositionY && keepOrientation)
+        else if (bakePositionXz && bakePositionY && bakeOrientation)
         {
             rootTSimple = fullT;
             rootQ = fullQ;
@@ -301,12 +303,12 @@ public sealed class AvatarMuscleReferential
         }
         else
         {
-            float rootX = keepPositionXz ? fullT.X : 0f;
-            float rootY = keepPositionY ? fullT.Y : 0f;
-            float rootZ = keepPositionXz ? fullT.Z : 0f;
+            float rootX = bakePositionXz ? fullT.X : 0f;
+            float rootY = bakePositionY ? fullT.Y : 0f;
+            float rootZ = bakePositionXz ? fullT.Z : 0f;
             rootTSimple = new Vector3(rootX, rootY, rootZ);
             motionT = fullT - rootTSimple;
-            if (keepOrientation)
+            if (bakeOrientation)
             {
                 rootQ = fullQ;
                 motionQ = Quaternion.Identity;

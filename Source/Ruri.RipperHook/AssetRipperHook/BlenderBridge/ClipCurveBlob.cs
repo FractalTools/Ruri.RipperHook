@@ -42,19 +42,22 @@ public static class ClipCurveBlob
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? postWrap = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool weighted = false);
 
+    /// <summary><c>bakePositionXZ</c>, <c>bakePositionY</c> and <c>bakeOrientation</c> are the clip's three Bake Into Pose flags (the muscle clip's
+    /// LoopBlendPositionXZ, LoopBlendPositionY and LoopBlendOrientation): an axis whose flag is set is part of the body's pose, one whose flag is not
+    /// set is the motion of the root.</summary>
     private sealed record ClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
-        bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
+        bool bakePositionXZ, bool bakePositionY, bool bakeOrientation,
         List<CurveIndexEntry> curves, bool loopTime = false,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ClipEvent>? events = null);
 
     private sealed record SolvedClipIndex(
         string name, float sampleRate, float startTime, float stopTime,
-        bool keepPositionXZ, bool keepPositionY, bool keepOrientation,
+        bool bakePositionXZ, bool bakePositionY, bool bakeOrientation,
         List<CurveIndexEntry> curves, string[] consumedAttributes);
 
     public static (List<(string Attribute, HermiteCurve Curve)> Channels, float SampleRate,
-        bool KeepPositionXZ, bool KeepPositionY, bool KeepOrientation)
+        bool BakePositionXZ, bool BakePositionY, bool BakeOrientation)
         ReadFloatChannels(string metaJson, byte[] payload)
     {
         ClipIndex meta = JsonSerializer.Deserialize<ClipIndex>(metaJson)
@@ -75,11 +78,11 @@ public static class ClipCurveBlob
             float[] outSlopes = floats.Slice(cursor + 3 * keys, keys).ToArray();
             channels.Add((entry.attr, HermiteCurve.FromArrays(times, values, inSlopes, outSlopes)));
         }
-        return (channels, meta.sampleRate, meta.keepPositionXZ, meta.keepPositionY, meta.keepOrientation);
+        return (channels, meta.sampleRate, meta.bakePositionXZ, meta.bakePositionY, meta.bakeOrientation);
     }
 
     public static (string MetaJson, byte[] Curves) BuildSolved(SolvedHumanoidPose pose,
-        string[] consumedAttributes, bool keepPositionXZ, bool keepPositionY, bool keepOrientation)
+        string[] consumedAttributes, bool bakePositionXZ, bool bakePositionY, bool bakeOrientation)
     {
         int frameCount = pose.FrameCount;
         List<CurveIndexEntry> index = new();
@@ -161,7 +164,7 @@ public static class ClipCurveBlob
         }
 
         SolvedClipIndex meta = new("solved", pose.SampleRate, 0f, 0f,
-            keepPositionXZ, keepPositionY, keepOrientation, index, consumedAttributes);
+            bakePositionXZ, bakePositionY, bakeOrientation, index, consumedAttributes);
         byte[] bytes = new byte[totalFloats * sizeof(float)];
         Buffer.BlockCopy(payload, 0, bytes, 0, bytes.Length);
         return (JsonSerializer.Serialize(meta), bytes);
@@ -304,9 +307,9 @@ public static class ClipCurveBlob
             clip.SampleRate_C74,
             muscleClip?.StartTime ?? 0f,
             muscleClip?.StopTime ?? 0f,
-            muscleClip?.KeepOriginalPositionXZ ?? true,
-            muscleClip?.KeepOriginalPositionY ?? true,
-            muscleClip?.KeepOriginalOrientation ?? true,
+            muscleClip?.LoopBlendPositionXZ ?? true,
+            muscleClip?.LoopBlendPositionY ?? true,
+            muscleClip?.LoopBlendOrientation ?? true,
             index,
             muscleClip?.LoopTime ?? false,
             events);
