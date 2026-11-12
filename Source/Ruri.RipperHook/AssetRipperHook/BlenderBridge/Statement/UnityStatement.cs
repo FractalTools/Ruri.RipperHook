@@ -1095,11 +1095,12 @@ public sealed class UnityStatement
         }
         foreach ((UnityNode holder, IAnimator animator) in animators)
         {
+            (string avatarKind, double humanScale) = AvatarKindOf(animator.AvatarP);
             _statement.Animators.Add(new StatementAnimator(SourcePath(rootObject, rows[holder]),
                 animator.Controller_PPtr_RuntimeAnimatorController_5P is { } played ? KeyOf(played) : string.Empty,
                 animator.AvatarP is { } built ? KeyOf(built) : string.Empty, animator.Enabled != 0, animator.ApplyRootMotion,
                 UpdateModeName(animator.UpdateMode), CullingModeName(animator.CullingMode), KeepsControllerState(animator),
-                PathOrdinalOf(holder.GameObject, SourcePath(rootObject, rows[holder]))));
+                PathOrdinalOf(holder.GameObject, SourcePath(rootObject, rows[holder])), avatarKind, humanScale));
         }
         _statement.Roots.Add(new StatementRoot(_plan.Seed, firstNode, rootObject.Name,
             _plan.Kind.ToString().ToLowerInvariant()));
@@ -2385,6 +2386,25 @@ public sealed class UnityStatement
     private static bool KeepsControllerState(IAnimator animator) =>
         animator.Has_KeepAnimatorStateOnDisable() ? animator.KeepAnimatorStateOnDisable
             : animator.Has_KeepAnimatorControllerStateOnDisable() && animator.KeepAnimatorControllerStateOnDisable;
+
+    /// <summary>What an Animator's avatar is: <c>Humanoid</c> with the human scale the engine's Animator.humanScale states (the avatar's
+    /// human scale, as the shortest decimal of its single-precision value), or <c>Generic</c> with 1; empty with 1 for no avatar. A humanoid
+    /// avatar is one whose human maps skeleton nodes to human bones.</summary>
+    private static (string Kind, double Scale) AvatarKindOf(IAvatar? avatar)
+    {
+        if (avatar is null)
+        {
+            return (string.Empty, 1d);
+        }
+        var constant = avatar.Avatar;
+        if (constant.HumanSkeletonIndexArray.Count == 0)
+        {
+            return ("Generic", 1d);
+        }
+        float scale = constant.Human.Data.Scale;
+        return ("Humanoid", double.Parse(scale.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            System.Globalization.CultureInfo.InvariantCulture));
+    }
 
     private void Clips()
     {

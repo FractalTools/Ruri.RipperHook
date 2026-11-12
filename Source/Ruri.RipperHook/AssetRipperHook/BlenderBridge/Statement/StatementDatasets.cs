@@ -198,8 +198,10 @@ public static class StatementDatasets
             "Every Animator component the seeds place: the node it sits on (its path as core.statement.nodes states it), "
             + "the controller it plays and the avatar it was built with, whether it is enabled, whether it applies root "
             + "motion, its update and culling modes, whether its controller keeps its state when the object is disabled "
-            + "and enabled again, and how many nodes of that path come before its node (path_ordinal, the number a script record "
-            + "states as its pathOrdinal, which tells apart the Animators of nodes that share a path)." + CommonText, Animators, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
+            + "and enabled again, how many nodes of that path come before its node (path_ordinal, the number a script record "
+            + "states as its pathOrdinal, which tells apart the Animators of nodes that share a path), and what its avatar is "
+            + "(avatar_kind, Humanoid or Generic, empty without an avatar) with the human scale the engine's Animator.humanScale "
+            + "states (human_scale: that of a humanoid avatar's human, 1 for a generic avatar and for no avatar)." + CommonText, Animators, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(ArchivesId, DataRole.Internal, [DataParam.List(Seed, required: true)],
             "Where each seed lives: every archive loading it would read, with the container path "
             + "that archive files first -- answered by the same resolution a load makes.", Archives);
