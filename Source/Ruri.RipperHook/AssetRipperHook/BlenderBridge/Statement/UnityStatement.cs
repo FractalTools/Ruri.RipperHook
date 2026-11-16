@@ -1111,6 +1111,22 @@ public sealed class UnityStatement
         {
             row.Skeleton = skeleton.Key;
         }
+        Dictionary<IAvatar, string> ownSkeletons = new(ReferenceEqualityComparer.Instance);
+        foreach ((UnityNode holder, IAvatar built) in rigRoots)
+        {
+            if (ReferenceEquals(built, avatar))
+            {
+                continue;
+            }
+            if (!ownSkeletons.TryGetValue(built, out string? ownKey))
+            {
+                StatementSkeleton own = Skeleton(string.Create(CultureInfo.InvariantCulture, $"{rootKey}#{KeyOf(built)}"), hierarchy, built);
+                _statement.Skeletons.Add(own);
+                ownKey = own.Key;
+                ownSkeletons[built] = ownKey;
+            }
+            rows[holder].Skeleton = ownKey;
+        }
 
         UnityRendererFilters filters = new()
         {
