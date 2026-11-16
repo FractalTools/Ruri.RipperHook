@@ -23,6 +23,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_64;
 using AssetRipper.SourceGenerated.Classes.ClassID_65;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
+using AssetRipper.SourceGenerated.Classes.ClassID_84;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
 using AssetRipper.SourceGenerated.Classes.ClassID_320;
 using AssetRipper.SourceGenerated.Classes.ClassID_91;
@@ -32,6 +33,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_135;
 using AssetRipper.SourceGenerated.Classes.ClassID_136;
 using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
+using AssetRipper.SourceGenerated.Subclasses.GLTextureSettings;
 using Ruri.RipperHook.BlenderBridge;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.BlenderBridge.Data;
@@ -185,6 +187,7 @@ public sealed class UnityStatement
         }
         Clips();
         AudioClips();
+        RenderTextures();
         Controllers();
         if (_options.Scripts)
         {
@@ -878,7 +881,7 @@ public sealed class UnityStatement
                 Tag = TagOf(info.Node?.GameObject),
             });
         }
-        foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters))
+        foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters, KeyOf))
         {
             pieces.Add(new WindowPiece
             {
@@ -1142,7 +1145,7 @@ public sealed class UnityStatement
         {
             FlattenRenderer(info, hierarchy, rows, skeleton, lodOf);
         }
-        foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters))
+        foreach (UnityCameraInfo camera in UnityRenderers.Cameras(cameras, behaviours, hierarchy, filters, KeyOf))
         {
             StatementNode row = rows[camera.Node];
             if (row.Kind == "empty")
@@ -2340,6 +2343,28 @@ public sealed class UnityStatement
                 continue;
             }
             _statement.AudioClips.Add(restated);
+        }
+    }
+
+    private void RenderTextures()
+    {
+        List<IRenderTexture> textures = [];
+        foreach (IUnityObjectBase asset in _gameData.GameBundle.FetchAssets())
+        {
+            if (asset is IRenderTexture texture && IsSeedCollection(asset.Collection) && Keeps(asset))
+            {
+                textures.Add(texture);
+            }
+        }
+        foreach (IRenderTexture texture in textures
+                     .OrderBy(entry => _identities[entry.Collection], StringComparer.Ordinal).ThenBy(entry => entry.PathID))
+        {
+            IGLTextureSettings settings = texture.TextureSettings_C84;
+            _statement.RenderTextures.Add(new StatementRenderTexture(KeyOf(texture), texture.Name_C84.String, texture.Width_C84,
+                texture.Height_C84, texture.VolumeDepth_C84, texture.Dimension_C84, texture.AntiAliasing_C84, texture.MipCount_C84,
+                texture.ColorFormat_C84, texture.DepthStencilFormat_C84, texture.ShadowSamplingMode_C84, texture.MipMap_C84,
+                texture.GenerateMips_C84, texture.SRGB_C84, texture.UseDynamicScale_C84, texture.BindMS_C84, settings.FilterMode,
+                settings.Aniso, settings.MipBias, settings.WrapU, settings.WrapV, settings.WrapW, texture.Collection.Name));
         }
     }
 
