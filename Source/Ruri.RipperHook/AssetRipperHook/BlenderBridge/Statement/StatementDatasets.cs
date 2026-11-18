@@ -28,6 +28,7 @@ public static class StatementDatasets
     public const string ClipsId = "core.statement.clips";
     public const string AudioClipsId = "core.statement.audioclips";
     public const string AudioClipId = "core.statement.audioclip";
+    public const string RenderTexturesId = "core.statement.rendertextures";
     public const string ControllersId = "core.statement.controllers";
     public const string AnimatorsId = "core.statement.animators";
     public const string TimelinesId = "core.statement.timelines";
@@ -157,6 +158,12 @@ public static class StatementDatasets
             "The bytes of ONE audio clip of a selection as a standard Ogg Vorbis file, rebuilt from the clip's sound bank. Asked "
             + "per clip rather than as a column beside the rest: a selection's sounds run to many megabytes."
             + CommonText, AudioClipBytes);
+        Datasets.Publish(RenderTexturesId, DataRole.Statement, Common(),
+            "Every render texture asset the seeds themselves carry, one row each as the descriptor the source serializes: the size, "
+            + "dimension, volume depth and anti-aliasing, the colour and depth-stencil graphics formats, the mip count and the mip, "
+            + "automatic mip generation, colour space, dynamic scale and multisample binding flags, the shadow sampling mode and the "
+            + "sampler settings (filter, anisotropy, mip bias, wrap per axis). A camera or an image states the texture it targets by "
+            + "the key of its row." + CommonText, RenderTextures, cacheIdentity: SnapshotIdentity, cacheGate: Gate);
         Datasets.Publish(ControllersId, DataRole.Statement, Common(),
             "Every animator controller the seeds themselves carry, one row each with the whole controller as a JSON "
             + "record: parameters, layers, state machines, states, transitions, conditions and blend trees, every clip it "
@@ -367,6 +374,9 @@ public static class StatementDatasets
 
     private static ColumnTable AudioClips(DataRequest request) =>
         StatementTables.AudioClips(AudioClipsId, Flatten(request).AudioClips);
+
+    private static ColumnTable RenderTextures(DataRequest request) =>
+        StatementTables.RenderTextures(RenderTexturesId, Flatten(request).RenderTextures);
 
     private static byte[] AudioClipBytes(DataRequest request)
     {

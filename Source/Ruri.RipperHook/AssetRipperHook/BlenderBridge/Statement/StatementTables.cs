@@ -40,7 +40,7 @@ public static class StatementTables
             "light_inner_angle#", "light_width#", "light_height#", "light_shadows#", "light_shadow_resolution#",
             "light_volume#", "light_specular#", "fov#", "near#",
             "far#", "ortho#",
-            "ortho_size#", "tag", "cast_shadows#", "main_light_shadows#", "two_sided_shadows#", "light_fade@", "light_parameters@",
+            "ortho_size#", "cull_mask#", "depth#", "target_texture", "tag", "cast_shadows#", "main_light_shadows#", "two_sided_shadows#", "light_fade@", "light_parameters@",
             "object_parameter_names", "object_parameters@", "collection", "layer#", "avatar",
             "source_object", "source_collection", "lightmap_index#", "lm_sx#", "lm_sy#", "lm_ox#", "lm_oy#",
         ]);
@@ -70,7 +70,8 @@ public static class StatementTables
                 light?.AreaHeight ?? 0f, light is { Shadows: true } ? 1 : 0, light?.ShadowResolution ?? 0,
                 light?.VolumeFactor ?? 0f, light?.SpecularFactor ?? 0f,
                 camera?.FieldOfView ?? 0f, camera?.Near ?? 0f, camera?.Far ?? 0f,
-                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f, node.Tag,
+                camera is null ? -1 : camera.Orthographic ? 1 : 0, camera?.OrthographicSize ?? 0f,
+                camera?.CullingMask ?? -1, camera?.Depth ?? 0f, camera?.TargetTexture ?? string.Empty, node.Tag,
                 node.Shadows is { } shadows ? (int)shadows : -1, node.MainLightShadows ? 1 : 0,
                 node.TwoSidedShadows || node.Shadows == ShadowCastingMode.TwoSided ? 1 : 0,
                 Bytes<float>(light is null ? [] : [light.Fade.X, light.Fade.Y, light.Fade.Z, light.Fade.W]),
@@ -354,6 +355,23 @@ public static class StatementTables
         {
             table.Row(clip.Key, clip.Name, clip.Channels, clip.Frequency, clip.SampleCount, clip.Duration, clip.SerializedLength,
                 clip.Format, clip.Ogg.Length, clip.Archive);
+        }
+        return table.Build();
+    }
+
+    public static ColumnTable RenderTextures(string id, IEnumerable<StatementRenderTexture> textures)
+    {
+        TableBuilder table = new(id, "rendertexture", "name", "width#", "height#", "volume_depth#", "dimension#", "anti_aliasing#",
+            "mip_count#", "color_format#", "depth_stencil_format#", "shadow_sampling_mode#", "mip_map#", "generate_mips#", "srgb#",
+            "dynamic_scale#", "bind_ms#", "filter_mode#", "aniso#", "mip_bias#", "wrap_u#", "wrap_v#", "wrap_w#", "cab");
+        table.Role(ColumnRole.Label, "name").Role(ColumnRole.Key, "rendertexture");
+        foreach (StatementRenderTexture texture in textures)
+        {
+            table.Row(texture.Key, texture.Name, texture.Width, texture.Height, texture.VolumeDepth, texture.Dimension,
+                texture.AntiAliasing, texture.MipCount, texture.ColorFormat, texture.DepthStencilFormat, texture.ShadowSamplingMode,
+                texture.MipMap ? 1 : 0, texture.GenerateMips ? 1 : 0, texture.Srgb ? 1 : 0, texture.UseDynamicScale ? 1 : 0,
+                texture.BindMultisampled ? 1 : 0, texture.FilterMode, texture.Aniso, texture.MipBias, texture.WrapU, texture.WrapV,
+                texture.WrapW, texture.Archive);
         }
         return table.Build();
     }

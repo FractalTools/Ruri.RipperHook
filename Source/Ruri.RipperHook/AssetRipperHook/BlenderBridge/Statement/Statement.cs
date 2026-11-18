@@ -23,6 +23,8 @@ public sealed class Statement
 
     public List<StatementAudioClip> AudioClips { get; } = [];
 
+    public List<StatementRenderTexture> RenderTextures { get; } = [];
+
     public List<StatementController> Controllers { get; } = [];
 
     public List<StatementTimeline> Timelines { get; } = [];
@@ -257,6 +259,14 @@ public sealed record StatementClip(string Key, string Name, string MetaJson, byt
 /// itself serializes in single precision, its compression format and the clip as a standard Ogg Vorbis file.</summary>
 public sealed record StatementAudioClip(string Key, string Name, int Channels, int Frequency, long SampleCount, double Duration,
     double SerializedLength, string Format, byte[] Ogg, string Archive);
+
+/// <summary>A render texture asset as the descriptor the source serializes: its size, dimension and anti-aliasing, the colour and
+/// depth-stencil graphics formats and the mip, colour-space, dynamic-scale and multisample-binding flags, and the sampler settings
+/// of its texture. A camera or a user interface image refers to it by the key, and the engine builds the texture from the descriptor.</summary>
+public sealed record StatementRenderTexture(string Key, string Name, int Width, int Height, int VolumeDepth, int Dimension,
+    int AntiAliasing, int MipCount, int ColorFormat, int DepthStencilFormat, int ShadowSamplingMode, bool MipMap, bool GenerateMips,
+    bool Srgb, bool UseDynamicScale, bool BindMultisampled, int FilterMode, int Aniso, float MipBias, int WrapU, int WrapV, int WrapW,
+    string Archive);
 
 /// <summary>An animator controller as one JSON record: its parameters, layers, state machines, states, transitions,
 /// conditions and blend trees, every clip it plays named by the key the clip statement states for it.</summary>

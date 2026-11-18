@@ -1,4 +1,5 @@
-﻿using AssetRipper.Import.Structure.Assembly.Serializable;
+﻿using AssetRipper.Assets;
+using AssetRipper.Import.Structure.Assembly.Serializable;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_108;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
@@ -75,6 +76,15 @@ public sealed class UnityCameraInfo
 
     /// <summary>The camera component's own enabled flag, apart from whether its object is active in the hierarchy.</summary>
     public bool Enabled { get; init; } = true;
+
+    /// <summary>The layer bits the camera renders and the camera brain of the camera package chooses its cameras by; every layer for a
+    /// carrier of a lens that is no camera component.</summary>
+    public int CullingMask { get; init; } = -1;
+
+    public float Depth { get; init; }
+
+    /// <summary>The key of the render texture the camera draws into, empty when it draws to the screen.</summary>
+    public string TargetTexture { get; init; } = string.Empty;
 }
 
 /// <summary>One light as the engine emits it. The colour is what the light emits per unit of its
@@ -306,7 +316,8 @@ public static class UnityRenderers
     }
 
     public static IEnumerable<UnityCameraInfo> Cameras(IEnumerable<ICamera> cameras,
-        IEnumerable<IMonoBehaviour> behaviours, UnityHierarchy hierarchy, UnityRendererFilters filters)
+        IEnumerable<IMonoBehaviour> behaviours, UnityHierarchy hierarchy, UnityRendererFilters filters,
+        Func<IUnityObjectBase, string> keyOf)
     {
         foreach (ICamera camera in cameras)
         {
@@ -327,6 +338,9 @@ public static class UnityRenderers
                 OrthographicSize = camera.Orthographic_size_C20,
                 Disabled = disabled,
                 Enabled = enabled,
+                CullingMask = unchecked((int)camera.CullingMask_C20.Bits),
+                Depth = camera.Depth_C20,
+                TargetTexture = camera.TargetTexture_C20P is { } target ? keyOf(target) : string.Empty,
             };
         }
         foreach (IMonoBehaviour behaviour in behaviours)
