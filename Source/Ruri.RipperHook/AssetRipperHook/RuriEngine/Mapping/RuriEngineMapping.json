@@ -53,7 +53,8 @@
     "Ruri.Engine.MaterialAssets.Material": {
       "m_CustomRenderQueue": "RenderQueueOverride",
       "m_EnableInstancingVariants": "InstancingVariants"
-    }
+    },
+    "Ruri.ComponentSpace.StructurePoolSC": { "fallback": "reserve" }
   },
   "ignoredFields": {
     "Mesh": [
