@@ -63,7 +63,6 @@ internal sealed class CliOptions
     public string[] SourceOptions { get; init; } = [];
     public string[] Modules { get; init; } = [];
 
-    /// <summary>A Unity project or game install to convert into RuriEngine data; the output goes to --export.</summary>
     public string? RuriEngineInput { get; init; }
 
     public string? RuriEngineMapping { get; init; }
