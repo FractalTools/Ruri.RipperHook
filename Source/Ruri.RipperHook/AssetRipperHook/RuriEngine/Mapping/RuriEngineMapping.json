@@ -78,6 +78,7 @@
       "m_ModifiedSerializedProperties",
       "m_LightmapFlags",
       "m_DoubleSidedGI",
+      "m_AllowLocking",
       "m_LockedProperties",
       "stringTagMap"
     ]

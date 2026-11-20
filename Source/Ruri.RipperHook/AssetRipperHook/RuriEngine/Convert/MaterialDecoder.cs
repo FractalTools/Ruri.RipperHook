@@ -19,6 +19,10 @@ internal static class MaterialDecoder
         {
             material.Add("Keywords", EngineValues.Texts(keywords));
         }
+        if (YamlNodes.Items(context.Take("m_BuildTextureStacks"), "m_BuildTextureStacks").Count > 0)
+        {
+            context.Unsupported("virtual texture stacks (m_BuildTextureStacks)");
+        }
         List<string> passes = new();
         AddTexts(passes, context.Take("disabledShaderPasses"), "disabledShaderPasses");
         if (passes.Count > 0)
