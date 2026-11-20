@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.Logging;
@@ -17,6 +19,8 @@ namespace Ruri.RipperHook.RuriEngine;
 internal static class UnityProjectReader
 {
     private const string AssetsDirectoryName = "Assets";
+    private const string PackageCacheDirectory = "Library/PackageCache";
+    private const string SettingsAssetPattern = "*.asset";
     private const string ProjectSettingsDirectoryName = "ProjectSettings";
     private const string ProjectVersionFile = "ProjectVersion.txt";
     private const string ProjectSettingsFile = "ProjectSettings.asset";
@@ -58,6 +62,9 @@ internal static class UnityProjectReader
 
         GameBundle bundle = new();
         ProjectIndex index = new(root);
+        PackageIndex packages = PackagesOf(root, fileSystem);
+        Logger.Info(LogCategory.Import, $"[UnityYaml] {packages.Count} package scripts and YAML assets indexed");
+        index.Materialize = guid => MaterializePackage(guid, packages, bundle, index, mapping, version, fileSystem);
         List<UnityYamlAssetCollection> yamlAssets = new();
         foreach (ProjectEntry entry in Scan(root, fileSystem, mapping, gaps))
         {
@@ -76,6 +83,11 @@ internal static class UnityProjectReader
 
         ITypeResolver resolver = new EngineTypeResolver(types);
         Parallel.ForEach(yamlAssets, collection => LoadYamlAsset(collection, index, mapping, types, resolver, gaps, version, fileSystem));
+        for (List<UnityYamlAssetCollection> referenced = index.TakePending(); referenced.Count > 0; referenced = index.TakePending())
+        {
+            Logger.Info(LogCategory.Import, $"[UnityYaml] {referenced.Count} package YAML assets the project refers to");
+            Parallel.ForEach(referenced, collection => LoadYamlAsset(collection, index, mapping, types, resolver, gaps, version, fileSystem));
+        }
         return new GameData(bundle, version, new BaseManager(static _ => { }), null);
     }
 
@@ -171,7 +183,85 @@ internal static class UnityProjectReader
                 Kind = kind,
             });
         }
+        AddSettings(entries, root, fileSystem);
         return entries;
+    }
+
+    private static void AddSettings(List<ProjectEntry> entries, string root, FileSystem fileSystem)
+    {
+        string settings = fileSystem.Path.Join(root, ProjectSettingsDirectoryName);
+        foreach (string path in fileSystem.Directory.EnumerateFiles(settings, SettingsAssetPattern))
+        {
+            if (!IsYaml(path, fileSystem))
+            {
+                continue;
+            }
+            string relative = $"{ProjectSettingsDirectoryName}/{fileSystem.Path.GetFileName(path)}";
+            entries.Add(new ProjectEntry
+            {
+                Guid = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(relative))),
+                RelativePath = relative,
+                AbsolutePath = path,
+                Meta = new UnityYamlMapping(),
+                ImporterName = string.Empty,
+                Kind = ProjectFileKind.YamlAsset,
+                WritesMeta = false,
+            });
+        }
+    }
+
+    private static PackageIndex PackagesOf(string root, FileSystem fileSystem)
+    {
+        string cache = RuriEngineSession.PackageCachePath is { Length: > 0 } given
+            ? given
+            : fileSystem.Path.Join(root, PackageCacheDirectory);
+        return fileSystem.Directory.Exists(cache) ? PackageIndex.Scan(cache, fileSystem) : PackageIndex.Empty;
+    }
+
+    private static UnityYamlAssetCollection? MaterializePackage(
+        string guid,
+        PackageIndex packages,
+        GameBundle bundle,
+        ProjectIndex index,
+        RuriEngineMapping mapping,
+        UnityVersion version,
+        FileSystem fileSystem)
+    {
+        if (!packages.TryGet(guid, out PackageFile file))
+        {
+            return null;
+        }
+        ProjectFileKind kind = file.IsScript ? ProjectFileKind.Script : IsYaml(file.AssetPath, fileSystem) ? ProjectFileKind.YamlAsset : ProjectFileKind.Skipped;
+        if (kind == ProjectFileKind.Skipped)
+        {
+            return null;
+        }
+        UnityYamlMapping meta;
+        try
+        {
+            meta = UnityYamlParser.ParseSingle(fileSystem.File.ReadAllText(file.AssetPath + MetaExtension)) as UnityYamlMapping ?? throw new FormatException("meta is not a mapping");
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        ProjectEntry entry = new()
+        {
+            Guid = guid,
+            RelativePath = file.RelativePath,
+            AbsolutePath = file.AssetPath,
+            Meta = meta,
+            ImporterName = ImporterOf(meta, mapping),
+            Kind = kind,
+            IsPackage = true,
+            WritesMeta = kind == ProjectFileKind.YamlAsset,
+        };
+        UnityYamlAssetCollection collection = new(bundle, entry, version) { Project = index };
+        if (kind == ProjectFileKind.Script)
+        {
+            AddScript(collection, version);
+        }
+        return collection;
     }
 
     private static string ImporterOf(UnityYamlMapping meta, RuriEngineMapping mapping)

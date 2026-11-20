@@ -243,6 +243,7 @@
     "MonoBehaviour": { "kind": "Scripted", "extension": "entity" },
     "Mesh": { "kind": "Mapped", "engineType": "Ruri.Engine.MeshAssets.Mesh", "extension": "mesh" },
     "Material": { "kind": "Mapped", "engineType": "Ruri.Engine.MaterialAssets.Material", "extension": "mat" },
+    "GraphicsSettings": { "kind": "Mapped", "engineType": "Ruri.ComponentSpace.GraphicsSettingsComponent", "extension": "entity" },
     "Texture2D": { "kind": "Payload" },
     "AudioClip": { "kind": "Payload" },
     "AnimationClip": { "kind": "Reserved" },
@@ -255,6 +256,11 @@
     "PrefabInstance": { "kind": "Reserved" },
     "Shader": { "kind": "Reserved" }
   },
+  "currentVersions": {
+    "Ruri.RenderPipelines.Universal.Runtime.UniversalRenderPipelineAsset": { "k_AssetVersion": 15, "k_AssetPreviousVersion": 15 },
+    "Ruri.RenderPipelines.Universal.Runtime.UniversalRendererData": { "_assetVersion": 3 },
+    "Ruri.RenderPipelines.Universal.Runtime.UniversalRenderPipelineGlobalSettings": { "AssetVersion": 16 }
+  },
   "fieldRenames": {
     "System.Numerics.Vector2": { "x": "X", "y": "Y" },
     "System.Numerics.Vector3": { "x": "X", "y": "Y", "z": "Z" },
@@ -263,6 +269,9 @@
     "Ruri.Mathematics.Vector2Int": { "x": "X", "y": "Y" },
     "Ruri.Mathematics.Vector3Int": { "x": "X", "y": "Y", "z": "Z" },
     "Ruri.Mathematics.DoubleVector3": { "x": "X", "y": "Y", "z": "Z" },
+    "Ruri.Mathematics.LinearRgba": { "r": "Red", "g": "Green", "b": "Blue" },
+    "Ruri.RenderPipelines.Universal.Runtime.UniversalRenderPipelineRuntimeShaders": { "m_FallbackErrorShader": "_substituteErrorShader" },
+    "Ruri.RenderPipelines.Core.Runtime.RenderPipelineGraphicsSettingsContainer": { "m_SettingsList": "_runtimeSettings" },
     "Ruri.Engine.MaterialAssets.Material": {
       "m_CustomRenderQueue": "RenderQueueOverride",
       "m_EnableInstancingVariants": "InstancingVariants"

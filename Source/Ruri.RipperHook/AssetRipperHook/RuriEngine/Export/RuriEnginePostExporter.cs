@@ -34,8 +34,11 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
                     payloads++;
                     break;
             }
-            WriteMeta(entry, fileSystem.Path.Join(root, entry.OutputRelativePath), fileSystem);
-            metas++;
+            if (entry.WritesMeta)
+            {
+                WriteMeta(entry, fileSystem.Path.Join(root, entry.OutputRelativePath), fileSystem);
+                metas++;
+            }
         }
         Logger.Info(LogCategory.Export, $"[RuriEngine] wrote {metas} meta file(s) and copied {payloads} payload file(s)");
 

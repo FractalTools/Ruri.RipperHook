@@ -8,6 +8,7 @@ internal static class MappedDecoders
     {
         ["Mesh"] = MeshDecoder.Decode,
         ["Material"] = MaterialDecoder.Decode,
+        ["GraphicsSettings"] = GraphicsSettingsDecoder.Decode,
     };
 
     public static bool TryGet(string unityClassName, [NotNullWhen(true)] out MappedDecoder? decoder)

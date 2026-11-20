@@ -7,6 +7,7 @@ public static class RuriEngineSession
     private static string? mappingPath;
     private static string? typesPath;
     private static string? gapReportPath;
+    private static string? packageCachePath;
     private static Lazy<RuriEngineMapping> mapping = NewMapping();
     private static Lazy<EngineTypes> types = NewTypes();
     private static GapReport gaps = new();
@@ -19,13 +20,16 @@ public static class RuriEngineSession
 
     internal static string? GapReportPath => gapReportPath;
 
-    public static void Configure(string? mappingOverride, string? gapReportOverride, string? typesOverride)
+    internal static string? PackageCachePath => packageCachePath;
+
+    public static void Configure(string? mappingOverride, string? gapReportOverride, string? typesOverride, string? packageCacheOverride)
     {
         lock (Gate)
         {
             mappingPath = mappingOverride;
             gapReportPath = gapReportOverride;
             typesPath = typesOverride;
+            packageCachePath = packageCacheOverride;
             Reset();
         }
     }

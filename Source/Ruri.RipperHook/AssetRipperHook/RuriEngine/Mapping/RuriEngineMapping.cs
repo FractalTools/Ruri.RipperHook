@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -64,6 +65,7 @@ internal sealed class RuriEngineMapping
     private HashSet<string>? builtinGuids;
     private HashSet<string>? metaTextKeys;
     private HashSet<string>? nonImporterBlocks;
+    private readonly ConcurrentDictionary<string, Dictionary<string, string?>> normalized = new(StringComparer.Ordinal);
 
     public string FieldPrefix { get; init; } = "m_";
 
@@ -84,6 +86,8 @@ internal sealed class RuriEngineMapping
     public string[] BuiltinGuids { get; init; } = [];
 
     public Dictionary<string, ClassRow> Classes { get; init; } = new();
+
+    public Dictionary<string, Dictionary<string, long>> CurrentVersions { get; init; } = new();
 
     public Dictionary<string, Dictionary<string, string>> FieldRenames { get; init; } = new();
 
@@ -178,7 +182,7 @@ internal sealed class RuriEngineMapping
         return false;
     }
 
-    public string? ResolveField(string engineTypeName, string sourceName, Func<string, bool> hasField)
+    public string? ResolveField(string engineTypeName, string sourceName, Func<string, bool> hasField, Func<IEnumerable<string>> fieldNames)
     {
         if (TryRename(engineTypeName, sourceName, out string? renamed) && hasField(renamed))
         {
@@ -189,12 +193,33 @@ internal sealed class RuriEngineMapping
             return sourceName;
         }
         string stripped = StripPrefix(sourceName);
-        return hasField(stripped) ? stripped : null;
+        if (hasField(stripped))
+        {
+            return stripped;
+        }
+        Dictionary<string, string?> byKey = normalized.GetOrAdd(engineTypeName, _ => NormalizedFields(fieldNames()));
+        return byKey.TryGetValue(NormalizedKey(sourceName), out string? found) ? found : null;
     }
 
     public string? ResolveField(StructShape shape, string sourceName)
     {
-        return ResolveField(shape.TypeName, sourceName, name => shape.TryGetField(name, out _));
+        return ResolveField(shape.TypeName, sourceName, name => shape.TryGetField(name, out _), () => shape.Fields.Select(static field => field.Name));
+    }
+
+    public string NormalizedKey(string name)
+    {
+        return StripPrefix(name).TrimStart('_').ToLowerInvariant();
+    }
+
+    private Dictionary<string, string?> NormalizedFields(IEnumerable<string> fieldNames)
+    {
+        Dictionary<string, string?> byKey = new(StringComparer.Ordinal);
+        foreach (string name in fieldNames)
+        {
+            string key = NormalizedKey(name);
+            byKey[key] = byKey.ContainsKey(key) ? null : name;
+        }
+        return byKey;
     }
 
     private static RuriEngineMapping Parse(byte[] json, string origin)

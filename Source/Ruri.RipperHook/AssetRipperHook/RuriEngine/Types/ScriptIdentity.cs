@@ -6,6 +6,7 @@ internal static class ScriptIdentity
     {
         engineClass = null;
         reason = string.Empty;
+        className = className.Replace('/', '+');
         if (className.Length == 0)
         {
             reason = "script has no class name";

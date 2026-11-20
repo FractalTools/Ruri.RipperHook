@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
@@ -30,6 +31,10 @@ internal sealed class ProjectEntry
     public required string ImporterName { get; init; }
 
     public required ProjectFileKind Kind { get; init; }
+
+    public bool IsPackage { get; init; }
+
+    public bool WritesMeta { get; init; } = true;
 
     public string? ConvertedRelativePath { get; set; }
 
@@ -86,17 +91,56 @@ internal sealed class UnityYamlAssetCollection : VirtualAssetCollection
 
 internal sealed class ProjectIndex(string root)
 {
-    private readonly Dictionary<string, UnityYamlAssetCollection> collections = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, UnityYamlAssetCollection> collections = new(StringComparer.Ordinal);
+    private readonly ConcurrentQueue<UnityYamlAssetCollection> pending = new();
+    private readonly object materializing = new();
 
     public string Root { get; } = root;
 
     public IEnumerable<UnityYamlAssetCollection> Collections => collections.Values;
 
+    public Func<string, UnityYamlAssetCollection?>? Materialize { get; set; }
+
     public void Add(UnityYamlAssetCollection collection) => collections[collection.Entry.Guid] = collection;
 
     public bool TryGetCollection(string guid, [NotNullWhen(true)] out UnityYamlAssetCollection? collection)
     {
-        return collections.TryGetValue(guid, out collection);
+        if (collections.TryGetValue(guid, out collection))
+        {
+            return true;
+        }
+        if (Materialize is null)
+        {
+            return false;
+        }
+        lock (materializing)
+        {
+            if (collections.TryGetValue(guid, out collection))
+            {
+                return true;
+            }
+            collection = Materialize(guid);
+            if (collection is null)
+            {
+                return false;
+            }
+            collections[guid] = collection;
+            if (collection.Entry.Kind == ProjectFileKind.YamlAsset)
+            {
+                pending.Enqueue(collection);
+            }
+            return true;
+        }
+    }
+
+    public List<UnityYamlAssetCollection> TakePending()
+    {
+        List<UnityYamlAssetCollection> taken = new();
+        while (pending.TryDequeue(out UnityYamlAssetCollection? next))
+        {
+            taken.Add(next);
+        }
+        return taken;
     }
 
     public int SlotFor(UnityYamlAssetCollection origin, string guid, int type)

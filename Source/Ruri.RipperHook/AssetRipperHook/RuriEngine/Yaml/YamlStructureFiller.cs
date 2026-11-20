@@ -20,6 +20,8 @@ internal sealed class YamlStructureFiller(
     UnityYamlAssetCollection collection)
 {
     private const long NullManagedReference = -2;
+    private const string LayerMaskBitsKey = "m_Bits";
+    private const string ObjectReferenceKey = "fileID";
 
     private delegate bool TryParseNode<T>(UnityYamlNode node, out T value);
 
@@ -38,7 +40,7 @@ internal sealed class YamlStructureFiller(
             {
                 continue;
             }
-            string? fieldName = mapping.ResolveField(type.Name, entry.Key, index.ContainsKey);
+            string? fieldName = mapping.ResolveField(type.Name, entry.Key, index.ContainsKey, () => index.Keys);
             if (fieldName is null)
             {
                 gaps.Add(GapCategories.IgnoredField, $"{type.Name}.{entry.Key}", collection.Entry.RelativePath);
@@ -183,6 +185,11 @@ internal sealed class YamlStructureFiller(
                 }
                 return Mismatch(path, "text");
             case PrimitiveType.Complex:
+                if (node is UnityYamlMapping reference && IsObjectReference(type, reference))
+                {
+                    value.AsAsset = Pointer(node, path);
+                    return true;
+                }
                 if (value.AsAsset is SerializableStructure existing && existing.Type == type && node is UnityYamlMapping existingMapping)
                 {
                     FillStructure(existing, existingMapping, path);
@@ -345,6 +352,10 @@ internal sealed class YamlStructureFiller(
             Mismatch(path, type.Name);
             return null;
         }
+        if (IsObjectReference(type, mappingNode))
+        {
+            return Pointer(node, path);
+        }
         if (type.CreateInstance(depth + 1, version) is not SerializableStructure structure)
         {
             Unsupported(path, type.Name);
@@ -352,6 +363,22 @@ internal sealed class YamlStructureFiller(
         }
         FillStructure(structure, mappingNode, path);
         return structure;
+    }
+
+    private static bool IsObjectReference(SerializableType type, UnityYamlMapping node)
+    {
+        if (!node.TryGet(ObjectReferenceKey, out _))
+        {
+            return false;
+        }
+        foreach (SerializableType.Field field in type.Fields)
+        {
+            if (field.Name == ObjectReferenceKey)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private IUnityAssetBase? ManagedReference(SerializableType type, UnityYamlNode node, int depth, string path)
@@ -563,6 +590,11 @@ internal sealed class YamlStructureFiller(
         if (node is UnityYamlScalar scalar)
         {
             return T.TryParse(scalar.Text.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
+        }
+        if (node is UnityYamlMapping mask && mask.TryGetText(LayerMaskBitsKey) is { } bits && ulong.TryParse(bits.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out ulong unsigned))
+        {
+            value = T.CreateTruncating(unsigned);
+            return true;
         }
         value = default;
         return false;

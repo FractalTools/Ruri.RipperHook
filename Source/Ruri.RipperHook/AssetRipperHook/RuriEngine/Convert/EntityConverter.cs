@@ -172,6 +172,17 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
             }
         }
 
+        if (mapping.CurrentVersions.TryGetValue(shape.TypeName, out Dictionary<string, long>? versions))
+        {
+            foreach (KeyValuePair<string, long> version in versions)
+            {
+                if (shape.TryGetField(version.Key, out EngineField? versionField) && versionField.Shape is PrimitiveShape)
+                {
+                    converted[version.Key] = ScalarValue.FromInteger(version.Value);
+                }
+            }
+        }
+
         ObjectValue result = new();
         foreach (EngineField field in shape.Fields)
         {
@@ -198,7 +209,12 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
             case ArrayShape array:
                 return ConvertArray(source, array, path);
             case StructShape structure:
-                return source is ObjectValue entity ? ConvertNested(entity, structure, path) : Mismatch(path, structure.TypeName, source);
+                return source switch
+                {
+                    ObjectValue entity => ConvertNested(entity, structure, path),
+                    ReferenceValue => source,
+                    _ => Mismatch(path, structure.TypeName, source),
+                };
             default:
                 return Mismatch(path, shape.GetType().Name, source);
         }
@@ -222,7 +238,7 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
         }
     }
 
-    private Value ConvertManaged(Value source, string path)
+    private Value? ConvertManaged(Value source, string path)
     {
         if (source is not ObjectValue reference
             || !(reference.TryGet(ManagedReferenceTypes.ReferenceIdFieldName, out Value? idValue) || reference.TryGet(ManagedReferenceTypes.IndexFieldName, out idValue))
@@ -239,17 +255,17 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
         if (!registry.TryGetValue(id, out RegistryEntry? entry))
         {
             gaps.Add(GapCategories.ShapeMismatch, $"{path}: managed reference is not in the registry", file);
-            return NullValue.Instance;
+            return null;
         }
         if (!ScriptIdentity.TryResolve(types, entry.Namespace, entry.ClassName, out EngineClass? engineClass, out string reason))
         {
             gaps.Add(GapCategories.UnresolvedClass, reason, file);
-            return NullValue.Instance;
+            return null;
         }
         ObjectValue? data = ConvertNested(entry.Data, engineClass.Shape, $"{path}<{engineClass.FullName}>");
         if (data is null)
         {
-            return NullValue.Instance;
+            return null;
         }
         ObjectValue wrapper = new();
         wrapper.Add(engineClass.FullName, data);
@@ -275,7 +291,11 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
         ArrayValue result = new();
         foreach (Value item in array.Items)
         {
-            Value? converted = Convert(item, shape.Element, path + "[]");
+            Value? converted = shape.Element is ManagedShape ? ConvertManaged(item, path + "[]") : Convert(item, shape.Element, path + "[]");
+            if (converted is null && shape.Element is ManagedShape)
+            {
+                continue;
+            }
             if (converted is null)
             {
                 return null;
