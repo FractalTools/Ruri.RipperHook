@@ -27,7 +27,14 @@
     "0000000000000000f000000000000000"
   ],
   "packageGuidRedirects": {
-    "e7857e9d0c934dc4f83f270f8447b006": "8c46464aaedeb7648b0dde413b6c18ad"
+    "e7857e9d0c934dc4f83f270f8447b006": "8c46464aaedeb7648b0dde413b6c18ad",
+    "93446b5c5339d4f00b85c159e1159b7c": "67d0083ef54e1a4ed88cd4f6ed82b4fb",
+    "d104b2fc1ca6445babb8e90b0758136b": "27903aa845875f7ecc6b2c72f1955fea",
+    "d6dae50ee9e1bfa4db75f19f99355220": "ef2f6b1702b729299df552e6cf9704e9",
+    "12dc59547ea167a4ab435097dd0f9add": "4b0073399653ad58a86ad06ace71082e",
+    "04c410c9937594faa893a11dceb85f7e": "2725c4556ec1947489a30c4a71ce6ce1",
+    "8c3ee818f2efa514c889881ccb2e95a2": "bffd510c94b5983e01fced6847a13d49",
+    "cacb30de6c40c7444bbc78cb0a81fd2a": "1b59aad797e1d4d8d03044a64eeada72"
   },
   "blankedPackageGuids": {
     "b3c92426a88625841ab15ca6a7917248": "blank:core/Runtime/RenderPipelineResources/GPUDriven/DebugOccluder.shader",
@@ -42,9 +49,7 @@
     "a679dba8ec4d9ce45884a270b0e22dda": "blank:core/Runtime/STP/StpPreTaa.compute",
     "33be2e9a5506b2843bdb2bdff9cad5e1": "blank:core/Runtime/STP/StpSetup.compute",
     "3923900e2b41b5e47bc25bfdcbcdc9e6": "blank:core/Runtime/STP/StpTaa.compute",
-    "cacb30de6c40c7444bbc78cb0a81fd2a": "pending:core/Runtime/Vrs/Shaders/VrsTexture.compute",
     "620b55b8040a88d468e94abe55bed5ba": "blank:core/Runtime/Vrs/Shaders/VrsVisualization.shader",
-    "12dc59547ea167a4ab435097dd0f9add": "pending:core/Shaders/CoreCopy.shader",
     "f056d8bd2a1c7e44e9729144b4c70395": "blank:universal/Runtime/Decal/DBuffer/DBufferClear.shader",
     "28969cfddd9ef3f4e94b971690146a4f": "blank:universal/Runtime/MipGen/Shaders/ColorPyramid.compute",
     "63b92baba208e314c8fdebe52ca0cc34": "blank:universal/Runtime/MipGen/Shaders/ColorPyramidPS.shader",
@@ -79,15 +84,10 @@
     "815c625bb9d4fe240a4ccf42ca3899cb": "blank:universal/Shaders/Utils/BlitFullPrecision.shader",
     "a89bee29cffa951418fc1e2da94d1959": "blank:universal/Shaders/Utils/BlitHDROverlay.shader",
     "7b3e6785f5f6b634794df3a85a2a35da": "blank:universal/Shaders/Utils/ComputeScreenSpaceReflection.shader",
-    "d6dae50ee9e1bfa4db75f19f99355220": "pending:universal/Shaders/Utils/CopyDepth.shader",
-    "93446b5c5339d4f00b85c159e1159b7c": "pending:universal/Shaders/Utils/CoreBlit.shader",
-    "d104b2fc1ca6445babb8e90b0758136b": "pending:universal/Shaders/Utils/CoreBlitColorAndDepth.shader",
     "e6e9a19c3678ded42a3bc431ebef7dbd": "blank:universal/Shaders/Utils/FallbackError.shader",
     "0e79c0fbcc6ffc642834ff60779ad086": "blank:universal/Shaders/Utils/GTAO.compute",
-    "04c410c9937594faa893a11dceb85f7e": "pending:universal/Shaders/Utils/Sampling.shader",
     "0849e84e3d62649e8882e9d6f056a017": "blank:universal/Shaders/Utils/ScreenSpaceAmbientOcclusion.shader",
     "e9155b26e1bc55942a41e518703fe304": "blank:universal/Shaders/Utils/StencilDeferred.shader",
-    "8c3ee818f2efa514c889881ccb2e95a2": "pending:universal/Shaders/Utils/StencilDitherMaskSeed.shader",
     "8b3d1e6f4c5a4d219a72f8e1c0b3d4a7": "blank:universal/Shaders/Utils/UIBackdropFilterComposite.shader",
     "f9ee4ed84c1d10c49aabb9b210b0fc44": "blank:universal/Textures/BayerMatrix.png",
     "81200413a40918d4d8702e94db29911c": "blank:universal/Textures/BlueNoise16/L/LDR_LLL1_0.png",
