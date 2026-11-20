@@ -22,7 +22,10 @@ internal sealed class RuriEngineExporter(RuriEngineMapping mapping, EngineTypes 
             exportCollection = new EntityFileCollection(this, GroupOf(asset), mapping, builder, gaps);
             return true;
         }
-        gaps.Add(GapCategories.UnmappedClass, row.Kind == ClassKind.Scripted ? $"{asset.ClassName} (component of a game object)" : asset.ClassName);
+        if (asset.Collection is not UnityYamlAssetCollection { Entry.Kind: ProjectFileKind.Script })
+        {
+            gaps.Add(GapCategories.UnmappedClass, row.Kind == ClassKind.Scripted ? $"{asset.ClassName} (component of a game object)" : asset.ClassName);
+        }
         exportCollection = new SkipExportCollection(this, asset);
         return true;
     }
