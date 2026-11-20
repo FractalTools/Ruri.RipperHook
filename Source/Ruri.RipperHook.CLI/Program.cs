@@ -9,6 +9,7 @@ using Ruri.Hook.Core;
 using Ruri.RipperHook;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.BlenderBridge.Install;
+using Ruri.RipperHook.RuriEngine;
 
 namespace Ruri.RipperHook.CLI;
 
@@ -99,7 +100,8 @@ internal static class Program
         {
             config.EnabledHooks.Add(id);
         }
-        string gameRoot = opts.LoadPaths.Length == 0
+        bool unityProject = opts.RuriEngineInput is { Length: > 0 } input && UnityProjectLayout.IsProjectRoot(input);
+        string gameRoot = opts.LoadPaths.Length == 0 || unityProject
             ? string.Empty
             : InstallProbe.RootOf(opts.LoadPaths[0]) ?? opts.LoadPaths[0];
         if (gameRoot.Length > 0 && !opts.Hooks.Any(static id => HookCatalog.DecoderById(id) is not null))
@@ -107,6 +109,15 @@ internal static class Program
             AddInstallDecoder(config, gameRoot);
         }
         config.EnabledHooks.Add("SkipStreamingAssetsCopy");
+        if (opts.RuriEngineInput is { Length: > 0 })
+        {
+            RuriEngineSession.Configure(opts.RuriEngineMapping, opts.RuriEngineGapReport, opts.RuriEngineTypes);
+            config.EnabledHooks.Add("RuriEngine");
+            if (unityProject)
+            {
+                config.EnabledHooks.Add("UnityYamlProject");
+            }
+        }
         if (opts.LoadTypes.Length > 0)
         {
             config.EnabledHooks.Add("TypeFilterExport");

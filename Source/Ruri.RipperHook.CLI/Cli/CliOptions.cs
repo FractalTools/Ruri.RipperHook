@@ -62,6 +62,15 @@ internal sealed class CliOptions
 
     public string[] SourceOptions { get; init; } = [];
     public string[] Modules { get; init; } = [];
+
+    /// <summary>A Unity project or game install to convert into RuriEngine data; the output goes to --export.</summary>
+    public string? RuriEngineInput { get; init; }
+
+    public string? RuriEngineMapping { get; init; }
+
+    public string? RuriEngineTypes { get; init; }
+
+    public string? RuriEngineGapReport { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -112,6 +121,14 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
 
     public Option<string[]> SourceOptionOption { get; }
     public Option<string[]> ModuleOption { get; }
+
+    public Option<string?> RuriEngineOption { get; }
+
+    public Option<string?> RuriEngineMappingOption { get; }
+
+    public Option<string?> RuriEngineTypesOption { get; }
+
+    public Option<string?> RuriEngineGapReportOption { get; }
 
     public Argument<string[]> Passthrough { get; }
 
@@ -226,6 +243,16 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
         DataOutOption = new Option<string?>("--data-out",
             "Write a blob dataset's bytes to this file instead of printing a table "
             + "(e.g. --data core.bundle.standard --data-arg bundle=<path> --data-out out.ab).");
+        RuriEngineOption = new Option<string?>("--ruri-engine",
+            "Convert this Unity project folder or game install into RuriEngine data under --export: SE and mesh/material JSON, JSON .meta files "
+            + "(guids kept, references as {fileID, guid, type}), binary payloads copied beside them, and RuriEngineGapReport.json. "
+            + "A folder holding Assets and ProjectSettings is read as a Unity YAML project; anything else is read as a game install.");
+        RuriEngineMappingOption = new Option<string?>("--ruri-engine-mapping",
+            "With --ruri-engine: a mapping table JSON to use instead of the embedded one (Unity class -> engine type, field renames, importer handling).");
+        RuriEngineTypesOption = new Option<string?>("--ruri-engine-types",
+            "With --ruri-engine: an engine type tree .tpk (Ruri.Tpk --ruriengine) to use instead of the embedded one.");
+        RuriEngineGapReportOption = new Option<string?>("--ruri-engine-gap-report",
+            "With --ruri-engine: where to write the gap report JSON; default <export>/RuriEngineGapReport.json.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -265,6 +292,10 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             ExportStandardBundleOption,
             SourceOptionOption,
             ModuleOption,
+            RuriEngineOption,
+            RuriEngineMappingOption,
+            RuriEngineTypesOption,
+            RuriEngineGapReportOption,
             Passthrough,
         };
         return root;
@@ -273,10 +304,11 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     protected override CliOptions GetBoundValue(BindingContext bindingContext)
     {
         var pr = bindingContext.ParseResult;
+        string? ruriEngineInput = pr.GetValueForOption(RuriEngineOption);
         return new CliOptions
         {
             Hooks = pr.GetValueForOption(Hook) ?? [],
-            LoadPaths = pr.GetValueForOption(Load) ?? [],
+            LoadPaths = ruriEngineInput is { Length: > 0 } ? [ruriEngineInput] : pr.GetValueForOption(Load) ?? [],
             ExportPath = pr.GetValueForOption(Export),
             ListHooks = pr.GetValueForOption(ListHooks),
             Types = pr.GetValueForOption(Types) ?? [],
@@ -305,6 +337,10 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             ExportStandardBundlePath = pr.GetValueForOption(ExportStandardBundleOption),
             SourceOptions = pr.GetValueForOption(SourceOptionOption) ?? [],
             Modules = pr.GetValueForOption(ModuleOption) ?? [],
+            RuriEngineInput = ruriEngineInput,
+            RuriEngineMapping = pr.GetValueForOption(RuriEngineMappingOption),
+            RuriEngineTypes = pr.GetValueForOption(RuriEngineTypesOption),
+            RuriEngineGapReport = pr.GetValueForOption(RuriEngineGapReportOption),
             DatasetList = pr.GetValueForOption(DataListOption),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };

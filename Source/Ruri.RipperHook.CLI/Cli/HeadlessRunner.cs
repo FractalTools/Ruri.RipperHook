@@ -349,7 +349,11 @@ internal static class HeadlessRunner
         foreach (string raw in loadPaths)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
-            if (Directory.Exists(raw))
+            if (Directory.Exists(raw) && Ruri.RipperHook.RuriEngine.UnityProjectLayout.IsProjectRoot(raw))
+            {
+                result.Add(raw);
+            }
+            else if (Directory.Exists(raw))
             {
                 result.AddRange(Directory.GetFiles(raw));
                 result.AddRange(Directory.GetDirectories(raw));
