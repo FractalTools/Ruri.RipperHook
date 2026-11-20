@@ -1,0 +1,56 @@
+{
+  "fieldPrefix": "m_",
+  "componentListField": "components",
+  "bookkeepingFields": [
+    "ObjectHideFlags",
+    "CorrespondingSourceObject",
+    "PrefabInstance",
+    "PrefabAsset",
+    "GameObject",
+    "Enabled",
+    "EditorHideFlags",
+    "Script",
+    "Name",
+    "EditorClassIdentifier"
+  ],
+  "metaTextKeys": [
+    "guid",
+    "userData",
+    "assetBundleName",
+    "assetBundleVariant"
+  ],
+  "builtinGuids": [
+    "0000000000000000e000000000000000",
+    "0000000000000000f000000000000000"
+  ],
+  "classes": {
+    "MonoBehaviour": { "kind": "Scripted", "extension": "asset" },
+    "Mesh": { "kind": "Mapped", "engineType": "Ruri.Engine.MeshAssets.Mesh", "extension": "mesh" },
+    "Material": { "kind": "Mapped", "engineType": "Ruri.Engine.MaterialAssets.Material", "extension": "mat" },
+    "Texture2D": { "kind": "Payload" },
+    "AudioClip": { "kind": "Payload" },
+    "AnimationClip": { "kind": "Reserved" },
+    "AnimatorController": { "kind": "Reserved" },
+    "AnimatorOverrideController": { "kind": "Reserved" },
+    "AudioMixer": { "kind": "Reserved" },
+    "Avatar": { "kind": "Reserved" },
+    "GameObject": { "kind": "Reserved" },
+    "MonoScript": { "kind": "Reserved" },
+    "PrefabInstance": { "kind": "Reserved" },
+    "Shader": { "kind": "Reserved" }
+  },
+  "fieldRenames": {
+    "System.Numerics.Vector2": { "x": "X", "y": "Y" },
+    "System.Numerics.Vector3": { "x": "X", "y": "Y", "z": "Z" },
+    "System.Numerics.Vector4": { "x": "X", "y": "Y", "z": "Z", "w": "W" },
+    "System.Numerics.Quaternion": { "x": "X", "y": "Y", "z": "Z", "w": "W" }
+  },
+  "importers": {
+    "NativeFormatImporter": "Yaml",
+    "MonoImporter": "Script",
+    "TextureImporter": "Copy",
+    "AudioImporter": "Copy",
+    "TrueTypeFontImporter": "Copy",
+    "VideoClipImporter": "Copy"
+  }
+}
