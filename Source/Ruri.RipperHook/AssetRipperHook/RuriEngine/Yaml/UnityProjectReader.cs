@@ -339,7 +339,7 @@ internal static class UnityProjectReader
             gaps.Add(GapCategories.UnresolvedClass, reason, relative);
             return;
         }
-        if (engineClass.RootLayout.CreateInstance(0, version) is SerializableStructure structure)
+        if (SplitLayout.RootOf(types, RuriEngineSession.Mapping, engineClass).CreateInstance(0, version) is SerializableStructure structure)
         {
             filler.FillStructure(structure, body, engineClass.FullName);
             behaviour.Structure = structure;

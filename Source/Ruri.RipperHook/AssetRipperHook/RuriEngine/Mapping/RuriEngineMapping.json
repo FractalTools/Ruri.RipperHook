@@ -26,6 +26,225 @@
     "0000000000000000e000000000000000",
     "0000000000000000f000000000000000"
   ],
+  "identityComponent": "Ruri.ComponentSpace.IdentitySC",
+  "identityField": "name",
+  "splits": {
+    "Ruri.ComponentSpace.ContentLibrarySC": { "identity": "name" },
+    "Ruri.ComponentSpace.LanguageTableSC": { "identity": "name", "emitIdentity": false,
+      "groups": [
+        { "component": "Ruri.ComponentSpace.LanguageTagSC", "fields": ["languageTag", "endonym", "bidirectional"] },
+        { "component": "Ruri.ComponentSpace.PluralRulesSC", "fields": ["cardinalRules", "ordinalRules"] }
+      ] },
+    "Ruri.ComponentSpace.DamageTypeDefinitionSC": { "identity": "damageTypeName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.DamageMessageSC", "fields": ["messageId", "deathMessageType"] },
+        { "component": "Ruri.ComponentSpace.DamageScalingSC", "fields": ["scaling", "exhaustion"] }
+      ] },
+    "Ruri.ComponentSpace.BiomeDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.BiomeClimateSC", "fields": ["HasPrecipitation", "Temperature", "TemperatureModifier", "Downfall"] },
+        { "component": "Ruri.ComponentSpace.BiomeEffectsSC", "fields": ["Effects", "Attributes"] }
+      ] },
+    "Ruri.ComponentSpace.ConfiguredCarverDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.ConfiguredFeatureDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.FeatureRootSC", "fields": ["Feature"] }
+      ] },
+    "Ruri.ComponentSpace.DensityFunctionDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.DimensionDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.DimensionGeneratorSC", "fields": ["Generator", "NoiseSettings", "FlatPreset", "FlatPresetFromOptions", "ExternalGenerator", "ExternalSettings"] },
+        { "component": "Ruri.ComponentSpace.DimensionBiomeSourceSC", "fields": ["BiomeSource", "FixedBiome", "FixedBiomeFromOptions"] }
+      ] },
+    "Ruri.ComponentSpace.DimensionTypeDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.DimensionExtentSC", "fields": ["Slice", "McId", "MinY", "Height", "LogicalHeight"] },
+        { "component": "Ruri.ComponentSpace.DimensionLightSC", "fields": ["HasSkyLight", "AmbientLight", "Skybox", "SkyLightLevel", "SkyLightFactor", "SkyLightColor", "AmbientLightColor"] },
+        { "component": "Ruri.ComponentSpace.DimensionClockSC", "fields": ["HasFixedTime", "FixedTimeOfDay"] },
+        { "component": "Ruri.ComponentSpace.DimensionPhysicsSC", "fields": ["HasCeiling", "FastLava", "WaterEvaporates", "Infiniburn", "CoordinateScale", "PortalSearchRadius"] },
+        { "component": "Ruri.ComponentSpace.DimensionBossSC", "fields": ["BossFightEntity", "BossAnchorEntity"] },
+        { "component": "Ruri.ComponentSpace.DimensionMonsterSpawnSC", "fields": ["MonsterSpawnLightTestMinimum", "MonsterSpawnLightTestMaximum", "MonsterSpawnBlockLightLimit"] }
+      ] },
+    "Ruri.ComponentSpace.FlatLevelGeneratorPresetDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.PresetMenuSC", "fields": ["SortOrder", "DisplayKey"] }
+      ] },
+    "Ruri.ComponentSpace.MultiNoiseBiomeSourceParameterListDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.NoiseDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.NoiseSettingsDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.NoiseGridSC", "fields": ["Noise", "UseLinearCongruentialRandom", "RandomRoles"] },
+        { "component": "Ruri.ComponentSpace.TerrainFluidSC", "fields": ["DefaultBlock", "DefaultFluid", "SeaLevel", "AquifersEnabled"] },
+        { "component": "Ruri.ComponentSpace.OreVeinSC", "fields": ["OreVeinsEnabled", "PositiveOreVein", "NegativeOreVein"] }
+      ] },
+    "Ruri.ComponentSpace.PlacedFeatureDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.FeatureRootSC", "fields": ["Feature"] }
+      ] },
+    "Ruri.ComponentSpace.StructureRuleDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.WorldPresetDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.PresetMenuSC", "fields": ["SortOrder", "DisplayKey"] },
+        { "component": "Ruri.ComponentSpace.WorldPresetStartSC", "fields": ["InitialLevels", "StartEvents", "PlayerLevels"] }
+      ] },
+    "Ruri.ComponentSpace.AdvancementDefinitionSC": { "identity": "advancementId",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.AdvancementDisplaySC", "fields": ["hasDisplay", "title", "description", "iconItemName", "frame", "showToast", "announceChat", "hidden"] },
+        { "component": "Ruri.ComponentSpace.AdvancementRewardSC", "fields": ["rewardExperience", "rewardLoot"] }
+      ] },
+    "Ruri.ComponentSpace.BiomeMobSpawnDefinitionSC": {
+      "groups": [
+        { "component": "Ruri.ComponentSpace.BiomeSpawnerSC", "fields": ["spawners", "structureSpawners"] },
+        { "component": "Ruri.ComponentSpace.BiomeSpawnProbabilitySC", "fields": ["creatureProbabilities", "biomeFlags"] }
+      ] },
+    "Ruri.ComponentSpace.BlockDefinitionSC": { "identity": "blockName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.MinecraftBlockSourceSC", "fields": ["minecraftName", "minecraftState", "blockClassChain"] },
+        { "component": "Ruri.ComponentSpace.BlockStatePropertiesSC", "fields": ["stateProperties"] },
+        { "component": "Ruri.ComponentSpace.BlockSolidSC", "fields": ["canOcclude", "hasCollision", "dynamicShape", "isAir", "replaceable", "forceSolidOn", "forceSolidOff", "redstoneConductorOn", "redstoneConductorOff", "excludedFromBlocksMotion"] },
+        { "component": "Ruri.ComponentSpace.BlockMotionSC", "fields": ["friction", "speedFactor", "jumpFactor"] },
+        { "component": "Ruri.ComponentSpace.BlockSoundSC", "fields": ["soundType", "noteInstrument"] },
+        { "component": "Ruri.ComponentSpace.BlockInteractionSC", "fields": ["randomTicks", "ignitedByLava", "openableByHand", "openableByWindCharge", "liquidBlockContainer", "excludedFromFluidHolding", "supportTag"] },
+        { "component": "Ruri.ComponentSpace.BlockPathingSC", "fields": ["pathTypeOverride", "burningForPathfinding", "dangerousToSpawnIn"] },
+        { "component": "Ruri.ComponentSpace.BlockItemSC", "fields": ["generateBlockItem", "blockItemMaxStack", "blockItemComponents"] }
+      ] },
+    "Ruri.ComponentSpace.BrewingDefinitionSC": { "identity": "brewingId",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.BrewingTimingSC", "fields": ["brewTimeTicks", "fuelUsesPerFuelItem"] },
+        { "component": "Ruri.ComponentSpace.BrewingSlotsSC", "fields": ["containers", "emptyBottleItem", "bottleSlotIcon", "fuelSlotIcon"] }
+      ] },
+    "Ruri.ComponentSpace.CombatEntityDefinitionSC": { "identity": "entityName" },
+    "Ruri.ComponentSpace.CombatEntityTuningDefinitionSC": { "identity": "tuningName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.VocabularyScanSC", "fields": ["vocabularyScanAssemblies", "vocabularyExemptions"] },
+        { "component": "Ruri.ComponentSpace.CombatTagsSC", "fields": ["invertedHealingAndHarmTag", "burnInDaylightTag"] },
+        { "component": "Ruri.ComponentSpace.LeashRulesSC", "fields": ["leadItem", "leashCutterItem", "leashKnotSupportTag"] }
+      ] },
+    "Ruri.ComponentSpace.EffectDefinitionSC": { "identity": "effectName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.EffectAppearanceSC", "fields": ["category", "color"] },
+        { "component": "Ruri.ComponentSpace.EffectTickSC", "fields": ["tickBehavior", "isInstant", "tickIntervalBase", "tickAmount", "tickDamageType", "damageFloorOne", "isHarm"] },
+        { "component": "Ruri.ComponentSpace.EffectAttributeModifierSC", "fields": ["attributeName", "attributeAmount", "attributeOperation"] },
+        { "component": "Ruri.ComponentSpace.EffectShieldSC", "fields": ["shieldAmount"] },
+        { "component": "Ruri.ComponentSpace.EffectBuffSC", "fields": ["buffName"] }
+      ] },
+    "Ruri.ComponentSpace.EnchantmentDefinitionSC": { "identity": "enchantmentName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.EnchantmentTargetSC", "fields": ["supportedItemsTag", "primaryItemsTag", "slots", "exclusiveWith"] },
+        { "component": "Ruri.ComponentSpace.SelectionWeightSC", "fields": ["weight"] },
+        { "component": "Ruri.ComponentSpace.EnchantmentCostSC", "fields": ["maxLevel", "minCostBase", "minCostPerLevelAboveFirst", "maxCostBase", "maxCostPerLevelAboveFirst", "anvilCost"] }
+      ] },
+    "Ruri.ComponentSpace.EnchantmentTuningDefinitionSC": { "identity": "tuningName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.EnchantingTableSC", "fields": ["enchantmentPowerProviderTag", "enchantmentPowerTransmitterTag", "enchantingTableBlock", "enchantingCurrencyItem", "enchantingCurrencySlotIcon"] },
+        { "component": "Ruri.ComponentSpace.EnchantedItemTagsSC", "fields": ["anvilTag", "curseTag", "inEnchantingTableTag"] }
+      ] },
+    "Ruri.ComponentSpace.EncounterDefinitionSC": { "identity": "encounterName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.EncounterArenaSC", "fields": ["spawnLevel", "arenaPlayerRange", "anchorScanInterval", "playerScanInterval", "maximumTicksBeforeRespawn"] },
+        { "component": "Ruri.ComponentSpace.EncounterGatewaySC", "fields": ["gatewayCount", "gatewayDistance", "gatewayLevel"] },
+        { "component": "Ruri.ComponentSpace.EncounterChunkLoadingSC", "fields": ["ticketRadius", "loadedRadius"] }
+      ] },
+    "Ruri.ComponentSpace.GameEventDefinitionSC": { "identity": "gameEventSetId" },
+    "Ruri.ComponentSpace.ItemDefinitionSC": { "identity": "itemName" },
+    "Ruri.ComponentSpace.LootTableDefinitionSC": { "identity": "tableName" },
+    "Ruri.ComponentSpace.MobArmorLadderDefinitionSC": { "identity": "ladderName" },
+    "Ruri.ComponentSpace.MobModelDefinitionSC": { "identity": "modelRole",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.MobTextureSC", "fields": ["textureName", "overlayTextureName", "variantTextureNames", "textureWidth", "textureHeight", "skinSwaps", "tintPalette"] },
+        { "component": "Ruri.ComponentSpace.MobModelScaleSC", "fields": ["feetPixelY", "pixelToMeter", "scaleVariable", "scaleSlope"] },
+        { "component": "Ruri.ComponentSpace.MobPoseSC", "fields": ["pose", "poseRows", "firstLegIndex", "legPairPhases", "squashStretch", "squashInset", "quadrupedStridePhase", "quadrupedStrideAmplitude"] }
+      ] },
+    "Ruri.ComponentSpace.ParticleBindingDefinitionSC": { "identity": "bindingSetId",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.ParticleWorldEventBindingSC", "fields": ["levelEvents", "explosionSets", "weather"] }
+      ] },
+    "Ruri.ComponentSpace.ParticleEffectTypeSC": { "identity": "effectTypeName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.ParticleCullingSC", "fields": ["allowCullingForLocalPlayers", "cullReaction", "significanceMode", "cullByDistance", "maximumDistance", "cullWhenNotRendered", "cullByViewFrustum", "allowPreCullingByViewFrustum", "maximumTimeOutsideViewFrustum", "maximumTimeWithoutRender"] },
+        { "component": "Ruri.ComponentSpace.ParticleInstanceBudgetSC", "fields": ["cullMaximumInstanceCount", "maximumInstances", "cullPerSystemMaximumInstanceCount", "maximumSystemInstances", "groupCapacity"] },
+        { "component": "Ruri.ComponentSpace.ParticleSpawnScalingSC", "fields": ["scaleSpawnCount", "spawnCountScale", "spawnDistanceSquared", "minimalUpgradeProbability", "decreasedDowngradeProbability"] }
+      ] },
+    "Ruri.ComponentSpace.ParticleMaterialSC": { "identity": "materialIdentity" },
+    "Ruri.ComponentSpace.ParticleMeshSC": { "identity": "meshIdentity" },
+    "Ruri.ComponentSpace.ParticleRecipeSC": { "identity": "recipeName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.ParticleSimulationSC", "fields": ["fixedTickDeltaTime", "simulationSpace"] },
+        { "component": "Ruri.ComponentSpace.LifetimeSC", "fields": ["lifetimeMinimum", "lifetimeMaximum"] },
+        { "component": "Ruri.ComponentSpace.LoopSC", "fields": ["loopDuration", "loop"] },
+        { "component": "Ruri.ComponentSpace.ParticleAttributesSC", "fields": ["attributes", "parameters"] },
+        { "component": "Ruri.ComponentSpace.ParticleSpawnSC", "fields": ["spawnInfos", "distributions"] },
+        { "component": "Ruri.ComponentSpace.ParticleModulesSC", "fields": ["modules", "dataInterfaces", "stages", "subRecipes"] },
+        { "component": "Ruri.ComponentSpace.ParticleRendererSC", "fields": ["spriteRenderers", "meshRenderers", "spriteSet"] }
+      ] },
+    "Ruri.ComponentSpace.PlayerDefinitionSC": {
+      "groups": [
+        { "component": "Ruri.ComponentSpace.PlayerPartsSC", "fields": ["player", "character", "camera"] }
+      ] },
+    "Ruri.ComponentSpace.PlayerExtensionDefinitionSC": {
+      "groups": [
+        { "component": "Ruri.ComponentSpace.PlayerPartsSC", "fields": ["player", "character", "camera"] }
+      ] },
+    "Ruri.ComponentSpace.PotionDefinitionSC": { "identity": "potionName" },
+    "Ruri.ComponentSpace.ProjectileDefinitionSC": { "identity": "projectileName" },
+    "Ruri.ComponentSpace.RecipeDefinitionSC": {  },
+    "Ruri.ComponentSpace.SlotDefinitionSC": { "identity": "slotSetId" },
+    "Ruri.ComponentSpace.SoundEventDefinitionSC": { "identity": "soundEventSetId",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.SoundLevelEventsSC", "fields": ["levelEvents"] }
+      ] },
+    "Ruri.ComponentSpace.SoundTypeDefinitionSC": { "identity": "soundTypeSetId" },
+    "Ruri.ComponentSpace.StructureDefinitionSC": { "identity": "structureName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.StructureSetSC", "fields": ["setName", "spacing", "separation", "spreadType", "salt"] },
+        { "component": "Ruri.ComponentSpace.SelectionWeightSC", "fields": ["weight"] },
+        { "component": "Ruri.ComponentSpace.StructureGenerationSC", "fields": ["size", "useExpansionHack", "projectStartToHeightmap", "startHeight", "maxDistanceFromCenter", "terrainAdaptation", "step"] }
+      ] },
+    "Ruri.ComponentSpace.StructurePoolSC": {  },
+    "Ruri.ComponentSpace.StructureTemplateSC": {
+      "groups": [
+        { "component": "Ruri.ComponentSpace.StructureShapeSC", "fields": ["size", "boxes", "spheres", "cylinders", "pointBatches", "columnDowns", "scatterPicks", "rectSamples"] },
+        { "component": "Ruri.ComponentSpace.StructureConnectorsSC", "fields": ["connectors"] },
+        { "component": "Ruri.ComponentSpace.StructureLootSC", "fields": ["lootChests"] },
+        { "component": "Ruri.ComponentSpace.StructureMarkersSC", "fields": ["markerEntities"] }
+      ] },
+    "Ruri.ComponentSpace.TagDefinitionSC": { "identity": "tagId" },
+    "Ruri.ComponentSpace.TradeTableDefinitionSC": { "identity": "tradeTableId" },
+    "Ruri.ComponentSpace.VehicleDefinitionSC": { "identity": "vehicleName" },
+    "Ruri.ComponentSpace.VillageDefinitionSC": { "identity": "villageId",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.VillageBiomeVariantSC", "fields": ["biomeVariants", "biomeVariantByBiome", "defaultBiomeVariant"] },
+        { "component": "Ruri.ComponentSpace.VillagePoiSC", "fields": ["homePoiTypeId", "meetingPoiTypeId", "villagePoiTypeTag", "poiTypes"] },
+        { "component": "Ruri.ComponentSpace.VillageProfessionSC", "fields": ["noneProfessionId", "professions", "tradeSets", "workerEntity"] }
+      ] },
+    "Ruri.ComponentSpace.VoxelWorldDefinitionSC": {
+      "groups": [
+        { "component": "Ruri.ComponentSpace.VoxelStreamingSC", "fields": ["voxelSize", "genBackend", "loadChunks", "maxConcurrentGen", "harvestPerFrame", "unloadHysteresis", "colliderCookPerFrame", "colliderWarmRadius"] },
+        { "component": "Ruri.ComponentSpace.VoxelLodSC", "fields": ["lodDistances", "lodViewDistanceDiameterBlocks", "lodCaveCullingHeight", "lodHorizontalQuality", "lodWorldCompression", "lodDataCompression", "lodEnableDistantGeneration", "lodMaxHorizontalResolutionDetailLevel", "lodNoiseEnabled", "lodNoiseSteps", "lodNoiseIntensity", "lodNoiseDropoff"] },
+        { "component": "Ruri.ComponentSpace.VoxelRenderSC", "fields": ["voxelMaterial", "waterMaterial", "useVertexColorOnly", "useBlockFaceCulling"] }
+      ] },
+    "Ruri.ComponentSpace.FractalProgramDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.FractalProgramBodySC", "fields": ["Prologue", "Loops", "Epilogue"] }
+      ] },
+    "Ruri.ComponentSpace.FractalVolumeDefinitionSC": { "identity": "Identity" },
+    "Ruri.ComponentSpace.NavigationGeneratorDefinitionSC": { "identity": "Identity",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.NavigationAgentSC", "fields": ["AgentTypeId", "AgentRadius", "AgentHeight", "AgentSlope", "AgentClimb"] },
+        { "component": "Ruri.ComponentSpace.NavigationRasterSC", "fields": ["CellSizeFraction", "CellHeightFraction", "TileSize", "MinimumRegionSize", "MergeRegionSize", "MaximumEdgeLength", "MaximumSimplificationError", "DetailSampleDistance", "DetailSampleMaximumError", "TessellateWallEdges", "TessellateAreaEdges"] },
+        { "component": "Ruri.ComponentSpace.NavigationBoundsSC", "fields": ["BoundsCenter", "BoundsExtent"] }
+      ] },
+    "Ruri.ComponentSpace.AbilityDefinitionSC": { "identity": "abilityName" },
+    "Ruri.ComponentSpace.AbilityBuffDefinitionSC": { "identity": "BuffName",
+      "groups": [
+        { "component": "Ruri.ComponentSpace.BuffTimingSC", "fields": ["ClockDomain", "DurationFrames", "PeriodFrames", "PeriodEventKey", "PeriodBuffs"] },
+        { "component": "Ruri.ComponentSpace.BuffStackingSC", "fields": ["Stacking"] },
+        { "component": "Ruri.ComponentSpace.BuffEffectsSC", "fields": ["Modifiers", "Shields", "Cues"] },
+        { "component": "Ruri.ComponentSpace.BuffTagsSC", "fields": ["GrantedTags", "GrantedAbilities", "ImmunityTags", "OngoingTags", "RemoveWithTags", "AssetTags"] }
+      ] },
+    "Ruri.ComponentSpace.AbilityCurveSC": { "identity": "CurveName" },
+    "Ruri.ComponentSpace.AbilityTagTreeSC": {  }
+  },
   "classes": {
     "MonoBehaviour": { "kind": "Scripted", "extension": "entity" },
     "Mesh": { "kind": "Mapped", "engineType": "Ruri.Engine.MeshAssets.Mesh", "extension": "mesh" },

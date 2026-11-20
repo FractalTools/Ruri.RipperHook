@@ -23,11 +23,64 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
     public ObjectValue ConvertScripted(ObjectValue source, EngineClass engineClass)
     {
         BuildRegistry(source);
+        SplitRow? split = mapping.SplitOf(engineClass.FullName);
+        ObjectValue main = source;
+        List<ObjectValue> groupSources = new();
+        Value? identity = null;
+        if (split is not null)
+        {
+            main = new ObjectValue();
+            foreach (SplitGroup group in split.Groups)
+            {
+                groupSources.Add(new ObjectValue());
+            }
+            foreach (KeyValuePair<string, Value> field in source.Fields)
+            {
+                string engineName = mapping.StripPrefix(field.Key);
+                if (split.Identity is not null && engineName == split.Identity)
+                {
+                    identity = field.Value;
+                    continue;
+                }
+                int index = GroupIndexOf(split, engineName);
+                if (index >= 0)
+                {
+                    groupSources[index].Add(field.Key, field.Value);
+                }
+                else
+                {
+                    main.Add(field.Key, field.Value);
+                }
+            }
+        }
+
         List<ObjectValue> expanded = new();
-        ObjectValue self = ConvertStruct(source, engineClass.Shape, engineClass.FullName, expanded);
+        ObjectValue self = ConvertStruct(main, engineClass.Shape, engineClass.FullName, expanded);
 
         ObjectValue components = new();
+        if (split is { EmitIdentity: true })
+        {
+            ObjectValue named = new();
+            if (identity is ScalarValue { Kind: ScalarKind.Text } text && text.Text.Length > 0)
+            {
+                named.Add(mapping.IdentityField, text);
+            }
+            components.Add(mapping.IdentityComponent, named);
+        }
         components.Add(engineClass.FullName, self);
+        if (split is not null)
+        {
+            for (int index = 0; index < split.Groups.Length; index++)
+            {
+                SplitGroup group = split.Groups[index];
+                if (!types.TryGet(group.Component, out EngineClass? groupClass))
+                {
+                    gaps.Add(GapCategories.UnresolvedClass, $"{group.Component}: no engine class of that name", file);
+                    continue;
+                }
+                components.Add(group.Component, ConvertStruct(groupSources[index], groupClass.Shape, group.Component, null));
+            }
+        }
         foreach (ObjectValue wrapper in expanded)
         {
             KeyValuePair<string, Value> component = wrapper.Fields[0];
@@ -39,6 +92,18 @@ internal sealed class EntityConverter(RuriEngineMapping mapping, EngineTypes typ
             components.Add(component.Key, component.Value);
         }
         return components;
+    }
+
+    private static int GroupIndexOf(SplitRow split, string engineName)
+    {
+        for (int index = 0; index < split.Groups.Length; index++)
+        {
+            if (Array.IndexOf(split.Groups[index].Fields, engineName) >= 0)
+            {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private void BuildRegistry(ObjectValue source)

@@ -29,6 +29,22 @@ internal sealed class ClassRow
     public string Extension { get; init; } = "entity";
 }
 
+internal sealed class SplitGroup
+{
+    public string Component { get; init; } = string.Empty;
+
+    public string[] Fields { get; init; } = [];
+}
+
+internal sealed class SplitRow
+{
+    public string? Identity { get; init; }
+
+    public bool EmitIdentity { get; init; } = true;
+
+    public SplitGroup[] Groups { get; init; } = [];
+}
+
 internal sealed class RuriEngineMapping
 {
     public const string ResourceName = "RuriEngineMapping.json";
@@ -52,6 +68,12 @@ internal sealed class RuriEngineMapping
     public string FieldPrefix { get; init; } = "m_";
 
     public string ComponentListField { get; init; } = string.Empty;
+
+    public string IdentityComponent { get; init; } = string.Empty;
+
+    public string IdentityField { get; init; } = string.Empty;
+
+    public Dictionary<string, SplitRow> Splits { get; init; } = new();
 
     public string[] BookkeepingFields { get; init; } = [];
 
@@ -88,6 +110,11 @@ internal sealed class RuriEngineMapping
     public ClassRow RowOf(string unityClassName)
     {
         return Classes.TryGetValue(unityClassName, out ClassRow? row) ? row : ReservedRow;
+    }
+
+    public SplitRow? SplitOf(string engineTypeName)
+    {
+        return Splits.TryGetValue(engineTypeName, out SplitRow? row) ? row : null;
     }
 
     public ImporterKind? ImporterOf(string importerName)
