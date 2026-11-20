@@ -1,9 +1,5 @@
-using AssetRipper.Tpk;
-using AssetRipper.Tpk.TypeTrees;
 using CUE4Parse.MappingsProvider.Usmap;
-using Ruri.RipperHook.Core.TypeTree;
 using Ruri.FModelHook.BlenderBridge.TypeTree;
-using System.Globalization;
 
 namespace Ruri.Tpk.Unreal;
 
@@ -47,26 +43,7 @@ internal static class UnrealTpkLane
         phase.Restart();
         UsmapTypeTreeBuilder builder = UsmapTypeTreeBuilder.Build(parser.Mappings);
         Console.WriteLine($"[Unreal] type trees built ({phase.ElapsedMilliseconds} ms)");
-        string lineageKey = ((int)CustomEngineType.UnrealEngine).ToString(CultureInfo.InvariantCulture);
-
-        TpkCollectionBlob collection = new();
-        TypeTreeManifest manifest = new();
-        for (int part = 0; part < builder.Blobs.Count; part++)
-        {
-            string key = builder.Blobs.Count == 1 ? lineageKey : lineageKey + "#" + part.ToString(CultureInfo.InvariantCulture);
-            collection.Add(key, builder.Blobs[part]);
-            manifest.Lineages.Add(new TypeTreeManifest.LineageEntry
-            {
-                Key = key,
-                UnityNames = key,
-                Versions = [new TypeTreeManifest.VersionEntry { Key = UsmapTypeTreeBuilder.VersionKey, Engine = layoutVersion }],
-            });
-            Console.WriteLine($"[Unreal]   blob {key}: {builder.Blobs[part].ClassInformation.Count} classes, {builder.Blobs[part].NodeBuffer.Count} nodes");
-        }
-        collection.Add(TypeTreeManifest.BlobName, new TpkJsonBlob { Text = manifest.ToJson() });
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        TpkFile.FromBlob(collection, TpkCompressionType.Brotli).WriteToFile(outputPath);
+        LineageTpkFile.Write(builder.Blobs, CustomEngineType.UnrealEngine, UsmapTypeTreeBuilder.VersionKey, layoutVersion, outputPath);
         Console.WriteLine($"[Unreal] Wrote {builder.ClassIds.Count} classes in {builder.Blobs.Count} blob(s): {new FileInfo(outputPath).Length / 1024.0 / 1024.0:F2} MB");
         return 0;
     }

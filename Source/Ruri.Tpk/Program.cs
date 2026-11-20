@@ -22,6 +22,10 @@ internal static class Program
             {
                 return Unreal.UnrealReflectionLane.Run(args[1..]);
             }
+            if (args.Length > 0 && args[0] is RuriEngine.RuriEngineTpkLane.Switch)
+            {
+                return RuriEngine.RuriEngineTpkLane.Run(args[1..]);
+            }
 
             bool drift = args.Length > 0 && args[0] is "--drift";
             if (drift)
@@ -31,7 +35,7 @@ internal static class Program
 
             if (args.Length > 2)
             {
-                throw new ArgumentException($"Usage: Ruri.Tpk [--drift] [<TypeTree dump root>] [<output path>] | Ruri.Tpk {Unreal.UnrealTpkLane.Switch} <mappings.usmap> [<output.tpk>] [<unity layout version>] | Ruri.Tpk {Unreal.UnrealReflectionLane.Switch} <game executable> [<output.usmap>]");
+                throw new ArgumentException($"Usage: Ruri.Tpk [--drift] [<TypeTree dump root>] [<output path>] | Ruri.Tpk {Unreal.UnrealTpkLane.Switch} <mappings.usmap> [<output.tpk>] [<unity layout version>] | Ruri.Tpk {Unreal.UnrealReflectionLane.Switch} <game executable> [<output.usmap>] | Ruri.Tpk {RuriEngine.RuriEngineTpkLane.Switch} <player data directory> [<output.tpk>] [<unity layout version>]");
             }
 
             string dumpRoot = ResolveDumpRoot(args.Length > 0 ? args[0] : DefaultDumpRoot);

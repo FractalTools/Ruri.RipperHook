@@ -6,6 +6,7 @@ public enum CustomEngineType : byte
 
     Endfield = 5,
     UnrealEngine = 6,
+    RuriEngine = 7,
 
     Max = 255,
 }

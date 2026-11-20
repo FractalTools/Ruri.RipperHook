@@ -9,6 +9,9 @@ internal static class RepoLayout
     public static string HookSourceRoot =>
         Path.Combine(Root, "Source", "Ruri.GameHook", "Unity");
 
+    public static string RuriEngineTpkPath =>
+        Path.Combine(Root, "Source", "Ruri.RipperHook", "AssetRipperHook", "RuriEngine", "RuriEngine.tpk");
+
     private static string Locate()
     {
         DirectoryInfo? dir = new(AppContext.BaseDirectory);

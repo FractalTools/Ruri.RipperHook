@@ -29,9 +29,8 @@ public sealed class UsmapTypeTreeBuilder
     public const string VersionKey = "usmap";
 
     /// <summary>The Unity layout every converted asset -- and every schema class -- is emitted at.</summary>
-    public static readonly UnityVersion LayoutVersion = new(2022, 3, 62, UnityVersionType.Final, 1);
+    public static readonly UnityVersion LayoutVersion = TypeTreeBlobWriter.LayoutVersion;
 
-    private const int NodeBudget = 8192;
     private const int NestingLimit = 10;
 
     private static readonly IReadOnlyDictionary<string, string> LeafTypeNames = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -66,22 +65,17 @@ public sealed class UsmapTypeTreeBuilder
     };
 
     private readonly TypeMappings mappings;
-    private readonly List<TpkTypeTreeBlob> blobs = new();
+    private readonly TypeTreeBlobWriter writer = new();
     private readonly Dictionary<string, int> classIds = new(StringComparer.Ordinal);
-    private readonly UnityVersion ordinalVersion = TypeTreeOrdinal.ToUnityVersion(0);
     private readonly Dictionary<(string Struct, int Depth), ushort[]> structChildren = new();
     private readonly Dictionary<string, ushort[]> classFields = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ushort> stringIndices = new(StringComparer.Ordinal);
-    private readonly Dictionary<NodeKey, ushort> nodeIndices = new();
-    private TpkTypeTreeBlob current;
 
     private UsmapTypeTreeBuilder(TypeMappings mappings)
     {
         this.mappings = mappings;
-        current = NewBlob();
     }
 
-    public IReadOnlyList<TpkTypeTreeBlob> Blobs => blobs;
+    public IReadOnlyList<TpkTypeTreeBlob> Blobs => writer.Blobs;
 
     public IReadOnlyDictionary<string, int> ClassIds => classIds;
 
@@ -104,48 +98,16 @@ public sealed class UsmapTypeTreeBuilder
             classIds[name] = id;
             Struct schema = mappings.Types[name];
 
-            if (current.NodeBuffer.Count > NodeBudget)
+            if (writer.BeginClass())
             {
-                Seal();
-                current = NewBlob();
+                structChildren.Clear();
+                classFields.Clear();
             }
 
-            TpkUnityClass unityClass = new()
-            {
-                Name = Intern(name),
-                Base = Intern(schema.SuperType ?? string.Empty),
-                Flags = TpkUnityClassFlags.HasReleaseRootNode | TpkUnityClassFlags.HasEditorRootNode,
-            };
             ushort root = ClassRoot(name, schema);
-            unityClass.ReleaseRootNode = root;
-            unityClass.EditorRootNode = root;
-
-            TpkClassInformation information = new(id);
-            information.Classes.Add(new KeyValuePair<UnityVersion, TpkUnityClass?>(ordinalVersion, unityClass));
-            current.ClassInformation.Add(information);
+            writer.AddClass(id, name, schema.SuperType ?? string.Empty, root);
         }
-        Seal();
-    }
-
-    private TpkTypeTreeBlob NewBlob()
-    {
-        structChildren.Clear();
-        classFields.Clear();
-        stringIndices.Clear();
-        nodeIndices.Clear();
-        TpkTypeTreeBlob blob = new();
-        blob.Versions.Add(ordinalVersion);
-        blob.CommonString.Add(UnityVersion.MinVersion, []);
-        blob.CreationTime = DateTime.UtcNow;
-        return blob;
-    }
-
-    private void Seal()
-    {
-        if (current.ClassInformation.Count > 0)
-        {
-            blobs.Add(current);
-        }
+        writer.Finish();
     }
 
     private ushort ClassRoot(string name, Struct schema)
@@ -298,16 +260,6 @@ public sealed class UsmapTypeTreeBuilder
         return Node(structName, nodeName, children, TransferMetaFlags.NoTransferFlags);
     }
 
-    private ushort Intern(string value)
-    {
-        if (!stringIndices.TryGetValue(value, out ushort index))
-        {
-            index = current.StringBuffer.AddString(value);
-            stringIndices[value] = index;
-        }
-        return index;
-    }
-
     private ushort Leaf(string typeName, string nodeName, TransferMetaFlags flags)
         => Node(typeName, nodeName, [], flags);
 
@@ -351,60 +303,5 @@ public sealed class UsmapTypeTreeBuilder
     public const string MapValueName = "second";
 
     private ushort Node(string typeName, string nodeName, IReadOnlyList<ushort> children, TransferMetaFlags flags)
-    {
-        TpkUnityNode node = new()
-        {
-            TypeName = Intern(typeName),
-            Name = Intern(nodeName),
-            Version = 1,
-            MetaFlag = (uint)flags,
-            SubNodes = children.Count == 0 ? Array.Empty<ushort>() : children.ToArray(),
-        };
-        NodeKey key = new(node.TypeName, node.Name, node.Version, node.MetaFlag, node.SubNodes);
-        if (!nodeIndices.TryGetValue(key, out ushort index))
-        {
-            index = current.NodeBuffer.AddNode(node);
-            nodeIndices[key] = index;
-        }
-        return index;
-    }
-
-    /// <summary>
-    /// A node's identity for the memo in front of the blob's own buffer: the buffer deduplicates
-    /// too, but by a search whose cost grows with the buffer, and a schema of ten thousand classes
-    /// asks it a quarter of a million times.
-    /// </summary>
-    private readonly struct NodeKey : IEquatable<NodeKey>
-    {
-        private readonly ushort typeName;
-        private readonly ushort name;
-        private readonly int version;
-        private readonly uint metaFlag;
-        private readonly ushort[] children;
-        private readonly int hash;
-
-        public NodeKey(ushort typeName, ushort name, int version, uint metaFlag, ushort[] children)
-        {
-            this.typeName = typeName;
-            this.name = name;
-            this.version = version;
-            this.metaFlag = metaFlag;
-            this.children = children;
-            HashCode code = new();
-            code.Add(typeName);
-            code.Add(name);
-            code.Add(version);
-            code.Add(metaFlag);
-            code.AddBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(children.AsSpan()));
-            hash = code.ToHashCode();
-        }
-
-        public bool Equals(NodeKey other) =>
-            hash == other.hash && typeName == other.typeName && name == other.name && version == other.version
-            && metaFlag == other.metaFlag && children.AsSpan().SequenceEqual(other.children);
-
-        public override bool Equals(object? obj) => obj is NodeKey other && Equals(other);
-
-        public override int GetHashCode() => hash;
-    }
+        => writer.Node(typeName, nodeName, 1, flags, children);
 }
