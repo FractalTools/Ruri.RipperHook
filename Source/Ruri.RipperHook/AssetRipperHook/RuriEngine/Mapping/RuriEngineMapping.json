@@ -27,7 +27,7 @@
     "0000000000000000f000000000000000"
   ],
   "classes": {
-    "MonoBehaviour": { "kind": "Scripted", "extension": "asset" },
+    "MonoBehaviour": { "kind": "Scripted", "extension": "entity" },
     "Mesh": { "kind": "Mapped", "engineType": "Ruri.Engine.MeshAssets.Mesh", "extension": "mesh" },
     "Material": { "kind": "Mapped", "engineType": "Ruri.Engine.MaterialAssets.Material", "extension": "mat" },
     "Texture2D": { "kind": "Payload" },

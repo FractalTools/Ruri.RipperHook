@@ -12,6 +12,7 @@ internal sealed class EntityFileCollection : ExportCollection
 {
     private const string EntitiesKey = "entities";
     private const string ComponentsKey = "components";
+    private const string MainObjectKey = "mainObjectFileID";
 
     private readonly IReadOnlyList<IUnityObjectBase> members;
     private readonly HashSet<IUnityObjectBase> memberSet;
@@ -59,7 +60,7 @@ internal sealed class EntityFileCollection : ExportCollection
 
     public override bool Export(IExportContainer container, string projectDirectory, FileSystem fileSystem)
     {
-        string path = yaml is null ? NewPath(projectDirectory, fileSystem) : fileSystem.Path.Join(projectDirectory, yaml.Entry.RelativePath);
+        string path = yaml is null ? NewPath(projectDirectory, fileSystem) : fileSystem.Path.Join(projectDirectory, ConvertedPath(yaml.Entry));
         string description = yaml?.Entry.RelativePath ?? $"{members[0].ClassName} {Name}";
 
         ReferenceResolver references = new(container, mapping, gaps);
@@ -97,7 +98,41 @@ internal sealed class EntityFileCollection : ExportCollection
         {
             WriteMeta(container, path, fileSystem);
         }
+        else
+        {
+            yaml.Entry.ConvertedRelativePath = ConvertedPath(yaml.Entry);
+        }
         return true;
+    }
+
+    private string ConvertedPath(ProjectEntry entry)
+    {
+        return System.IO.Path.ChangeExtension(entry.RelativePath, mapping.RowOf(MainMember(entry).ClassName).Extension);
+    }
+
+    private IUnityObjectBase MainMember(ProjectEntry entry)
+    {
+        if (entry.Meta.TryGet(entry.ImporterName, out UnityYamlNode? importer)
+            && importer is UnityYamlMapping block
+            && block.TryGetText(MainObjectKey) is { } text
+            && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long mainId))
+        {
+            foreach (IUnityObjectBase member in members)
+            {
+                if (member.PathID == mainId)
+                {
+                    return member;
+                }
+            }
+        }
+        foreach (IUnityObjectBase member in members)
+        {
+            if (mapping.RowOf(member.ClassName).Kind == ClassKind.Mapped)
+            {
+                return member;
+            }
+        }
+        return members[0];
     }
 
     private string NewPath(string projectDirectory, FileSystem fileSystem)

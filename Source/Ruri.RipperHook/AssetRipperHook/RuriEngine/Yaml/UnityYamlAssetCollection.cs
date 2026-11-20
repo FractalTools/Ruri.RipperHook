@@ -30,6 +30,10 @@ internal sealed class ProjectEntry
     public required string ImporterName { get; init; }
 
     public required ProjectFileKind Kind { get; init; }
+
+    public string? ConvertedRelativePath { get; set; }
+
+    public string OutputRelativePath => ConvertedRelativePath ?? RelativePath;
 }
 
 internal readonly record struct ExternalReference(string Guid, int Type);

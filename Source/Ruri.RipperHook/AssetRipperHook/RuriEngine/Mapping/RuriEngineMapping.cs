@@ -26,7 +26,7 @@ internal sealed class ClassRow
 
     public string? EngineType { get; init; }
 
-    public string Extension { get; init; } = "asset";
+    public string Extension { get; init; } = "entity";
 }
 
 internal sealed class RuriEngineMapping
