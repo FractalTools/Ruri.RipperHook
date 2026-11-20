@@ -56,9 +56,9 @@ public static class ClosureReader
     /// and nothing an export would. Null when the seeds are in no loaded map -- a caller that has
     /// nothing to say about an empty selection says nothing.</summary>
     public static GameData? Read(CabTable table, IEnumerable<string> seedCabNames,
-        bool reachThroughDependents = false)
+        bool reachThroughDependents = false, bool scriptedDependenciesOnly = false)
     {
-        CabClosure closure = Resolve(table, seedCabNames, reachThroughDependents);
+        CabClosure closure = Resolve(table, seedCabNames, reachThroughDependents, scriptedDependenciesOnly);
         if (closure.Files.Length == 0)
         {
             return null;
