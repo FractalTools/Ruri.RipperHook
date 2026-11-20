@@ -8,6 +8,7 @@ internal static class MeshDecoder
 {
     private const int PositionChannel = 0;
     private const int NormalChannel = 1;
+    private const int TangentChannel = 2;
     private const int ColorChannel = 3;
     private const int FirstTextureChannel = 4;
     private const int TextureChannelCount = 8;
@@ -46,6 +47,10 @@ internal static class MeshDecoder
         if (vertices.Has(NormalChannel))
         {
             mesh.Add("Normals", Mirrored(Vectors(vertices, NormalChannel)));
+        }
+        if (vertices.Has(TangentChannel))
+        {
+            context.Unsupported("vertex tangents have no UsdGeom attribute and are regenerated from st and normals on import");
         }
         mesh.Add("SubdivisionScheme", ScalarValue.FromText(NoSubdivision));
         ReadFaces(context, vertexCount, mesh);
