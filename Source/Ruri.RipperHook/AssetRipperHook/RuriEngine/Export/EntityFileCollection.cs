@@ -12,7 +12,6 @@ internal sealed class EntityFileCollection : ExportCollection
 {
     private const string EntitiesKey = "entities";
     private const string ComponentsKey = "components";
-    private const string MetaExtension = ".meta";
 
     private readonly IReadOnlyList<IUnityObjectBase> members;
     private readonly HashSet<IUnityObjectBase> memberSet;
@@ -94,7 +93,10 @@ internal sealed class EntityFileCollection : ExportCollection
         document.Add(EntitiesKey, entities);
         fileSystem.Directory.Create(fileSystem.Path.GetDirectoryName(path));
         fileSystem.File.WriteAllBytes(path, JsonValueWriter.Write(document));
-        WriteMeta(container, path, fileSystem);
+        if (yaml is null)
+        {
+            WriteMeta(container, path, fileSystem);
+        }
         return true;
     }
 
@@ -108,11 +110,6 @@ internal sealed class EntityFileCollection : ExportCollection
 
     private void WriteMeta(IExportContainer container, string path, FileSystem fileSystem)
     {
-        if (yaml is not null)
-        {
-            fileSystem.File.WriteAllBytes(path + MetaExtension, MetaJson.Write(yaml.Entry.Meta, mapping));
-            return;
-        }
         INativeFormatImporter importer = NativeFormatImporter.Create(container.File, container.ExportVersion);
         importer.MainObjectFileID = GetExportID(container, members[0]);
         if (importer.Has_AssetBundleName_R() && members[0].AssetBundleName is { } bundleName)

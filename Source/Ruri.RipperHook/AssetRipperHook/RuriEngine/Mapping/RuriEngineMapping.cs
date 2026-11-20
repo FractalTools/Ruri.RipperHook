@@ -63,6 +63,8 @@ internal sealed class RuriEngineMapping
 
     public Dictionary<string, ImporterKind> Importers { get; init; } = new();
 
+    public Dictionary<string, string> ImporterByExtension { get; init; } = new();
+
     public static RuriEngineMapping Load(string? overridePath)
     {
         if (overridePath is { Length: > 0 })
@@ -85,6 +87,11 @@ internal sealed class RuriEngineMapping
     public ImporterKind? ImporterOf(string importerName)
     {
         return Importers.TryGetValue(importerName, out ImporterKind kind) ? kind : null;
+    }
+
+    public string? ImporterOfExtension(string extension)
+    {
+        return ImporterByExtension.TryGetValue(extension.TrimStart('.').ToLowerInvariant(), out string? importerName) ? importerName : null;
     }
 
     public string StripPrefix(string name)

@@ -24,12 +24,15 @@ internal static class UnityProjectReader
     private const string ProductNameKey = "productName";
     private const string MetaExtension = ".meta";
     private const string ScriptExtension = ".cs";
-    private const string YamlSignature = "%YAML";
     private const string GuidKey = "guid";
     private const string FolderKey = "folderAsset";
     private const int MonoBehaviourClassId = 114;
     private const int MonoScriptClassId = 115;
     private const long MonoScriptFileId = 11500000;
+
+    private static ReadOnlySpan<byte> YamlSignature => "%YAML"u8;
+
+    private static ReadOnlySpan<byte> Utf8ByteOrderMark => [0xEF, 0xBB, 0xBF];
 
     public static GameData? TryLoad(IReadOnlyList<string> paths, FileSystem fileSystem)
     {
@@ -122,11 +125,7 @@ internal static class UnityProjectReader
             string assetPath = metaPath[..^MetaExtension.Length];
             string relative = fileSystem.Path.GetRelativePath(root, assetPath).Replace('\\', '/');
             bool isFolder = fileSystem.Directory.Exists(assetPath);
-            if (!isFolder && !fileSystem.File.Exists(assetPath))
-            {
-                gaps.Add(GapCategories.UnreadableFile, "meta without asset", relative);
-                continue;
-            }
+            bool exists = isFolder || fileSystem.File.Exists(assetPath);
             UnityYamlMapping meta;
             try
             {
@@ -145,7 +144,23 @@ internal static class UnityProjectReader
             }
 
             string importer = ImporterOf(meta);
-            ProjectFileKind kind = isFolder ? ProjectFileKind.Folder : KindOf(assetPath, relative, importer, mapping, gaps, fileSystem);
+            if (importer.Length == 0 && exists && !isFolder)
+            {
+                importer = mapping.ImporterOfExtension(fileSystem.Path.GetExtension(assetPath)) ?? string.Empty;
+            }
+            ProjectFileKind kind = ProjectFileKind.Skipped;
+            if (!exists)
+            {
+                gaps.Add(GapCategories.OrphanMeta, "meta without asset", relative);
+            }
+            else if (isFolder)
+            {
+                kind = ProjectFileKind.Folder;
+            }
+            else
+            {
+                kind = KindOf(assetPath, relative, importer, mapping, gaps, fileSystem);
+            }
             entries.Add(new ProjectEntry
             {
                 Guid = guid,
@@ -197,9 +212,13 @@ internal static class UnityProjectReader
     private static bool IsYaml(string path, FileSystem fileSystem)
     {
         using Stream stream = fileSystem.File.OpenRead(path);
-        Span<byte> head = stackalloc byte[YamlSignature.Length];
-        int read = stream.Read(head);
-        return read == head.Length && System.Text.Encoding.ASCII.GetString(head) == YamlSignature;
+        Span<byte> buffer = stackalloc byte[Utf8ByteOrderMark.Length + YamlSignature.Length];
+        ReadOnlySpan<byte> head = buffer[..stream.Read(buffer)];
+        if (head.StartsWith(Utf8ByteOrderMark))
+        {
+            head = head[Utf8ByteOrderMark.Length..];
+        }
+        return head.StartsWith(YamlSignature);
     }
 
     private static void AddScript(UnityYamlAssetCollection collection, UnityVersion version)

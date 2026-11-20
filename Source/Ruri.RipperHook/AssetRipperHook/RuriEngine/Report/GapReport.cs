@@ -16,6 +16,7 @@ internal static class GapCategories
     public const string DuplicateComponent = "duplicateComponents";
     public const string UnmappedImporter = "unmappedImporters";
     public const string UnreadableFile = "unreadableFiles";
+    public const string OrphanMeta = "orphanMetas";
     public const string UnsupportedLayout = "unsupportedLayouts";
 }
 

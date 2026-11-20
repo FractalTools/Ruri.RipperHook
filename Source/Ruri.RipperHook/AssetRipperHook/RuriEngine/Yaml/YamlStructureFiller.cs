@@ -450,10 +450,10 @@ internal sealed class YamlStructureFiller(
             {
                 if (dataType.CreateInstance(depth + 1, version) is SerializableStructure data)
                 {
-                    if (item.TryGet(ManagedReferenceTypes.DataFieldName, out UnityYamlNode? dataNode) && dataNode is UnityYamlMapping dataMapping)
-                    {
-                        FillStructure(data, dataMapping, dataType.Name);
-                    }
+                    UnityYamlMapping dataMapping = item.TryGet(ManagedReferenceTypes.DataFieldName, out UnityYamlNode? dataNode) && dataNode is UnityYamlMapping stated
+                        ? stated
+                        : new UnityYamlMapping();
+                    FillStructure(data, dataMapping, dataType.Name);
                     referencedObject[ManagedReferenceTypes.DataFieldName].AsAsset = data;
                 }
             }

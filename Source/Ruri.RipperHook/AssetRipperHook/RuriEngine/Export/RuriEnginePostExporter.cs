@@ -13,7 +13,7 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
     public void DoPostExport(GameData gameData, FullConfiguration settings, FileSystem fileSystem)
     {
         string root = settings.ProjectRootPath;
-        int folders = 0;
+        int metas = 0;
         int payloads = 0;
         foreach (UnityYamlAssetCollection collection in gameData.GameBundle.FetchAssetCollections().OfType<UnityYamlAssetCollection>())
         {
@@ -23,8 +23,6 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
             {
                 case ProjectFileKind.Folder:
                     fileSystem.Directory.Create(target);
-                    WriteMeta(entry, target, fileSystem);
-                    folders++;
                     break;
                 case ProjectFileKind.Payload:
                     fileSystem.Directory.Create(fileSystem.Path.GetDirectoryName(target));
@@ -33,12 +31,13 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
                     {
                         source.CopyTo(destination);
                     }
-                    WriteMeta(entry, target, fileSystem);
                     payloads++;
                     break;
             }
+            WriteMeta(entry, target, fileSystem);
+            metas++;
         }
-        Logger.Info(LogCategory.Export, $"[RuriEngine] wrote {folders} folder meta file(s) and copied {payloads} payload file(s)");
+        Logger.Info(LogCategory.Export, $"[RuriEngine] wrote {metas} meta file(s) and copied {payloads} payload file(s)");
 
         string reportPath = RuriEngineSession.GapReportPath ?? fileSystem.Path.Join(settings.ExportRootPath, GapReport.FileName);
         gaps.Write(fileSystem, reportPath);
@@ -47,6 +46,7 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
 
     private void WriteMeta(ProjectEntry entry, string target, FileSystem fileSystem)
     {
+        fileSystem.Directory.Create(fileSystem.Path.GetDirectoryName(target));
         fileSystem.File.WriteAllBytes(target + MetaExtension, MetaJson.Write(entry.Meta, mapping));
     }
 }

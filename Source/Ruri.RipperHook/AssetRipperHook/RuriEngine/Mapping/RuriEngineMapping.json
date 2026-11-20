@@ -43,7 +43,14 @@
     "System.Numerics.Vector2": { "x": "X", "y": "Y" },
     "System.Numerics.Vector3": { "x": "X", "y": "Y", "z": "Z" },
     "System.Numerics.Vector4": { "x": "X", "y": "Y", "z": "Z", "w": "W" },
-    "System.Numerics.Quaternion": { "x": "X", "y": "Y", "z": "Z", "w": "W" }
+    "System.Numerics.Quaternion": { "x": "X", "y": "Y", "z": "Z", "w": "W" },
+    "Ruri.Mathematics.Vector2Int": { "x": "X", "y": "Y" },
+    "Ruri.Mathematics.Vector3Int": { "x": "X", "y": "Y", "z": "Z" },
+    "Ruri.Mathematics.DoubleVector3": { "x": "X", "y": "Y", "z": "Z" }
+  },
+  "importerByExtension": {
+    "cs": "MonoImporter",
+    "asset": "NativeFormatImporter"
   },
   "importers": {
     "NativeFormatImporter": "Yaml",
