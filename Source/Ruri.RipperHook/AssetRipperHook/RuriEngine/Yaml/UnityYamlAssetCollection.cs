@@ -56,6 +56,10 @@ internal sealed class UnityYamlAssetCollection : VirtualAssetCollection
 
     public ProjectEntry Entry { get; }
 
+    public ProjectIndex? Project { get; set; }
+
+    public Dictionary<long, UnityYamlMapping> Bodies { get; } = new();
+
     public int ReferenceType => Entry.Kind == ProjectFileKind.YamlAsset ? SerializedReferenceType : ImportedReferenceType;
 
     public void Add(IUnityObjectBase asset) => AddAsset(asset);

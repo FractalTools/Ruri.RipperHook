@@ -56,7 +56,24 @@ internal sealed class EntityDocumentBuilder(RuriEngineMapping mapping, EngineTyp
             gaps.Add(GapCategories.NoEngineType, $"{asset.ClassName} -> {engineType}", file);
             return null;
         }
-        ObjectValue source = ValueTreeWalker.Walk(asset, asset.Collection, references, file);
+        if (asset.Collection is not UnityYamlAssetCollection yaml || !yaml.Bodies.TryGetValue(asset.PathID, out UnityYamlMapping? body))
+        {
+            gaps.Add(GapCategories.UnreadableFile, $"{asset.ClassName} has no YAML body", file);
+            return null;
+        }
+        if (!MappedDecoders.TryGet(asset.ClassName, out MappedDecoder? decoder))
+        {
+            gaps.Add(GapCategories.UnmappedClass, $"{asset.ClassName} has no decoder", file);
+            return null;
+        }
+        DecodeContext context = new(body, yaml, asset.ClassName, engineClass.FullName, engineClass.Shape, mapping, gaps, file);
+        ObjectValue? source = decoder(context);
+        if (source is null)
+        {
+            return null;
+        }
+        context.CarryRenamed(source);
+        context.ReportLeftovers();
         return new EntityConverter(mapping, types, gaps, file).ConvertMapped(source, engineClass.FullName, engineClass.Shape);
     }
 }

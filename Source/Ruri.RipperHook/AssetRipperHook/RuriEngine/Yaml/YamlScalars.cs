@@ -102,6 +102,18 @@ internal static class YamlScalars
         return true;
     }
 
+    public static bool IsZeroGuid(string guid)
+    {
+        foreach (char c in guid)
+        {
+            if (c != '0')
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static bool IsCompact(string text, int elementSize)
     {
         return TryDecodeCompact(text, elementSize, out _);

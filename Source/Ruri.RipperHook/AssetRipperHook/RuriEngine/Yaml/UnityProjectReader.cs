@@ -61,7 +61,7 @@ internal static class UnityProjectReader
         List<UnityYamlAssetCollection> yamlAssets = new();
         foreach (ProjectEntry entry in Scan(root, fileSystem, mapping, gaps))
         {
-            UnityYamlAssetCollection collection = new(bundle, entry, version);
+            UnityYamlAssetCollection collection = new(bundle, entry, version) { Project = index };
             index.Add(collection);
             if (entry.Kind == ProjectFileKind.Script)
             {
@@ -278,7 +278,7 @@ internal static class UnityProjectReader
                 }
                 else if (row.Kind == ClassKind.Mapped)
                 {
-                    LoadMapped(collection, document, body, className, filler, version);
+                    LoadMapped(collection, document, body, className, version);
                 }
                 else
                 {
@@ -351,7 +351,6 @@ internal static class UnityProjectReader
         UnityYamlDocument document,
         UnityYamlMapping body,
         string className,
-        YamlStructureFiller filler,
         UnityVersion version)
     {
         if (!TypeTreeNodeStruct.TryMakeFromTpk((ClassIDType)document.ClassId, version, out _, out TypeTreeNodeStruct editorTree))
@@ -360,7 +359,7 @@ internal static class UnityProjectReader
             return;
         }
         TypeTreeObject asset = TypeTreeObject.Create(new AssetInfo(collection, document.FileId, document.ClassId), editorTree, ITypeResolver.Null);
-        filler.FillStructure(asset.EditorFields, body, className);
+        collection.Bodies.Add(document.FileId, body);
         collection.Add(asset);
     }
 }

@@ -44,6 +44,7 @@ internal sealed class RuriEngineMapping
     };
 
     private HashSet<string>? bookkeeping;
+    private Dictionary<string, HashSet<string>>? ignored;
     private HashSet<string>? builtinGuids;
     private HashSet<string>? metaTextKeys;
     private HashSet<string>? nonImporterBlocks;
@@ -63,6 +64,8 @@ internal sealed class RuriEngineMapping
     public Dictionary<string, ClassRow> Classes { get; init; } = new();
 
     public Dictionary<string, Dictionary<string, string>> FieldRenames { get; init; } = new();
+
+    public Dictionary<string, string[]> IgnoredFields { get; init; } = new();
 
     public Dictionary<string, ImporterKind> Importers { get; init; } = new();
 
@@ -111,6 +114,12 @@ internal sealed class RuriEngineMapping
         bookkeeping ??= new HashSet<string>(BookkeepingFields, StringComparer.Ordinal);
         string stripped = StripPrefix(sourceName);
         return stripped.Length != sourceName.Length && bookkeeping.Contains(stripped);
+    }
+
+    public bool IsIgnoredField(string unityClassName, string fieldName)
+    {
+        ignored ??= IgnoredFields.ToDictionary(static pair => pair.Key, static pair => new HashSet<string>(pair.Value, StringComparer.Ordinal), StringComparer.Ordinal);
+        return ignored.TryGetValue(unityClassName, out HashSet<string>? names) && names.Contains(fieldName);
     }
 
     public bool IsMetaTextKey(string key)

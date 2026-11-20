@@ -491,7 +491,7 @@ internal sealed class YamlStructureFiller(
         {
             return CreatePointer(0, 0);
         }
-        if (string.IsNullOrEmpty(guid) || IsZeroGuid(guid))
+        if (string.IsNullOrEmpty(guid) || YamlScalars.IsZeroGuid(guid))
         {
             return CreatePointer(0, fileId);
         }
@@ -517,18 +517,6 @@ internal sealed class YamlStructureFiller(
         EndianSpanReader reader = new(buffer[..length], EndianType.LittleEndian);
         pointer.ReadRelease(ref reader);
         return pointer;
-    }
-
-    private static bool IsZeroGuid(string guid)
-    {
-        foreach (char c in guid)
-        {
-            if (c != '0')
-            {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static bool TryIdentifier(string text, out long identifier)

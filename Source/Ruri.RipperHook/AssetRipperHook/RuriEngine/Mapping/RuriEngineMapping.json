@@ -49,7 +49,38 @@
     "System.Numerics.Quaternion": { "x": "X", "y": "Y", "z": "Z", "w": "W" },
     "Ruri.Mathematics.Vector2Int": { "x": "X", "y": "Y" },
     "Ruri.Mathematics.Vector3Int": { "x": "X", "y": "Y", "z": "Z" },
-    "Ruri.Mathematics.DoubleVector3": { "x": "X", "y": "Y", "z": "Z" }
+    "Ruri.Mathematics.DoubleVector3": { "x": "X", "y": "Y", "z": "Z" },
+    "Ruri.Engine.MaterialAssets.Material": {
+      "m_CustomRenderQueue": "RenderQueueOverride",
+      "m_EnableInstancingVariants": "InstancingVariants"
+    }
+  },
+  "ignoredFields": {
+    "Mesh": [
+      "serializedVersion",
+      "m_IsReadable",
+      "m_KeepVertices",
+      "m_KeepIndices",
+      "m_BonesAABB",
+      "m_MeshUsageFlags",
+      "m_CookingOptions",
+      "m_PreBakeConvexCollisionMesh",
+      "m_PreBakeTriangleCollisionMesh",
+      "m_BakedConvexCollisionMesh",
+      "m_BakedTriangleCollisionMesh",
+      "m_MeshMetrics[0]",
+      "m_MeshMetrics[1]",
+      "m_MeshOptimizationFlags",
+      "m_MeshLodInfo"
+    ],
+    "Material": [
+      "serializedVersion",
+      "m_ModifiedSerializedProperties",
+      "m_LightmapFlags",
+      "m_DoubleSidedGI",
+      "m_LockedProperties",
+      "stringTagMap"
+    ]
   },
   "importerByExtension": {
     "cs": "MonoImporter",
