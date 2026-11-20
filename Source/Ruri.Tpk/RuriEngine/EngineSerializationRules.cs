@@ -11,6 +11,7 @@ internal static class EngineSerializationRules
     public const int NestingLimit = 10;
 
     private const string ListDefinition = "System.Collections.Generic.List`1";
+    private const string ViewDefinition = "System.ReadOnlyMemory`1";
     private const string TypedAssetReferenceDefinition = "Ruri.Engine.AssetTables.AssetRef`1";
     private const string UntypedAssetReference = "Ruri.Engine.AssetTables.AssetReference";
 
@@ -99,7 +100,7 @@ internal static class EngineSerializationRules
             element = type.GetElementType()!;
             return true;
         }
-        if (type.IsGenericType && type.GetGenericTypeDefinition().FullName == ListDefinition)
+        if (type.IsGenericType && type.GetGenericTypeDefinition().FullName is ListDefinition or ViewDefinition)
         {
             element = type.GetGenericArguments()[0];
             return true;
