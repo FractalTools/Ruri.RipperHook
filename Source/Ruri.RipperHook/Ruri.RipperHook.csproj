@@ -115,8 +115,6 @@
 		</EmbeddedResource>
 	</ItemGroup>
 
-	<!-- The RuriEngine output: the engine's own serialized layouts (packed by the RuriEngine lane of Ruri.Tpk) and the
-	     table that maps Unity classes and field names onto them. Both are data, not code. -->
 	<ItemGroup>
 		<EmbeddedResource Include="AssetRipperHook\RuriEngine\RuriEngine.tpk">
 			<LogicalName>RuriEngine.tpk</LogicalName>

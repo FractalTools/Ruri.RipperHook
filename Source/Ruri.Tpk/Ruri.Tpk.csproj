@@ -24,7 +24,6 @@
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeNameFixer.cs" Link="Contract\TypeTreeNameFixer.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeManifest.cs" Link="Contract\TypeTreeManifest.cs" />
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeOrdinal.cs" Link="Contract\TypeTreeOrdinal.cs" />
-		<!-- Both custom-engine lanes write their trees through this one node and blob writer. -->
 		<Compile Include="..\Ruri.RipperHook\Core\TypeTree\TypeTreeBlobWriter.cs" Link="Contract\TypeTreeBlobWriter.cs" />
 		<!-- The Unreal lane restates a .usmap as this custom engine's type trees with the very
 		     builder the runtime registers the mounted schema through, so the packed file and the
@@ -35,7 +34,6 @@
 	<ItemGroup>
 		<PackageReference Include="AssetRipper.Tpk" Version="2.0.0" />
 		<PackageReference Include="AssetRipper.Tpk.TypeTrees.Json" Version="2.0.0" />
-		<!-- The RuriEngine lane reads the engine's compiled assemblies by reflection without loading them into this process. -->
 		<PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.3" />
 		<ProjectReference Include="..\..\FModel\CUE4Parse\CUE4Parse\CUE4Parse.csproj" />
 		<ProjectReference Include="..\..\AssetRipper\Source\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
