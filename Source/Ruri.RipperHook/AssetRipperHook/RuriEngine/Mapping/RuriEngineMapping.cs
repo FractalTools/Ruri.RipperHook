@@ -46,6 +46,7 @@ internal sealed class RuriEngineMapping
     private HashSet<string>? bookkeeping;
     private HashSet<string>? builtinGuids;
     private HashSet<string>? metaTextKeys;
+    private HashSet<string>? nonImporterBlocks;
 
     public string FieldPrefix { get; init; } = "m_";
 
@@ -54,6 +55,8 @@ internal sealed class RuriEngineMapping
     public string[] BookkeepingFields { get; init; } = [];
 
     public string[] MetaTextKeys { get; init; } = [];
+
+    public string[] NonImporterBlocks { get; init; } = [];
 
     public string[] BuiltinGuids { get; init; } = [];
 
@@ -114,6 +117,12 @@ internal sealed class RuriEngineMapping
     {
         metaTextKeys ??= new HashSet<string>(MetaTextKeys, StringComparer.Ordinal);
         return metaTextKeys.Contains(key);
+    }
+
+    public bool IsNonImporterBlock(string key)
+    {
+        nonImporterBlocks ??= new HashSet<string>(NonImporterBlocks, StringComparer.Ordinal);
+        return nonImporterBlocks.Contains(key);
     }
 
     public bool IsBuiltinGuid(string guid)

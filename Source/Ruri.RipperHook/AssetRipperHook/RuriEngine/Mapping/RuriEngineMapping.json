@@ -19,6 +19,9 @@
     "assetBundleName",
     "assetBundleVariant"
   ],
+  "nonImporterBlocks": [
+    "AssetOrigin"
+  ],
   "builtinGuids": [
     "0000000000000000e000000000000000",
     "0000000000000000f000000000000000"

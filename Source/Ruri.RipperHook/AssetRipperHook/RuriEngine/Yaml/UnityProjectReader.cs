@@ -143,7 +143,7 @@ internal static class UnityProjectReader
                 continue;
             }
 
-            string importer = ImporterOf(meta);
+            string importer = ImporterOf(meta, mapping);
             if (importer.Length == 0 && exists && !isFolder)
             {
                 importer = mapping.ImporterOfExtension(fileSystem.Path.GetExtension(assetPath)) ?? string.Empty;
@@ -174,11 +174,11 @@ internal static class UnityProjectReader
         return entries;
     }
 
-    private static string ImporterOf(UnityYamlMapping meta)
+    private static string ImporterOf(UnityYamlMapping meta, RuriEngineMapping mapping)
     {
         foreach (KeyValuePair<string, UnityYamlNode> entry in meta.Entries)
         {
-            if (entry.Key != FolderKey && entry.Value is UnityYamlMapping)
+            if (entry.Key != FolderKey && !mapping.IsNonImporterBlock(entry.Key) && entry.Value is UnityYamlMapping)
             {
                 return entry.Key;
             }

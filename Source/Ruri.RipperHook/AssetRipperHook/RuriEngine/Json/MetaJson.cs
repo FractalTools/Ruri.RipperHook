@@ -40,9 +40,14 @@ internal static partial class MetaJson
         switch (node)
         {
             case UnityYamlMapping map:
+                bool isRoot = key.Length == 0;
                 ObjectValue obj = new();
                 foreach (KeyValuePair<string, UnityYamlNode> entry in map.Entries)
                 {
+                    if (isRoot && mapping.IsNonImporterBlock(entry.Key))
+                    {
+                        continue;
+                    }
                     obj.Add(entry.Key, Convert(entry.Value, mapping, entry.Key));
                 }
                 return obj;
