@@ -18,6 +18,8 @@ internal static class GapCategories
     public const string UnreadableFile = "unreadableFiles";
     public const string OrphanMeta = "orphanMetas";
     public const string UnsupportedLayout = "unsupportedLayouts";
+    public const string PackageReferenceBlanked = "packageReferencesBlanked";
+    public const string PackageReferenceRedirected = "packageReferencesRedirected";
 }
 
 internal sealed class GapReport

@@ -63,6 +63,9 @@ internal sealed class RuriEngineMapping
     private HashSet<string>? bookkeeping;
     private Dictionary<string, HashSet<string>>? ignored;
     private HashSet<string>? builtinGuids;
+    private Dictionary<string, string>? redirects;
+    private HashSet<string>? blanked;
+    private Dictionary<string, string>? relocations;
     private HashSet<string>? metaTextKeys;
     private HashSet<string>? nonImporterBlocks;
     private readonly ConcurrentDictionary<string, Dictionary<string, string?>> normalized = new(StringComparer.Ordinal);
@@ -84,6 +87,12 @@ internal sealed class RuriEngineMapping
     public string[] NonImporterBlocks { get; init; } = [];
 
     public string[] BuiltinGuids { get; init; } = [];
+
+    public Dictionary<string, string> PackageGuidRedirects { get; init; } = new();
+
+    public Dictionary<string, string> BlankedPackageGuids { get; init; } = new();
+
+    public Dictionary<string, string> OutputRelocations { get; init; } = new();
 
     public Dictionary<string, ClassRow> Classes { get; init; } = new();
 
@@ -169,6 +178,35 @@ internal sealed class RuriEngineMapping
     {
         builtinGuids ??= new HashSet<string>(BuiltinGuids, StringComparer.Ordinal);
         return builtinGuids.Contains(guid);
+    }
+
+    /// <summary>包资产的引用改写:空表里的 guid 写成空引用,重定向表里的 guid 换成引擎资产 guid(主对象 fileID 与类型沿用源引用);都不在表里返回 null。</summary>
+    public ReferenceValue? RetargetPackageReference(string? guid, long fileId, int type, GapReport gaps, string where)
+    {
+        if (string.IsNullOrEmpty(guid))
+        {
+            return null;
+        }
+        blanked ??= new HashSet<string>(BlankedPackageGuids.Keys, StringComparer.OrdinalIgnoreCase);
+        if (blanked.Contains(guid))
+        {
+            gaps.Add(GapCategories.PackageReferenceBlanked, guid, where);
+            return ReferenceValue.Null;
+        }
+        redirects ??= new Dictionary<string, string>(PackageGuidRedirects, StringComparer.OrdinalIgnoreCase);
+        if (redirects.TryGetValue(guid, out string? engineGuid))
+        {
+            gaps.Add(GapCategories.PackageReferenceRedirected, guid, where);
+            return new ReferenceValue(fileId, engineGuid, type);
+        }
+        return null;
+    }
+
+    /// <summary>源工程相对路径(含扩展名)的输出改址;不在表里返回 null,表键值按正斜杠比较。</summary>
+    public string? RelocatedPath(string relativePath)
+    {
+        relocations ??= new Dictionary<string, string>(OutputRelocations, StringComparer.OrdinalIgnoreCase);
+        return relocations.TryGetValue(relativePath.Replace('\\', '/'), out string? target) ? target : null;
     }
 
     public bool TryRename(string engineTypeName, string sourceName, [NotNullWhen(true)] out string? engineName)

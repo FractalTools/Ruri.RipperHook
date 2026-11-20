@@ -52,6 +52,11 @@ internal sealed class DecodeContext(
         {
             return new ReferenceValue(fileId, null, 0);
         }
+        int type = reference.TryGetText("type") is { } typeText && YamlScalars.TryParseInteger(typeText, out long parsed) ? (int)parsed : 0;
+        if (mapping.RetargetPackageReference(guid, fileId, type, gaps, $"{file}:{path}") is { } retargeted)
+        {
+            return retargeted;
+        }
         if (collection.Project is { } project && project.TryGetCollection(guid, out UnityYamlAssetCollection? target))
         {
             return new ReferenceValue(fileId, target.Entry.Guid, target.ReferenceType);
@@ -60,7 +65,6 @@ internal sealed class DecodeContext(
         {
             gaps.Add(GapCategories.DanglingReference, guid, $"{file}:{path} -> {guid}:{fileId}");
         }
-        int type = reference.TryGetText("type") is { } typeText && YamlScalars.TryParseInteger(typeText, out long parsed) ? (int)parsed : 0;
         return new ReferenceValue(fileId, guid, type);
     }
 

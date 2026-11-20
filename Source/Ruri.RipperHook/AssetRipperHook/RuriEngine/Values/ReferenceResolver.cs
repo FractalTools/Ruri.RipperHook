@@ -21,6 +21,10 @@ internal sealed class ReferenceResolver(IExportContainer container, RuriEngineMa
         }
         if (origin is UnityYamlAssetCollection yaml && yaml.TryGetExternal(fileIndex, out ExternalReference external))
         {
+            if (mapping.RetargetPackageReference(external.Guid, pathId, external.Type, gaps, where) is { } retargeted)
+            {
+                return retargeted;
+            }
             if (!mapping.IsBuiltinGuid(external.Guid))
             {
                 gaps.Add(GapCategories.DanglingReference, external.Guid, $"{where} -> {external.Guid}:{pathId}");
@@ -38,6 +42,11 @@ internal sealed class ReferenceResolver(IExportContainer container, RuriEngineMa
 
     private ReferenceValue ResolveAsset(IUnityObjectBase target, long pathId, string where)
     {
+        if (target.Collection is UnityYamlAssetCollection source
+            && mapping.RetargetPackageReference(source.Entry.Guid, pathId, source.ReferenceType, gaps, where) is { } retargeted)
+        {
+            return retargeted;
+        }
         MetaPtr pointer = container.CreateExportPointer(target);
         if (pointer.GUID.IsZero)
         {

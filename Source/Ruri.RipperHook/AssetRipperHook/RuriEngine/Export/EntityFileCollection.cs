@@ -107,7 +107,8 @@ internal sealed class EntityFileCollection : ExportCollection
 
     private string ConvertedPath(ProjectEntry entry)
     {
-        return System.IO.Path.ChangeExtension(entry.RelativePath, mapping.RowOf(MainMember(entry).ClassName).Extension);
+        string extension = mapping.RowOf(MainMember(entry).ClassName).Extension;
+        return System.IO.Path.ChangeExtension(mapping.RelocatedPath(entry.RelativePath) ?? entry.RelativePath, extension);
     }
 
     private IUnityObjectBase MainMember(ProjectEntry entry)
