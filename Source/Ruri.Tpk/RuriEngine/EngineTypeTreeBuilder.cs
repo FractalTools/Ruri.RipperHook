@@ -16,6 +16,8 @@ internal sealed class EngineTypeTreeBuilder
 
     public List<string> Failures { get; } = new();
 
+    public Dictionary<string, (int Count, string Example)> Unsupported { get; } = new(StringComparer.Ordinal);
+
     public void Build(IEnumerable<Type> candidates)
     {
         List<Type> ordered = candidates.OrderBy(static type => type.FullName, StringComparer.Ordinal).ToList();
@@ -53,6 +55,10 @@ internal sealed class EngineTypeTreeBuilder
             {
                 children.Add(node.Value);
             }
+            else
+            {
+                RecordUnsupported(type, field);
+            }
         }
         if (ContainsManagedReference(type))
         {
@@ -85,13 +91,17 @@ internal sealed class EngineTypeTreeBuilder
             ushort? child = ValueNode("data", element, path, depth + 1, allowCollection: false);
             return child is null ? null : Vector(name, child.Value);
         }
+        if (EngineSerializationRules.TryAssetReferenceTarget(type, out string referenceTarget))
+        {
+            return Pointer("PPtr<$" + referenceTarget + ">", name);
+        }
         if (EngineSerializationRules.IsInlineStructure(type))
         {
             return StructureNode(name, type, path, depth);
         }
         if (EngineSerializationRules.IsAssetReference(type))
         {
-            return Pointer("PPtr<$" + type.FullName + ">", name);
+            return Pointer("PPtr<$" + EngineSerializationRules.DisplayName(type) + ">", name);
         }
         return null;
     }
@@ -112,13 +122,25 @@ internal sealed class EngineTypeTreeBuilder
                 {
                     children.Add(node.Value);
                 }
+                else
+                {
+                    RecordUnsupported(type, field);
+                }
             }
-            return writer.Node(type.FullName!, name, 1, TransferMetaFlags.NoTransferFlags, children);
+            return writer.Node(EngineSerializationRules.DisplayName(type), name, 1, TransferMetaFlags.NoTransferFlags, children);
         }
         finally
         {
             path.Remove(type);
         }
+    }
+
+    private void RecordUnsupported(Type owner, FieldInfo field)
+    {
+        string key = EngineSerializationRules.DisplayName(field.FieldType);
+        Unsupported[key] = Unsupported.TryGetValue(key, out (int Count, string Example) known)
+            ? (known.Count + 1, known.Example)
+            : (1, $"{owner.FullName}.{field.Name}");
     }
 
     private ushort? ManagedNode(string name, Type type)

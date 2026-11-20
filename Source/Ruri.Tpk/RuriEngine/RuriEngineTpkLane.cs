@@ -54,6 +54,17 @@ internal static class RuriEngineTpkLane
             }
         }
         Console.WriteLine($"[RuriEngine] candidate types={candidates.Count} unreadable={skipped.Count} ({phase.ElapsedMilliseconds} ms)");
+        List<IGrouping<string, Type>> shared = candidates.GroupBy(static type => type.FullName!, StringComparer.Ordinal).Where(static group => group.Count() > 1).ToList();
+        if (shared.Count > 0)
+        {
+            HashSet<string> sharedNames = shared.Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
+            int excluded = candidates.RemoveAll(type => sharedNames.Contains(type.FullName!));
+            Console.WriteLine($"[RuriEngine] excluded {excluded} types under {shared.Count} full name(s) declared by more than one assembly, which the engine component registry refuses to resolve");
+            foreach (IGrouping<string, Type> group in shared.Take(ReportedFailures))
+            {
+                Console.WriteLine($"[RuriEngine]   {group.Key} x{group.Count()}");
+            }
+        }
 
         phase.Restart();
         EngineTypeTreeBuilder builder = new();
@@ -62,6 +73,11 @@ internal static class RuriEngineTpkLane
         foreach (string failure in skipped.Concat(builder.Failures).Take(ReportedFailures))
         {
             Console.WriteLine($"[RuriEngine]   {failure}");
+        }
+        Console.WriteLine($"[RuriEngine] serialized fields without a type tree node: {builder.Unsupported.Values.Sum(static entry => entry.Count)} across {builder.Unsupported.Count} field type(s)");
+        foreach (KeyValuePair<string, (int Count, string Example)> unsupported in builder.Unsupported.OrderByDescending(static pair => pair.Value.Count).Take(ReportedFailures))
+        {
+            Console.WriteLine($"[RuriEngine]   {unsupported.Key} x{unsupported.Value.Count} (first: {unsupported.Value.Example})");
         }
 
         LineageTpkFile.Write(builder.Blobs, CustomEngineType.RuriEngine, VersionKey, layoutVersion, outputPath);

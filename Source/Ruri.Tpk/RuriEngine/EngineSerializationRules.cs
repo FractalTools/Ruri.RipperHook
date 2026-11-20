@@ -1,5 +1,6 @@
 using AssetRipper.IO.Files.SerializedFiles;
 using System.Reflection;
+using System.Text;
 
 namespace Ruri.Tpk.RuriEngine;
 
@@ -10,6 +11,8 @@ internal static class EngineSerializationRules
     public const int NestingLimit = 10;
 
     private const string ListDefinition = "System.Collections.Generic.List`1";
+    private const string TypedAssetReferenceDefinition = "Ruri.Engine.AssetTables.AssetRef`1";
+    private const string UntypedAssetReference = "Ruri.Engine.AssetTables.AssetReference";
 
     public static IReadOnlyList<FieldInfo> SerializedFields(Type type)
     {
@@ -105,6 +108,22 @@ internal static class EngineSerializationRules
         return false;
     }
 
+    public static bool TryAssetReferenceTarget(Type type, out string target)
+    {
+        if (type.IsGenericType && type.GetGenericTypeDefinition().FullName == TypedAssetReferenceDefinition)
+        {
+            target = DisplayName(type.GetGenericArguments()[0]);
+            return true;
+        }
+        if (type.FullName == UntypedAssetReference)
+        {
+            target = UntypedAssetReference;
+            return true;
+        }
+        target = string.Empty;
+        return false;
+    }
+
     public static bool IsInlineStructure(Type type)
     {
         if (!IsStructureShape(type))
@@ -117,10 +136,34 @@ internal static class EngineSerializationRules
     public static bool IsAssetReference(Type type) =>
         IsStructureShape(type) && !type.IsValueType && (type.Attributes & TypeAttributes.Serializable) == 0;
 
+    public static string DisplayName(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return type.FullName!;
+        }
+        StringBuilder name = new();
+        string definition = type.GetGenericTypeDefinition().FullName!;
+        for (int index = 0; index < definition.Length; index++)
+        {
+            if (definition[index] != '`')
+            {
+                name.Append(definition[index]);
+                continue;
+            }
+            while (index + 1 < definition.Length && char.IsAsciiDigit(definition[index + 1]))
+            {
+                index++;
+            }
+        }
+        name.Append('<').Append(string.Join(", ", type.GetGenericArguments().Select(DisplayName))).Append('>');
+        return name.ToString();
+    }
+
     private static bool IsStructureShape(Type type)
     {
         if (type.IsEnum || type.IsPrimitive || type.IsPointer || type.IsByRef || type.IsGenericParameter
-            || type.IsGenericType || type.IsArray || type.IsInterface)
+            || type.ContainsGenericParameters || type.IsArray || type.IsInterface)
         {
             return false;
         }

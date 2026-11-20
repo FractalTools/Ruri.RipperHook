@@ -7,6 +7,7 @@ namespace Ruri.Tpk.RuriEngine;
 internal sealed class EngineAssemblySet : IDisposable
 {
     public const string ManifestName = "ScriptingAssemblies.json";
+    private const string AssemblyPathProperty = "Path";
     private const string ModsDirectoryName = "Mods";
     private const string ManagedDirectoryName = "Managed";
 
@@ -75,23 +76,36 @@ internal sealed class EngineAssemblySet : IDisposable
         string mods = Path.Combine(root, ModsDirectoryName);
         if (Directory.Exists(mods))
         {
-            manifests.AddRange(Directory.EnumerateFiles(mods, ManifestName, SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase));
+            foreach (string modDirectory in Directory.GetDirectories(mods).Order(StringComparer.Ordinal))
+            {
+                manifests.Add(Path.Combine(modDirectory, ManifestName));
+            }
         }
 
+        Dictionary<string, string> byName = new(StringComparer.Ordinal);
         List<string> assemblies = new();
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
         foreach (string manifest in manifests)
         {
             string baseDirectory = Path.GetDirectoryName(manifest)!;
             using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(manifest));
             foreach (JsonProperty entry in document.RootElement.EnumerateObject())
             {
-                string relative = entry.Value.GetProperty("Path").GetString()!;
+                string relative = entry.Value.GetProperty(AssemblyPathProperty).GetString()!;
                 string full = Path.GetFullPath(Path.Combine(baseDirectory, relative));
-                if (File.Exists(full) && seen.Add(full))
+                if (byName.TryGetValue(entry.Name, out string? first))
                 {
-                    assemblies.Add(full);
+                    if (!string.Equals(first, full, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException($"Assembly {entry.Name} resolves to {first} and to {full}.");
+                    }
+                    continue;
                 }
+                if (!File.Exists(full))
+                {
+                    throw new FileNotFoundException($"{manifest} names {entry.Name} at {full}, which does not exist.", full);
+                }
+                byName.Add(entry.Name, full);
+                assemblies.Add(full);
             }
         }
         return assemblies;
