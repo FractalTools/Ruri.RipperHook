@@ -398,6 +398,10 @@
     "Ruri.ComponentSpace.StructurePoolSC": { "fallback": "reserve" }
   },
   "ignoredFields": {
+    "GraphicsSettings": [
+      "m_LightsUseLinearIntensity",
+      "m_LightsUseColorTemperature"
+    ],
     "Mesh": [
       "serializedVersion",
       "m_IsReadable",
