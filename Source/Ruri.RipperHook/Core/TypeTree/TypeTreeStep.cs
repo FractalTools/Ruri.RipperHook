@@ -103,13 +103,17 @@ internal sealed class TypeTreeFilledFieldStep : TypeTreeFieldStep
 
 internal sealed class TypeTreeCaptureFieldStep : TypeTreeFieldStep
 {
-    public TypeTreeCaptureFieldStep(TypeTreeNode node, string path) : base(node, path)
+    private readonly TypeTreeOverrides.CapturedElementTailReader? readTail;
+
+    public TypeTreeCaptureFieldStep(TypeTreeNode node, string path, TypeTreeOverrides.CapturedElementTailReader? readTail)
+        : base(node, path)
     {
+        this.readTail = readTail;
     }
 
     protected override void ReadCore(object? owner, ref EndianSpanReader reader, TypeTreeReadContext context)
     {
-        context.Capture(Path, owner, TypeTreeCaptureReader.Read(Node, ref reader));
+        context.Capture(Path, owner, TypeTreeCaptureReader.Read(Node, ref reader, readTail));
     }
 }
 

@@ -6,7 +6,8 @@ namespace Ruri.RipperHook.Core.TypeTree;
 
 internal static class TypeTreeCaptureReader
 {
-    public static TypeTreeValue Read(TypeTreeNode node, ref EndianSpanReader reader)
+    public static TypeTreeValue Read(TypeTreeNode node, ref EndianSpanReader reader,
+        TypeTreeOverrides.CapturedElementTailReader? readTail = null)
     {
         switch (node.NodeType)
         {
@@ -14,16 +15,16 @@ internal static class TypeTreeCaptureReader
             {
                 TypeTreeNode arrayNode = node.SubNodes[0];
                 TypeTreeNode elementNode = arrayNode.SubNodes[1];
-                return ReadSequence(node, elementNode, node.AlignBytes || arrayNode.AlignBytes, ref reader);
+                return ReadSequence(node, elementNode, node.AlignBytes || arrayNode.AlignBytes, ref reader, readTail);
             }
             case TypeTreeNodeType.Array:
-                return ReadSequence(node, node.SubNodes[1], node.AlignBytes, ref reader);
+                return ReadSequence(node, node.SubNodes[1], node.AlignBytes, ref reader, readTail);
 
             case TypeTreeNodeType.Map:
             {
                 TypeTreeNode arrayNode = node.SubNodes[0];
                 TypeTreeNode pairNode = arrayNode.SubNodes[1];
-                return ReadSequence(node, pairNode, node.AlignBytes || arrayNode.AlignBytes, ref reader);
+                return ReadSequence(node, pairNode, node.AlignBytes || arrayNode.AlignBytes, ref reader, readTail);
             }
             case TypeTreeNodeType.TypelessData:
             {
@@ -94,9 +95,10 @@ internal static class TypeTreeCaptureReader
         }
     }
 
-    private static TypeTreeValue ReadSequence(TypeTreeNode node, TypeTreeNode elementNode, bool align, ref EndianSpanReader reader)
+    private static TypeTreeValue ReadSequence(TypeTreeNode node, TypeTreeNode elementNode, bool align,
+        ref EndianSpanReader reader, TypeTreeOverrides.CapturedElementTailReader? readTail)
     {
-        if (IsBulkByteElement(elementNode))
+        if (readTail is null && IsBulkByteElement(elementNode))
         {
             byte[] bytes = TypeTreePrimitives.ReadByteArray(ref reader);
             AlignIf(align, ref reader);
@@ -107,7 +109,9 @@ internal static class TypeTreeCaptureReader
         List<TypeTreeValue> items = new(Math.Min(count, 1024));
         for (int i = 0; i < count; i++)
         {
-            items.Add(Read(elementNode, ref reader));
+            TypeTreeValue item = Read(elementNode, ref reader);
+            readTail?.Invoke(item, ref reader);
+            items.Add(item);
         }
         AlignIf(align, ref reader);
         return TypeTreeValue.Sequence(node, items);

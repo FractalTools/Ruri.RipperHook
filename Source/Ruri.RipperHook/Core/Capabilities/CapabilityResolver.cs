@@ -73,10 +73,11 @@ public static class CapabilityResolver
             if (winner is null) continue;
 
             TypeTreePostReadAttribute attribute = slot.First(e => e.Method == winner).Attribute;
-            TypeTreeOverrides.RegisterPostRead(
-                attribute.ClassID,
-                winner.CreateDelegate<Action<TypeTreeReadContext>>(),
-                attribute.Captures);
+            if (attribute.CapturedElementTail.HasValue)
+            {
+                HookManager.RegisterCleanup(TypeTreeOverrides.Clear);
+            }
+            TypeTreeOverrides.RegisterPostRead(attribute, winner.CreateDelegate<Action<TypeTreeReadContext>>());
         }
     }
 

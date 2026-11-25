@@ -101,7 +101,12 @@ public sealed class TypeTreeReadPlan
 
     private static TypeTreeFieldStep BuildFieldStep(TypeTreeNode node, FieldInfo? field, ClassIDType classID, string path, bool strict)
     {
-        bool capture = TypeTreeOverrides.ShouldCapture(classID, path);
+        bool capture = TypeTreeOverrides.TryGetCapture(classID, path, out var readTail);
+        if (readTail is not null && (field is not null ||
+            node.NodeType is not (TypeTreeNodeType.Vector or TypeTreeNodeType.Array or TypeTreeNodeType.Map)))
+        {
+            throw new NotSupportedException($"[TypeTree] '{path}' must be an unbound sequence to read element tails.");
+        }
 
         if (field is null)
         {
@@ -110,7 +115,7 @@ public sealed class TypeTreeReadPlan
                 throw new NotSupportedException($"[TypeTree] '{path}' ({node.TypeName}) has no field in the serialized target.");
             }
             return capture
-                ? new TypeTreeCaptureFieldStep(node, path)
+                ? new TypeTreeCaptureFieldStep(node, path, readTail)
                 : new TypeTreeFilledFieldStep(node, path, null, new TypeTreeDiscardStep(node));
         }
 

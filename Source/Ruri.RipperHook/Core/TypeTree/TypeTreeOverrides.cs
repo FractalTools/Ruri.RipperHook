@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated;
 
 namespace Ruri.RipperHook.Core.TypeTree;
 
 public static class TypeTreeOverrides
 {
+    public delegate void CapturedElementTailReader(TypeTreeValue element, ref EndianSpanReader reader);
+
     private static readonly Dictionary<(ClassIDType ClassID, string Path), Func<TypeTreeReadContext, bool>> Gates = new();
     private static readonly Dictionary<(ClassIDType ClassID, string Path), Delegate> ValueFixes = new();
     private static readonly Dictionary<ClassIDType, List<Action<TypeTreeReadContext>>> PostReaders = new();
-    private static readonly HashSet<(ClassIDType ClassID, string Path)> Captures = new();
+    private static readonly Dictionary<(ClassIDType ClassID, string Path), CapturedElementTailReader?> Captures = new();
 
     public static int Revision { get; private set; }
 
@@ -38,6 +41,15 @@ public static class TypeTreeOverrides
         Revision++;
     }
 
+    internal static void RegisterPostRead(TypeTreePostReadAttribute attribute, Action<TypeTreeReadContext> postRead)
+    {
+        RegisterPostRead(attribute.ClassID, postRead, attribute.Captures);
+        if (attribute.CapturedElementTail is { } tail)
+        {
+            Captures[(attribute.ClassID, tail.Path)] = tail.Read;
+        }
+    }
+
     public static void Clear()
     {
         Gates.Clear();
@@ -53,7 +65,8 @@ public static class TypeTreeOverrides
     internal static Delegate? FindValueFix(ClassIDType classID, string path) =>
         ValueFixes.TryGetValue((classID, path), out Delegate? fix) ? fix : null;
 
-    internal static bool ShouldCapture(ClassIDType classID, string path) => Captures.Contains((classID, path));
+    internal static bool TryGetCapture(ClassIDType classID, string path, out CapturedElementTailReader? readTail) =>
+        Captures.TryGetValue((classID, path), out readTail);
 
     internal static IReadOnlyList<Action<TypeTreeReadContext>>? FindPostReaders(ClassIDType classID) =>
         PostReaders.TryGetValue(classID, out List<Action<TypeTreeReadContext>>? list) ? list : null;
@@ -62,7 +75,7 @@ public static class TypeTreeOverrides
     {
         for (int i = 0; i < captures.Count; i++)
         {
-            Captures.Add((classID, captures[i]));
+            Captures.TryAdd((classID, captures[i]), null);
         }
     }
 }
