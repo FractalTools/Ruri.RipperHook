@@ -7,17 +7,17 @@ internal static class MaterialDecoder
     public static ObjectValue? Decode(DecodeContext context)
     {
         ObjectValue material = new();
-        material.Add("SourceAsset", context.Pointer(context.Take("m_Shader"), "m_Shader"));
+        material.Add("sourceAsset", context.Pointer(context.Take("m_Shader"), "m_Shader"));
         if (context.Pointer(context.Take("m_Parent"), "m_Parent") is ReferenceValue { IsNull: false } parent)
         {
-            material.Add("BaseMaterial", parent);
+            material.Add("baseMaterial", parent);
         }
         List<string> keywords = new();
         AddTexts(keywords, context.Take("m_ValidKeywords"), "m_ValidKeywords");
         AddTexts(keywords, context.Take("m_InvalidKeywords"), "m_InvalidKeywords");
         if (keywords.Count > 0)
         {
-            material.Add("Keywords", EngineValues.Texts(keywords));
+            material.Add("keywordsValue", EngineValues.Texts(keywords));
         }
         if (YamlNodes.Items(context.Take("m_BuildTextureStacks"), "m_BuildTextureStacks").Count > 0)
         {
@@ -27,7 +27,7 @@ internal static class MaterialDecoder
         AddTexts(passes, context.Take("disabledShaderPasses"), "disabledShaderPasses");
         if (passes.Count > 0)
         {
-            material.Add("DisabledShaderPasses", EngineValues.Texts(passes));
+            material.Add("disabledShaderPasses", EngineValues.Texts(passes));
         }
         ReadProperties(context, material);
         return material;
@@ -43,26 +43,26 @@ internal static class MaterialDecoder
                 context.Ignored("m_SavedProperties." + entry.Key);
             }
         }
-        AddRows(material, "FloatInputs", Named(YamlNodes.Optional(saved, "m_Floats"), "m_Floats"), static (name, value, path) =>
+        AddRows(material, "floatInputs", Named(YamlNodes.Optional(saved, "m_Floats"), "m_Floats"), static (name, value, path) =>
         {
             ObjectValue row = Row(name);
-            row.Add("Value", ScalarValue.FromSingle((float)YamlNodes.Number(value, path)));
+            row.Add("value", ScalarValue.FromSingle((float)YamlNodes.Number(value, path)));
             return row;
         });
-        AddRows(material, "IntInputs", Named(YamlNodes.Optional(saved, "m_Ints"), "m_Ints"), static (name, value, path) =>
+        AddRows(material, "intInputs", Named(YamlNodes.Optional(saved, "m_Ints"), "m_Ints"), static (name, value, path) =>
         {
             ObjectValue row = Row(name);
-            row.Add("Value", ScalarValue.FromInteger(YamlNodes.Integer(value, path)));
+            row.Add("value", ScalarValue.FromInteger(YamlNodes.Integer(value, path)));
             return row;
         });
-        AddRows(material, "ColorInputs", Named(YamlNodes.Optional(saved, "m_Colors"), "m_Colors"), static (name, value, path) =>
+        AddRows(material, "colorInputs", Named(YamlNodes.Optional(saved, "m_Colors"), "m_Colors"), static (name, value, path) =>
         {
             (double R, double G, double B, double A) color = YamlNodes.Color(value, path);
             ObjectValue row = Row(name);
-            row.Add("Value", EngineValues.Vector4(color.R, color.G, color.B, color.A));
+            row.Add("value", EngineValues.Vector4(color.R, color.G, color.B, color.A));
             return row;
         });
-        AddRows(material, "TextureInputs", Named(YamlNodes.Optional(saved, "m_TexEnvs"), "m_TexEnvs"), (name, value, path) => TextureRow(context, name, value, path));
+        AddRows(material, "textureInputs", Named(YamlNodes.Optional(saved, "m_TexEnvs"), "m_TexEnvs"), (name, value, path) => TextureRow(context, name, value, path));
     }
 
     private static ObjectValue? TextureRow(DecodeContext context, string name, UnityYamlNode value, string path)
@@ -79,10 +79,10 @@ internal static class MaterialDecoder
         ObjectValue row = Row(name);
         if (hasFile)
         {
-            row.Add("File", file);
+            row.Add("file", file);
         }
-        row.Add("Scale", EngineValues.Vector2(scale.X, scale.Y));
-        row.Add("Translation", EngineValues.Vector2(offset.X, offset.Y));
+        row.Add("scale", EngineValues.Vector2(scale.X, scale.Y));
+        row.Add("translation", EngineValues.Vector2(offset.X, offset.Y));
         return row;
     }
 
@@ -105,7 +105,7 @@ internal static class MaterialDecoder
     private static ObjectValue Row(string name)
     {
         ObjectValue row = new();
-        row.Add("Name", ScalarValue.FromText(name));
+        row.Add("name", ScalarValue.FromText(name));
         return row;
     }
 

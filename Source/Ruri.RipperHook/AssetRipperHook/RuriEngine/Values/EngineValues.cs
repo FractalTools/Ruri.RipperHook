@@ -57,11 +57,11 @@ internal static class EngineValues
     public static ObjectValue Primvar(ArrayValue values, string interpolation, int elementSize = 1)
     {
         ObjectValue primvar = new();
-        primvar.Add("Values", values);
-        primvar.Add("Interpolation", ScalarValue.FromText(interpolation));
+        primvar.Add("values", values);
+        primvar.Add("interpolation", ScalarValue.FromText(interpolation));
         if (elementSize != 1)
         {
-            primvar.Add("ElementSize", ScalarValue.FromInteger(elementSize));
+            primvar.Add("elementSize", ScalarValue.FromInteger(elementSize));
         }
         return primvar;
     }

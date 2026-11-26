@@ -42,17 +42,17 @@ internal static class MeshDecoder
         }
 
         ObjectValue mesh = new();
-        mesh.Add("Extent", ReadExtent(context));
-        mesh.Add("Points", Mirrored(Vectors(vertices, PositionChannel)));
+        mesh.Add("extent", ReadExtent(context));
+        mesh.Add("points", Mirrored(Vectors(vertices, PositionChannel)));
         if (vertices.Has(NormalChannel))
         {
-            mesh.Add("Normals", Mirrored(Vectors(vertices, NormalChannel)));
+            mesh.Add("normals", Mirrored(Vectors(vertices, NormalChannel)));
         }
         if (vertices.Has(TangentChannel))
         {
             context.Unsupported("vertex tangents have no UsdGeom attribute and are regenerated from st and normals on import");
         }
-        mesh.Add("SubdivisionScheme", ScalarValue.FromText(NoSubdivision));
+        mesh.Add("subdivisionScheme", ScalarValue.FromText(NoSubdivision));
         ReadFaces(context, vertexCount, mesh);
         ReadColors(context, vertices, mesh);
         ReadTextureCoordinates(context, vertices, mesh);
@@ -179,8 +179,8 @@ internal static class MeshDecoder
             subsets.Add([.. Enumerable.Range(firstFace, faceCount)]);
         }
 
-        mesh.Add("FaceVertexCounts", EngineValues.Integers(counts));
-        mesh.Add("FaceVertexIndices", EngineValues.Integers(corners));
+        mesh.Add("faceVertexCounts", EngineValues.Integers(counts));
+        mesh.Add("faceVertexIndices", EngineValues.Integers(corners));
         if (subsets.Count <= 1)
         {
             return;
@@ -189,11 +189,11 @@ internal static class MeshDecoder
         foreach (int[] faces in subsets)
         {
             ObjectValue subset = new();
-            subset.Add("Indices", EngineValues.Integers(faces));
-            subset.Add("FamilyName", ScalarValue.FromText(MaterialBindFamily));
+            subset.Add("indices", EngineValues.Integers(faces));
+            subset.Add("familyName", ScalarValue.FromText(MaterialBindFamily));
             array.Items.Add(subset);
         }
-        mesh.Add("Subsets", array);
+        mesh.Add("subsets", array);
     }
 
     private static int ReadIndex(byte[] bytes, int size, int position)
@@ -226,10 +226,10 @@ internal static class MeshDecoder
                 opacity.Items.Add(ScalarValue.FromSingle(floats[offset + 3]));
             }
         }
-        mesh.Add("DisplayColor", EngineValues.Primvar(color, VertexInterpolation));
+        mesh.Add("displayColor", EngineValues.Primvar(color, VertexInterpolation));
         if (dimension > 3)
         {
-            mesh.Add("DisplayOpacity", EngineValues.Primvar(opacity, VertexInterpolation));
+            mesh.Add("displayOpacity", EngineValues.Primvar(opacity, VertexInterpolation));
         }
     }
 
@@ -254,7 +254,7 @@ internal static class MeshDecoder
             {
                 values.Items.Add(EngineValues.Vector2(floats[offset], floats[offset + 1]));
             }
-            mesh.Add(set == 0 ? "St" : "St" + set, EngineValues.Primvar(values, VertexInterpolation));
+            mesh.Add(set == 0 ? "st" : "st" + set, EngineValues.Primvar(values, VertexInterpolation));
         }
     }
 
@@ -270,11 +270,11 @@ internal static class MeshDecoder
             {
                 array.Items.Add(ScalarValue.FromInteger(hash));
             }
-            mesh.Add("BoneNameHashes", array);
+            mesh.Add("boneNameHashes", array);
         }
         if (rootHash != 0)
         {
-            mesh.Add("RootBoneNameHash", ScalarValue.FromInteger(rootHash));
+            mesh.Add("rootBoneNameHash", ScalarValue.FromInteger(rootHash));
         }
         if (bindPoses.Count > 0)
         {
@@ -284,7 +284,7 @@ internal static class MeshDecoder
                 double[] bindPose = YamlNodes.Matrix(bindPoses[index], $"m_BindPose[{index}]");
                 transforms.Items.Add(UsdMatrices.ToValue(UsdMatrices.ReflectX(UsdMatrices.Transpose(UsdMatrices.Invert(bindPose)))));
             }
-            mesh.Add("BindTransforms", transforms);
+            mesh.Add("bindTransforms", transforms);
         }
         if (!vertices.Has(BlendWeightChannel) || !vertices.Has(BlendIndicesChannel))
         {
@@ -295,8 +295,8 @@ internal static class MeshDecoder
         {
             throw new FormatException("blend weight and blend index channels differ in dimension");
         }
-        mesh.Add("JointWeights", EngineValues.Primvar(EngineValues.Singles(vertices.Floats(BlendWeightChannel)), VertexInterpolation, dimension));
-        mesh.Add("JointIndices", EngineValues.Primvar(EngineValues.Integers(vertices.Integers(BlendIndicesChannel)), VertexInterpolation, dimension));
+        mesh.Add("jointWeights", EngineValues.Primvar(EngineValues.Singles(vertices.Floats(BlendWeightChannel)), VertexInterpolation, dimension));
+        mesh.Add("jointIndices", EngineValues.Primvar(EngineValues.Integers(vertices.Integers(BlendIndicesChannel)), VertexInterpolation, dimension));
     }
 
     private static void ReadBlendShapes(DecodeContext context, ObjectValue mesh)
@@ -323,7 +323,7 @@ internal static class MeshDecoder
                 shapes.Items.Add(ReadBlendShapeFrame(context, vertexNodes, shapeNodes, weights, name, frame));
             }
         }
-        mesh.Add("BlendShapes", shapes);
+        mesh.Add("blendShapes", shapes);
     }
 
     private static ObjectValue ReadBlendShapeFrame(DecodeContext context, IReadOnlyList<UnityYamlNode> vertexNodes, IReadOnlyList<UnityYamlNode> shapeNodes, float[] weights, string name, int frame)
@@ -363,14 +363,14 @@ internal static class MeshDecoder
         }
 
         ObjectValue result = new();
-        result.Add("SourceName", ScalarValue.FromText(name));
-        result.Add("FrameWeight", ScalarValue.FromSingle(weights[frame]));
-        result.Add("Offsets", offsets);
+        result.Add("sourceName", ScalarValue.FromText(name));
+        result.Add("frameWeight", ScalarValue.FromSingle(weights[frame]));
+        result.Add("offsets", offsets);
         if (hasNormals)
         {
-            result.Add("NormalOffsets", normalOffsets);
+            result.Add("normalOffsets", normalOffsets);
         }
-        result.Add("PointIndices", pointIndices);
+        result.Add("pointIndices", pointIndices);
         return result;
     }
 }
