@@ -1,6 +1,8 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection.PortableExecutable;
 using Cpp2IL.Core.Model.Contexts;
 using LibCpp2IL;
 
@@ -13,10 +15,6 @@ namespace Ruri.RipperHook.AR;
 internal sealed class Il2CppFunctionTable
 {
     private const int EntrySize = 12;
-    private const int ExceptionDirectoryIndex = 3;
-    private const int DirectoriesOffset = 112;
-    private const int HeaderBytes = 4096;
-    private const int SectionHeaderSize = 40;
     private const byte ChainedUnwind = 4;
     private const int UnwindHeaderSize = 4;
     private const int ChainDepth = 8;
@@ -157,64 +155,35 @@ internal sealed class Il2CppFunctionTable
 
     private static Il2CppFunctionTable Build(Il2CppBinary binary)
     {
-        Il2CppFunctionTable empty = new(0, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>());
-        long length = Math.Min(binary.RawLength, HeaderBytes);
-        if (length < 0x200)
+        if (binary is not LibCpp2IL.PE.PE image)
         {
-            return empty;
+            return new Il2CppFunctionTable(0, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>());
         }
-        byte[] header = binary.ReadByteArrayAtRawAddress(0, (int)length);
-        if (header[0] != (byte)'M' || header[1] != (byte)'Z')
+        PEHeaders headers;
+        using (Stream stream = image.ToStream())
         {
-            return empty;
+            headers = new PEHeaders(stream);
         }
-        int pe = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0x3C));
-        if (pe <= 0 || pe + 24 > header.Length || header[pe] != (byte)'P' || header[pe + 1] != (byte)'E')
+        PEHeader header = headers.PEHeader;
+        ulong imageBase = header.ImageBase;
+        Section[] sections = new Section[headers.SectionHeaders.Length];
+        for (int index = 0; index < sections.Length; index++)
         {
-            return empty;
+            SectionHeader section = headers.SectionHeaders[index];
+            ulong available = (ulong)Math.Max(0L, Math.Min((long)section.SizeOfRawData, binary.RawLength - section.PointerToRawData));
+            ulong size = Math.Min(section.VirtualSize == 0 ? (ulong)section.SizeOfRawData : (ulong)section.VirtualSize, available);
+            ulong start = imageBase + (ulong)section.VirtualAddress;
+            sections[index] = new Section(start, start + size, section.PointerToRawData,
+                (section.SectionCharacteristics & SectionCharacteristics.MemExecute) != 0,
+                (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0);
         }
-        int optional = pe + 24;
-        ushort magic = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(optional));
-        if (magic is not (0x20b or 0x10b))
+        DirectoryEntry exceptions = header.ExceptionTableDirectory;
+        if (header.Magic != PEMagic.PE32Plus || exceptions.Size < EntrySize || !headers.TryGetDirectoryOffset(exceptions, out int tableRaw))
         {
-            return empty;
-        }
-        ulong imageBase = magic == 0x20b
-            ? BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(optional + 24))
-            : BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(optional + 28));
-        int sectionCount = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(pe + 6));
-        int sectionTable = optional + BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(pe + 20));
-        byte[] sectionHeaders = binary.ReadByteArrayAtRawAddress(sectionTable, sectionCount * SectionHeaderSize);
-        Section[] sections = new Section[sectionCount];
-        for (int index = 0; index < sectionCount; index++)
-        {
-            ReadOnlySpan<byte> section = sectionHeaders.AsSpan(index * SectionHeaderSize, SectionHeaderSize);
-            uint virtualSize = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(8));
-            uint virtualAddress = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(12));
-            uint rawSize = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(16));
-            uint rawOffset = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(20));
-            uint flags = BinaryPrimitives.ReadUInt32LittleEndian(section.Slice(36));
-            ulong available = (ulong)Math.Max(0L, Math.Min((long)rawSize, binary.RawLength - rawOffset));
-            ulong size = Math.Min(virtualSize == 0 ? rawSize : virtualSize, available);
-            sections[index] = new Section(imageBase + virtualAddress, imageBase + virtualAddress + size,
-                rawOffset, (flags & 0x20000000) != 0, (flags & 0x80000000) != 0);
-        }
-        empty = new Il2CppFunctionTable(imageBase, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>(), sections);
-        if (magic != 0x20b)
-            return empty;
-        int directory = optional + DirectoriesOffset + ExceptionDirectoryIndex * 8;
-        if (directory + 8 > header.Length)
-        {
-            return empty;
-        }
-        uint tableRva = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(directory));
-        uint tableSize = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(directory + 4));
-        if (tableRva == 0 || tableSize < EntrySize || !binary.TryMapVirtualAddressToRaw(imageBase + tableRva, out long tableRaw))
-        {
-            return empty;
+            return new Il2CppFunctionTable(imageBase, Array.Empty<ulong>(), Array.Empty<ulong>(), Array.Empty<ulong>(), sections);
         }
 
-        byte[] table = binary.ReadByteArrayAtRawAddress(tableRaw, (int)tableSize);
+        byte[] table = binary.ReadByteArrayAtRawAddress(tableRaw, exceptions.Size);
         int count = table.Length / EntrySize;
         ulong[] begin = new ulong[count];
         ulong[] end = new ulong[count];

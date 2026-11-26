@@ -49,9 +49,6 @@ internal static class Il2CppX86Listing
     internal static string Describe(Exception exception) =>
         $"{exception.GetType().Name} in {exception.TargetSite?.DeclaringType?.Name}.{exception.TargetSite?.Name}: {exception.Message}";
 
-    public static string Render(ApplicationAnalysisContext app, MethodAnalysisContext method, bool withAddresses = false,
-        bool withChunks = false) => Render(app, method, Decode(app, method, withChunks), withAddresses);
-
     public static string Render(ApplicationAnalysisContext app, MethodAnalysisContext method, Il2CppNativeBody body,
         bool withAddresses = true)
     {
@@ -62,17 +59,10 @@ internal static class Il2CppX86Listing
         return Format(app, body, flow, withAddresses);
     }
 
-    /// <summary>The code between two addresses as text, with no method behind it to say what its registers hold: a
-    /// runtime helper, a thunk, any function a call lands in.</summary>
-    public static string RenderRange(ApplicationAnalysisContext app, ulong start, ulong end, bool withAddresses = true,
-        bool withChunks = true)
-        => Format(app, DecodeRange(app, start, end, withChunks), null, withAddresses);
-
+    /// <summary>The code of a body with no method behind it to say what its registers hold: a runtime helper, a
+    /// thunk, any function a call lands in.</summary>
     public static string RenderRange(ApplicationAnalysisContext app, Il2CppNativeBody body, bool withAddresses = true) =>
         Format(app, body, null, withAddresses);
-
-    public static ulong FindEnd(ApplicationAnalysisContext app, ulong start, int limit = 0x4000) =>
-        Il2CppNativeBody.Read(app, start, withChunks: false, limit: limit).PrimaryEnd;
 
     private static string Format(ApplicationAnalysisContext app, Il2CppNativeBody body, Il2CppRegisterFlow flow, bool withAddresses)
     {
