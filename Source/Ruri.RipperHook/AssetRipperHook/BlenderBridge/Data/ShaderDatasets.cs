@@ -156,12 +156,13 @@ public static class ShaderDatasets
             string name = stated.Length > 0 ? stated : shader.GetBestName();
             if (!_written.TryGetValue(shader, out string? file))
             {
-                Directory.CreateDirectory(_outputDir);
-                file = Path.Combine(_outputDir, Readable(name) + ".shader");
+                string relative = RelativePath(name);
+                file = Path.Combine(_outputDir, relative + ".shader");
                 for (int copy = 2; !_taken.Add(file); copy++)
                 {
-                    file = Path.Combine(_outputDir, Readable(name) + "_" + copy + ".shader");
+                    file = Path.Combine(_outputDir, relative + "_" + copy + ".shader");
                 }
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
                 {
                     return;
@@ -174,9 +175,26 @@ public static class ShaderDatasets
 
         public ColumnTable Build() => _table.Build();
 
-        private static string Readable(string name)
+        /// <summary>A shader's ShaderLab name is its addressable path; its '/' segments are kept as folders so the
+        /// path survives whole, each segment stripped only of the characters a file name cannot hold. Empty, '.'
+        /// and '..' segments are dropped so the result stays a relative path under the output directory.</summary>
+        private static string RelativePath(string name)
         {
-            char[] made = name.ToCharArray();
+            List<string> segments = [];
+            foreach (string part in name.Split('/', '\\'))
+            {
+                string segment = Readable(part);
+                if (segment.Length != 0 && segment is not ("." or ".."))
+                {
+                    segments.Add(segment);
+                }
+            }
+            return segments.Count == 0 ? "shader" : Path.Combine([.. segments]);
+        }
+
+        private static string Readable(string segment)
+        {
+            char[] made = segment.ToCharArray();
             char[] bad = Path.GetInvalidFileNameChars();
             for (int index = 0; index < made.Length; index++)
             {
@@ -185,8 +203,7 @@ public static class ShaderDatasets
                     made[index] = '_';
                 }
             }
-            string readable = new string(made).Trim();
-            return readable.Length == 0 ? "shader" : readable;
+            return new string(made).Trim();
         }
     }
 }
