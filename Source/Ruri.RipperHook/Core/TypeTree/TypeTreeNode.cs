@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AssetRipper.IO.Files.SerializedFiles;
+using AssetRipper.SourceGenerated;
 using AssetRipper.Tpk.Shared;
 using AssetRipper.Tpk.TypeTrees;
 
@@ -83,31 +84,28 @@ public sealed class TypeTreeNode
             (TransferMetaFlags)node.MetaFlag, subNodes);
     }
 
-    internal static TypeTreeNode FromSerialized(AssetRipper.Import.Structure.Assembly.TypeTrees.TypeTreeNodeStruct node, string? parentType = null)
+    /// <summary>
+    /// A tree as a serialized file spells it, its fields named the way the packed trees name them
+    /// (see <see cref="TypeTreeDatabase.GetFieldName"/>).
+    /// </summary>
+    internal static TypeTreeNode FromSerialized(AssetRipper.Import.Structure.Assembly.TypeTrees.TypeTreeNodeStruct node,
+        ClassIDType classID, bool editor) =>
+        FromSerialized(node, classID, editor, null, "");
+
+    private static TypeTreeNode FromSerialized(AssetRipper.Import.Structure.Assembly.TypeTrees.TypeTreeNodeStruct node,
+        ClassIDType classID, bool editor, string? parentType, string path)
     {
-        TypeTreeNode[] subNodes = new TypeTreeNode[node.SubNodes.Count];
+        TypeTreeNode[] subNodes = node.SubNodes.Count == 0 ? NoSubNodes : new TypeTreeNode[node.SubNodes.Count];
         for (int i = 0; i < subNodes.Length; i++)
         {
-            subNodes[i] = FromSerialized(node.SubNodes[i], node.TypeName);
+            AssetRipper.Import.Structure.Assembly.TypeTrees.TypeTreeNodeStruct child = node.SubNodes[i];
+            subNodes[i] = FromSerialized(child, classID, editor, node.TypeName, path.Length == 0 ? child.Name : path + "/" + child.Name);
         }
 
-        string fieldName = TypeTreeNameFixer.GetValidFieldName(node.Name);
-        if (parentType is not null && parentType.StartsWith("PPtr<", StringComparison.Ordinal)
-            && fieldName is "m_FileID" or "m_PathID")
-        {
-            fieldName += "_";
-        }
-        else if (fieldName == "m_ObjectHideFlags")
-        {
-            fieldName = "m_HideFlags";
-        }
-        else if (parentType == "ComputeShaderPlatformVariant" && fieldName == "m_Kernels")
-        {
-            fieldName = "m_KernelParents";
-        }
-
-        string typeName = node.TypeName == "ComputeShaderPlatformVariant" ? "ComputeShaderVariant" : node.TypeName;
-        return Normalize(typeName, node.Name, node.Version, node.MetaFlag, subNodes, fieldName);
+        string? fieldName = parentType is null
+            ? null
+            : TypeTreeDatabase.GetFieldName(classID, editor, path, parentType, node.Name, node.TypeName);
+        return Normalize(node.TypeName, node.Name, node.Version, node.MetaFlag, subNodes, fieldName);
     }
 
     private static TypeTreeNode Normalize(string typeName, string originalName, int version,

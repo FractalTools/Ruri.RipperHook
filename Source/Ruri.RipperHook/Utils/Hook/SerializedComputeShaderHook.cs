@@ -54,7 +54,8 @@ public sealed class SerializedComputeShaderHook : CommonHook, IHookModule
         }
 
         IComputeShader asset = (IComputeShader)AssetFactory.CreateSerialized(assetInfo, assetInfo.Collection.Version)!;
-        TypeTreeReadPlan plan = TypeTreeReadPlan.Create(ClassIDType.ComputeShader, asset.GetType(), TypeTreeNode.FromSerialized(root));
+        TypeTreeReadPlan plan = TypeTreeReadPlan.Create(ClassIDType.ComputeShader, asset.GetType(),
+            TypeTreeNode.FromSerialized(root, ClassIDType.ComputeShader, !assetInfo.Collection.Flags.IsRelease()));
         EndianSpanReader reader = new(assetData, assetInfo.Collection.EndianType);
         plan.Read(asset, ref reader);
         if (reader.Position != reader.Length)

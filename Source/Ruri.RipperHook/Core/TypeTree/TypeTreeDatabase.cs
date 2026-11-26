@@ -24,6 +24,7 @@ public static class TypeTreeDatabase
 
     private static TypeTreeManifest? _manifest;
     private static Dictionary<string, Lineage>? _lineages;
+    private static FieldNames? _fieldNames;
     private static string _origin = "<unloaded>";
 
     private sealed class Lineage
@@ -91,6 +92,7 @@ public static class TypeTreeDatabase
             _manifest!.Lineages.RemoveAll(existing => existing.Key == key);
             _manifest.Lineages.Add(entry);
             _manifest.Invalidate();
+            _fieldNames = null;
         }
         foreach (var cached in ReleaseRootCache.Keys.Where(cacheKey => cacheKey.Lineage == key).ToArray())
         {
@@ -186,6 +188,121 @@ public static class TypeTreeDatabase
         }
 
         return FindRoot((int)classID, version.Lineage, version.Version, editor, unityNames: true);
+    }
+
+    /// <summary>
+    /// The field name AssetRipper's renaming pass gives a node that a serialized tree of class <paramref name="classID"/>
+    /// spells <paramref name="name"/>, of type <paramref name="type"/>, at <paramref name="path"/> (the spelled names from
+    /// the root, joined by '/') under a node of type <paramref name="parentType"/>. The packed lineages hold every tree both
+    /// as the engine spells it and as that pass rewrote it, node for node, so the name is read off them: by the node's
+    /// place in its class first, else by its parent's type. Null where no packed tree holds such a node; a node the packed
+    /// trees name two ways both at its place and under its parent's type throws.
+    /// </summary>
+    public static string? GetFieldName(ClassIDType classID, bool editor, string path, string parentType, string name, string type)
+    {
+        FieldNames names = Volatile.Read(ref _fieldNames) ?? BuildFieldNames();
+        if (names.ByPath.TryGetValue((editor, (int)classID, path, type), out string? placed) && placed is not null)
+        {
+            return placed;
+        }
+        if (!names.ByParent.TryGetValue((editor, parentType, name, type), out string? fieldName))
+        {
+            return null;
+        }
+        return fieldName ?? throw new NotSupportedException(
+            $"[TypeTreeDatabase] {type} {path} of {classID} is renamed two ways across the packed trees of {_origin}.");
+    }
+
+    private sealed class FieldNames
+    {
+        public readonly Dictionary<(bool Editor, int ClassID, string Path, string Type), string?> ByPath = new();
+        public readonly Dictionary<(bool Editor, string Parent, string Name, string Type), string?> ByParent = new();
+
+        public static void Record<TKey>(Dictionary<TKey, string?> names, TKey key, string fieldName) where TKey : notnull
+        {
+            if (!names.TryAdd(key, fieldName) && names[key] != fieldName)
+            {
+                names[key] = null;
+            }
+        }
+    }
+
+    private static FieldNames BuildFieldNames()
+    {
+        EnsureLoaded();
+        lock (SyncRoot)
+        {
+            if (_fieldNames is not null)
+            {
+                return _fieldNames;
+            }
+            FieldNames names = new();
+            HashSet<(TpkTypeTreeBlob Blob, int ClassID, string Path, ushort Unity, ushort Renamed, bool Editor)> walked = new();
+            foreach (Lineage lineage in _lineages!.Values)
+            {
+                foreach ((int id, (TpkClassInformation Class, TpkTypeTreeBlob Blob) renamed) in lineage.ClassesById)
+                {
+                    if (!lineage.UnityClassesById.TryGetValue(id, out (TpkClassInformation Class, TpkTypeTreeBlob Blob) unity)
+                        || ReferenceEquals(unity.Blob, renamed.Blob))
+                    {
+                        continue;
+                    }
+                    List<KeyValuePair<UnityVersion, TpkUnityClass?>> unityClasses = unity.Class.Classes;
+                    List<KeyValuePair<UnityVersion, TpkUnityClass?>> renamedClasses = renamed.Class.Classes;
+                    if (unityClasses.Count != renamedClasses.Count)
+                    {
+                        throw new InvalidDataException(
+                            $"[TypeTreeDatabase] Class {id} has {unityClasses.Count} spelled and {renamedClasses.Count} renamed versions in {_origin}. Repack it with Ruri.Tpk.");
+                    }
+                    for (int i = 0; i < unityClasses.Count; i++)
+                    {
+                        if (unityClasses[i].Value is not { } unityClass || renamedClasses[i].Value is not { } renamedClass)
+                        {
+                            continue;
+                        }
+                        if ((unityClass.Flags & TpkUnityClassFlags.HasEditorRootNode) != 0)
+                        {
+                            WalkFieldNames(names, walked, id, "", unity.Blob, unityClass.EditorRootNode, renamed.Blob, renamedClass.EditorRootNode, true);
+                        }
+                        if ((unityClass.Flags & TpkUnityClassFlags.HasReleaseRootNode) != 0)
+                        {
+                            WalkFieldNames(names, walked, id, "", unity.Blob, unityClass.ReleaseRootNode, renamed.Blob, renamedClass.ReleaseRootNode, false);
+                        }
+                    }
+                }
+            }
+            Volatile.Write(ref _fieldNames, names);
+            return names;
+        }
+    }
+
+    private static void WalkFieldNames(FieldNames names,
+        HashSet<(TpkTypeTreeBlob Blob, int ClassID, string Path, ushort Unity, ushort Renamed, bool Editor)> walked, int classID,
+        string path, TpkTypeTreeBlob unityBlob, ushort unityIndex, TpkTypeTreeBlob renamedBlob, ushort renamedIndex, bool editor)
+    {
+        if (!walked.Add((unityBlob, classID, path, unityIndex, renamedIndex, editor)))
+        {
+            return;
+        }
+        TpkUnityNode unity = unityBlob.NodeBuffer[unityIndex];
+        TpkUnityNode renamed = renamedBlob.NodeBuffer[renamedIndex];
+        if (unity.SubNodes.Length != renamed.SubNodes.Length)
+        {
+            throw new InvalidDataException(
+                $"[TypeTreeDatabase] {unityBlob.StringBuffer[unity.TypeName]} has {unity.SubNodes.Length} spelled and {renamed.SubNodes.Length} renamed children in {_origin}. Repack it with Ruri.Tpk.");
+        }
+        string parent = unityBlob.StringBuffer[unity.TypeName];
+        for (int i = 0; i < unity.SubNodes.Length; i++)
+        {
+            TpkUnityNode child = unityBlob.NodeBuffer[unity.SubNodes[i]];
+            string name = unityBlob.StringBuffer[child.Name];
+            string type = unityBlob.StringBuffer[child.TypeName];
+            string childPath = path.Length == 0 ? name : path + "/" + name;
+            string fieldName = renamedBlob.StringBuffer[renamedBlob.NodeBuffer[renamed.SubNodes[i]].Name];
+            FieldNames.Record(names.ByPath, (editor, classID, childPath, type), fieldName);
+            FieldNames.Record(names.ByParent, (editor, parent, name, type), fieldName);
+            WalkFieldNames(names, walked, classID, childPath, unityBlob, unity.SubNodes[i], renamedBlob, renamed.SubNodes[i], editor);
+        }
     }
 
     private static TypeTreeNode? BuildRoot(int classID, string lineageKey, string versionKey, bool editor) =>
