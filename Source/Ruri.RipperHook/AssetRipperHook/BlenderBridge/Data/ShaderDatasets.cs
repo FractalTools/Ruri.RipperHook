@@ -1,10 +1,13 @@
 ﻿using AssetRipper.Assets;
+using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Files;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_21;
+using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
+using AssetRipper.SourceGenerated.Subclasses.AssetInfo;
 using Ruri.RipperHook.CabMapping;
 using Ruri.RipperHook.BlenderBridge.Statements;
 using Ruri.RipperHook.BlenderBridge.Tables;
@@ -84,13 +87,13 @@ public static class ShaderDatasets
     {
         string output = request.Text(Output);
         ArgumentException.ThrowIfNullOrWhiteSpace(output);
-        ShaderWriter writer = new(output, ShadersId);
         GameData? loaded = ClosureReader.Read(request.Map, StatementSources.Archives(request.List(Seed), request.Map),
             reachThroughDependents: true);
         if (loaded is null)
         {
-            return writer.Build();
+            return new ShaderWriter(output, ShadersId, EmptyPaths).Build();
         }
+        ShaderWriter writer = new(output, ShadersId, ContainerPaths(loaded));
         foreach (IUnityObjectBase asset in loaded.GameBundle.FetchAssets())
         {
             request.Cancellation.ThrowIfCancellationRequested();
@@ -106,7 +109,6 @@ public static class ShaderDatasets
     {
         string output = request.Text(Output);
         ArgumentException.ThrowIfNullOrWhiteSpace(output);
-        ShaderWriter writer = new(output, AllShadersId);
         CabTable map = request.Map;
         List<string> cabs = [];
         for (int id = 0; id < map.Count; id++)
@@ -119,8 +121,9 @@ public static class ShaderDatasets
         GameData? loaded = ClosureReader.Read(map, cabs);
         if (loaded is null)
         {
-            return writer.Build();
+            return new ShaderWriter(output, AllShadersId, EmptyPaths).Build();
         }
+        ShaderWriter writer = new(output, AllShadersId, ContainerPaths(loaded));
         foreach (IUnityObjectBase asset in loaded.GameBundle.FetchAssets())
         {
             request.Cancellation.ThrowIfCancellationRequested();
@@ -132,18 +135,51 @@ public static class ShaderDatasets
         return writer.Build();
     }
 
+    private static readonly IReadOnlyDictionary<IUnityObjectBase, string> EmptyPaths =
+        new Dictionary<IUnityObjectBase, string>(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Each asset's addressable path, as its asset bundle files it: the m_Container key that points at it,
+    /// read straight from the bundle so it does not depend on which export layout the processing chose. An asset
+    /// filed under more than one path keeps the shortest, the way AssetRipper's own path processor does.</summary>
+    private static IReadOnlyDictionary<IUnityObjectBase, string> ContainerPaths(GameData loaded)
+    {
+        Dictionary<IUnityObjectBase, string> paths = new(ReferenceEqualityComparer.Instance);
+        foreach (IUnityObjectBase asset in loaded.GameBundle.FetchAssets())
+        {
+            if (asset is not IAssetBundle bundle)
+            {
+                continue;
+            }
+            foreach (AccessPairBase<AssetRipper.Primitives.Utf8String, IAssetInfo> entry in bundle.Container)
+            {
+                if (entry.Value.Asset.FileID != 0 || entry.Value.Asset.TryGetAsset(bundle.Collection) is not { } target)
+                {
+                    continue;
+                }
+                string path = entry.Key.String;
+                if (path.Length != 0 && (!paths.TryGetValue(target, out string? held) || path.Length < held.Length))
+                {
+                    paths[target] = path;
+                }
+            }
+        }
+        return paths;
+    }
+
     /// <summary>One shader per file, one row per reason it was asked for; a shader reached
     /// twice is written once and named once.</summary>
     private sealed class ShaderWriter
     {
         private readonly Dictionary<IShader, string> _written = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<string> _taken = new(StringComparer.OrdinalIgnoreCase);
+        private readonly IReadOnlyDictionary<IUnityObjectBase, string> _containerPaths;
         private readonly TableBuilder _table;
         private readonly string _outputDir;
 
-        public ShaderWriter(string outputDir, string id)
+        public ShaderWriter(string outputDir, string id, IReadOnlyDictionary<IUnityObjectBase, string> containerPaths)
         {
             _outputDir = outputDir;
+            _containerPaths = containerPaths;
             _table = new TableBuilder(id, "material|Material", "name|Shader", "keywords|Variant", "file|File", "bytes#|Size", "cab|Cab");
             _table.Role(ColumnRole.Label, "name").Role(ColumnRole.Detail, "keywords").Role(ColumnRole.Group, "material");
         }
@@ -156,12 +192,14 @@ public static class ShaderDatasets
             string name = stated.Length > 0 ? stated : shader.GetBestName();
             if (!_written.TryGetValue(shader, out string? file))
             {
-                Directory.CreateDirectory(_outputDir);
-                file = Path.Combine(_outputDir, Readable(name) + ".shader");
+                string relative = ContainerRelative(shader, name);
+                string stem = relative.EndsWith(".shader", StringComparison.OrdinalIgnoreCase) ? relative[..^".shader".Length] : relative;
+                file = Path.Combine(_outputDir, stem + ".shader");
                 for (int copy = 2; !_taken.Add(file); copy++)
                 {
-                    file = Path.Combine(_outputDir, Readable(name) + "_" + copy + ".shader");
+                    file = Path.Combine(_outputDir, stem + "_" + copy + ".shader");
                 }
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 if (!AR.ShaderContentExtractor.Instance.Export(shader, file, LocalFileSystem.Instance))
                 {
                     return;
@@ -174,9 +212,34 @@ public static class ShaderDatasets
 
         public ColumnTable Build() => _table.Build();
 
-        private static string Readable(string name)
+        /// <summary>The addressable path the bundle files this shader under (assets/.../x.shader, the m_Container
+        /// key), kept whole as folders so it survives, each segment stripped only of characters a file name cannot
+        /// hold. A shader no bundle files under a path (an engine/shared shader) falls back to its own name,
+        /// flattened, in the output root.</summary>
+        private string ContainerRelative(IShader shader, string name)
         {
-            char[] made = name.ToCharArray();
+            string container = (_containerPaths.GetValueOrDefault(shader) ?? string.Empty).Replace('\\', '/');
+            List<string> segments = [];
+            foreach (string part in container.Split('/'))
+            {
+                string segment = Sanitize(part);
+                if (segment.Length != 0 && segment is not ("." or ".."))
+                {
+                    segments.Add(segment);
+                }
+            }
+            return segments.Count == 0 ? Flatten(name) : Path.Combine([.. segments]);
+        }
+
+        private static string Flatten(string name)
+        {
+            string flattened = Sanitize(name.Replace('/', '_').Replace('\\', '_'));
+            return flattened.Length == 0 ? "shader" : flattened;
+        }
+
+        private static string Sanitize(string segment)
+        {
+            char[] made = segment.ToCharArray();
             char[] bad = Path.GetInvalidFileNameChars();
             for (int index = 0; index < made.Length; index++)
             {
@@ -185,8 +248,7 @@ public static class ShaderDatasets
                     made[index] = '_';
                 }
             }
-            string readable = new string(made).Trim();
-            return readable.Length == 0 ? "shader" : readable;
+            return new string(made).Trim();
         }
     }
 }
