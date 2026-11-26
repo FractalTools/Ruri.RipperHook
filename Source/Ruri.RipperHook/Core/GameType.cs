@@ -34,4 +34,5 @@ public enum GameType
     HoneyCome,
     SamabakeScramble,
     UnrealEngine,
+    VRChat,
 }
