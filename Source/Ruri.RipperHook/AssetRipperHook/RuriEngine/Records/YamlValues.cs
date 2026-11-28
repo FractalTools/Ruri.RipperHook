@@ -9,6 +9,8 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
     private const string GuidKey = "guid";
     private const string TypeKey = "type";
     private const int SelfFileIndex = 0;
+    private const string PersistentCallsKey = "m_PersistentCalls";
+    private const string CallsKey = "m_Calls";
 
     public ObjectValue Read(UnityYamlMapping body)
     {
@@ -17,30 +19,31 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
         {
             if (!mapping.IsBookkeeping(entry.Key))
             {
-                result.Add(entry.Key, Read(entry.Value, entry.Key));
+                result.Add(entry.Key, Read(entry.Value, entry.Key, false));
             }
         }
         return result;
     }
 
-    private Value Read(UnityYamlNode node, string path)
+    private Value Read(UnityYamlNode node, string path, bool engineStructure)
     {
         switch (node)
         {
             case UnityYamlMapping map when IsPointer(map):
                 return Pointer(map, path);
             case UnityYamlMapping map:
+                bool stripPrefix = engineStructure || IsUnityEvent(map);
                 ObjectValue entity = new();
                 foreach (KeyValuePair<string, UnityYamlNode> entry in map.Entries)
                 {
-                    entity.Add(entry.Key, Read(entry.Value, $"{path}.{entry.Key}"));
+                    entity.Add(stripPrefix ? mapping.StripPrefix(entry.Key) : entry.Key, Read(entry.Value, $"{path}.{entry.Key}", stripPrefix));
                 }
                 return entity;
             case UnityYamlSequence sequence:
                 ArrayValue array = new();
                 foreach (UnityYamlNode item in sequence.Items)
                 {
-                    array.Items.Add(Read(item, path + "[]"));
+                    array.Items.Add(Read(item, path + "[]", engineStructure));
                 }
                 return array;
             case UnityYamlScalar scalar:
@@ -48,6 +51,11 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
             default:
                 throw new NotSupportedException($"{path}: {node.GetType().Name} has no record value form.");
         }
+    }
+
+    private static bool IsUnityEvent(UnityYamlMapping map)
+    {
+        return map.Entries is [{ Key: PersistentCallsKey, Value: UnityYamlMapping { Entries: [{ Key: CallsKey }] } }];
     }
 
     private static bool IsPointer(UnityYamlMapping map)
