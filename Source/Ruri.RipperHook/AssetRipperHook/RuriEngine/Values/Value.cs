@@ -56,7 +56,7 @@ internal enum ScalarKind
 
 internal sealed class ScalarValue : Value
 {
-    private ScalarValue(ScalarKind kind, long signed, ulong unsigned, double floating, string text, byte[] bytes)
+    private ScalarValue(ScalarKind kind, long signed, ulong unsigned, double floating, string text, byte[] bytes, string? source = null)
     {
         Kind = kind;
         Signed = signed;
@@ -64,6 +64,7 @@ internal sealed class ScalarValue : Value
         Floating = floating;
         Text = text;
         Bytes = bytes;
+        Source = source;
     }
 
     public ScalarKind Kind { get; }
@@ -77,6 +78,8 @@ internal sealed class ScalarValue : Value
     public string Text { get; }
 
     public byte[] Bytes { get; }
+
+    public string? Source { get; }
 
     public bool IsNumber => Kind is ScalarKind.Integer or ScalarKind.Unsigned or ScalarKind.Single or ScalarKind.Double;
 
@@ -98,6 +101,8 @@ internal sealed class ScalarValue : Value
 
     public static ScalarValue FromBytes(byte[] value) => new(ScalarKind.Bytes, 0, 0, 0, string.Empty, value);
 
+    public ScalarValue WithSource(string source) => new(Kind, Signed, Unsigned, Floating, Text, Bytes, source);
+
     public bool AsBoolean => Kind == ScalarKind.Boolean ? Signed != 0 : Signed != 0 || Unsigned != 0;
 
     public double AsDouble => Kind switch
@@ -110,20 +115,34 @@ internal sealed class ScalarValue : Value
 
 internal sealed class ReferenceValue : Value
 {
-    public ReferenceValue(long fileId, string? guid, int type)
+    private ReferenceValue(Guid target, long fileId)
     {
+        Target = target;
         FileId = fileId;
-        Guid = guid;
-        Type = type;
     }
+
+    public static ReferenceValue Null { get; } = new(Guid.Empty, 0);
+
+    public Guid Target { get; }
 
     public long FileId { get; }
 
-    public string? Guid { get; }
+    public string ComponentType { get; private init; } = string.Empty;
 
-    public int Type { get; }
+    public bool IsNull => Target == Guid.Empty;
 
-    public bool IsNull => FileId == 0;
+    public static ReferenceValue To(Guid fileGuid, long fileId, bool isMain)
+    {
+        return new ReferenceValue(ObjectGuid.OfUnityObject(fileGuid, fileId, isMain), fileId);
+    }
 
-    public static ReferenceValue Null { get; } = new(0, null, 0);
+    public static ReferenceValue To(string fileGuid, long fileId, bool isMain)
+    {
+        return To(Guid.Parse(fileGuid), fileId, isMain);
+    }
+
+    public ReferenceValue WithComponentType(string componentType)
+    {
+        return new ReferenceValue(Target, FileId) { ComponentType = componentType };
+    }
 }

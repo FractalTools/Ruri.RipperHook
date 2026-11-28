@@ -181,6 +181,7 @@ internal static class UnityProjectReader
                 Meta = meta,
                 ImporterName = importer,
                 Kind = kind,
+                WritesMeta = !isFolder,
             });
         }
         AddSettings(entries, root, fileSystem);
@@ -423,6 +424,12 @@ internal static class UnityProjectReader
             return;
         }
         behaviour.ScriptP = script;
+
+        if (RuriEngineSession.Records.TryFind(script.ClassName_R.String, null, null, out _))
+        {
+            collection.Bodies.Add(document.FileId, body);
+            return;
+        }
 
         if (!ScriptIdentity.TryResolve(types, string.Empty, script.ClassName_R.String, out EngineClass? engineClass, out string reason))
         {

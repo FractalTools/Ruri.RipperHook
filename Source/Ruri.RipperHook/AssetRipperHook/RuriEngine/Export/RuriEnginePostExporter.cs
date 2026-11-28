@@ -34,7 +34,7 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
                     payloads++;
                     break;
             }
-            if (entry.WritesMeta)
+            if (entry.WritesMeta && HasOutput(entry))
             {
                 WriteMeta(entry, fileSystem.Path.Join(root, entry.OutputRelativePath), fileSystem);
                 metas++;
@@ -45,6 +45,11 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
         string reportPath = RuriEngineSession.GapReportPath ?? fileSystem.Path.Join(settings.ExportRootPath, GapReport.FileName);
         gaps.Write(fileSystem, reportPath);
         Logger.Info(LogCategory.Export, $"[RuriEngine] gap report written to {reportPath}");
+    }
+
+    private static bool HasOutput(ProjectEntry entry)
+    {
+        return entry.Kind == ProjectFileKind.Payload || entry.ConvertedRelativePath is not null;
     }
 
     private void WriteMeta(ProjectEntry entry, string target, FileSystem fileSystem)

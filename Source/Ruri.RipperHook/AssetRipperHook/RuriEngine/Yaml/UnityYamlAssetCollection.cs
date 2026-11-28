@@ -39,6 +39,22 @@ internal sealed class ProjectEntry
     public string? ConvertedRelativePath { get; set; }
 
     public string OutputRelativePath => ConvertedRelativePath ?? RelativePath;
+
+    public long? MainObjectFileId
+    {
+        get
+        {
+            return Meta.TryGet(ImporterName, out UnityYamlNode? importer)
+                && importer is UnityYamlMapping block
+                && block.TryGetText("mainObjectFileID") is { } text
+                && long.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long id)
+                && id != 0
+                ? id
+                : null;
+        }
+    }
+
+    public bool IsMain(long fileId) => MainObjectFileId is { } main ? fileId == main : ObjectGuid.IsMainByStride(fileId);
 }
 
 internal readonly record struct ExternalReference(string Guid, int Type);

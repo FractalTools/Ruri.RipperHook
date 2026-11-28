@@ -72,6 +72,8 @@ internal sealed class CliOptions
     public string? RuriEngineGapReport { get; init; }
 
     public string? RuriEnginePackages { get; init; }
+
+    public string? RuriEngineRecords { get; init; }
 }
 
 internal sealed class CliOptionsBinder : BinderBase<CliOptions>
@@ -132,6 +134,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
     public Option<string?> RuriEngineGapReportOption { get; }
 
     public Option<string?> RuriEnginePackagesOption { get; }
+
+    public Option<string?> RuriEngineRecordsOption { get; }
 
     public Argument<string[]> Passthrough { get; }
 
@@ -258,6 +262,8 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             "With --ruri-engine: where to write the gap report JSON; default <export>/RuriEngineGapReport.json.");
         RuriEnginePackagesOption = new Option<string?>("--ruri-engine-packages",
             "With --ruri-engine on a Unity YAML project: the package cache folder (Library/PackageCache of the project) whose packages resolve the scripts and YAML assets the project refers to; default <project>/Library/PackageCache when it exists.");
+        RuriEngineRecordsOption = new Option<string?>("--ruri-engine-records",
+            "With --ruri-engine: a record table JSON (original script class -> engine component type, member claims, list members, constant rows) the converter loads to write script records as engine components; nothing but this table names an original class.");
         Passthrough = new Argument<string[]>("passthrough", () => [], "Forwarded to AssetRipper Web UI when --load is omitted.");
         Passthrough.Arity = ArgumentArity.ZeroOrMore;
     }
@@ -302,6 +308,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             RuriEngineTypesOption,
             RuriEngineGapReportOption,
             RuriEnginePackagesOption,
+            RuriEngineRecordsOption,
             Passthrough,
         };
         return root;
@@ -348,6 +355,7 @@ internal sealed class CliOptionsBinder : BinderBase<CliOptions>
             RuriEngineTypes = pr.GetValueForOption(RuriEngineTypesOption),
             RuriEngineGapReport = pr.GetValueForOption(RuriEngineGapReportOption),
             RuriEnginePackages = pr.GetValueForOption(RuriEnginePackagesOption),
+            RuriEngineRecords = pr.GetValueForOption(RuriEngineRecordsOption),
             DatasetList = pr.GetValueForOption(DataListOption),
             Passthrough = pr.GetValueForArgument(Passthrough) ?? [],
         };

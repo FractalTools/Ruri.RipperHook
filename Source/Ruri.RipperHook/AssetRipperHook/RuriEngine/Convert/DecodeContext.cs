@@ -50,22 +50,21 @@ internal sealed class DecodeContext(
         string? guid = reference.TryGetText("guid");
         if (string.IsNullOrEmpty(guid) || YamlScalars.IsZeroGuid(guid))
         {
-            return new ReferenceValue(fileId, null, 0);
+            return ReferenceValue.To(collection.Entry.Guid, fileId, collection.Entry.IsMain(fileId));
         }
-        int type = reference.TryGetText("type") is { } typeText && YamlScalars.TryParseInteger(typeText, out long parsed) ? (int)parsed : 0;
-        if (mapping.RetargetPackageReference(guid, fileId, type, gaps, $"{file}:{path}") is { } retargeted)
+        if (mapping.RetargetPackageReference(guid, fileId, gaps, $"{file}:{path}") is { } retargeted)
         {
             return retargeted;
         }
         if (collection.Project is { } project && project.TryGetCollection(guid, out UnityYamlAssetCollection? target))
         {
-            return new ReferenceValue(fileId, target.Entry.Guid, target.ReferenceType);
+            return ReferenceValue.To(target.Entry.Guid, fileId, target.Entry.IsMain(fileId));
         }
         if (!mapping.IsBuiltinGuid(guid))
         {
             gaps.Add(GapCategories.DanglingReference, guid, $"{file}:{path} -> {guid}:{fileId}");
         }
-        return new ReferenceValue(fileId, guid, type);
+        return ReferenceValue.To(guid, fileId, ObjectGuid.IsMainByStride(fileId));
     }
 
     public void CarryRenamed(ObjectValue output)

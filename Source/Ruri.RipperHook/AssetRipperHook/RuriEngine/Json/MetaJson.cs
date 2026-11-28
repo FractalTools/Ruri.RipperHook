@@ -5,9 +5,12 @@ namespace Ruri.RipperHook.RuriEngine;
 
 internal static partial class MetaJson
 {
+    private const string FormatVersionKey = "fileFormatVersion";
+    private const string GuidKey = "guid";
+
     public static byte[] Write(UnityYamlNode root, RuriEngineMapping mapping)
     {
-        return JsonValueWriter.Write(Convert(root, mapping, string.Empty));
+        return JsonValueWriter.Write(Convert(root, mapping, string.Empty, string.Empty));
     }
 
     public static UnityYamlNode FromAssetRipper(YamlNode node)
@@ -35,7 +38,7 @@ internal static partial class MetaJson
         }
     }
 
-    private static Value Convert(UnityYamlNode node, RuriEngineMapping mapping, string key)
+    private static Value Convert(UnityYamlNode node, RuriEngineMapping mapping, string key, string importer)
     {
         switch (node)
         {
@@ -44,18 +47,22 @@ internal static partial class MetaJson
                 ObjectValue obj = new();
                 foreach (KeyValuePair<string, UnityYamlNode> entry in map.Entries)
                 {
-                    if (isRoot && mapping.IsNonImporterBlock(entry.Key))
+                    if (isRoot && (mapping.IsNonImporterBlock(entry.Key) || entry.Value is UnityYamlScalar && entry.Key is not (FormatVersionKey or GuidKey)))
                     {
                         continue;
                     }
-                    obj.Add(entry.Key, Convert(entry.Value, mapping, entry.Key));
+                    if (importer.Length > 0 && key == importer && mapping.DropsIdentityKey(importer, entry.Key))
+                    {
+                        continue;
+                    }
+                    obj.Add(entry.Key, Convert(entry.Value, mapping, entry.Key, isRoot && entry.Value is UnityYamlMapping ? entry.Key : importer));
                 }
                 return obj;
             case UnityYamlSequence sequence:
                 ArrayValue array = new();
                 foreach (UnityYamlNode item in sequence.Items)
                 {
-                    array.Items.Add(Convert(item, mapping, key));
+                    array.Items.Add(Convert(item, mapping, key, importer));
                 }
                 return array;
             case UnityYamlScalar scalar:

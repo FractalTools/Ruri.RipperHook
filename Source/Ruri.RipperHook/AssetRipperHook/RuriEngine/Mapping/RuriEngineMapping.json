@@ -19,6 +19,8 @@
     "assetBundleName",
     "assetBundleVariant"
   ],
+  "identityKeys": ["mainObjectFileID", "internalIDToNameTable"],
+  "identityKeyImporters": ["NativeFormatImporter", "ModelImporter", "MonoImporter", "DefaultImporter", "TextScriptImporter", "PrefabImporter"],
   "nonImporterBlocks": [
     "AssetOrigin"
   ],

@@ -26,7 +26,7 @@ public partial class AR_RuriEngine_Hook : RipperHookCommon
     public static void ProjectExporter_DoFinalOverrides(ProjectExporter exporter, FullConfiguration settings)
     {
         exporter.OverrideExporter<IUnityObjectBase>(
-            new RuriEngineExporter(RuriEngineSession.Mapping, RuriEngineSession.Types, RuriEngineSession.Gaps),
+            new RuriEngineExporter(RuriEngineSession.Mapping, RuriEngineSession.Types, RuriEngineSession.Records, RuriEngineSession.Gaps),
             allowInheritance: true);
     }
 

@@ -86,6 +86,10 @@ internal sealed class RuriEngineMapping
 
     public string[] NonImporterBlocks { get; init; } = [];
 
+    public string[] IdentityKeys { get; init; } = [];
+
+    public string[] IdentityKeyImporters { get; init; } = [];
+
     public string[] BuiltinGuids { get; init; } = [];
 
     public Dictionary<string, string> PackageGuidRedirects { get; init; } = new();
@@ -168,6 +172,11 @@ internal sealed class RuriEngineMapping
         return metaTextKeys.Contains(key);
     }
 
+    public bool DropsIdentityKey(string importer, string key)
+    {
+        return Array.IndexOf(IdentityKeys, key) >= 0 && Array.IndexOf(IdentityKeyImporters, importer) < 0;
+    }
+
     public bool IsNonImporterBlock(string key)
     {
         nonImporterBlocks ??= new HashSet<string>(NonImporterBlocks, StringComparer.Ordinal);
@@ -181,7 +190,7 @@ internal sealed class RuriEngineMapping
     }
 
     /// <summary>包资产的引用改写:空表里的 guid 写成空引用,重定向表里的 guid 换成引擎资产 guid(主对象 fileID 与类型沿用源引用);都不在表里返回 null。</summary>
-    public ReferenceValue? RetargetPackageReference(string? guid, long fileId, int type, GapReport gaps, string where)
+    public ReferenceValue? RetargetPackageReference(string? guid, long fileId, GapReport gaps, string where)
     {
         if (string.IsNullOrEmpty(guid))
         {
@@ -197,7 +206,7 @@ internal sealed class RuriEngineMapping
         if (redirects.TryGetValue(guid, out string? engineGuid))
         {
             gaps.Add(GapCategories.PackageReferenceRedirected, guid, where);
-            return new ReferenceValue(fileId, engineGuid, type);
+            return ReferenceValue.To(engineGuid, fileId, ObjectGuid.IsMainByStride(fileId));
         }
         return null;
     }

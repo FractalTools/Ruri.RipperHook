@@ -128,14 +128,12 @@ internal static class JsonValueWriter
 
     private static void WriteReference(StringBuilder builder, ReferenceValue value)
     {
-        builder.Append("{\"fileID\": ").Append(value.FileId.ToString(CultureInfo.InvariantCulture));
-        if (value.Guid is not null)
+        if (value.IsNull)
         {
-            builder.Append(", \"guid\": ");
-            WriteString(builder, value.Guid);
-            builder.Append(", \"type\": ").Append(value.Type.ToString(CultureInfo.InvariantCulture));
+            builder.Append("null");
+            return;
         }
-        builder.Append('}');
+        builder.Append('"').Append(value.Target.ToString("N", CultureInfo.InvariantCulture)).Append('"');
     }
 
     private static void WriteScalar(StringBuilder builder, ScalarValue value)

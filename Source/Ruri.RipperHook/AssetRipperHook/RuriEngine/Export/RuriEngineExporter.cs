@@ -5,9 +5,9 @@ using AssetRipper.SourceGenerated.Classes.ClassID_114;
 
 namespace Ruri.RipperHook.RuriEngine;
 
-internal sealed class RuriEngineExporter(RuriEngineMapping mapping, EngineTypes types, GapReport gaps) : IAssetExporter
+internal sealed class RuriEngineExporter(RuriEngineMapping mapping, EngineTypes types, RecordTable records, GapReport gaps) : IAssetExporter
 {
-    private readonly EntityDocumentBuilder builder = new(mapping, types, gaps);
+    private readonly EntityDocumentBuilder builder = new(mapping, types, records, gaps);
 
     public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out IExportCollection? exportCollection)
     {
@@ -19,7 +19,7 @@ internal sealed class RuriEngineExporter(RuriEngineMapping mapping, EngineTypes 
         }
         if (IsConvertible(asset))
         {
-            exportCollection = new EntityFileCollection(this, GroupOf(asset), mapping, builder, gaps);
+            exportCollection = new EntityFileCollection(this, GroupOf(asset), mapping, builder, records, gaps);
             return true;
         }
         if (asset.Collection is not UnityYamlAssetCollection { Entry.Kind: ProjectFileKind.Script })

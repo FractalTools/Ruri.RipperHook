@@ -18,19 +18,21 @@ internal sealed class EntityFileCollection : ExportCollection
     private readonly HashSet<IUnityObjectBase> memberSet;
     private readonly RuriEngineMapping mapping;
     private readonly EntityDocumentBuilder builder;
+    private readonly RecordTable records;
     private readonly GapReport gaps;
     private readonly UnityYamlAssetCollection? yaml;
 
-    public EntityFileCollection(IAssetExporter exporter, IReadOnlyList<IUnityObjectBase> members, RuriEngineMapping mapping, EntityDocumentBuilder builder, GapReport gaps)
+    public EntityFileCollection(IAssetExporter exporter, IReadOnlyList<IUnityObjectBase> members, RuriEngineMapping mapping, EntityDocumentBuilder builder, RecordTable records, GapReport gaps)
     {
         AssetExporter = exporter;
         this.members = members;
         memberSet = new HashSet<IUnityObjectBase>(members);
         this.mapping = mapping;
         this.builder = builder;
+        this.records = records;
         this.gaps = gaps;
         yaml = members[0].Collection as UnityYamlAssetCollection;
-        GUID = yaml is null ? UnityGuid.NewGuid() : UnityGuid.Parse(yaml.Entry.Guid);
+        GUID = UnityGuid.Parse((yaml is null ? StableGuid(members[0]) : Guid.Parse(yaml.Entry.Guid)).ToString("N", CultureInfo.InvariantCulture));
     }
 
     public override UnityGuid GUID { get; }
@@ -63,14 +65,15 @@ internal sealed class EntityFileCollection : ExportCollection
         string path = yaml is null ? NewPath(projectDirectory, fileSystem) : fileSystem.Path.Join(projectDirectory, ConvertedPath(yaml.Entry));
         string description = yaml?.Entry.RelativePath ?? $"{members[0].ClassName} {Name}";
 
-        ReferenceResolver references = new(container, mapping, gaps);
+        ReferenceResolver references = new(container, mapping, records, gaps, Guid.Parse(GUID.ToString()), yaml?.Entry);
         ObjectValue entities = new();
+        int order = 0;
         foreach (IUnityObjectBase asset in members)
         {
             ObjectValue? components;
             try
             {
-                components = builder.BuildComponents(asset, references, description);
+                components = builder.BuildComponents(asset, references, description, order++);
             }
             catch (Exception exception)
             {
@@ -103,6 +106,11 @@ internal sealed class EntityFileCollection : ExportCollection
             yaml.Entry.ConvertedRelativePath = ConvertedPath(yaml.Entry);
         }
         return true;
+    }
+
+    private static Guid StableGuid(IUnityObjectBase main)
+    {
+        return ObjectGuid.Derive(ObjectDomain.DerivedProduct, Guid.Empty, $"{main.Collection.Name}|{main.PathID.ToString(CultureInfo.InvariantCulture)}");
     }
 
     private string ConvertedPath(ProjectEntry entry)

@@ -8,7 +8,9 @@ public static class RuriEngineSession
     private static string? typesPath;
     private static string? gapReportPath;
     private static string? packageCachePath;
+    private static string? recordsPath;
     private static Lazy<RuriEngineMapping> mapping = NewMapping();
+    private static Lazy<RecordTable> records = NewRecords();
     private static Lazy<EngineTypes> types = NewTypes();
     private static GapReport gaps = new();
 
@@ -16,13 +18,15 @@ public static class RuriEngineSession
 
     internal static EngineTypes Types => types.Value;
 
+    internal static RecordTable Records => records.Value;
+
     internal static GapReport Gaps => gaps;
 
     internal static string? GapReportPath => gapReportPath;
 
     internal static string? PackageCachePath => packageCachePath;
 
-    public static void Configure(string? mappingOverride, string? gapReportOverride, string? typesOverride, string? packageCacheOverride)
+    public static void Configure(string? mappingOverride, string? gapReportOverride, string? typesOverride, string? packageCacheOverride, string? recordsOverride)
     {
         lock (Gate)
         {
@@ -30,6 +34,7 @@ public static class RuriEngineSession
             gapReportPath = gapReportOverride;
             typesPath = typesOverride;
             packageCachePath = packageCacheOverride;
+            recordsPath = recordsOverride;
             Reset();
         }
     }
@@ -40,6 +45,7 @@ public static class RuriEngineSession
         {
             mapping = NewMapping();
             types = NewTypes();
+            records = NewRecords();
             gaps = new GapReport();
         }
     }
@@ -47,6 +53,8 @@ public static class RuriEngineSession
     private static Lazy<RuriEngineMapping> NewMapping() => new(() => RuriEngineMapping.Load(mappingPath));
 
     private static Lazy<EngineTypes> NewTypes() => new(() => EngineTypes.Load(typesPath));
+
+    private static Lazy<RecordTable> NewRecords() => new(() => RecordTable.Load(recordsPath));
 }
 
 public static class UnityProjectLayout

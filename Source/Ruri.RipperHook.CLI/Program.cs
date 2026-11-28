@@ -111,7 +111,7 @@ internal static class Program
         config.EnabledHooks.Add("SkipStreamingAssetsCopy");
         if (opts.RuriEngineInput is { Length: > 0 })
         {
-            RuriEngineSession.Configure(opts.RuriEngineMapping, opts.RuriEngineGapReport, opts.RuriEngineTypes, opts.RuriEnginePackages);
+            RuriEngineSession.Configure(opts.RuriEngineMapping, opts.RuriEngineGapReport, opts.RuriEngineTypes, opts.RuriEnginePackages, opts.RuriEngineRecords);
             config.EnabledHooks.Add("RuriEngine");
             if (unityProject)
             {
