@@ -127,7 +127,7 @@ internal static class NodeFileReader
             }
             RecordClass? row = null;
             string? componentType = null;
-            if (!records.TryFind(className, string.Empty, string.Empty, out RecordClass? found))
+            if (!records.TryFind(className, null, null, out RecordClass? found))
             {
                 gaps.Add(GapCategories.UnmappedClass, $"{className} (component of a game object)", file);
             }
