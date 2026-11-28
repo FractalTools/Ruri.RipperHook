@@ -359,12 +359,17 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
                 return value is ScalarValue { Kind: ScalarKind.Text } hashed ? ScalarValue.FromUnsigned(Fnv1a64(hashed.Text)) : Mismatch(where, value, "text");
             case "Structure":
                 RecordStruct nested = table.Structs[field.Struct!];
-                return value switch
+                ObjectValue? mapped = value switch
                 {
                     ObjectValue record => MapStruct(nested, record, where, state, true, out _),
                     ReferenceValue pointer => MapPointer(nested, pointer, where, state),
-                    _ => Mismatch(where, value, "object"),
+                    _ => null,
                 };
+                if (mapped is null)
+                {
+                    return Mismatch(where, value, "object");
+                }
+                return mapped.Count == 0 ? null : mapped;
             case "NodeReference":
             case "AssetReference":
                 return value switch
