@@ -38,6 +38,8 @@ internal sealed class ProjectEntry
 
     public string? ConvertedRelativePath { get; set; }
 
+    public UnityYamlMapping? OutputMeta { get; set; }
+
     public string OutputRelativePath => ConvertedRelativePath ?? RelativePath;
 
     public long? MainObjectFileId
@@ -63,6 +65,7 @@ internal sealed class UnityYamlAssetCollection : VirtualAssetCollection
 {
     private const int SerializedReferenceType = 2;
     private const int ImportedReferenceType = 3;
+    private const int SelfFileIndex = 0;
 
     private readonly Dictionary<int, ExternalReference> externals = new();
     private readonly Dictionary<(string Guid, int Type), int> externalSlots = new();
@@ -85,6 +88,8 @@ internal sealed class UnityYamlAssetCollection : VirtualAssetCollection
 
     public Dictionary<long, UnityYamlMapping> Bodies { get; } = new();
 
+    public NodeFile? Nodes { get; set; }
+
     public int ReferenceType => Entry.Kind == ProjectFileKind.YamlAsset ? SerializedReferenceType : ImportedReferenceType;
 
     public void Add(IUnityObjectBase asset) => AddAsset(asset);
@@ -103,6 +108,16 @@ internal sealed class UnityYamlAssetCollection : VirtualAssetCollection
     }
 
     public bool TryGetExternal(int fileIndex, out ExternalReference external) => externals.TryGetValue(fileIndex, out external);
+
+    public ReferenceValue Reference(long fileId, RecordTable records)
+    {
+        if (Nodes is { } nodes)
+        {
+            return nodes.Reference(Entry.Guid, fileId);
+        }
+        ReferenceValue reference = ReferenceValue.To(Entry.Guid, fileId, Entry.IsMain(fileId));
+        return TryGetAsset(SelfFileIndex, fileId, out IUnityObjectBase? asset) ? reference.WithComponentType(records.ComponentTypeOf(asset)) : reference;
+    }
 }
 
 internal sealed class ProjectIndex(string root)

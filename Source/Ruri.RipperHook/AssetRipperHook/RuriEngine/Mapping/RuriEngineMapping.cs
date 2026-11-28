@@ -9,6 +9,7 @@ internal enum ClassKind
 {
     Scripted,
     Mapped,
+    Node,
     Payload,
     Reserved,
 }

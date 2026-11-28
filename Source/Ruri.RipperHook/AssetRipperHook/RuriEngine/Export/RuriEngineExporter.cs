@@ -44,6 +44,7 @@ internal sealed class RuriEngineExporter(RuriEngineMapping mapping, EngineTypes 
         {
             ClassKind.Scripted => asset is IMonoBehaviour { GameObjectP: null },
             ClassKind.Mapped => true,
+            ClassKind.Node => asset.Collection is UnityYamlAssetCollection { Nodes: not null },
             _ => false,
         };
     }

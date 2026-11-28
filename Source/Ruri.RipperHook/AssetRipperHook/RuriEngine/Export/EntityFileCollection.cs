@@ -65,29 +65,9 @@ internal sealed class EntityFileCollection : ExportCollection
         string path = yaml is null ? NewPath(projectDirectory, fileSystem) : fileSystem.Path.Join(projectDirectory, ConvertedPath(yaml.Entry));
         string description = yaml?.Entry.RelativePath ?? $"{members[0].ClassName} {Name}";
 
-        ReferenceResolver references = new(container, mapping, records, gaps, Guid.Parse(GUID.ToString()), yaml?.Entry);
-        ObjectValue entities = new();
-        int order = 0;
-        foreach (IUnityObjectBase asset in members)
-        {
-            ObjectValue? components;
-            try
-            {
-                components = builder.BuildComponents(asset, references, description, order++);
-            }
-            catch (Exception exception)
-            {
-                gaps.Add(GapCategories.UnreadableFile, $"{asset.ClassName} could not be converted", $"{description}: {exception.GetType().Name}: {exception.Message}");
-                continue;
-            }
-            if (components is null)
-            {
-                continue;
-            }
-            ObjectValue entity = new();
-            entity.Add(ComponentsKey, components);
-            entities.Add(GetExportID(container, asset).ToString(CultureInfo.InvariantCulture), entity);
-        }
+        ObjectValue entities = yaml?.Nodes is { } nodes
+            ? new NodeEntityWriter(yaml, nodes, mapping, records, gaps).Write()
+            : MemberEntities(container, description);
         if (entities.Count == 0)
         {
             return true;
@@ -104,8 +84,36 @@ internal sealed class EntityFileCollection : ExportCollection
         else
         {
             yaml.Entry.ConvertedRelativePath = ConvertedPath(yaml.Entry);
+            yaml.Entry.OutputMeta = yaml.Nodes is { } placed ? NodeMeta.Of(yaml.Entry, placed.RootKey) : null;
         }
         return true;
+    }
+
+    private ObjectValue MemberEntities(IExportContainer container, string description)
+    {
+        ReferenceResolver references = new(container, mapping, records, gaps, Guid.Parse(GUID.ToString()), yaml?.Entry);
+        ObjectValue entities = new();
+        foreach (IUnityObjectBase asset in members)
+        {
+            ObjectValue? components;
+            try
+            {
+                components = builder.BuildComponents(asset, references, description);
+            }
+            catch (Exception exception)
+            {
+                gaps.Add(GapCategories.UnreadableFile, $"{asset.ClassName} could not be converted", $"{description}: {exception.GetType().Name}: {exception.Message}");
+                continue;
+            }
+            if (components is null)
+            {
+                continue;
+            }
+            ObjectValue entity = new();
+            entity.Add(ComponentsKey, components);
+            entities.Add(GetExportID(container, asset).ToString(CultureInfo.InvariantCulture), entity);
+        }
+        return entities;
     }
 
     private static Guid StableGuid(IUnityObjectBase main)

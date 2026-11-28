@@ -8,18 +8,18 @@ namespace Ruri.RipperHook.RuriEngine;
 
 internal sealed class EntityDocumentBuilder(RuriEngineMapping mapping, EngineTypes types, RecordTable records, GapReport gaps)
 {
-    public ObjectValue? BuildComponents(IUnityObjectBase asset, ReferenceResolver references, string file, int order)
+    public ObjectValue? BuildComponents(IUnityObjectBase asset, ReferenceResolver references, string file)
     {
         ClassRow row = mapping.RowOf(asset.ClassName);
         return row.Kind switch
         {
-            ClassKind.Scripted => BuildScripted(asset, references, file, order),
+            ClassKind.Scripted => BuildScripted(asset, references, file),
             ClassKind.Mapped => BuildMapped(asset, row, references, file),
             _ => null,
         };
     }
 
-    private ObjectValue? BuildScripted(IUnityObjectBase asset, ReferenceResolver references, string file, int order)
+    private ObjectValue? BuildScripted(IUnityObjectBase asset, ReferenceResolver references, string file)
     {
         if (asset is not IMonoBehaviour behaviour)
         {
@@ -29,7 +29,7 @@ internal sealed class EntityDocumentBuilder(RuriEngineMapping mapping, EngineTyp
         IMonoScript? script = behaviour.ScriptP;
         if (script is not null && records.TryFind(script, out RecordClass? record))
         {
-            return BuildRecord(behaviour, script, record, references, file, order);
+            return BuildRecord(behaviour, script, record, references, file);
         }
         SerializableStructure? structure = behaviour.LoadStructure();
         if (structure is null || script is null)
@@ -52,7 +52,7 @@ internal sealed class EntityDocumentBuilder(RuriEngineMapping mapping, EngineTyp
         return new EntityConverter(mapping, types, gaps, file).ConvertScripted(source, engineClass);
     }
 
-    private ObjectValue? BuildRecord(IMonoBehaviour behaviour, IMonoScript script, RecordClass record, ReferenceResolver references, string file, int order)
+    private ObjectValue? BuildRecord(IMonoBehaviour behaviour, IMonoScript script, RecordClass record, ReferenceResolver references, string file)
     {
         string className = script.ClassName_R.String;
         if (record.TargetOnly)
@@ -74,7 +74,7 @@ internal sealed class EntityDocumentBuilder(RuriEngineMapping mapping, EngineTyp
             gaps.Add(GapCategories.UnresolvedScript, className, file);
             return null;
         }
-        RecordEntry entry = new(className, behaviour.Enabled != 0, behaviour.Name.String, fields, references.Local(behaviour.PathID).Target, order);
+        RecordEntry entry = new(className, behaviour.Enabled != 0, behaviour.Name.String, behaviour.Name.String, fields, references.Local(behaviour.PathID).Target, static () => []);
         return new RecordConverter(records, gaps, file).Convert(entry, record);
     }
 

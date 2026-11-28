@@ -345,6 +345,12 @@ internal static class UnityProjectReader
             return;
         }
 
+        if (NodeFileReader.IsNodeFile(entry))
+        {
+            NodeFileReader.Read(collection, documents, index, version, gaps);
+            return;
+        }
+
         YamlStructureFiller filler = new(mapping, index, resolver, gaps, version, collection);
         foreach (UnityYamlDocument document in documents)
         {
@@ -352,9 +358,7 @@ internal static class UnityProjectReader
             {
                 continue;
             }
-            string className = Enum.IsDefined(typeof(ClassIDType), document.ClassId)
-                ? ((ClassIDType)document.ClassId).ToString()
-                : $"Class{document.ClassId}";
+            string className = ClassNameOf(document.ClassId);
             ClassRow row = mapping.RowOf(className);
             if (document.Root is not UnityYamlMapping { Entries.Count: 1 } wrapper || wrapper.Entries[0].Value is not UnityYamlMapping body)
             {
@@ -369,7 +373,7 @@ internal static class UnityProjectReader
                 }
                 else if (row.Kind == ClassKind.Mapped)
                 {
-                    LoadMapped(collection, document, body, className, version);
+                    LoadMapped(collection, document, body, version);
                 }
                 else
                 {
@@ -447,16 +451,27 @@ internal static class UnityProjectReader
         UnityYamlAssetCollection collection,
         UnityYamlDocument document,
         UnityYamlMapping body,
-        string className,
         UnityVersion version)
     {
-        if (!TypeTreeNodeStruct.TryMakeFromTpk((ClassIDType)document.ClassId, version, out _, out TypeTreeNodeStruct editorTree))
+        if (AddTypeTreeAsset(collection, document.FileId, document.ClassId, version))
         {
-            RuriEngineSession.Gaps.Add(GapCategories.UnreadableFile, $"no Unity type tree for {className}", collection.Entry.RelativePath);
-            return;
+            collection.Bodies.Add(document.FileId, body);
         }
-        TypeTreeObject asset = TypeTreeObject.Create(new AssetInfo(collection, document.FileId, document.ClassId), editorTree, ITypeResolver.Null);
-        collection.Bodies.Add(document.FileId, body);
-        collection.Add(asset);
+    }
+
+    internal static string ClassNameOf(int classId)
+    {
+        return Enum.IsDefined(typeof(ClassIDType), classId) ? ((ClassIDType)classId).ToString() : $"Class{classId}";
+    }
+
+    internal static bool AddTypeTreeAsset(UnityYamlAssetCollection collection, long fileId, int classId, UnityVersion version)
+    {
+        if (!TypeTreeNodeStruct.TryMakeFromTpk((ClassIDType)classId, version, out _, out TypeTreeNodeStruct editorTree))
+        {
+            RuriEngineSession.Gaps.Add(GapCategories.UnreadableFile, $"no Unity type tree for {ClassNameOf(classId)}", collection.Entry.RelativePath);
+            return false;
+        }
+        collection.Add(TypeTreeObject.Create(new AssetInfo(collection, fileId, classId), editorTree, ITypeResolver.Null));
+        return true;
     }
 }

@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using AssetRipper.Assets;
 
 namespace Ruri.RipperHook.RuriEngine;
 
@@ -8,7 +7,6 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
     private const string FileIdKey = "fileID";
     private const string GuidKey = "guid";
     private const string TypeKey = "type";
-    private const int SelfFileIndex = 0;
     private const string PersistentCallsKey = "m_PersistentCalls";
     private const string CallsKey = "m_Calls";
 
@@ -101,7 +99,7 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
         string? guid = map.TryGetText(GuidKey);
         if (string.IsNullOrEmpty(guid) || YamlScalars.IsZeroGuid(guid))
         {
-            return Typed(ReferenceValue.To(collection.Entry.Guid, fileId, collection.Entry.IsMain(fileId)), collection, fileId);
+            return collection.Reference(fileId, records);
         }
         if (mapping.RetargetPackageReference(guid, fileId, gaps, $"{file}:{path}") is { } retargeted)
         {
@@ -109,20 +107,13 @@ internal sealed partial class YamlValues(UnityYamlAssetCollection collection, Ru
         }
         if (collection.Project is { } project && project.TryGetCollection(guid, out UnityYamlAssetCollection? target))
         {
-            return Typed(ReferenceValue.To(target.Entry.Guid, fileId, target.Entry.IsMain(fileId)), target, fileId);
+            return target.Reference(fileId, records);
         }
         if (!mapping.IsBuiltinGuid(guid))
         {
             gaps.Add(GapCategories.DanglingReference, guid, $"{file}:{path} -> {guid}:{fileId}");
         }
         return ReferenceValue.To(guid, fileId, ObjectGuid.IsMainByStride(fileId));
-    }
-
-    private ReferenceValue Typed(ReferenceValue reference, UnityYamlAssetCollection owner, long fileId)
-    {
-        return owner.TryGetAsset(SelfFileIndex, fileId, out IUnityObjectBase? asset)
-            ? reference.WithComponentType(records.ComponentTypeOf(asset))
-            : reference;
     }
 
     [GeneratedRegex(@"^-?\d+$")]

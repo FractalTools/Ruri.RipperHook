@@ -10,12 +10,13 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
     private const string CallsMember = "Calls";
     private const string EnabledKey = "$enabled";
     private const string ValueMember = "Value";
-    private const string HashSuffix = "Hash";
     private const string AssetMember = "assetId";
     private const string EntityMember = "entity";
     private const string ComponentTypeMember = "componentType";
     private const ulong FnvOffsetBasis = 14695981039346656037UL;
     private const ulong FnvPrime = 1099511628211UL;
+
+    private static readonly Func<IReadOnlyList<IReadOnlyList<ChildRecord>>> NoChildren = static () => [];
 
     private sealed class State(RecordEntry entry)
     {
@@ -38,10 +39,12 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         public State ForElements(ulong memberKey) => new(Entry) { MemberKey = memberKey, AllowPersistentEvents = false };
     }
 
+    private sealed record SourceContext(ObjectValue Fields, ReferenceValue? Record, string HostName, Func<IReadOnlyList<IReadOnlyList<ChildRecord>>> Children, long Index);
+
     public ObjectValue Convert(RecordEntry entry, RecordClass row)
     {
         State state = new(entry);
-        foreach (string path in row.Ignore.Concat(row.Buffers.Select(static buffer => buffer.Member)))
+        foreach (string path in ClaimedPaths(row))
         {
             state.Exact.Add(path);
             for (int separator = path.LastIndexOf('.'); separator > 0; separator = path.LastIndexOf('.', separator - 1))
@@ -50,16 +53,14 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
             }
         }
 
+        SourceContext root = new(entry.Fields, null, entry.HostName, entry.Children, 0);
         ObjectValue components = new();
         if (row.Component is { } componentType && !row.TargetOnly)
         {
-            RecordStruct plan = table.Structs[componentType];
-            ObjectValue component = row.Fields is not null
-                ? MapExplicit(plan, row.Fields, entry)
-                : MapStruct(plan, entry.Fields, string.Empty, state, true, out _);
+            ObjectValue component = MapPlan(table.Structs[componentType], row.Fields, root, state);
             if (!entry.Enabled && !row.AlwaysEnabled)
             {
-                if (plan.Enableable)
+                if (table.Structs[componentType].Enableable)
                 {
                     component.Add(EnabledKey, ScalarValue.FromBoolean(false));
                 }
@@ -70,6 +71,11 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
             }
             components.Add(componentType, component);
         }
+        foreach (ExtraComponent extra in row.Extra)
+        {
+            components.Add(extra.Component, MapPlan(table.Structs[extra.Component], extra.Fields, root, state));
+        }
+        ReportUnclaimed(entry.Fields, string.Empty, null, state);
 
         foreach (RecordBuffer buffer in row.Buffers)
         {
@@ -86,15 +92,48 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
             List<Value> elements = new();
             foreach (Dictionary<string, FieldSource> item in group.Items)
             {
-                elements.Add(MapExplicit(plan, item, entry));
+                elements.Add(MapPlan(plan, item, root, new State(entry)));
             }
             Merge(components, group.Element, elements);
+        }
+        foreach (FlattenBuffer buffer in row.Flatten)
+        {
+            List<Value> elements = new();
+            if (Navigate(entry.Fields, buffer.Member) is ObjectValue start)
+            {
+                Flatten(buffer, 0, start, new Dictionary<string, Value>(), elements, state);
+            }
+            Merge(components, buffer.Element, elements);
+        }
+        foreach (ChildBuffer buffer in row.Children)
+        {
+            RecordStruct plan = table.Structs[buffer.Element];
+            List<Value> elements = new();
+            foreach (IReadOnlyList<ChildRecord> node in entry.Children())
+            {
+                if (node.FirstOrDefault(record => record.Row.Roles.ContainsKey(buffer.Role)) is { } chosen)
+                {
+                    elements.Add(MapPlan(plan, chosen.Row.Roles[buffer.Role], new SourceContext(chosen.Fields, chosen.Reference, string.Empty, NoChildren, 0), new State(entry)));
+                }
+            }
+            Merge(components, buffer.Element, elements);
         }
         if (state.PersistentEvents.Count > 0)
         {
             Merge(components, table.PersistentEventBuffer, MapPersistentEvents(state));
         }
         return components;
+    }
+
+    private static IEnumerable<string> ClaimedPaths(RecordClass row)
+    {
+        IEnumerable<FieldSource> sources = row.Fields.Values
+            .Concat(row.Extra.SelectMany(static extra => extra.Fields.Values))
+            .Concat(row.Elements.SelectMany(static group => group.Items.SelectMany(static item => item.Values)));
+        return row.Ignore
+            .Concat(row.Buffers.Select(static buffer => buffer.Member))
+            .Concat(row.Flatten.Select(static buffer => buffer.Member))
+            .Concat(sources.Where(static source => source.From is not null).Select(static source => source.From!));
     }
 
     private static void Merge(ObjectValue components, string elementType, List<Value> elements)
@@ -127,13 +166,17 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         return current;
     }
 
-    private ObjectValue MapExplicit(RecordStruct plan, Dictionary<string, FieldSource> sources, RecordEntry entry)
+    private ObjectValue MapPlan(RecordStruct plan, Dictionary<string, FieldSource> sources, SourceContext context, State state)
     {
         ObjectValue result = new();
-        State state = new(entry);
         foreach (RecordField field in plan.Fields)
         {
-            if (!sources.TryGetValue(field.Name, out FieldSource? source) || SourceValue(source, entry.Fields) is not { } value)
+            if (IsReserved(field.Kind))
+            {
+                AssignReserved(result, field, state, state.MemberKey);
+                continue;
+            }
+            if (!sources.TryGetValue(field.Name, out FieldSource? source) || SourceValue(source, context) is not { } value)
             {
                 continue;
             }
@@ -145,13 +188,29 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         return result;
     }
 
-    private static Value? SourceValue(FieldSource source, ObjectValue fields)
+    private static Value? SourceValue(FieldSource source, SourceContext context)
     {
         if (source.Const is { } constant)
         {
             return Literal(constant);
         }
-        if (source.From is { } path && Navigate(fields, path) is { } found)
+        if (source.Record)
+        {
+            return context.Record;
+        }
+        if (source.HostName)
+        {
+            return ScalarValue.FromText(context.HostName);
+        }
+        if (source.Index)
+        {
+            return ScalarValue.FromInteger(context.Index);
+        }
+        if (source.Child is { } role)
+        {
+            return context.Children().SelectMany(static node => node).FirstOrDefault(record => record.Row.Roles.ContainsKey(role))?.Reference;
+        }
+        if (source.From is { } path && Navigate(context.Fields, path) is { } found)
         {
             return found;
         }
@@ -172,6 +231,47 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         };
     }
 
+    private void Flatten(FlattenBuffer buffer, int depth, ObjectValue holder, Dictionary<string, Value> carried, List<Value> elements, State state)
+    {
+        FlattenLevel level = buffer.Levels[depth];
+        if (!holder.TryGet(level.List, out Value? list) || list is not ArrayValue items)
+        {
+            return;
+        }
+        RecordStruct plan = table.Structs[buffer.Element];
+        for (int index = 0; index < items.Items.Count; index++)
+        {
+            if (items.Items[index] is not ObjectValue item)
+            {
+                continue;
+            }
+            Dictionary<string, Value> row = new(carried);
+            SourceContext context = new(item, null, string.Empty, NoChildren, index);
+            foreach (KeyValuePair<string, FieldSource> field in level.Fields)
+            {
+                if (SourceValue(field.Value, context) is { } value)
+                {
+                    row[field.Key] = value;
+                }
+            }
+            bool leaf = depth + 1 == buffer.Levels.Length || !(item.TryGet(buffer.Levels[depth + 1].List, out Value? next) && next is ArrayValue { Items.Count: > 0 });
+            if (!leaf)
+            {
+                Flatten(buffer, depth + 1, item, row, elements, state);
+                continue;
+            }
+            ObjectValue element = new();
+            foreach (RecordField field in plan.Fields)
+            {
+                if (row.TryGetValue(field.Name, out Value? value) && ConvertField(field, value, field.Name, state) is { } converted)
+                {
+                    element.Add(field.Name, converted);
+                }
+            }
+            elements.Add(element);
+        }
+    }
+
     private ObjectValue MapStruct(RecordStruct plan, ObjectValue source, string path, State state, bool strict, out int claimed)
     {
         ObjectValue result = new();
@@ -184,8 +284,7 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
                 AssignReserved(result, field, state, memberKey);
                 continue;
             }
-            string? member = FindMember(source, field);
-            if (member is null)
+            if (field.Member is not { } member || !source.TryGet(member, out Value? value))
             {
                 continue;
             }
@@ -194,8 +293,10 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
                 gaps.Add(GapCategories.ShapeMismatch, $"{Combine(path, member)}: claimed by two fields", file);
                 continue;
             }
-            source.TryGet(member, out Value? value);
-            if (ConvertField(field, value!, Combine(path, member), state) is { } converted)
+            Value? converted = field.Kind == "ActionOwner"
+                ? ResolveOwner(field, value, result, Combine(path, member))
+                : ConvertField(field, value, Combine(path, member), state);
+            if (converted is not null)
             {
                 result.Add(field.Name, converted);
             }
@@ -208,19 +309,12 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         return result;
     }
 
-    private static bool IsReserved(string kind) => kind is "DocumentOrder" or "NodeLayer" or "ClassHash" or "ClassOrdinal" or "MemberKey" or "Self" or "Name";
+    private static bool IsReserved(string kind) => kind is "MemberKey" or "Self" or "Name";
 
     private void AssignReserved(ObjectValue result, RecordField field, State state, ulong memberKey)
     {
         switch (field.Kind)
         {
-            case "DocumentOrder":
-                result.Add(field.Name, ScalarValue.FromInteger(state.Entry.DocumentOrder));
-                break;
-            case "NodeLayer":
-            case "ClassOrdinal":
-                result.Add(field.Name, ScalarValue.FromInteger(0));
-                break;
             case "MemberKey":
                 result.Add(field.Name, ScalarValue.FromUnsigned(memberKey));
                 break;
@@ -238,38 +332,27 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         }
     }
 
-    private static string? FindMember(ObjectValue source, RecordField field)
+    private Value? ResolveOwner(RecordField field, Value value, ObjectValue result, string where)
     {
-        string memberName = field.Kind == "TextHash" && field.Name.Length > HashSuffix.Length && field.Name.EndsWith(HashSuffix, StringComparison.Ordinal)
-            ? field.Name[..^HashSuffix.Length]
-            : field.Name;
-        string? sameWord = null;
-        foreach (KeyValuePair<string, Value> entry in source.Fields)
+        if (value is not ScalarValue { Kind: ScalarKind.Text } declared)
         {
-            if (entry.Key == memberName)
-            {
-                return entry.Key;
-            }
-            if (sameWord is null && IsSameWord(entry.Key, memberName))
-            {
-                sameWord = entry.Key;
-            }
+            return Mismatch(where, value, "text");
         }
-        return sameWord;
-    }
-
-    private static bool IsSameWord(string source, string target)
-    {
-        int start = 0;
-        while (start < source.Length && source[start] == '_')
+        string owner = declared.Text;
+        if (field.Owner is { } sibling
+            && result.TryGet(sibling, out Value? pointer)
+            && pointer is ObjectValue holder
+            && holder.TryGet(ComponentTypeMember, out Value? actual)
+            && actual is ScalarValue { Kind: ScalarKind.Text } resolved
+            && resolved.Text.Length > 0)
         {
-            start++;
+            owner = resolved.Text;
         }
-        int length = source.Length - start;
-        return length > 0
-            && length == target.Length
-            && char.ToLowerInvariant(source[start]) == char.ToLowerInvariant(target[0])
-            && string.CompareOrdinal(source, start + 1, target, 1, length - 1) == 0;
+        else if (table.ComponentTypeOfName(owner) is { } engine)
+        {
+            owner = engine;
+        }
+        return Encoding.UTF8.GetByteCount(owner) <= field.Capacity ? ScalarValue.FromText(owner) : Mismatch(where, value, $"text up to {field.Capacity} bytes");
     }
 
     private static string Combine(string path, string name) => path.Length == 0 ? name : path + "." + name;
@@ -400,7 +483,7 @@ internal sealed class RecordConverter(RecordTable table, GapReport gaps, string 
         ObjectValue mapped = MapStruct(plan, members, where, state, false, out int claimed);
         if (!pointer.IsNull && claimed == 0)
         {
-            gaps.Add(GapCategories.ShapeMismatch, $"{where}: pointer struct has no field named {AssetMember}, {EntityMember} or {ComponentTypeMember}", file);
+            gaps.Add(GapCategories.ShapeMismatch, $"{where}: pointer struct has no field reading {AssetMember}, {EntityMember} or {ComponentTypeMember}", file);
         }
         return mapped;
     }

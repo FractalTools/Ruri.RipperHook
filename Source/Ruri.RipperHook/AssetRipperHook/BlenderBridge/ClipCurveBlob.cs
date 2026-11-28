@@ -11,6 +11,7 @@ using Ruri.RipperHook.Animation;
 using Ruri.RipperHook.BlenderBridge.Conversion;
 using Ruri.RipperHook.BlenderBridge.Statements;
 using Ruri.RipperHook.Humanoid;
+using Ruri.RipperHook.RuriEngine;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -232,8 +233,9 @@ public static class ClipCurveBlob
         void Count(string kind, int keys, int dimensions, string path, string? attr = null, int classId = 0, IMonoScript? script = null,
             string? className = null, int? preWrap = null, int? postWrap = null, bool weighted = false)
         {
-            index.Add(new CurveIndexEntry(kind, path, attr, classId, keys, totalFloats,
-                script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String, className, preWrap, postWrap, weighted));
+            (string? scriptAssembly, string? scriptNamespace, string? scriptClass, string? driven) = EngineScript(script, attr);
+            index.Add(new CurveIndexEntry(kind, path, driven, classId, keys, totalFloats,
+                scriptAssembly, scriptNamespace, scriptClass, className, preWrap, postWrap, weighted));
             totalFloats += keys + 3L * keys * dimensions + (weighted ? (2L * dimensions + 1L) * keys : 0L);
         }
 
@@ -334,6 +336,20 @@ public static class ClipCurveBlob
             [ScriptRecordMembers.Class] = UnityScripts.ClassNameOf(target),
             [ScriptRecordMembers.Name] = UnityScripts.NameOf(target),
         };
+    }
+
+    /// <summary>The script a float curve drives and the field it drives, as the record table states them for the engine (the component's
+    /// assembly, namespace, type name and the field the original member feeds); a script the table has no row for keeps its own.</summary>
+    private static (string? Assembly, string? Namespace, string? Class, string? Attribute) EngineScript(IMonoScript? script, string? attribute)
+    {
+        RecordTable records = RuriEngineSession.Records;
+        if (script is null || !records.TryFind(script, out RecordClass? row) || row.Component is not { } component)
+        {
+            return (script?.GetAssemblyNameFixed(), script?.Namespace.String, script?.ClassName_R.String, attribute);
+        }
+        int dot = component.LastIndexOf('.');
+        string? field = row.Fields.FirstOrDefault(pair => pair.Value.From == attribute).Key;
+        return (records.Structs.TryGetValue(component, out RecordStruct? plan) ? plan.Assembly : null, component[..dot], component[(dot + 1)..], field ?? attribute);
     }
 
     /// <summary>The weight a key states when its version of the engine states none: the third the engine fills a new key with.</summary>

@@ -372,7 +372,7 @@
     "AnimatorOverrideController": { "kind": "Reserved" },
     "AudioMixer": { "kind": "Reserved" },
     "Avatar": { "kind": "Reserved" },
-    "GameObject": { "kind": "Reserved" },
+    "GameObject": { "kind": "Node", "extension": "entity" },
     "MonoScript": { "kind": "Reserved" },
     "PrefabInstance": { "kind": "Reserved" },
     "Shader": { "kind": "Reserved" }
@@ -437,6 +437,8 @@
   },
   "importers": {
     "NativeFormatImporter": "Yaml",
+    "DefaultImporter": "Yaml",
+    "PrefabImporter": "Yaml",
     "MonoImporter": "Script",
     "TextureImporter": "Copy",
     "AudioImporter": "Copy",

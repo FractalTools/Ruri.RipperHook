@@ -36,6 +36,11 @@ internal static class YamlNodes
         return mapping.TryGet(key, out UnityYamlNode? value) ? value : null;
     }
 
+    public static long FileId(UnityYamlNode? pointer)
+    {
+        return pointer is UnityYamlMapping mapping && mapping.TryGetText("fileID") is { } text && YamlScalars.TryParseInteger(text, out long id) ? id : 0;
+    }
+
     public static long Integer(UnityYamlNode? node, string path)
     {
         return node is UnityYamlScalar scalar && YamlScalars.TryParseInteger(scalar.Text, out long value)

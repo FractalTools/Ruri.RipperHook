@@ -55,6 +55,6 @@ internal sealed class RuriEnginePostExporter(RuriEngineMapping mapping, GapRepor
     private void WriteMeta(ProjectEntry entry, string target, FileSystem fileSystem)
     {
         fileSystem.Directory.Create(fileSystem.Path.GetDirectoryName(target));
-        fileSystem.File.WriteAllBytes(target + MetaExtension, MetaJson.Write(entry.Meta, mapping));
+        fileSystem.File.WriteAllBytes(target + MetaExtension, MetaJson.Write(entry.OutputMeta ?? entry.Meta, mapping));
     }
 }
