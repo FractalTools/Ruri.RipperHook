@@ -90,7 +90,7 @@ internal static class MaterialSymbols
                 }
                 return;
             }
-            current = current is UMaterialInstance instance ? instance.Parent : null;
+            current = current is UMaterialInstance instance ? instance.Parent?.Load<UObject>() : null;
         }
     }
 

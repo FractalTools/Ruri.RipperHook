@@ -47,7 +47,7 @@ public static class UnrealComponents
         FPackageIndex?[] slots = mesh switch
         {
             UStaticMesh staticMesh => staticMesh.StaticMaterials.Select(static slot => slot.MaterialInterface).ToArray(),
-            USkeletalMesh skeletalMesh => skeletalMesh.SkeletalMaterials.Select(static slot => slot.Material).ToArray(),
+            USkeletalMesh skeletalMesh => skeletalMesh.SkeletalMaterials.Select(static slot => slot.MaterialInterface).ToArray(),
             _ => [],
         };
         string[] paths = new string[slots.Length];

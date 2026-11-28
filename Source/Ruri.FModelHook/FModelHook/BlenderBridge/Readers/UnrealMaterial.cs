@@ -71,7 +71,7 @@ public static class UnrealMaterial
         while (cursor is UMaterialInterface layer && seen.Add(layer))
         {
             chain.Add(layer);
-            cursor = layer is UMaterialInstance instance ? instance.Parent : null;
+            cursor = layer is UMaterialInstance instance ? instance.Parent?.Load<UUnrealMaterial>() : null;
         }
         chain.Reverse();
         return chain;

@@ -5,18 +5,19 @@ using System.Linq;
 using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Versions;
+using CUE4Parse_Conversion.Options;
 using CUE4Parse_Conversion.Textures;
 
 namespace Ruri.FModelHook.Utils;
 
 internal static class TextureStripExport
 {
-    public static CTexture? Decode(UTexture texture, ETexturePlatform platform, out int slices)
+    public static CTexture? Decode(UTexture texture, ExportOptions options, out int slices)
     {
         slices = 1;
-        if (texture is not UTexture2DArray array) return texture.Decode(platform);
+        if (texture is not UTexture2DArray array) return texture.Decode(options);
 
-        CTexture[] layers = (array.DecodeTextureArray(platform) ?? [])
+        CTexture[] layers = (array.DecodeTextureArray(options) ?? [])
             .Where(static layer => layer is not null)
             .Select(static layer => layer!)
             .ToArray();

@@ -78,7 +78,7 @@ internal static class ShaderLabRenderState
                 shadingModel = overrides.ShadingModel.ToString();
                 ditheredLODTransition = overrides.DitheredLODTransition;
             }
-            if (instance.Parent is UMaterial template)
+            if (instance.Parent?.Load<UMaterial>() is { } template)
             {
                 twoSided |= template.TwoSided;
                 disableDepthTest |= template.bDisableDepthTest;

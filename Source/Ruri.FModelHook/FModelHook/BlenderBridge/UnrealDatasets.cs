@@ -251,13 +251,13 @@ public static class UnrealDatasets
             {
                 case UStaticMesh staticMesh:
                 {
-                    using StaticMeshDto dto = new(staticMesh, EMeshQuality.All, ENaniteMeshFormat.NoNanite);
+                    using StaticMeshDto dto = new(staticMesh, UnrealSourceOptions.ConversionOptions());
                     Rows(table, export.Name, dto, null, null);
                     break;
                 }
                 case USkeletalMesh skeletalMesh:
                 {
-                    using SkeletalMeshDto dto = new(skeletalMesh, EMeshQuality.All, ENaniteMeshFormat.NoNanite);
+                    using SkeletalMeshDto dto = new(skeletalMesh, UnrealSourceOptions.ConversionOptions());
                     Rows(table, export.Name, dto, static vertex => vertex.Influences,
                         UnrealRig.From(skeletalMesh, UnrealBasis.Basis));
                     break;
@@ -665,7 +665,7 @@ public static class UnrealDatasets
         TableBuilder table = new(TexturesId, "texture", "name", "width#", "height#", "srgb", "normal", "image@",
             "wrap_u", "wrap_v", "filter");
         UnrealFileProvider provider = UnrealProviderSession.Open(request.GameRoot);
-        ETexturePlatform platform = UnrealSourceOptions.TexturePlatformChoice();
+        ExportOptions options = UnrealSourceOptions.ConversionOptions();
         List<(string Path, UTexture Source)> loaded = new();
         foreach (string path in Named(request.List(TextureParam)))
         {
@@ -676,7 +676,7 @@ public static class UnrealDatasets
         }
         (int Width, int Height, byte[] Image)[] images = new (int, int, byte[])[loaded.Count];
         WarmEncoder();
-        Parallel.For(0, loaded.Count, index => images[index] = Image(loaded[index].Path, loaded[index].Source, platform));
+        Parallel.For(0, loaded.Count, index => images[index] = Image(loaded[index].Path, loaded[index].Source, options));
         for (int index = 0; index < loaded.Count; index++)
         {
             (string path, UTexture source) = loaded[index];
@@ -712,12 +712,12 @@ public static class UnrealDatasets
     /// through. A layout the decoder answers with that has no matching colour type is reported
     /// and yields no image, never a silently reinterpreted one.
     /// </summary>
-    private static (int Width, int Height, byte[] Image) Image(string path, UTexture source, ETexturePlatform platform)
+    private static (int Width, int Height, byte[] Image) Image(string path, UTexture source, ExportOptions options)
     {
         CTexture? decoded;
         try
         {
-            decoded = source.Decode(platform);
+            decoded = source.Decode(options);
         }
         catch (Exception exception)
         {

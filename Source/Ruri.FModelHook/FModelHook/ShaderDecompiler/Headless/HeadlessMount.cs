@@ -87,14 +87,14 @@ public static class HeadlessMount
                     if (export is CUE4Parse.UE4.Assets.Exports.Texture.UTexture texture)
                     {
                         CUE4Parse_Conversion.Textures.CTexture? decoded =
-                            TextureStripExport.Decode(texture, exportOptions.TexturePlatform, out int slices);
+                            TextureStripExport.Decode(texture, exportOptions, out int slices);
                         if (decoded is null)
                         {
                             logError($"[Headless] --export-asset: '{export.Name}' decode returned null (unsupported pixel format?).");
                             result.ExportsSkippedUnsupported++;
                             continue;
                         }
-                        byte[] imageBytes = decoded.Encode(exportOptions.TextureFormat, exportOptions.ExportHdrTexturesAsHdr, out string extension);
+                        byte[] imageBytes = decoded.Encode(exportOptions, out string extension);
                         if (imageBytes.Length == 0)
                         {
                             logError($"[Headless] --export-asset: '{export.Name}' encoded to 0 bytes.");
@@ -244,15 +244,7 @@ public static class HeadlessMount
         }
         catch (Exception ex) { logError($"[Headless] Zlib init failed: {ex.Message}"); }
 
-        try
-        {
-            string detexPath = Path.Combine(dataDir, CUE4Parse_Conversion.Textures.BC.DetexHelper.DLL_NAME);
-            CUE4Parse_Conversion.Textures.BC.DetexHelper.LoadDll(detexPath);
-            CUE4Parse_Conversion.Textures.BC.DetexHelper.Initialize(detexPath);
-        }
-        catch (Exception ex) { logError($"[Headless] Detex init failed: {ex.Message}"); }
-
-        log("[Headless] Native codecs initialised (Oodle + Zlib + Detex).");
+        log("[Headless] Native codecs initialised (Oodle + Zlib).");
     }
 
     private static bool LoadMappings(AbstractVfsFileProvider provider, HeadlessGameConfig cfg, Action<string> log, Action<string> logError)

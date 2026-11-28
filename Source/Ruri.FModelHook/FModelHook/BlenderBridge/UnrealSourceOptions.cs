@@ -3,6 +3,7 @@ using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.Core.Serialization;
 using CUE4Parse.UE4.Versions;
+using CUE4Parse_Conversion.Options;
 using Ruri.RipperHook.BlenderBridge.Data;
 
 namespace Ruri.FModelHook.BlenderBridge;
@@ -180,6 +181,13 @@ public static class UnrealSourceOptions
 
     public static ETexturePlatform TexturePlatformChoice() =>
         Enum.TryParse(Text(TexturePlatform), ignoreCase: true, out ETexturePlatform platform) ? platform : ETexturePlatform.DesktopMobile;
+
+    /// <summary>
+    /// What CUE4Parse's converters read in place of loose arguments: the stated texture platform, and every LOD of a
+    /// mesh without its Nanite proxy; everything else is the converter's own default.
+    /// </summary>
+    public static ExportOptions ConversionOptions() =>
+        new(meshQuality: EMeshQuality.All, naniteMeshFormat: ENaniteMeshFormat.NoNanite, texturePlatform: TexturePlatformChoice());
 
     public static IEnumerable<KeyValuePair<FGuid, FAesKey>> AesKeys() => AesKeys(UnrealTitles.For(Session.GameRoot));
 

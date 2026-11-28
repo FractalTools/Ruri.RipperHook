@@ -93,12 +93,6 @@ public static class UnrealProviderSession
         LoadCodec("Oodle", () => OodleHelper.Initialize(
             CUE4Parse.Utils.CUE4ParseNatives.IsFeatureAvailable("Oodle\0"u8) ? null : Path.Combine(folder, OodleHelper.OodleFileName)));
         LoadCodec("zlib-ng", () => ZlibHelper.Initialize(Path.Combine(folder, ZlibHelper.DllName)));
-        LoadCodec("Detex", () =>
-        {
-            string path = Path.Combine(folder, DetexHelper.DLL_NAME);
-            DetexHelper.LoadDll(path);
-            DetexHelper.Initialize(path);
-        });
     }
 
     private static void LoadCodec(string codec, Action initialize)

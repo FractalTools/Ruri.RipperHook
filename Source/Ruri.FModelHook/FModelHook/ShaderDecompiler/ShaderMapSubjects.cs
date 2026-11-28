@@ -111,7 +111,7 @@ public sealed class MaterialSubject : IShaderMapSubject
             int walked = 0;
             while (owner.LoadedMaterialResources is not { Count: > 0 }
                    && owner is UMaterialInstance instance
-                   && instance.Parent is UMaterialInterface parent
+                   && instance.Parent?.Load<UMaterialInterface>() is { } parent
                    && walked < ParentChainLimit)
             {
                 owner = parent;

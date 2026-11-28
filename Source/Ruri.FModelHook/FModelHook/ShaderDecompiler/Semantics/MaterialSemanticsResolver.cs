@@ -145,7 +145,7 @@ public sealed class MaterialSemanticsResolver : IDisposable
             {
                 return (best, layer.GetPathName());
             }
-            cursor = layer is UMaterialInstance instance ? instance.Parent : null;
+            cursor = layer is UMaterialInstance instance ? instance.Parent?.Load<UUnrealMaterial>() : null;
         }
         return null;
     }

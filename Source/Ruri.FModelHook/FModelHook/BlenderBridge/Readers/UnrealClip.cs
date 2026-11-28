@@ -53,7 +53,7 @@ public static class UnrealClip
         int frameCount = statedRate > 0f ? Math.Max(1, (int)MathF.Round(source.SequenceLength * statedRate) + 1) : sourceFrames;
         float sourceStep = frameCount > 1 ? (sourceFrames - 1f) / (frameCount - 1f) : 0f;
 
-        SkeletonDto skeletonDto = new(skeleton);
+        SkeletonDto skeletonDto = new(skeleton, UnrealSourceOptions.ConversionOptions());
         UnrealRig rig = UnrealRig.From(skeletonDto.Bones, basis);
         skeletonDto.Dispose();
 
